@@ -565,32 +565,40 @@ export default function AdminCardEditor({
     [clientBudgetsByTier, clientBudget, tiers],
   );
 
-  // Partner price preview for SELECTED tiers only: finalized price (subscription
-  // price, else proposed) minus the final margin (admin markup, else catalog).
-  // Unselected tiers return null — they must not look "priced for publish".
+  // Partner price preview: selected tiers use form Final − margin; unselected
+  // fall back to catalog Final − catalog margin (those levels still broadcast
+  // at catalog rates on publish).
   const partnerPriceForTier = useCallback(
     (tier: string): number | null => {
-      if (!tiers.includes(tier)) return null;
+      const isSelected = tiers.includes(tier);
       const entry = tierPricing[tier];
-      if (!entry) return null;
-      const finalized = entry.subscriptionPrice ?? (entry.proposedPrice > 0 ? entry.proposedPrice : null);
-      if (finalized == null) return null;
-      const margin = entry.markup ?? catalogMarginForTier(tier) ?? 0;
-      return Math.max(0, finalized - margin);
+      if (isSelected && entry) {
+        const finalized = entry.subscriptionPrice ?? (entry.proposedPrice > 0 ? entry.proposedPrice : null);
+        if (finalized == null) return null;
+        const margin = entry.markup ?? catalogMarginForTier(tier) ?? 0;
+        return Math.max(0, finalized - margin);
+      }
+      const row = catalogPricingForTier(tier);
+      if (!row || !(row.price > 0)) return null;
+      const marginAbs =
+        row.margin_type === 'percent'
+          ? Math.ceil((row.price * row.margin_value) / 100 / 100) * 100
+          : Math.max(0, row.margin_value);
+      return Math.max(0, row.price - marginAbs);
     },
-    [tiers, tierPricing, catalogMarginForTier],
+    [tiers, tierPricing, catalogMarginForTier, catalogPricingForTier],
   );
 
   // Whether at least one selected tier has catalog data loaded — used to
   // decide whether to render the per-tier hours table or the empty-state
   // copy in the combined Deliverables section.
-  const anyCatalogLoaded = tiers.some((t) => catalogByTier[t] != null);
+  const anyCatalogLoaded = tiers.some((t) => catalogByTier[t] != null)
+    || pricingTableTiers.some((t) => catalogByTier[t] != null);
 
   // Build the API tier_pricing map (snake_case shape) from the form state.
-  // Selected tiers carry full pricing (Final/margin). Unselected levels MUST
-  // NOT keep subscription_price/markup — those are what fan-out publishes —
-  // but we still retain client_budget-only stubs so preferred-level budgets
-  // survive a deselect → reselect without a reload.
+  // Selected tiers carry admin Final/margin. Client budgets are kept for
+  // preferred levels. Unselected catalog prices are filled at publish time
+  // (expandBroadcastTiersForPublish) — no need to store them on every save.
   const tierPricingPayload = useMemo(() => {
     const out: Record<
       string,
@@ -607,7 +615,7 @@ export default function AdminCardEditor({
         ...(client_budget != null && client_budget > 0 ? { client_budget } : {}),
       };
     }
-    // Keep client_budget for preferred-but-unselected tiers (no publishable price).
+    // Keep client_budget for preferred-but-unselected tiers (reference only).
     for (const [tier, budget] of Object.entries(clientBudgetsByTier)) {
       if (out[tier]) continue;
       if (typeof budget === 'number' && budget > 0) {
@@ -763,12 +771,20 @@ export default function AdminCardEditor({
   // Publish gate: every selected tier must have a client-facing price —
   // either a proposed price or a finalized subscription price (catalog-
   // seeded briefs often have Final set with Proposed left at 0).
-  const canPublish =
+  // Selected tiers need a Final/proposed. If none selected, catalog can still
+  // fill all three standard levels on publish (needs service + plan).
+  const selectedHavePrices =
     tiers.length > 0 &&
     tiers.every((t) => {
       const entry = tierPricing[t];
       return (entry?.proposedPrice ?? 0) > 0 || (entry?.subscriptionPrice ?? 0) > 0;
     });
+  const catalogCanFill =
+    !!serviceType && !!planName && pricingTableTiers.some((t) => {
+      const row = catalogByTier[t]?.pricing;
+      return Array.isArray(row) && row.some((p) => p && p.price > 0);
+    });
+  const canPublish = selectedHavePrices || (tiers.length === 0 && catalogCanFill);
 
   if (isLoading) {
     return (
@@ -880,11 +896,11 @@ export default function AdminCardEditor({
                   title={
                     !canPublish
                       ? tiers.length === 0
-                        ? 'Select at least one tier with a price'
+                        ? 'Set service + plan (catalog fills all levels) or select a tier with a Final price'
                         : 'Every selected tier needs a proposed or final price'
                       : distribution === 'manual'
                         ? 'Soft publish — build the list, then hand-pick recipients before broadcasting'
-                        : 'Publish — auto-match all qualifying partners into a staged list, then broadcast'
+                        : 'Publish — all levels broadcast (selected at set price, others at catalog)'
                   }
                   className="sh-btn-primary sh-btn-primary-sm"
                 >
@@ -1017,11 +1033,10 @@ export default function AdminCardEditor({
                   );
                 })}
               </div>
-              {tiers.length > 1 && (
-                <p className="mt-2 text-[11px] text-[var(--color-sh-ink-faint)]">
-                  Publishing creates one card with a tab per tier. Each tier is broadcast only to that tier&apos;s partners, and the business sees a single card with a tab for each tier.
-                </p>
-              )}
+              <p className="mt-2 text-[11px] text-[var(--color-sh-ink-faint)]">
+                On publish, all three levels (Junior / Pro / Top Talents) broadcast.
+                Levels you mark here use your Final price; unmarked levels use catalog pricing.
+              </p>
             </Field>
             <Field label="Working Days">
               <div className="flex flex-wrap gap-2">
@@ -1183,18 +1198,15 @@ export default function AdminCardEditor({
             </div>
           </Section>
 
-          {/* Pricing — always shows Junior / Pro / Top Talents for comparison.
-              ONLY selected tiers (Tiers pills / row click) carry Final/Margin/
-              Partner and publish. Unselected rows stay muted with catalog list
-              price only — they must never look "priced for broadcast". */}
+          {/* Pricing — always shows Junior / Pro / Top Talents.
+              Selected (client/admin) levels: editable Final at set price.
+              Unselected levels: catalog Final — they STILL broadcast at that
+              catalog price when the card is published. */}
           <Section title="Pricing">
             <div className="space-y-2">
               <p className="rounded-md bg-[var(--color-sh-cream)] px-2.5 py-1.5 text-[10px] leading-snug text-[var(--color-sh-ink-muted)]">
-                {tiers.length === 0
-                  ? 'Pick at least one level (click a row or use Plan Basics → Tiers). Only selected levels are published to talent.'
-                  : tiers.length === 1
-                    ? <>Only <strong>{tiers[0]}</strong> will be published. Unselected levels are catalog reference only — they are not broadcast.</>
-                    : <>Selected levels publish as <strong>one card</strong> with a tab per tier. Unselected levels are not broadcast.</>}
+                All three levels broadcast. Highlighted = client/admin selected (uses the Final you set).
+                Unselected levels still go out to talent at the <strong>catalog</strong> price.
               </p>
 
               <div className="overflow-x-auto rounded-lg border border-[var(--color-sh-warm-border)]">
@@ -1225,8 +1237,6 @@ export default function AdminCardEditor({
                     {pricingTableTiers.map((tier, rowIdx) => {
                       const isSelected = tiers.includes(tier);
                       const clientProposed = clientProposedForTier(tier);
-                      // Client-picked on the brief (budget and/or listed in the
-                      // brief's target_tiers). Distinct from admin selection.
                       const showClientBadge =
                         clientProposed != null
                         || (Array.isArray(card?.target_tiers)
@@ -1239,8 +1249,18 @@ export default function AdminCardEditor({
                       const partnerPrice = partnerPriceForTier(tier);
                       const catalogPricingRow = catalogPricingForTier(tier);
                       const catalogCurrency = currencySymbol(catalogPricingRow?.country?.currency);
-                      const catalogMarginInRupees = isSelected ? catalogMarginForTier(tier) : null;
-                      const rowHighlight = isSelected
+                      const catalogMarginInRupees = isSelected
+                        ? catalogMarginForTier(tier)
+                        : catalogPricingRow
+                          ? (catalogPricingRow.margin_type === 'percent'
+                              ? Math.ceil((catalogPricingRow.price * catalogPricingRow.margin_value) / 100 / 100) * 100
+                              : Math.max(0, catalogPricingRow.margin_value))
+                          : null;
+                      const catalogFinal =
+                        catalogPricingRow && catalogPricingRow.price > 0
+                          ? catalogPricingRow.price
+                          : null;
+                      const rowHighlight = isSelected || showClientBadge
                         ? 'bg-[var(--color-sh-lime-soft)]/50'
                         : 'bg-white';
                       return (
@@ -1252,33 +1272,35 @@ export default function AdminCardEditor({
                           onClick={isEditable ? () => toggleTier(tier) : undefined}
                           title={
                             isEditable
-                              ? (isSelected ? `Deselect ${tier} (will not publish)` : `Select ${tier} for publish`)
+                              ? (isSelected
+                                  ? `Deselect ${tier} — will still broadcast at catalog price`
+                                  : `Select ${tier} to set a custom Final (client preferred)`)
                               : undefined
                           }
                         >
                           <td className="px-2.5 py-1.5">
                             <div className="flex items-center gap-1.5">
-                              {isSelected && (
+                              {(isSelected || showClientBadge) && (
                                 <span
                                   className="h-1.5 w-1.5 flex-shrink-0 rounded-full bg-[var(--color-sh-ink)]"
-                                  title="Selected for publish"
+                                  title={showClientBadge ? 'Client preferred' : 'Selected'}
                                 />
                               )}
                               <span className={`text-xs font-semibold ${
-                                isSelected
+                                isSelected || showClientBadge
                                   ? 'text-[var(--color-sh-ink)]'
                                   : 'text-[var(--color-sh-ink-muted)]'
                               }`}>
                                 {tier}
                               </span>
                             </div>
-                            {isSelected ? (
+                            {isSelected || showClientBadge ? (
                               <span className="mt-0.5 block text-[9px] font-medium text-[var(--color-sh-ink-muted)]">
-                                {showClientBadge ? 'Client selected' : 'Selected'}
+                                {showClientBadge ? 'Client selected' : 'Selected'} · set price
                               </span>
                             ) : (
                               <span className="mt-0.5 block text-[9px] font-medium text-[var(--color-sh-ink-faint)]">
-                                Not publishing
+                                Catalog price · still broadcasts
                               </span>
                             )}
                           </td>
@@ -1287,7 +1309,6 @@ export default function AdminCardEditor({
                             {catalogPricingRow ? `${catalogCurrency}${catalogPricingRow.price.toLocaleString()}` : '—'}
                           </td>
 
-                          {/* Client proposed price — brief budget for preferred levels only */}
                           <td className="px-2 py-1.5">
                             {clientProposed != null ? (
                               <div className="text-xs font-semibold tabular-nums text-[var(--color-sh-ink)]">
@@ -1322,7 +1343,11 @@ export default function AdminCardEditor({
                                 currency={catalogCurrency}
                               />
                             ) : (
-                              <span className="tabular-nums text-[var(--color-sh-ink-faint)]">—</span>
+                              <span className="tabular-nums text-[var(--color-sh-ink-muted)]">
+                                {catalogFinal != null
+                                  ? `${catalogCurrency}${catalogFinal.toLocaleString()}`
+                                  : '—'}
+                              </span>
                             )}
                           </td>
 
@@ -1343,16 +1368,20 @@ export default function AdminCardEditor({
                                 currency={catalogCurrency}
                               />
                             ) : (
-                              <span className="tabular-nums text-[var(--color-sh-ink-faint)]">—</span>
+                              <span className="tabular-nums text-[var(--color-sh-ink-muted)]">
+                                {catalogMarginInRupees != null
+                                  ? `${catalogCurrency}${catalogMarginInRupees.toLocaleString()}`
+                                  : '—'}
+                              </span>
                             )}
                           </td>
 
                           <td className={`px-2.5 py-1.5 tabular-nums font-semibold ${
-                            isSelected
+                            isSelected || showClientBadge
                               ? 'bg-[var(--color-sh-cream)]/80 text-[var(--color-sh-ink)]'
-                              : 'text-[var(--color-sh-ink-faint)]'
+                              : 'text-[var(--color-sh-ink-muted)]'
                           }`}>
-                            {isSelected && partnerPrice != null
+                            {partnerPrice != null
                               ? `${catalogCurrency}${partnerPrice.toLocaleString()}`
                               : '—'}
                           </td>
@@ -1364,7 +1393,7 @@ export default function AdminCardEditor({
               </div>
 
               <p className="px-0.5 text-[10px] leading-snug text-[var(--color-sh-ink-faint)]">
-                Click a row to select/deselect for publish · <strong className="font-medium text-[var(--color-sh-ink-muted)]">Subscription</strong> = catalog min price (bid floor) · <strong className="font-medium text-[var(--color-sh-ink-muted)]">Client proposed</strong> = budget from brief · <strong className="font-medium text-[var(--color-sh-ink-muted)]">Final</strong> = what the client pays · <strong className="font-medium text-[var(--color-sh-ink-muted)]">Partner</strong> = Final − Margin (% ceils up to ₹100; stays live while bidding) · Only selected levels are broadcast
+                Click a row to mark client-selected (custom Final) · <strong className="font-medium text-[var(--color-sh-ink-muted)]">Subscription</strong> = catalog list price · <strong className="font-medium text-[var(--color-sh-ink-muted)]">Client proposed</strong> = budget from brief · <strong className="font-medium text-[var(--color-sh-ink-muted)]">Final</strong> = what the client pays · Unselected levels still broadcast at catalog Final
               </p>
             </div>
           </Section>

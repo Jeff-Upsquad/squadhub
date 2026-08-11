@@ -192,3 +192,116 @@ export function coerceProposedPrice(value: number | null | undefined): number | 
   if (value == null || value <= 0) return null;
   return value;
 }
+
+/**
+ * Standard talent levels always broadcast on subscription publish.
+ * Client/admin "selected" levels use their set Final price; every other
+ * level still fans out using the Subscriptions catalog price.
+ * Custom is only included when already selected (no catalog default).
+ */
+export const BROADCAST_STANDARD_TIERS = ['Top Talents', 'Pro', 'Junior'] as const;
+
+const SERVICE_TYPE_TO_SLUG: Record<string, string> = {
+  Designers: 'designer',
+  Editors: 'video_editor',
+  'Designer plus Editor': 'designer_video_editor',
+  Accountants: 'accountant',
+};
+
+/**
+ * Expand a draft's selected tiers + pricing into the full broadcast set:
+ *   - every standard level that has a catalog price for this plan
+ *   - plus Custom if it was selected with a publishable price
+ *
+ * Selected / already-priced tiers keep their tier_pricing entry (client
+ * budget Final, admin override, etc.). Unselected standard tiers get
+ * catalog-seeded Final so they still broadcast at default rates.
+ */
+export async function expandBroadcastTiersForPublish(opts: {
+  serviceType: string | null | undefined;
+  planName: string | null | undefined;
+  countryId: string | null | undefined;
+  /** Levels the client or admin marked (preferred / custom Final). */
+  selectedTiers: string[];
+  /** Current draft tier_pricing (may only cover selected levels). */
+  existingPricing: Record<
+    string,
+    {
+      proposed_price?: number | null;
+      markup?: number | null;
+      subscription_price?: number | null;
+      client_budget?: number | null;
+    }
+  >;
+}): Promise<{
+  targetTiers: string[];
+  tierPricing: Record<string, CatalogTierPricingEntry>;
+}> {
+  const selected = (opts.selectedTiers || []).filter(Boolean);
+  const existing = opts.existingPricing && typeof opts.existingPricing === 'object'
+    ? opts.existingPricing
+    : {};
+
+  // Always try to cover all three standard levels from the catalog.
+  const standardList = [...BROADCAST_STANDARD_TIERS];
+  const serviceSlug =
+    SERVICE_TYPE_TO_SLUG[String(opts.serviceType ?? '')] ||
+    String(opts.serviceType ?? '')
+      .toLowerCase()
+      .trim()
+      .replace(/\s+/g, '_');
+
+  const catalog = await buildCatalogTierPricing({
+    serviceSlug,
+    planName: opts.planName,
+    tiers: standardList,
+    countryId: opts.countryId,
+  });
+
+  const tierPricing: Record<string, CatalogTierPricingEntry> = {};
+  const targetTiers: string[] = [];
+
+  // Preserve selected order first (client preferred), then fill remaining
+  // standard levels so fan-out order is predictable.
+  const ordered: string[] = [];
+  for (const t of selected) {
+    if (!ordered.includes(t)) ordered.push(t);
+  }
+  for (const t of standardList) {
+    if (!ordered.includes(t)) ordered.push(t);
+  }
+
+  for (const tier of ordered) {
+    const existingEntry = existing[tier];
+    if (tierHasPublishablePrice(existingEntry)) {
+      tierPricing[tier] = {
+        proposed_price: existingEntry!.proposed_price ?? 0,
+        markup: existingEntry!.markup ?? null,
+        subscription_price: existingEntry!.subscription_price ?? null,
+        ...(typeof existingEntry!.client_budget === 'number' && existingEntry!.client_budget > 0
+          ? { client_budget: existingEntry!.client_budget }
+          : {}),
+      };
+      targetTiers.push(tier);
+      continue;
+    }
+
+    // Unselected (or selected but blank Final): catalog default, if any.
+    // Skip Custom — no catalog row for Custom.
+    if (tier === 'Custom') continue;
+    const cat = catalog[tier];
+    if (tierHasPublishablePrice(cat)) {
+      tierPricing[tier] = {
+        proposed_price: 0,
+        markup: cat.markup ?? null,
+        subscription_price: cat.subscription_price ?? null,
+        ...(typeof existingEntry?.client_budget === 'number' && existingEntry.client_budget > 0
+          ? { client_budget: existingEntry.client_budget }
+          : {}),
+      };
+      targetTiers.push(tier);
+    }
+  }
+
+  return { targetTiers, tierPricing };
+}

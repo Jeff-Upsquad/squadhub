@@ -358,10 +358,10 @@ export async function matchPartnersForCard(
 }
 
 /**
- * Fan a multi-tier draft card out to N published cards, one per SELECTED
- * tier (`target_tiers` only). Unselected levels are never published — even
- * if `tier_pricing` still holds catalog defaults for them (admin pricing
- * table shows those as reference only).
+ * Fan a multi-tier draft card out to N published cards, one per entry in
+ * `target_tiers`. For subscription briefs the publish handler expands this
+ * list first: selected levels keep their set Final price; unselected standard
+ * levels are filled from the catalog so every level still reaches talent.
  *
  * The siblings are NOT linked via parent_card_id — each keeps its own
  * independent state machine so closing/assigning one tier doesn't cascade to
@@ -392,9 +392,8 @@ export async function fanOutTierCards(
     .single();
   if (loadErr || !original) throw loadErr ?? new Error('Card not found');
 
-  // Sole source of which levels publish. Never expand to catalog tiers or
-  // Object.keys(tier_pricing) — that was broadcasting unselected levels at
-  // default subscription prices.
+  // Publish handler expands target_tiers to all broadcast levels (selected +
+  // catalog-filled unselected) before calling us. One card per entry.
   const targetTiers: string[] = Array.isArray(original.target_tiers)
     ? (original.target_tiers as string[]).filter(Boolean)
     : [];

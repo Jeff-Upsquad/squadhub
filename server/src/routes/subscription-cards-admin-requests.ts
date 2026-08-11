@@ -20,7 +20,9 @@ import { generateBriefVoiceUploadUrl } from '../r2';
 import {
   buildCatalogTierPricing,
   coerceProposedPrice,
+  expandBroadcastTiersForPublish,
   resolveScalarClientBudget,
+  tierHasPublishablePrice,
 } from '../utils/subscriptionFormPricing';
 
 const router = Router();
@@ -986,15 +988,17 @@ router.post('/subscription-cards/:id/publish', async (req: Request, res: Respons
       return;
     }
 
-    // Tier-required gate: a card delivered to talents MUST have at least one
-    // target tier. Otherwise the SquadHire matcher's tier filter is skipped
-    // (it only fires when match_rules.target_tiers is non-empty), and every
-    // category-matching talent becomes a recipient regardless of skill level
-    // — which is exactly the bug the per-tier fan-out is meant to fix.
+    // Subscription cards expand unselected levels from the catalog on publish,
+    // so an empty client selection is OK (all three levels go out at catalog).
+    // Assignments still need at least one selected level with a budget.
     const cardTargetTiers: string[] = Array.isArray(card.target_tiers)
       ? (card.target_tiers as string[]).filter(Boolean)
       : [];
-    if (publishTargets.includes('talent') && cardTargetTiers.length === 0) {
+    if (
+      publishTargets.includes('talent') &&
+      card.card_type === 'assignment' &&
+      cardTargetTiers.length === 0
+    ) {
       res.status(400).json({
         success: false,
         error: 'Pick at least one tier — empty target_tiers would broadcast to every category-matching talent.',
@@ -1002,18 +1006,18 @@ router.post('/subscription-cards/:id/publish', async (req: Request, res: Respons
       return;
     }
 
-    // Fan-out is driven ONLY by target_tiers (selected levels).
-    // Unselected levels must NEVER publish — even if tier_pricing still holds
-    // catalog defaults for them (the pricing table shows those as reference).
-    // Reproduced: client picks Pro only → Junior/Top Talents still broadcast
-    // with catalog subscription_price. Sanitize before fan-out.
-    const targetTiers: string[] = Array.isArray(card.target_tiers)
+    // Broadcast product rule (subscription cards):
+    //   - Client/admin "selected" levels keep their set Final price
+    //   - Unselected standard levels (Junior / Pro / Top Talents) STILL
+    //     broadcast, priced from the Subscriptions catalog
+    // Expand before fan-out so one card per level reaches talent.
+    const selectedTiers: string[] = Array.isArray(card.target_tiers)
       ? (card.target_tiers as string[]).filter(Boolean)
       : [];
     const rawTierPricing: Record<
       string,
       {
-        proposed_price?: number;
+        proposed_price?: number | null;
         markup?: number | null;
         subscription_price?: number | null;
         client_budget?: number | null;
@@ -1023,80 +1027,91 @@ router.post('/subscription-cards/:id/publish', async (req: Request, res: Respons
         ? (card.tier_pricing as any)
         : {};
 
-    const orphanKeys = Object.keys(rawTierPricing).filter((t) => !targetTiers.includes(t));
-    if (orphanKeys.length > 0) {
-      console.warn(
-        '[publish] stripping unselected tier_pricing keys before fan-out (would have broadcast catalog defaults)',
-        { cardId, targetTiers, orphanKeys },
-      );
-    }
+    // Country for catalog seed (card targeting join, else null → India fallback).
+    const { data: countryRows } = await supabaseAdmin
+      .from('subscription_card_target_countries')
+      .select('country_id')
+      .eq('card_id', cardId)
+      .limit(1);
+    const countryId =
+      Array.isArray(countryRows) && countryRows[0]?.country_id
+        ? String(countryRows[0].country_id)
+        : null;
 
-    // Keep only selected tiers. Drop publishable prices for anything else so
-    // fan-out cannot invent sibling cards from catalog defaults.
-    const tierPricing: Record<
+    let targetTiers: string[];
+    let tierPricing: Record<
       string,
       {
-        proposed_price?: number;
+        proposed_price?: number | null;
         markup?: number | null;
         subscription_price?: number | null;
         client_budget?: number | null;
       }
-    > = {};
-    for (const tier of targetTiers) {
-      if (rawTierPricing[tier]) tierPricing[tier] = rawTierPricing[tier];
-    }
+    >;
 
-    if (targetTiers.length > 1) {
-      for (const tier of targetTiers) {
-        const entry = tierPricing[tier];
-        const hasFinal = entry?.subscription_price != null && entry.subscription_price > 0;
-        const hasProposed = entry?.proposed_price != null && entry.proposed_price > 0;
-        if (!entry || (!hasFinal && !hasProposed)) {
-          res.status(400).json({
-            success: false,
-            error: `Missing pricing for tier "${tier}"`,
-          });
-          return;
-        }
+    if (card.card_type === 'assignment') {
+      // Assignments: only selected levels publish (no catalog monthly price).
+      targetTiers = selectedTiers;
+      tierPricing = {};
+      for (const t of targetTiers) {
+        if (rawTierPricing[t]) tierPricing[t] = rawTierPricing[t];
       }
     } else {
-      const finalized =
-        (card.subscription_price != null && card.subscription_price > 0
-          ? card.subscription_price
-          : null) ??
-        (card.proposed_price != null && card.proposed_price > 0 ? card.proposed_price : null);
-      // Also accept a single-tier entry living only in tier_pricing.
-      const singleEntry = targetTiers.length === 1 ? tierPricing[targetTiers[0]] : null;
-      const singleFinalized =
-        finalized ??
-        (singleEntry?.subscription_price != null && singleEntry.subscription_price > 0
-          ? singleEntry.subscription_price
-          : null) ??
-        (singleEntry?.proposed_price != null && singleEntry.proposed_price > 0
-          ? singleEntry.proposed_price
-          : null);
-      if (singleFinalized == null || singleFinalized <= 0) {
-        res.status(400).json({ success: false, error: 'Display price must be > 0' });
+      const expanded = await expandBroadcastTiersForPublish({
+        serviceType: card.service_type,
+        planName: card.plan_name,
+        countryId,
+        selectedTiers,
+        existingPricing: rawTierPricing,
+      });
+      targetTiers = expanded.targetTiers;
+      tierPricing = expanded.tierPricing;
+      console.info('[publish] expanded broadcast tiers', {
+        cardId,
+        selectedTiers,
+        broadcastTiers: targetTiers,
+      });
+    }
+
+    if (targetTiers.length === 0) {
+      res.status(400).json({
+        success: false,
+        error:
+          card.card_type === 'assignment'
+            ? 'Pick at least one level with a project budget.'
+            : 'No priced levels to broadcast — set a plan and pricing, or pick a level.',
+      });
+      return;
+    }
+
+    for (const tier of targetTiers) {
+      if (!tierHasPublishablePrice(tierPricing[tier])) {
+        res.status(400).json({
+          success: false,
+          error: `Missing pricing for tier "${tier}"`,
+        });
         return;
       }
     }
 
-    // Persist the sanitized map so fan-out / webhook read a clean row —
-    // unselected catalog prices cannot leak into sibling cards.
-    if (orphanKeys.length > 0 || Object.keys(rawTierPricing).length !== Object.keys(tierPricing).length) {
-      const { error: cleanErr } = await supabaseAdmin
+    // Persist expanded target_tiers + tier_pricing so fan-out creates one
+    // sibling card per level (selected at set price, others at catalog).
+    {
+      const { error: expandErr } = await supabaseAdmin
         .from('subscription_cards')
-        .update({ tier_pricing: tierPricing })
+        .update({
+          target_tiers: targetTiers,
+          tier_pricing: tierPricing,
+        })
         .eq('id', cardId)
         .eq('state', 'draft');
-      if (cleanErr) {
-        res.status(500).json({ success: false, error: cleanErr.message });
+      if (expandErr) {
+        res.status(500).json({ success: false, error: expandErr.message });
         return;
       }
     }
 
-    // Fan out (or single-publish) — one published card per SELECTED tier only.
-    // Unselected levels are not created and not delivered to talent.
+    // Fan out — one published card per broadcast tier.
     let cardIds: string[];
     try {
       cardIds = await fanOutTierCards(cardId, (req as any).userId, distribution);
