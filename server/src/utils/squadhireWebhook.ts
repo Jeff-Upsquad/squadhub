@@ -185,24 +185,32 @@ export async function buildSquadhirePayloadForCard(
   }
 
   // Never-published guard — the single chokepoint for EVERY delivery path
-  // (archive / reinstate / inline publish / retry sweeper). A card that was
-  // never published has no mirror on SquadHire, so "delivering" it updates
-  // nothing — it CREATES the card there and triggers a fresh talent broadcast
-  // on first ingest, even for a draft an admin merely spun up and archived
-  // (archive re-delivers to flip an EXISTING mirror to 'archived'; it must
-  // never be the card's first contact with SquadHire). Only cards actually
-  // published (published_at set) or advanced past it (assigned / closed) may
-  // reach SquadHire; a new/draft with no published_at never does, archived or
-  // not. This is the belt to the sweeper's own never-published filter.
+  // (archive / reinstate / inline publish / retry sweeper).
+  //
+  // Default: a card that was never published has no talent-facing mirror on
+  // SquadHire, so "delivering" it would CREATE the card there and risk a
+  // first-ingest fan-out/WhatsApp blast (reproduced 2026-07-05: archive of
+  // broadcast drafts created mirrors). Only cards actually published
+  // (published_at set) or advanced past it (assigned / closed) may reach
+  // SquadHire for normal publish/reinstate traffic.
+  //
+  // Exception — archive takedown of CRM pending briefs: deal-briefs create a
+  // business-visible status='submitted' mirror on SquadHire via the separate
+  // /pending-brief endpoint, WITHOUT publishing on Hub. When those cards are
+  // archived on Hub, we MUST still re-deliver so Hire can hide them. The
+  // payload status maps to 'archived' (archived_at is set), and Profiles'
+  // ingest skips fan-out for non-active statuses — so even a first-contact
+  // create can't broadcast. This is the belt to the sweeper's own filter.
+  const isArchiveTakedown = !!(card as any).archived_at;
   const wasEverPublished =
     !!(card as any).published_at ||
     card.state === 'published' ||
     card.state === 'assigned' ||
     card.state === 'closed';
-  if (!wasEverPublished) {
+  if (!wasEverPublished && !isArchiveTakedown) {
     console.warn(
       '[squadhire] skipping delivery — card was never published',
-      { cardId, state: card.state, archived: !!(card as any).archived_at },
+      { cardId, state: card.state, archived: isArchiveTakedown },
     );
     return null;
   }
@@ -210,10 +218,12 @@ export async function buildSquadhirePayloadForCard(
   // Skip-if-empty gate: an admin who didn't pick any SquadHire categories
   // doesn't want this card on SquadHire. The publish handler treats a null
   // payload as a no-op, so the outbound fetch + retry loop never starts.
+  // Archive takedowns of pending-brief mirrors are exempt — those cards may
+  // exist on Hire without categories and still need the hide signal.
   const categoryIds = Array.isArray(contentSource.squadhire_category_ids)
     ? (contentSource.squadhire_category_ids as string[])
     : [];
-  if (categoryIds.length === 0) {
+  if (categoryIds.length === 0 && !isArchiveTakedown) {
     // Without this log, a forgotten-checkbox publish is invisible: no fetch,
     // no error, no audit trail. Surface it so it's at least diagnosable in
     // pm2 logs after the fact.
@@ -228,13 +238,18 @@ export async function buildSquadhirePayloadForCard(
   // a card slips through publish without target_tiers (legacy rows, direct
   // DB edits), refuse to broadcast it. SquadHire's matcher would otherwise
   // skip its tier filter and deliver to every category-matching talent.
+  // Archive takedowns skip this too — same reason as the category gate.
   const cardPublishTargets = Array.isArray((card as any).publish_targets)
     ? ((card as any).publish_targets as string[])
     : ['partner', 'talent'];
   const cardTargetTiers = Array.isArray(contentSource.target_tiers)
     ? ((contentSource.target_tiers as string[]).filter(Boolean))
     : [];
-  if (cardPublishTargets.includes('talent') && cardTargetTiers.length === 0) {
+  if (
+    !isArchiveTakedown &&
+    cardPublishTargets.includes('talent') &&
+    cardTargetTiers.length === 0
+  ) {
     console.warn(
       '[squadhire] skipping delivery — card targets talent but has no tiers',
       { cardId, state: card.state },

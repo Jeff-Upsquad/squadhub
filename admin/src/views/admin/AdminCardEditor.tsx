@@ -21,6 +21,15 @@ const PLAN_TO_CANONICAL: Record<string, string> = {
   starter: 'Starter', basic: 'Basic', plus: 'Plus', pro: 'Pro', personal: 'Personal',
 };
 
+interface PlanLookupPricingRow {
+  plan_id: string;
+  country_id: string;
+  price: number;
+  margin_value: number;
+  margin_type: 'fixed' | 'percent';
+  country?: { id: string; name: string; currency: string };
+}
+
 interface PlanLookupRow {
   plan: {
     id: string;
@@ -29,14 +38,37 @@ interface PlanLookupRow {
     plan: string;
     tier: string;
   };
-  pricing: Array<{
-    plan_id: string;
-    country_id: string;
-    price: number;
-    margin_value: number;
-    margin_type: 'fixed' | 'percent';
-    country?: { id: string; name: string; currency: string };
-  }>;
+  pricing: PlanLookupPricingRow[];
+}
+
+/**
+ * Pick the catalog pricing row for a plan lookup.
+ * Prefer the card's target country, then India, then the first row.
+ * Never use pricing[0] blindly — multi-country catalogs often put a
+ * small USD price (e.g. 30) first, which was showing as "₹30" for Junior.
+ */
+function pickCatalogPricing(
+  pricing: PlanLookupPricingRow[] | null | undefined,
+  preferredCountryId?: string | null,
+  indiaCountryId?: string | null,
+): PlanLookupPricingRow | null {
+  if (!pricing || pricing.length === 0) return null;
+  if (preferredCountryId) {
+    const match = pricing.find((r) => r.country_id === preferredCountryId);
+    if (match) return match;
+  }
+  if (indiaCountryId) {
+    const india = pricing.find((r) => r.country_id === indiaCountryId);
+    if (india) return india;
+  }
+  const byName = pricing.find((r) => r.country?.name === 'India');
+  if (byName) return byName;
+  return pricing[0] ?? null;
+}
+
+/** Country currency codes are INR/USD; table UI shows symbols. */
+function currencySymbol(code: string | undefined | null): string {
+  return code === 'USD' ? '$' : '₹';
 }
 
 function workingDaysThisMonth(workingDays: string[]): number {
@@ -355,6 +387,31 @@ export default function AdminCardEditor({
     [],
   );
 
+  // Countries list (for Location + country-aware catalog pricing).
+  const countriesQuery = useQuery({
+    queryKey: ['admin-countries'],
+    queryFn: () => api.get('/admin/countries').then((r) => r.data?.data || []),
+  });
+  // Defensive: never assume the endpoint handed back a clean array of
+  // well-formed rows. A null/malformed entry here used to take down the whole
+  // editor with a bare "client-side exception" instead of degrading the one
+  // Location field.
+  const countries: Array<{ id: string; name: string }> = useMemo(
+    () => (Array.isArray(countriesQuery.data) ? countriesQuery.data : []),
+    [countriesQuery.data],
+  );
+  const countryById: Record<string, { id: string; name: string }> = useMemo(() => {
+    const map: Record<string, { id: string; name: string }> = {};
+    countries.forEach((c) => {
+      if (c && typeof c.id === 'string') map[c.id] = c;
+    });
+    return map;
+  }, [countries]);
+  const indiaCountryId = useMemo(
+    () => countries.find((c) => c.name === 'India')?.id ?? null,
+    [countries],
+  );
+
   // Catalog lookup: one query per pricing-table tier (always Junior/Pro/Top
   // Talents + any selected Custom) so unselected levels still show catalog
   // prices. Deliverables use the same map for selected tiers.
@@ -385,7 +442,22 @@ export default function AdminCardEditor({
     return map;
   }, [catalogLookupTiers, catalogQueries]);
 
-  // Once per card+plan+tiers: fill blank Margin and blank Final from the
+  // Country used for catalog prices: card target first, else India.
+  // Matches server buildCatalogTierPricing / resolvePricingCountryId.
+  const catalogPreferredCountryId = targetCountryIds[0] || null;
+
+  // Resolve the correct per-country catalog price for a tier.
+  const catalogPricingForTier = useCallback(
+    (tier: string): PlanLookupPricingRow | null =>
+      pickCatalogPricing(
+        catalogByTier[tier]?.pricing,
+        catalogPreferredCountryId,
+        indiaCountryId,
+      ),
+    [catalogByTier, catalogPreferredCountryId, indiaCountryId],
+  );
+
+  // Once per card+plan+tiers+country: fill blank Margin and blank Final from the
   // catalog. Covers CRM/internal briefs that landed before server-side seeding,
   // and plan changes in the editor. Client budget (if any) stays reference-only.
   const catalogSeedKeyRef = useRef('');
@@ -396,17 +468,17 @@ export default function AdminCardEditor({
     if (!catalogPlan || tiers.length === 0) return;
     // Wait until every selected tier's catalog lookup has settled.
     if (catalogQueries.some((q) => q.isLoading || q.isFetching)) return;
-    const anyRow = tiers.some((t) => catalogByTier[t]?.pricing?.[0]);
+    const anyRow = tiers.some((t) => catalogPricingForTier(t));
     if (!anyRow) return;
 
-    const seedKey = `${card.id}|${catalogPlan}|${tiers.join(',')}`;
+    const seedKey = `${card.id}|${catalogPlan}|${tiers.join(',')}|${catalogPreferredCountryId || indiaCountryId || ''}`;
     if (catalogSeedKeyRef.current === seedKey) return;
 
     setTierPricing((prev) => {
       let changed = false;
       const next = { ...prev };
       for (const tier of tiers) {
-        const row = catalogByTier[tier]?.pricing?.[0];
+        const row = catalogPricingForTier(tier);
         if (!row || !(row.price > 0)) continue;
         const entry = next[tier] || {
           proposedPrice: 0,
@@ -431,7 +503,7 @@ export default function AdminCardEditor({
       return changed ? next : prev;
     });
     catalogSeedKeyRef.current = seedKey;
-  }, [card, catalogPlan, tiers, catalogByTier, catalogQueries]);
+  }, [card, catalogPlan, tiers, catalogPricingForTier, catalogQueries, catalogPreferredCountryId, indiaCountryId]);
 
   const workingDaysCount = useMemo(
     () => workingDaysThisMonth(workingDays),
@@ -449,11 +521,11 @@ export default function AdminCardEditor({
     [catalogByTier, workingDaysCount],
   );
 
-  // Catalog-suggested margin in rupees for a given tier. Fixed margins don't
-  // need a base price; percent margins apply to the finalized price.
+  // Catalog-suggested margin for a given tier. Fixed margins don't need a base
+  // price; percent margins apply to the finalized price.
   const catalogMarginForTier = useCallback(
     (tier: string): number | null => {
-      const row = catalogByTier[tier]?.pricing?.[0] || null;
+      const row = catalogPricingForTier(tier);
       if (!row) return null;
       if (row.margin_type === 'percent') {
         const entry = tierPricing[tier];
@@ -463,7 +535,7 @@ export default function AdminCardEditor({
       }
       return row.margin_value;
     },
-    [catalogByTier, tierPricing],
+    [catalogPricingForTier, tierPricing],
   );
 
   // Client-stated budget for a tier (from the brief). Used as "Client proposed
@@ -489,7 +561,7 @@ export default function AdminCardEditor({
     (tier: string): number | null => {
       const entry = tierPricing[tier];
       if (!entry) {
-        const row = catalogByTier[tier]?.pricing?.[0];
+        const row = catalogPricingForTier(tier);
         if (!row || !(row.price > 0)) return null;
         const marginAbs =
           row.margin_type === 'percent'
@@ -502,7 +574,7 @@ export default function AdminCardEditor({
       const margin = entry.markup ?? catalogMarginForTier(tier) ?? 0;
       return Math.max(0, finalized - margin);
     },
-    [tierPricing, catalogMarginForTier, catalogByTier],
+    [tierPricing, catalogMarginForTier, catalogPricingForTier],
   );
 
   // Whether at least one selected tier has catalog data loaded — used to
@@ -587,27 +659,6 @@ export default function AdminCardEditor({
       queryClient.invalidateQueries({ queryKey: ['admin-card-editor', cardId] });
     },
   });
-
-  // Countries list (for the Location section)
-  const countriesQuery = useQuery({
-    queryKey: ['admin-countries'],
-    queryFn: () => api.get('/admin/countries').then((r) => r.data?.data || []),
-  });
-  // Defensive: never assume the endpoint handed back a clean array of
-  // well-formed rows. A null/malformed entry here used to take down the whole
-  // editor with a bare "client-side exception" instead of degrading the one
-  // Location field.
-  const countries: Array<{ id: string; name: string }> = useMemo(
-    () => (Array.isArray(countriesQuery.data) ? countriesQuery.data : []),
-    [countriesQuery.data],
-  );
-  const countryById: Record<string, { id: string; name: string }> = useMemo(() => {
-    const map: Record<string, { id: string; name: string }> = {};
-    countries.forEach((c) => {
-      if (c && typeof c.id === 'string') map[c.id] = c;
-    });
-    return map;
-  }, [countries]);
 
   // SquadHire categories — drives the publish gate. Empty = card is not
   // delivered to SquadHire (the "Not on SquadHire" badge in the list view).
@@ -1160,7 +1211,8 @@ export default function AdminCardEditor({
                         subscriptionPrice: null,
                       };
                       const partnerPrice = partnerPriceForTier(tier);
-                      const catalogPricingRow = catalogByTier[tier]?.pricing?.[0] || null;
+                      const catalogPricingRow = catalogPricingForTier(tier);
+                      const catalogCurrency = currencySymbol(catalogPricingRow?.country?.currency);
                       const catalogMarginInRupees = isSelected
                         ? catalogMarginForTier(tier)
                         : catalogPricingRow
@@ -1206,14 +1258,14 @@ export default function AdminCardEditor({
                           </td>
 
                           <td className="px-2 py-1.5 tabular-nums text-[var(--color-sh-ink-muted)]">
-                            {catalogPricingRow ? `₹${catalogPricingRow.price.toLocaleString()}` : '—'}
+                            {catalogPricingRow ? `${catalogCurrency}${catalogPricingRow.price.toLocaleString()}` : '—'}
                           </td>
 
                           {/* Client proposed price — brief budget for preferred levels only */}
                           <td className="px-2 py-1.5">
                             {isClientPreferred && clientProposed != null ? (
                               <div className="text-xs font-semibold tabular-nums text-[var(--color-sh-ink)]">
-                                ₹{clientProposed.toLocaleString()}
+                                {catalogCurrency}{clientProposed.toLocaleString()}
                               </div>
                             ) : isClientPreferred ? (
                               <span className="text-[var(--color-sh-ink-faint)]">—</span>
@@ -1240,10 +1292,11 @@ export default function AdminCardEditor({
                                 disabled={!isEditable}
                                 emphasis
                                 ariaLabel={`${tier} final price`}
+                                currency={catalogCurrency}
                               />
                             ) : (
                               <span className="tabular-nums text-[var(--color-sh-ink-muted)]">
-                                {effectiveFinal != null ? `₹${effectiveFinal.toLocaleString()}` : '—'}
+                                {effectiveFinal != null ? `${catalogCurrency}${effectiveFinal.toLocaleString()}` : '—'}
                               </span>
                             )}
                           </td>
@@ -1259,11 +1312,12 @@ export default function AdminCardEditor({
                                 }}
                                 disabled={!isEditable}
                                 ariaLabel={`${tier} margin`}
+                                currency={catalogCurrency}
                               />
                             ) : (
                               <span className="tabular-nums text-[var(--color-sh-ink-muted)]">
                                 {catalogMarginInRupees != null
-                                  ? `₹${catalogMarginInRupees.toLocaleString()}`
+                                  ? `${catalogCurrency}${catalogMarginInRupees.toLocaleString()}`
                                   : '—'}
                               </span>
                             )}
@@ -1274,7 +1328,7 @@ export default function AdminCardEditor({
                               ? 'bg-[var(--color-sh-cream)]/80 text-[var(--color-sh-ink)]'
                               : 'text-[var(--color-sh-ink-muted)]'
                           }`}>
-                            {partnerPrice != null ? `₹${partnerPrice.toLocaleString()}` : '—'}
+                            {partnerPrice != null ? `${catalogCurrency}${partnerPrice.toLocaleString()}` : '—'}
                           </td>
                         </tr>
                       );
@@ -1677,8 +1731,8 @@ function ReadOnlyField({ label, children }: { label: string; children: React.Rea
   );
 }
 
-// Compact ₹-prefixed number input for the pricing table cells. `emphasis`
-// bolds the value (used for the Final price column, the amount the client pays).
+// Compact currency-prefixed number input for the pricing table cells.
+// `emphasis` bolds the value (used for the Final price column).
 function PriceInput({
   value,
   onChange,
@@ -1686,6 +1740,7 @@ function PriceInput({
   disabled,
   emphasis,
   ariaLabel,
+  currency = '₹',
 }: {
   value: number | string;
   onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
@@ -1693,11 +1748,12 @@ function PriceInput({
   disabled?: boolean;
   emphasis?: boolean;
   ariaLabel?: string;
+  currency?: string;
 }) {
   return (
     <div className="relative">
       <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-[var(--color-sh-ink-faint)]">
-        ₹
+        {currency}
       </span>
       <input
         type="number"
