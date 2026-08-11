@@ -815,6 +815,9 @@ router.patch('/subscription-cards/:id/edit', async (req: Request, res: Response)
     if (body.proposed_price !== undefined) updates.proposed_price = body.proposed_price;
     if (body.subscription_price !== undefined) updates.subscription_price = body.subscription_price;
     if (body.markup !== undefined) updates.markup = body.markup;
+    // Persist tier_pricing as sent. The editor only includes selected tiers;
+    // replacing the whole map (rather than merging) drops orphan unselected
+    // levels so they can never fan out on a later publish.
     if (body.tier_pricing !== undefined) updates.tier_pricing = body.tier_pricing;
     if (body.partner_price_override !== undefined) updates.partner_price_override = body.partner_price_override;
     if (body.publish_targets !== undefined) updates.publish_targets = body.publish_targets;
@@ -999,21 +1002,49 @@ router.post('/subscription-cards/:id/publish', async (req: Request, res: Respons
       return;
     }
 
-    // Multi-tier validation: when 2+ tiers selected, every tier must have
-    // a client-facing price in tier_pricing (proposed OR finalized
-    // subscription_price — catalog-seeded briefs often leave proposed at 0).
-    // Single-tier (or untargeted) drafts fall through to the legacy
-    // proposed_price / subscription_price check.
+    // Fan-out is driven ONLY by target_tiers (selected levels).
+    // Unselected levels must NEVER publish — even if tier_pricing still holds
+    // catalog defaults for them (the pricing table shows those as reference).
+    // Reproduced: client picks Pro only → Junior/Top Talents still broadcast
+    // with catalog subscription_price. Sanitize before fan-out.
     const targetTiers: string[] = Array.isArray(card.target_tiers)
       ? (card.target_tiers as string[]).filter(Boolean)
       : [];
-    const tierPricing: Record<
+    const rawTierPricing: Record<
       string,
-      { proposed_price?: number; markup?: number; subscription_price?: number | null }
+      {
+        proposed_price?: number;
+        markup?: number | null;
+        subscription_price?: number | null;
+        client_budget?: number | null;
+      }
     > =
       card.tier_pricing && typeof card.tier_pricing === 'object'
-        ? card.tier_pricing
+        ? (card.tier_pricing as any)
         : {};
+
+    const orphanKeys = Object.keys(rawTierPricing).filter((t) => !targetTiers.includes(t));
+    if (orphanKeys.length > 0) {
+      console.warn(
+        '[publish] stripping unselected tier_pricing keys before fan-out (would have broadcast catalog defaults)',
+        { cardId, targetTiers, orphanKeys },
+      );
+    }
+
+    // Keep only selected tiers. Drop publishable prices for anything else so
+    // fan-out cannot invent sibling cards from catalog defaults.
+    const tierPricing: Record<
+      string,
+      {
+        proposed_price?: number;
+        markup?: number | null;
+        subscription_price?: number | null;
+        client_budget?: number | null;
+      }
+    > = {};
+    for (const tier of targetTiers) {
+      if (rawTierPricing[tier]) tierPricing[tier] = rawTierPricing[tier];
+    }
 
     if (targetTiers.length > 1) {
       for (const tier of targetTiers) {
@@ -1050,8 +1081,22 @@ router.post('/subscription-cards/:id/publish', async (req: Request, res: Respons
       }
     }
 
-    // Fan out (or single-publish) — returns the original id first, then
-    // any sibling ids created for additional tiers.
+    // Persist the sanitized map so fan-out / webhook read a clean row —
+    // unselected catalog prices cannot leak into sibling cards.
+    if (orphanKeys.length > 0 || Object.keys(rawTierPricing).length !== Object.keys(tierPricing).length) {
+      const { error: cleanErr } = await supabaseAdmin
+        .from('subscription_cards')
+        .update({ tier_pricing: tierPricing })
+        .eq('id', cardId)
+        .eq('state', 'draft');
+      if (cleanErr) {
+        res.status(500).json({ success: false, error: cleanErr.message });
+        return;
+      }
+    }
+
+    // Fan out (or single-publish) — one published card per SELECTED tier only.
+    // Unselected levels are not created and not delivered to talent.
     let cardIds: string[];
     try {
       cardIds = await fanOutTierCards(cardId, (req as any).userId, distribution);

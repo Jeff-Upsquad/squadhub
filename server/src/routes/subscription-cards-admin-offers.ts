@@ -4,6 +4,8 @@ import { requireAuth } from '../middleware/auth';
 import { requireMiniAppOrAdmin } from '../middleware/miniApp';
 import { config } from '../config';
 import { supabaseAdmin } from '../supabase';
+import { expandBusinessBid, loadCardBidPricing } from '../utils/cardBidPricing';
+import { lockAcceptedBidPrice } from '../utils/lockAcceptedBidPrice';
 
 /**
  * Card offers / bids — admin management for subscription + assignment cards.
@@ -14,6 +16,11 @@ import { supabaseAdmin } from '../supabase';
  * Profiles; every write is a signed proxy to its admin-mirror webhook
  * (/api/webhooks/squadhub/cards/offers) with actor {type:'admin',
  * source:'squadhub'} (Profiles applies it canonically + notifies the talent).
+ *
+ * Margin stays constant across counters:
+ *   fixed  — absolute cut is unchanged
+ *   percent — % re-applies to the new business amount; ₹ cut ceils to ₹100
+ * Catalog min price is the business bid floor; talent floor is min − margin.
  *
  * Accept ≠ Select: accepting a bid only locks the figure + shortlists; Select
  * stays on the recipients funnel.
@@ -165,18 +172,40 @@ router.get('/:id/offers', async (req: Request, res: Response) => {
       res.status(404).json({ success: false, error: 'Card not found' });
       return;
     }
+    // Always attach bid floors / margin rules so the admin UI can enforce
+    // and explain them even when SquadHire is momentarily unavailable.
+    let bidPricing: Awaited<ReturnType<typeof loadCardBidPricing>> = null;
+    try {
+      bidPricing = await loadCardBidPricing(cardId);
+    } catch (err) {
+      console.error('[assignment-offers] bid pricing load failed:', (err as Error)?.message);
+    }
+    const bidPricingPayload = bidPricing
+      ? {
+          min_customer_price: bidPricing.min_customer_price,
+          min_partner_price: bidPricing.min_partner_price,
+          margin_type: bidPricing.margin_type,
+          margin_value: bidPricing.margin_value,
+        }
+      : null;
+
     if (!configured() || breakerIsOpen()) {
-      res.json({ success: true, source: 'unavailable', offers: [] });
+      res.json({ success: true, source: 'unavailable', offers: [], bid_pricing: bidPricingPayload });
       return;
     }
     try {
       const snap = await fetchOffersSnapshot(cardId);
       recordSuccess();
-      res.json({ success: true, source: 'live', offers: snap?.offers ?? [] });
+      res.json({
+        success: true,
+        source: 'live',
+        offers: snap?.offers ?? [],
+        bid_pricing: bidPricingPayload,
+      });
     } catch (err) {
       recordFailure();
       console.error('[assignment-offers] live offers fetch failed:', (err as Error)?.message);
-      res.json({ success: true, source: 'unavailable', offers: [] });
+      res.json({ success: true, source: 'unavailable', offers: [], bid_pricing: bidPricingPayload });
     }
   } catch (err: any) {
     console.error('List assignment offers error:', err);
@@ -214,6 +243,34 @@ const sendSchema = z.object({
   note: z.string().trim().max(2000).optional(),
 });
 
+/** Admin amounts are business-side. Expand with live margin + enforce min. */
+async function businessAmountOrReject(
+  res: Response,
+  cardId: string,
+  rawAmount: { amount: number } & Record<string, unknown>,
+): Promise<Record<string, unknown> | null> {
+  try {
+    const ctx = await loadCardBidPricing(cardId);
+    if (!ctx) {
+      res.status(404).json({ success: false, error: 'Card not found' });
+      return null;
+    }
+    const expanded = expandBusinessBid(rawAmount.amount, ctx);
+    return {
+      ...rawAmount,
+      amount: expanded.amount,
+      partner_amount: expanded.partner_amount,
+      margin_amount: expanded.margin_amount,
+      margin_type: expanded.margin_type,
+      margin_value: expanded.margin_value,
+      side: expanded.side,
+    };
+  } catch (err: any) {
+    res.status(400).json({ success: false, error: err?.message || 'Invalid bid amount' });
+    return null;
+  }
+}
+
 // POST /:id/offers/send — admin sends an offer to a talent (auto-shortlists).
 router.post('/:id/offers/send', async (req: Request, res: Response) => {
   const parsed = sendSchema.safeParse(req.body);
@@ -221,11 +278,13 @@ router.post('/:id/offers/send', async (req: Request, res: Response) => {
     res.status(400).json({ success: false, error: parsed.error.errors[0].message });
     return;
   }
+  const amount = await businessAmountOrReject(res, req.params.id as string, parsed.data.amount);
+  if (!amount) return;
   await proxyOfferAction(req, res, {
     op: 'send',
     external_id: req.params.id,
     recipient_id: parsed.data.recipient_id,
-    amount: parsed.data.amount,
+    amount,
     ...(parsed.data.note ? { note: parsed.data.note } : {}),
   });
 });
@@ -237,24 +296,84 @@ router.post('/:id/offers/:offerId/counter', async (req: Request, res: Response) 
     res.status(400).json({ success: false, error: parsed.error.errors[0].message });
     return;
   }
+  const amount = await businessAmountOrReject(res, req.params.id as string, parsed.data.amount);
+  if (!amount) return;
   await proxyOfferAction(req, res, {
     op: 'counter',
     external_id: req.params.id,
     offer_id: req.params.offerId,
-    amount: parsed.data.amount,
+    amount,
     ...(parsed.data.note ? { note: parsed.data.note } : {}),
   });
 });
 
 // POST /:id/offers/:offerId/accept — admin accepts the bid (does NOT select).
+// On success we also freeze the accepted figure onto the card so admin +
+// Leads show the final agreed price even before Select/Assign.
 router.post('/:id/offers/:offerId/accept', async (req: Request, res: Response) => {
   const parsed = actionSchema.safeParse(req.body ?? {});
-  await proxyOfferAction(req, res, {
+  const cardId = req.params.id as string;
+  const offerId = req.params.offerId as string;
+
+  // Custom proxy so we can lock prices after a successful accept.
+  if (!configured()) {
+    res.status(503).json({ success: false, error: 'SquadHire integration is not configured on this server' });
+    return;
+  }
+  if (breakerIsOpen()) {
+    res.status(503).json({ success: false, error: 'SquadHire is temporarily unavailable — try again shortly' });
+    return;
+  }
+
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    'X-SquadHub-Signature': config.squadhireWebhookSecret,
+  };
+  if (req.userEmail) headers['X-SquadHub-Actor'] = req.userEmail;
+  if (req.userName) headers['X-SquadHub-Actor-Name'] = req.userName;
+
+  const payload = {
     op: 'accept',
-    external_id: req.params.id,
-    offer_id: req.params.offerId,
+    external_id: cardId,
+    offer_id: offerId,
+    source: 'squadhub',
+    actor: { type: 'admin', email: req.userEmail ?? null, name: req.userName ?? null },
     ...(parsed.success && parsed.data.note ? { note: parsed.data.note } : {}),
-  });
+  };
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), WRITE_TIMEOUT_MS);
+  const startedAt = Date.now();
+  try {
+    const upstream = await fetch(buildUrl('/offers'), {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(payload),
+      signal: controller.signal,
+    });
+    const text = await upstream.text();
+    if (upstream.status >= 500) {
+      recordFailure();
+      console.error(`[assignment-offers] upstream POST /offers accept → ${upstream.status} (${Date.now() - startedAt}ms)`);
+    } else {
+      recordSuccess();
+      if (upstream.ok) {
+        // Await so admin/Leads refetch sees subscription_price + partner override.
+        try {
+          await lockAcceptedBidPrice({ cardId, offerId });
+        } catch (err) {
+          console.error('[assignment-offers] lock bid price after accept failed', err);
+        }
+      }
+    }
+    res.status(upstream.status).type('application/json').send(text);
+  } catch (err) {
+    recordFailure();
+    console.error(`[assignment-offers] upstream POST /offers accept failed (${Date.now() - startedAt}ms):`, (err as Error)?.message);
+    res.status(502).json({ success: false, error: 'SquadHire is unreachable' });
+  } finally {
+    clearTimeout(timer);
+  }
 });
 
 // POST /:id/offers/:offerId/decline — admin declines the talent's offer.

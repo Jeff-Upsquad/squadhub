@@ -358,8 +358,12 @@ export async function matchPartnersForCard(
 }
 
 /**
- * Fan a multi-tier draft card out to N published cards, one per selected
- * tier. The siblings are NOT linked via parent_card_id — each keeps its own
+ * Fan a multi-tier draft card out to N published cards, one per SELECTED
+ * tier (`target_tiers` only). Unselected levels are never published — even
+ * if `tier_pricing` still holds catalog defaults for them (admin pricing
+ * table shows those as reference only).
+ *
+ * The siblings are NOT linked via parent_card_id — each keeps its own
  * independent state machine so closing/assigning one tier doesn't cascade to
  * its siblings. They ARE, however, tagged with a shared `brief_group_id` so
  * the admin Published view (and, via the webhook, SquadHire) can collapse the
@@ -388,13 +392,26 @@ export async function fanOutTierCards(
     .single();
   if (loadErr || !original) throw loadErr ?? new Error('Card not found');
 
+  // Sole source of which levels publish. Never expand to catalog tiers or
+  // Object.keys(tier_pricing) — that was broadcasting unselected levels at
+  // default subscription prices.
   const targetTiers: string[] = Array.isArray(original.target_tiers)
     ? (original.target_tiers as string[]).filter(Boolean)
     : [];
-  const tierPricing: Record<string, { proposed_price?: number; markup?: number | null; subscription_price?: number | null }> =
+  const rawTierPricing: Record<
+    string,
+    { proposed_price?: number; markup?: number | null; subscription_price?: number | null }
+  > =
     original.tier_pricing && typeof original.tier_pricing === 'object'
       ? original.tier_pricing
       : {};
+  const tierPricing: Record<
+    string,
+    { proposed_price?: number; markup?: number | null; subscription_price?: number | null }
+  > = {};
+  for (const tier of targetTiers) {
+    if (rawTierPricing[tier]) tierPricing[tier] = rawTierPricing[tier];
+  }
 
   const now = new Date().toISOString();
 

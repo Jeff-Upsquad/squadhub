@@ -1652,7 +1652,11 @@ export interface SubscriptionPlanPricing {
   id: string;
   plan_id: string;
   country_id: string;
-  /** Minimum customer price for this plan in this country (was "customer price" in v1). */
+  /**
+   * Minimum customer (business) price for this plan in this country.
+   * During bidding, the business cannot offer/bid below this amount; the
+   * talent floor is this amount after the plan margin is applied.
+   */
   price: number;
   /** Margin admin keeps from the customer's proposed price; partner price = proposed - margin. */
   margin_value: number;
@@ -1680,13 +1684,18 @@ export interface SubscriptionCardTierPricing {
 
 // ---- Pricing resolution helpers (single source of truth) ----
 // Model:
-//   Plan price         — catalog minimum (SubscriptionPlanPricing.price)
+//   Plan price         — catalog MINIMUM business bid (SubscriptionPlanPricing.price)
 //   Proposed price     — what the client asked for in the brief
 //   Subscription price — the FINALIZED monthly price the client pays
 //   Plan margin        — catalog default (margin_value + margin_type)
-//   Adjusted margin    — per-card override (markup); null = use plan margin
-//   Final margin       — adjusted if set, else plan margin
+//   Adjusted margin    — per-card FIXED override (markup); null = use plan margin
+//   Final margin       — adjusted if set, else plan margin (recomputed on each bid base)
 //   Partner price      — partner_price_override, else finalized - final margin
+//
+// Bidding: margin rules stay the same for every counter.
+//   fixed  — absolute cut is constant
+//   percent — percent is re-applied to the new business amount; the rupee
+//             cut is rounded UP to the nearest hundred (ceil-to-100).
 
 type CardPriceFields = {
   subscription_price?: number | null;
@@ -1694,7 +1703,33 @@ type CardPriceFields = {
   markup?: number | null;
   partner_price_override?: number | null;
 };
-type PlanMarginFields = { margin_value?: number | null; margin_type?: 'fixed' | 'percent' | null };
+export type PlanMarginFields = {
+  margin_value?: number | null;
+  margin_type?: 'fixed' | 'percent' | null;
+  /** Catalog minimum business price (subscription_plan_pricing.price). */
+  price?: number | null;
+};
+
+/** Round a positive amount UP to the nearest hundred (₹/currency units).
+ *  0 stays 0; negatives clamp to 0. Used for percent-margin rupee cuts. */
+export function ceilToHundred(amount: number): number {
+  if (!Number.isFinite(amount) || amount <= 0) return 0;
+  return Math.ceil(amount / 100) * 100;
+}
+
+/** Absolute margin amount for a catalog margin row against a business price.
+ *  Percent margins: (base × pct / 100), then ceil up to the nearest hundred. */
+export function resolvePlanMargin(
+  pricing: PlanMarginFields | null | undefined,
+  basePrice: number | null,
+): number | null {
+  if (!pricing || pricing.margin_value == null) return null;
+  if (pricing.margin_type === 'percent') {
+    if (basePrice == null) return null;
+    return ceilToHundred((basePrice * pricing.margin_value) / 100);
+  }
+  return pricing.margin_value;
+}
 
 /** Finalized monthly client price: the finalized subscription price if set,
  *  else the proposed price. null when neither is a positive amount. */
@@ -1704,23 +1739,11 @@ export function resolveFinalizedPrice(card: CardPriceFields): number | null {
   return null;
 }
 
-/** The plan's catalog margin as an absolute INR amount. Percent margins are
- *  applied to `basePrice` (the finalized price). null when no plan pricing or
- *  a percent margin has no base to apply against. */
-export function resolvePlanMargin(
-  pricing: PlanMarginFields | null | undefined,
-  basePrice: number | null,
-): number | null {
-  if (!pricing || pricing.margin_value == null) return null;
-  if (pricing.margin_type === 'percent') {
-    if (basePrice == null) return null;
-    return Math.round((basePrice * pricing.margin_value) / 100);
-  }
-  return pricing.margin_value;
-}
-
-/** Final margin: the per-card adjusted margin (markup) if set, else the plan
- *  margin. null when neither is available. */
+/**
+ * Final margin against a business (customer) base price.
+ * - Card `markup` is always a FIXED absolute override (does not re-percent).
+ * - Otherwise the plan margin is applied (percent re-calcs + ceil-to-100).
+ */
 export function resolveFinalMargin(
   card: CardPriceFields,
   pricing: PlanMarginFields | null | undefined,
@@ -1728,6 +1751,59 @@ export function resolveFinalMargin(
 ): number | null {
   if (card.markup != null) return card.markup;
   return resolvePlanMargin(pricing, basePrice);
+}
+
+/** Partner (talent) price from a business amount using the card/plan margin. */
+export function partnerPriceFromCustomer(
+  customerPrice: number,
+  card: CardPriceFields,
+  pricing?: PlanMarginFields | null,
+): number {
+  const margin = resolveFinalMargin(card, pricing, customerPrice) ?? 0;
+  return Math.max(0, customerPrice - margin);
+}
+
+/**
+ * Reverse: business (customer) amount implied by a talent bid, keeping the
+ * same margin rule. Fixed markup/plan margin adds back; percent solves for
+ * the smallest business amount whose partner side equals the talent bid.
+ */
+export function customerPriceFromPartner(
+  partnerPrice: number,
+  card: CardPriceFields,
+  pricing?: PlanMarginFields | null,
+): number {
+  if (partnerPrice < 0 || !Number.isFinite(partnerPrice)) return 0;
+  // Absolute fixed margin (card override or plan fixed).
+  if (card.markup != null) return partnerPrice + card.markup;
+  if (!pricing || pricing.margin_value == null || pricing.margin_value === 0) {
+    return partnerPrice;
+  }
+  if (pricing.margin_type !== 'percent') {
+    return partnerPrice + pricing.margin_value;
+  }
+  // Percent with ceil-to-100: search upward from the naive inverse.
+  const pct = pricing.margin_value;
+  if (pct >= 100) return partnerPrice; // degenerate — margin would eat everything
+  let guess = Math.ceil(partnerPrice / (1 - pct / 100));
+  // Walk up until partnerPriceFromCustomer(guess) >= partnerPrice, then
+  // tighten so the derived partner lands on the talent figure when possible.
+  for (let i = 0; i < 500; i++) {
+    const derived = partnerPriceFromCustomer(guess, card, pricing);
+    if (derived === partnerPrice) return guess;
+    if (derived < partnerPrice) {
+      guess += 1;
+      continue;
+    }
+    // derived > partnerPrice: step back while still meeting the talent ask.
+    while (guess > partnerPrice) {
+      const prev = guess - 1;
+      if (partnerPriceFromCustomer(prev, card, pricing) < partnerPrice) break;
+      guess = prev;
+    }
+    return guess;
+  }
+  return guess;
 }
 
 /** Partner price: the override if set, else finalized price minus final
@@ -1739,8 +1815,53 @@ export function resolvePartnerPrice(
   if (card.partner_price_override != null) return card.partner_price_override;
   const finalized = resolveFinalizedPrice(card);
   if (finalized == null) return null;
-  const margin = resolveFinalMargin(card, pricing, finalized) ?? 0;
-  return Math.max(0, finalized - margin);
+  return partnerPriceFromCustomer(finalized, card, pricing);
+}
+
+/**
+ * Catalog minimum business bid for a plan/country pricing row.
+ * null when no catalog price is set.
+ */
+export function resolveMinCustomerPrice(
+  pricing: PlanMarginFields | null | undefined,
+): number | null {
+  if (!pricing || pricing.price == null || pricing.price <= 0) return null;
+  return pricing.price;
+}
+
+/**
+ * Catalog minimum talent bid = partner side of the min customer price
+ * under the same margin rules (override markup / plan margin).
+ */
+export function resolveMinPartnerPrice(
+  card: CardPriceFields,
+  pricing: PlanMarginFields | null | undefined,
+): number | null {
+  const minCustomer = resolveMinCustomerPrice(pricing);
+  if (minCustomer == null) return null;
+  if (card.partner_price_override != null) return card.partner_price_override;
+  return partnerPriceFromCustomer(minCustomer, card, pricing);
+}
+
+/** Validate a business-side bid against the catalog floor. */
+export function isCustomerBidAtOrAboveMin(
+  customerBid: number,
+  pricing: PlanMarginFields | null | undefined,
+): boolean {
+  const min = resolveMinCustomerPrice(pricing);
+  if (min == null) return customerBid > 0;
+  return customerBid >= min;
+}
+
+/** Validate a talent-side bid against the catalog floor (after margin). */
+export function isPartnerBidAtOrAboveMin(
+  partnerBid: number,
+  card: CardPriceFields,
+  pricing: PlanMarginFields | null | undefined,
+): boolean {
+  const min = resolveMinPartnerPrice(card, pricing);
+  if (min == null) return partnerBid > 0;
+  return partnerBid >= min;
 }
 
 export interface SubscriptionDeliverableType {

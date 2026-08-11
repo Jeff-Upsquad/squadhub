@@ -1,4 +1,13 @@
-import { formatDeliverableCadence, resolveFinalizedPrice, resolvePartnerPrice } from '@squadhub/shared';
+import {
+  formatDeliverableCadence,
+  partnerPriceFromCustomer,
+  resolveFinalizedPrice,
+  resolveFinalMargin,
+  resolveMinCustomerPrice,
+  resolveMinPartnerPrice,
+  resolvePartnerPrice,
+  type PlanMarginFields,
+} from '@squadhub/shared';
 import { config } from '../config';
 import { supabaseAdmin } from '../supabase';
 import { resolveHireBusinessUserIdForCardDelivery } from './clientExternalLinks';
@@ -583,6 +592,10 @@ export async function buildSquadhirePayloadForCard(
   let resolvedMonthlyPrice: number | null = null;
   let resolvedCustomerMonthlyPrice: number | null = null;
   let resolvedCurrency: string | null = null;
+  // Margin row for this country — used both for listed partner pay and for
+  // the bid-floor / percent-ceil rules sent to SquadHire.
+  let stagedMarginRow: PlanMarginFields | null = null;
+
   if (planSnapshot && pricingCountryId) {
     // Frozen pricing path: use the snapshot captured at publish time.
     const customerRow = (planSnapshot.pricing ?? []).find(
@@ -596,16 +609,33 @@ export async function buildSquadhirePayloadForCard(
       .select('currency')
       .eq('id', pricingCountryId)
       .maybeSingle();
-    const defaultPartnerPrice = partnerRow ? Number(partnerRow.price) : null;
-    const override = card.partner_price_override as number | null | undefined;
-    const resolved = override ?? defaultPartnerPrice;
-    if (resolved != null && country?.currency) {
-      resolvedMonthlyPrice = resolved;
-      resolvedCurrency = country.currency as string;
-    }
     if (customerRow) {
+      stagedMarginRow = {
+        price: Number(customerRow.price) || 0,
+        margin_value: Number(customerRow.margin_value) || 0,
+        margin_type: customerRow.margin_type ?? 'fixed',
+      };
       resolvedCustomerMonthlyPrice = Number(customerRow.price);
-      if (!resolvedCurrency && country?.currency) resolvedCurrency = country.currency as string;
+      if (country?.currency) resolvedCurrency = country.currency as string;
+    }
+    // Prefer margin-derived partner (override → finalize − margin → legacy
+    // partner_pricing row) so fixed/% catalog rules stay the source of truth.
+    const override = card.partner_price_override as number | null | undefined;
+    const cardFields = {
+      markup: (contentSource as any).markup as number | null,
+      partner_price_override: override ?? null,
+      subscription_price: (contentSource as any).subscription_price as number | null,
+      proposed_price: (contentSource as any).proposed_price as number | null,
+    };
+    const derivedPartner =
+      override ??
+      (resolvedCustomerMonthlyPrice != null
+        ? partnerPriceFromCustomer(resolvedCustomerMonthlyPrice, cardFields, stagedMarginRow)
+        : null) ??
+      (partnerRow ? Number(partnerRow.price) : null);
+    if (derivedPartner != null && country?.currency) {
+      resolvedMonthlyPrice = derivedPartner;
+      resolvedCurrency = country.currency as string;
     }
   } else if (pricingCountryId && staged?.plan_id) {
     const [{ data: planPartner }, { data: planCustomer }, { data: country }] = await Promise.all([
@@ -615,12 +645,9 @@ export async function buildSquadhirePayloadForCard(
         .eq('plan_id', staged.plan_id)
         .eq('country_id', pricingCountryId)
         .maybeSingle(),
-      // Customer pricing comes from the canonical plan-pricing table — what
-      // the client actually pays. No per-card override exists for this side
-      // (only partner price is override-able), so we read the plan default.
       supabaseAdmin
         .from('subscription_plan_pricing')
-        .select('price')
+        .select('price, margin_value, margin_type')
         .eq('plan_id', staged.plan_id)
         .eq('country_id', pricingCountryId)
         .maybeSingle(),
@@ -630,41 +657,81 @@ export async function buildSquadhirePayloadForCard(
         .eq('id', pricingCountryId)
         .maybeSingle(),
     ]);
-    const defaultPartnerPrice = (planPartner?.price as number | undefined) ?? null;
-    const override = card.partner_price_override as number | null | undefined;
-    const resolved = override ?? defaultPartnerPrice;
-    if (resolved != null && country?.currency) {
-      resolvedMonthlyPrice = resolved;
-      resolvedCurrency = country.currency as string;
-    }
     const customer = (planCustomer?.price as number | undefined) ?? null;
     if (customer != null) {
+      stagedMarginRow = {
+        price: customer,
+        margin_value: Number(planCustomer?.margin_value) || 0,
+        margin_type: ((planCustomer?.margin_type as 'fixed' | 'percent') ?? 'fixed'),
+      };
       resolvedCustomerMonthlyPrice = customer;
-      // Defensive: if partner pricing was missing but customer is present we
-      // still need a currency to render. Reuse the same country's currency.
-      if (!resolvedCurrency && country?.currency) resolvedCurrency = country.currency as string;
+      if (country?.currency) resolvedCurrency = country.currency as string;
+    }
+    const override = card.partner_price_override as number | null | undefined;
+    const cardFields = {
+      markup: (contentSource as any).markup as number | null,
+      partner_price_override: override ?? null,
+      subscription_price: (contentSource as any).subscription_price as number | null,
+      proposed_price: (contentSource as any).proposed_price as number | null,
+    };
+    const derivedPartner =
+      override ??
+      (resolvedCustomerMonthlyPrice != null
+        ? partnerPriceFromCustomer(resolvedCustomerMonthlyPrice, cardFields, stagedMarginRow)
+        : null) ??
+      ((planPartner?.price as number | undefined) ?? null);
+    if (derivedPartner != null && country?.currency) {
+      resolvedMonthlyPrice = derivedPartner;
+      resolvedCurrency = country.currency as string;
     }
   }
 
   // A finalized subscription price set on the card is the source of truth for
   // what the client pays — it overrides the catalog customer price on staged
-  // cards. (resolvedCurrency is only set once a staged branch resolved, so this
-  // is a no-op for non-staged cards, which set the customer price just below.)
+  // cards. Re-derive partner from margin so the talent side tracks Final.
   {
     const finalized = (contentSource as any).subscription_price as number | null;
-    if (finalized != null && finalized > 0 && resolvedCurrency) {
+    if (finalized != null && finalized > 0) {
       resolvedCustomerMonthlyPrice = finalized;
+      if (!resolvedCurrency) resolvedCurrency = 'INR';
+      const override = card.partner_price_override as number | null | undefined;
+      if (override == null) {
+        const cardFields = {
+          markup: (contentSource as any).markup as number | null,
+          partner_price_override: null,
+          subscription_price: finalized,
+          proposed_price: (contentSource as any).proposed_price as number | null,
+        };
+        resolvedMonthlyPrice = partnerPriceFromCustomer(
+          finalized,
+          cardFields,
+          stagedMarginRow,
+        );
+      }
     }
   }
 
   // For non-staged cards: the finalized subscription price (or proposed price)
   // is what the customer pays/sees, and the talent earns the partner price
-  // (finalized - final margin, or the partner override). No catalog plan is
-  // linked on these cards, so a null markup resolves to a zero margin here
-  // (the talent earns the full finalized price) — same as the old default.
+  // (finalized - final margin, or the partner override). Prefer plan_snapshot
+  // margin when present; otherwise null markup → zero margin (full pay).
   if (!staged && cardSource && NON_STAGED_SOURCES.has(cardSource)) {
+    let nonStagedMargin = stagedMarginRow;
+    if (!nonStagedMargin && planSnapshot?.pricing?.length) {
+      const row =
+        (pricingCountryId &&
+          planSnapshot.pricing.find((p) => p.country_id === pricingCountryId)) ||
+        (planSnapshot.pricing.length === 1 ? planSnapshot.pricing[0] : null);
+      if (row) {
+        nonStagedMargin = {
+          price: Number(row.price) || 0,
+          margin_value: Number(row.margin_value) || 0,
+          margin_type: row.margin_type ?? 'fixed',
+        };
+      }
+    }
     const finalized = resolveFinalizedPrice(contentSource as any);
-    const partner = resolvePartnerPrice(contentSource as any);
+    const partner = resolvePartnerPrice(contentSource as any, nonStagedMargin);
     if (finalized != null) {
       resolvedMonthlyPrice = partner ?? finalized;
       resolvedCustomerMonthlyPrice = finalized;
@@ -777,6 +844,59 @@ export async function buildSquadhirePayloadForCard(
   if (resolvedCustomerMonthlyPrice != null && resolvedCurrency) {
     content.customer_monthly_price = resolvedCustomerMonthlyPrice;
     if (content.currency == null) content.currency = resolvedCurrency;
+  }
+
+  // Bidding rules for SquadHire: keep the same margin across counters, and
+  // enforce catalog min floors (business + talent). Percent cuts ceil to ₹100.
+  {
+    const cardFields = {
+      markup: (contentSource as any).markup as number | null,
+      partner_price_override: (card as any).partner_price_override as number | null,
+      subscription_price: (contentSource as any).subscription_price as number | null,
+      proposed_price: (contentSource as any).proposed_price as number | null,
+    };
+    let marginRow: PlanMarginFields | null = null;
+    if (planSnapshot && pricingCountryId) {
+      const row = (planSnapshot.pricing ?? []).find((p) => p.country_id === pricingCountryId);
+      if (row) {
+        marginRow = {
+          price: Number(row.price) || 0,
+          margin_value: Number(row.margin_value) || 0,
+          margin_type: row.margin_type ?? 'fixed',
+        };
+      }
+    }
+    const minCustomer = resolveMinCustomerPrice(marginRow);
+    const minPartner = resolveMinPartnerPrice(cardFields, marginRow);
+    if (minCustomer != null) content.min_customer_price = minCustomer;
+    if (minPartner != null) content.min_partner_price = minPartner;
+
+    // Effective margin rule: card markup freezes to fixed absolute; else plan.
+    if (cardFields.markup != null) {
+      content.margin_type = 'fixed';
+      content.margin_value = cardFields.markup;
+    } else if (marginRow && marginRow.margin_value != null) {
+      content.margin_type = marginRow.margin_type ?? 'fixed';
+      content.margin_value = marginRow.margin_value;
+    }
+    // Absolute cut at the current finalized price (for display / first bid).
+    const base = resolveFinalizedPrice(cardFields);
+    const absMargin = resolveFinalMargin(cardFields, marginRow, base);
+    if (absMargin != null) content.margin_amount = absMargin;
+
+    // When we already have a customer price but partner was missing, derive it
+    // with the live margin rule so the talent card still shows pay.
+    if (
+      resolvedMonthlyPrice == null &&
+      resolvedCustomerMonthlyPrice != null &&
+      cardFields.partner_price_override == null
+    ) {
+      const derived = partnerPriceFromCustomer(resolvedCustomerMonthlyPrice, cardFields, marginRow);
+      if (resolvedCurrency) {
+        content.monthly_price = derived;
+        content.currency = resolvedCurrency;
+      }
+    }
   }
   // Attach a single-line hours label ("1 hrs/day · 6 hrs/week · 30 hrs/month")
   // when the plan (or a card override) defines an hours-kind deliverable.

@@ -1035,14 +1035,25 @@ function CardGroup({
   );
 }
 
-// Customer-facing monthly price for a card: the finalized subscription price
-// (or proposed price) the client pays. Staged cards have neither, so fall back
-// to the plan's catalog pricing row.
+// Customer-facing price for a card: the finalized subscription price (or
+// proposed price) the client pays. After an accepted bid is locked, both the
+// business final and talent final are shown. Staged cards fall back to catalog.
 function priceLabelForCard(card: AdminSubscriptionCard): string {
   const planPrice = card.submission_subscription?.plan?.pricing?.[0];
   const priceCurrency = planPrice?.country?.currency || '₹';
+  const per = card.card_type === 'assignment' ? '' : '/mo';
   const priceValue = resolveFinalizedPrice(card) ?? planPrice?.price ?? null;
-  return priceValue ? `${priceCurrency}${Number(priceValue).toLocaleString()}/mo` : '';
+  if (priceValue == null) return '';
+  const business = `${priceCurrency}${Number(priceValue).toLocaleString()}${per}`;
+  const hasAgreed =
+    card.subscription_price != null &&
+    card.subscription_price > 0 &&
+    (card.state === 'assigned' || !!card.selected_recipient_id || card.partner_price_override != null);
+  if (hasAgreed && card.partner_price_override != null) {
+    return `Final ${business} · talent ${priceCurrency}${Number(card.partner_price_override).toLocaleString()}${per}`;
+  }
+  if (hasAgreed) return `Final ${business}`;
+  return business;
 }
 
 function SubscriptionCardRow({ card, onOpen, showCancelledTag, showArchivedTag, onReinstate, reinstating, onPause, onCancel, pausing, cancelling }: { card: AdminSubscriptionCard; onOpen: () => void; showCancelledTag: boolean; showArchivedTag?: boolean; onReinstate?: () => void; reinstating?: boolean; onPause?: () => void; onCancel?: () => void; pausing?: boolean; cancelling?: boolean }) {

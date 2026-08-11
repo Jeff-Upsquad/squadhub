@@ -8,7 +8,7 @@ import ConfirmDialog from '@/components/ConfirmDialog';
 import CardCodeChip from '@/components/CardCodeChip';
 import { useSquadhireConfig } from '@/hooks/useSquadhireConfig';
 import { openLeadInCRM } from '@/utils/squadCrm';
-import { resolveFinalizedPrice } from '@squadhub/shared';
+import { resolveFinalizedPrice, resolvePartnerPrice } from '@squadhub/shared';
 import AdminAssignmentOffers from './AdminAssignmentOffers';
 import CardViewToggle, { type CardViewMode } from './CardViewToggle';
 import type { AdminSubscriptionCard } from './AdminSubscriptionCards';
@@ -880,7 +880,16 @@ export default function AdminSubscriptionCardRecipientsView({
   const planPrice = plan?.pricing?.[0];
   const priceCurrency = planPrice?.country?.currency || card.submission?.country?.currency || '';
   const cur = priceCurrency || '₹';
+  const isAssignment = card.card_type === 'assignment';
+  const per = isAssignment ? '' : '/mo';
   const finalizedPrice = resolveFinalizedPrice(card);
+  const partnerPrice = resolvePartnerPrice(card, planPrice);
+  // After accept/select, subscription_price + partner_price_override hold the
+  // negotiated final — surface both so admin + Leads see what was agreed.
+  const hasAgreedBid =
+    card.subscription_price != null &&
+    card.subscription_price > 0 &&
+    (card.state === 'assigned' || !!card.selected_recipient_id || card.partner_price_override != null);
   const planNameDisplay = plan?.plan || card.plan_name || null;
   const planTierDisplay = plan?.tier || null;
   const serviceDisplay = card.submission_subscription?.subscription?.name || card.service_type || null;
@@ -892,7 +901,8 @@ export default function AdminSubscriptionCardRecipientsView({
         hoursDeliverable.per_month ? `${hoursDeliverable.per_month} hrs/month` : null,
       ].filter(Boolean).join(' · ') || null
     : null;
-  const planPriceDisplay = finalizedPrice != null ? `${cur} ${finalizedPrice.toLocaleString()}/mo` : null;
+  const planPriceDisplay = finalizedPrice != null ? `${cur} ${finalizedPrice.toLocaleString()}${per}` : null;
+  const partnerPriceDisplay = partnerPrice != null ? `${cur} ${partnerPrice.toLocaleString()}${per}` : null;
 
   // Broadcast summary info
   const talentTotal = allRecipients.filter((r) => r.type === 'talent').length;
@@ -1228,7 +1238,14 @@ export default function AdminSubscriptionCardRecipientsView({
               <HeaderDetailRow label="Tier" value={planTierDisplay} />
               <HeaderDetailRow label="Service" value={serviceDisplay} />
               <HeaderDetailRow label="Hours" value={planHours} />
-              <HeaderDetailRow label="Price" value={planPriceDisplay} />
+              {hasAgreedBid ? (
+                <>
+                  <HeaderDetailRow label="Final (business)" value={planPriceDisplay} />
+                  <HeaderDetailRow label="Final (talent)" value={partnerPriceDisplay} />
+                </>
+              ) : (
+                <HeaderDetailRow label="Price" value={planPriceDisplay} />
+              )}
             </div>
           </div>
           <div className="sh-card p-5">

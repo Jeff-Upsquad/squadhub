@@ -9,6 +9,19 @@ interface OfferAmount {
   amount: number;
   currency?: string;
   period?: string;
+  /** Talent-side pay derived from margin (when amount is business-side). */
+  partner_amount?: number;
+  margin_amount?: number;
+  margin_type?: 'fixed' | 'percent' | null;
+  margin_value?: number | null;
+  side?: 'business' | 'talent';
+}
+
+interface BidPricing {
+  min_customer_price: number | null;
+  min_partner_price: number | null;
+  margin_type: 'fixed' | 'percent' | null;
+  margin_value: number | null;
 }
 interface OfferEvent {
   id: string;
@@ -48,7 +61,16 @@ function fmtAmount(a: unknown): string | null {
   const o = a as OfferAmount;
   if (typeof o.amount !== 'number') return null;
   const cur = o.currency && o.currency !== 'INR' ? `${o.currency} ` : '₹';
-  return `${cur}${o.amount.toLocaleString()}`;
+  const business = `${cur}${o.amount.toLocaleString()}`;
+  if (typeof o.partner_amount === 'number') {
+    return `${business} business · ${cur}${o.partner_amount.toLocaleString()} talent`;
+  }
+  return business;
+}
+
+function fmtMoney(n: number | null | undefined): string {
+  if (n == null) return '—';
+  return `₹${n.toLocaleString()}`;
 }
 
 function fmtDate(s: string): string {
@@ -63,13 +85,18 @@ export default function AdminAssignmentOffers({ cardId }: { cardId: string }) {
     queryFn: () =>
       api
         .get(`/admin/subscription-cards/${cardId}/offers`)
-        .then((r) => r.data as { source: string; offers: AdminOffer[] }),
+        .then((r) => r.data as { source: string; offers: AdminOffer[]; bid_pricing?: BidPricing | null }),
     refetchInterval: 20_000,
   });
 
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: ['admin-assignment-offers', cardId] });
     qc.invalidateQueries({ queryKey: ['admin-card-recipients', cardId] });
+    // Accepted bid locks subscription_price / partner_price_override on the
+    // card — refresh lists + open-card detail so Final price appears.
+    qc.invalidateQueries({ queryKey: ['admin-subscription-cards'] });
+    qc.invalidateQueries({ queryKey: ['admin-card'] });
+    qc.invalidateQueries({ queryKey: ['admin-card-detail', cardId] });
   };
   const counter = useMutation({
     mutationFn: (v: { offerId: string; amount: OfferAmount; note?: string }) =>
@@ -103,12 +130,18 @@ export default function AdminAssignmentOffers({ cardId }: { cardId: string }) {
 
   const offers = data?.offers ?? [];
   const source = data?.source;
+  const bidPricing = data?.bid_pricing ?? null;
   const busy = counter.isPending || accept.isPending || decline.isPending;
+  const minBusiness = bidPricing?.min_customer_price ?? null;
 
   const submitCounter = (offerId: string) => {
     const n = Math.round(Number(counterVal));
     if (!Number.isFinite(n) || n <= 0 || n % OFFER_STEP !== 0) {
       showToast(`Amount must be a positive multiple of ₹${OFFER_STEP}`, 'error');
+      return;
+    }
+    if (minBusiness != null && n < minBusiness) {
+      showToast(`Business bid cannot be below catalog min ${fmtMoney(minBusiness)}`, 'error');
       return;
     }
     counter.mutate(
@@ -122,10 +155,28 @@ export default function AdminAssignmentOffers({ cardId }: { cardId: string }) {
     );
   };
 
+  const marginHint =
+    bidPricing?.margin_type === 'percent' && bidPricing.margin_value != null
+      ? `${bidPricing.margin_value}% (₹ cut rounds up to nearest ₹100)`
+      : bidPricing?.margin_type === 'fixed' && bidPricing.margin_value != null
+        ? `₹${bidPricing.margin_value.toLocaleString()} fixed`
+        : null;
+
   return (
     <div className="rounded-2xl border border-[#E7E7EA] bg-surface shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
       <div className="flex items-center justify-between border-b border-[#E7E7EA] px-5 py-4">
-        <h2 className="text-sm font-semibold text-foreground">Bidding</h2>
+        <div>
+          <h2 className="text-sm font-semibold text-foreground">Bidding</h2>
+          {(minBusiness != null || marginHint) && (
+            <p className="mt-0.5 text-[11px] text-foreground-muted">
+              {minBusiness != null && (
+                <>Min business {fmtMoney(minBusiness)} · Min talent {fmtMoney(bidPricing?.min_partner_price)}</>
+              )}
+              {minBusiness != null && marginHint ? ' · ' : null}
+              {marginHint ? <>Margin {marginHint}</> : null}
+            </p>
+          )}
+        </div>
         <div className="flex items-center gap-2">
           {source === 'live' && (
             <span className="inline-flex items-center gap-1 rounded-full bg-[#DCFCE7] px-2 py-0.5 text-[10px] font-semibold text-[#166534]">
@@ -169,7 +220,14 @@ export default function AdminAssignmentOffers({ cardId }: { cardId: string }) {
                     </div>
                     <p className="mt-1 text-sm text-foreground">
                       <span className="text-foreground-muted">
-                        {o.status === 'pending_business' ? 'Talent asks' : o.status === 'pending_talent' ? 'You offered' : 'Latest'}:
+                        {o.status === 'accepted'
+                          ? 'Final agreed'
+                          : o.status === 'pending_business'
+                            ? 'Talent asks'
+                            : o.status === 'pending_talent'
+                              ? 'You offered'
+                              : 'Latest'}
+                        :
                       </span>{' '}
                       <span className="font-semibold">{fmtAmount(o.current_amount) ?? '—'}</span>
                     </p>
@@ -240,8 +298,12 @@ export default function AdminAssignmentOffers({ cardId }: { cardId: string }) {
                       step={OFFER_STEP}
                       value={counterVal}
                       onChange={(e) => setCounterVal(e.target.value)}
-                      placeholder="Your figure (₹)"
-                      className="w-40 rounded-lg border border-[#E7E7EA] bg-surface px-3 py-1.5 text-sm text-foreground"
+                      placeholder={
+                        minBusiness != null
+                          ? `Business figure (min ₹${minBusiness.toLocaleString()})`
+                          : 'Business figure (₹)'
+                      }
+                      className="w-52 rounded-lg border border-[#E7E7EA] bg-surface px-3 py-1.5 text-sm text-foreground"
                     />
                     <button
                       type="button"

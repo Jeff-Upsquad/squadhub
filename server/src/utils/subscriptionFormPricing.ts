@@ -7,7 +7,8 @@ import { supabaseAdmin } from '../supabase';
  *
  * Rules:
  *   - proposed_price stays 0 (admin may fill later)
- *   - margin is always copied from the catalog (absolute ₹)
+ *   - markup stays null so the plan catalog margin (fixed OR percent) is
+ *     inherited live — percent margins re-apply on every bid amount
  *   - customer price always → subscription_price (the Final price in the editor)
  *   - client budget (if any) is reference only: stored per tier as
  *     tier_pricing.<tier>.client_budget, and optionally as a scalar
@@ -29,17 +30,6 @@ export type CatalogTierPricingEntry = {
   /** Client's stated monthly budget for this tier (reference only). */
   client_budget?: number | null;
 };
-
-function marginInRupees(
-  price: number,
-  marginValue: number,
-  marginType: 'fixed' | 'percent' | string | null | undefined,
-): number {
-  if (marginType === 'percent') {
-    return Math.max(0, Math.round((price * marginValue) / 100));
-  }
-  return Math.max(0, marginValue);
-}
 
 /** Resolve which country pricing row to use: explicit id, else India, else first. */
 async function resolvePricingCountryId(
@@ -157,11 +147,12 @@ export async function buildCatalogTierPricing(opts: {
       continue;
     }
 
-    const markup = marginInRupees(pricing.price, pricing.margin_value, pricing.margin_type);
+    // Keep markup null so percent (or fixed) plan margins stay live during
+    // bidding — resolvePlanMargin recomputes against each bid amount.
+    // Catalog min customer price seeds Final. Client budget is reference only.
     out[tier] = {
       proposed_price: 0,
-      markup,
-      // Catalog customer price → Final. Client budget (if any) is reference only.
+      markup: null,
       subscription_price: pricing.price,
       ...(client_budget != null ? { client_budget } : {}),
     };

@@ -5,6 +5,7 @@ import { config } from '../../config';
 import { supabaseAdmin } from '../../supabase';
 import { logCardEvent } from '../../utils/cardEvents';
 import { endActiveAssignmentTermsForCard } from '../../utils/assignmentTerms';
+import { lockAcceptedBidPrice } from '../../utils/lockAcceptedBidPrice';
 
 /**
  * Inbound callbacks from SquadHire.
@@ -146,6 +147,17 @@ const cardSelectionSchema = z
     talent_user_id: z.string().min(1),
     talent_name: z.string().min(1).optional(),
     selected_at: z.string().datetime(),
+    // Optional agreed bid (business-side amount + optional partner_amount).
+    // When omitted we pull the accepted offer from SquadHire's offers snapshot.
+    agreed_amount: z
+      .object({
+        amount: z.number().positive(),
+        partner_amount: z.number().nonnegative().optional(),
+        side: z.enum(['business', 'talent']).optional(),
+        currency: z.string().optional(),
+        period: z.string().optional(),
+      })
+      .optional(),
   })
   .strict();
 
@@ -215,6 +227,16 @@ router.post(
           paused_at: null,
         })
         .eq('id', card.id);
+
+      // Freeze the negotiated bid for this talent onto the card so admin +
+      // Leads mini-app show the final agreed business / talent prices.
+      lockAcceptedBidPrice({
+        cardId: card.id,
+        talentUserId: body.talent_user_id,
+        amount: body.agreed_amount ?? null,
+      }).catch((err) => {
+        console.error('[squadhire-callback card-selection] lock bid price failed', err);
+      });
 
       res.json({ success: true });
     } catch (err: any) {

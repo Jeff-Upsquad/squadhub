@@ -88,8 +88,24 @@ function workingDaysThisMonth(workingDays: string[]): number {
 
 function computePartnerPrice(proposed: number, marginValue: number, marginType: 'fixed' | 'percent'): number {
   if (proposed <= 0) return 0;
-  if (marginType === 'percent') return Math.max(0, Math.round(proposed - (proposed * marginValue) / 100));
+  // Percent margin cut is rounded UP to the nearest hundred (catalog rule).
+  if (marginType === 'percent') {
+    const cut = Math.ceil((proposed * marginValue) / 100 / 100) * 100;
+    return Math.max(0, proposed - cut);
+  }
   return Math.max(0, proposed - marginValue);
+}
+
+/** Absolute margin from a catalog row against a business base price. */
+function catalogMarginAbs(
+  row: { margin_value: number; margin_type: 'fixed' | 'percent' },
+  basePrice: number,
+): number {
+  if (row.margin_type === 'percent') {
+    if (!(basePrice > 0)) return 0;
+    return Math.ceil((basePrice * row.margin_value) / 100 / 100) * 100;
+  }
+  return Math.max(0, row.margin_value);
 }
 
 interface CardData {
@@ -279,24 +295,25 @@ export default function AdminCardEditor({
     setCustomerLocation(card.customer_location || '');
     setEmailEditable(false);
     setPhoneEditable(false);
-    // Hydrate tier_pricing from DB if present; otherwise seed every selected
-    // tier from the legacy proposed_price/markup so the form round-trips
-    // for cards that pre-date this column.
+    // Hydrate tier_pricing from DB — ONLY for selected target_tiers.
+    // Orphan keys for unselected levels (legacy / catalog-display artifacts)
+    // must not enter form state, or a later save would re-persist them and
+    // risk multi-tier fan-out treating them as publishable.
     const dbTierPricing = card.tier_pricing && typeof card.tier_pricing === 'object'
       ? card.tier_pricing
       : null;
+    const selectedTiers = card.target_tiers || [];
     const initialPricing: Record<string, { proposedPrice: number; markup: number | null; subscriptionPrice: number | null }> = {};
-    if (dbTierPricing) {
-      Object.entries(dbTierPricing).forEach(([tier, p]) => {
+    selectedTiers.forEach((tier) => {
+      const p = dbTierPricing?.[tier] as any;
+      if (p) {
         initialPricing[tier] = {
-          proposedPrice: (p as any)?.proposed_price ?? 0,
-          markup: (p as any)?.markup ?? null,
-          subscriptionPrice: (p as any)?.subscription_price ?? null,
+          proposedPrice: p?.proposed_price ?? 0,
+          markup: p?.markup ?? null,
+          subscriptionPrice: p?.subscription_price ?? null,
         };
-      });
-    }
-    (card.target_tiers || []).forEach((tier) => {
-      if (!initialPricing[tier]) {
+      } else {
+        // Legacy single-tier cards predate tier_pricing — seed from row cols.
         initialPricing[tier] = {
           proposedPrice: card.proposed_price || 0,
           markup: card.markup ?? null,
@@ -485,15 +502,10 @@ export default function AdminCardEditor({
           markup: null,
           subscriptionPrice: null,
         };
-        const marginAbs =
-          row.margin_type === 'percent'
-            ? Math.max(0, Math.round((row.price * row.margin_value) / 100))
-            : Math.max(0, row.margin_value);
+        // Do NOT seed absolute markup from a percent catalog margin — leave
+        // markup null so the plan % stays live and re-applies on each bid.
+        // Final seeds to the catalog min price when empty.
         const updated = { ...entry };
-        if (updated.markup == null) {
-          updated.markup = marginAbs;
-          changed = true;
-        }
         if (updated.subscriptionPrice == null && !(updated.proposedPrice > 0)) {
           updated.subscriptionPrice = row.price;
           changed = true;
@@ -522,7 +534,7 @@ export default function AdminCardEditor({
   );
 
   // Catalog-suggested margin for a given tier. Fixed margins don't need a base
-  // price; percent margins apply to the finalized price.
+  // price; percent margins re-apply to the finalized price (ceil to ₹100).
   const catalogMarginForTier = useCallback(
     (tier: string): number | null => {
       const row = catalogPricingForTier(tier);
@@ -531,7 +543,7 @@ export default function AdminCardEditor({
         const entry = tierPricing[tier];
         const base = entry?.subscriptionPrice ?? entry?.proposedPrice ?? 0;
         if (base <= 0) return null;
-        return Math.round((base * row.margin_value) / 100);
+        return catalogMarginAbs(row, base);
       }
       return row.margin_value;
     },
@@ -553,28 +565,20 @@ export default function AdminCardEditor({
     [clientBudgetsByTier, clientBudget, tiers],
   );
 
-  // Partner price preview: finalized price (subscription price, else proposed)
-  // minus the final margin (the admin's adjusted markup, else the plan margin).
-  // A blank markup inherits the catalog margin rather than meaning "zero".
-  // Unselected tiers fall back to catalog Final − catalog margin for display.
+  // Partner price preview for SELECTED tiers only: finalized price (subscription
+  // price, else proposed) minus the final margin (admin markup, else catalog).
+  // Unselected tiers return null — they must not look "priced for publish".
   const partnerPriceForTier = useCallback(
     (tier: string): number | null => {
+      if (!tiers.includes(tier)) return null;
       const entry = tierPricing[tier];
-      if (!entry) {
-        const row = catalogPricingForTier(tier);
-        if (!row || !(row.price > 0)) return null;
-        const marginAbs =
-          row.margin_type === 'percent'
-            ? Math.max(0, Math.round((row.price * row.margin_value) / 100))
-            : Math.max(0, row.margin_value);
-        return Math.max(0, row.price - marginAbs);
-      }
+      if (!entry) return null;
       const finalized = entry.subscriptionPrice ?? (entry.proposedPrice > 0 ? entry.proposedPrice : null);
       if (finalized == null) return null;
       const margin = entry.markup ?? catalogMarginForTier(tier) ?? 0;
       return Math.max(0, finalized - margin);
     },
-    [tierPricing, catalogMarginForTier, catalogPricingForTier],
+    [tiers, tierPricing, catalogMarginForTier],
   );
 
   // Whether at least one selected tier has catalog data loaded — used to
@@ -583,14 +587,18 @@ export default function AdminCardEditor({
   const anyCatalogLoaded = tiers.some((t) => catalogByTier[t] != null);
 
   // Build the API tier_pricing map (snake_case shape) from the form state.
-  // Preserve client_budget from the brief so a save doesn't wipe preferred-
-  // level budgets the admin only uses as reference.
+  // Selected tiers carry full pricing (Final/margin). Unselected levels MUST
+  // NOT keep subscription_price/markup — those are what fan-out publishes —
+  // but we still retain client_budget-only stubs so preferred-level budgets
+  // survive a deselect → reselect without a reload.
   const tierPricingPayload = useMemo(() => {
     const out: Record<
       string,
       { proposed_price: number; markup: number | null; subscription_price: number | null; client_budget?: number | null }
     > = {};
-    for (const [tier, entry] of Object.entries(tierPricing)) {
+    for (const tier of tiers) {
+      const entry = tierPricing[tier];
+      if (!entry) continue;
       const client_budget = clientBudgetsByTier[tier] ?? null;
       out[tier] = {
         proposed_price: entry.proposedPrice ?? 0,
@@ -599,8 +607,20 @@ export default function AdminCardEditor({
         ...(client_budget != null && client_budget > 0 ? { client_budget } : {}),
       };
     }
+    // Keep client_budget for preferred-but-unselected tiers (no publishable price).
+    for (const [tier, budget] of Object.entries(clientBudgetsByTier)) {
+      if (out[tier]) continue;
+      if (typeof budget === 'number' && budget > 0) {
+        out[tier] = {
+          proposed_price: 0,
+          markup: null,
+          subscription_price: null,
+          client_budget: budget,
+        };
+      }
+    }
     return out;
-  }, [tierPricing, clientBudgetsByTier]);
+  }, [tiers, tierPricing, clientBudgetsByTier]);
 
   // Legacy proposed_price / markup columns: only meaningful when there's
   // exactly one tier (single-card publish path reads from the row). With
@@ -1163,17 +1183,19 @@ export default function AdminCardEditor({
             </div>
           </Section>
 
-          {/* Pricing — always shows Junior / Pro / Top Talents. Client-selected
-              levels are highlighted; their brief budget appears under
-              "Client proposed price". Unselected levels stay muted with no
-              client proposed amount. */}
+          {/* Pricing — always shows Junior / Pro / Top Talents for comparison.
+              ONLY selected tiers (Tiers pills / row click) carry Final/Margin/
+              Partner and publish. Unselected rows stay muted with catalog list
+              price only — they must never look "priced for broadcast". */}
           <Section title="Pricing">
             <div className="space-y-2">
-              {tiers.length > 1 && (
-                <p className="rounded-md bg-[var(--color-sh-cream)] px-2.5 py-1.5 text-[10px] leading-snug text-[var(--color-sh-ink-muted)]">
-                  Highlighted rows are levels the client asked for. Selected tiers publish as <strong>one card</strong> with a tab per tier.
-                </p>
-              )}
+              <p className="rounded-md bg-[var(--color-sh-cream)] px-2.5 py-1.5 text-[10px] leading-snug text-[var(--color-sh-ink-muted)]">
+                {tiers.length === 0
+                  ? 'Pick at least one level (click a row or use Plan Basics → Tiers). Only selected levels are published to talent.'
+                  : tiers.length === 1
+                    ? <>Only <strong>{tiers[0]}</strong> will be published. Unselected levels are catalog reference only — they are not broadcast.</>
+                    : <>Selected levels publish as <strong>one card</strong> with a tab per tier. Unselected levels are not broadcast.</>}
+              </p>
 
               <div className="overflow-x-auto rounded-lg border border-[var(--color-sh-warm-border)]">
                 <table className="w-full min-w-[640px] border-collapse text-left text-xs">
@@ -1203,8 +1225,12 @@ export default function AdminCardEditor({
                     {pricingTableTiers.map((tier, rowIdx) => {
                       const isSelected = tiers.includes(tier);
                       const clientProposed = clientProposedForTier(tier);
-                      const isClientPreferred =
-                        clientProposed != null || (card?.target_tiers || []).includes(tier);
+                      // Client-picked on the brief (budget and/or listed in the
+                      // brief's target_tiers). Distinct from admin selection.
+                      const showClientBadge =
+                        clientProposed != null
+                        || (Array.isArray(card?.target_tiers)
+                          && (card!.target_tiers as string[]).includes(tier));
                       const entry = tierPricing[tier] || {
                         proposedPrice: 0,
                         markup: null,
@@ -1213,46 +1239,46 @@ export default function AdminCardEditor({
                       const partnerPrice = partnerPriceForTier(tier);
                       const catalogPricingRow = catalogPricingForTier(tier);
                       const catalogCurrency = currencySymbol(catalogPricingRow?.country?.currency);
-                      const catalogMarginInRupees = isSelected
-                        ? catalogMarginForTier(tier)
-                        : catalogPricingRow
-                          ? (catalogPricingRow.margin_type === 'percent'
-                              ? Math.max(0, Math.round((catalogPricingRow.price * catalogPricingRow.margin_value) / 100))
-                              : Math.max(0, catalogPricingRow.margin_value))
-                          : null;
-                      // Selected tiers: admin-controlled Final. Unselected: catalog only.
-                      const effectiveFinal = isSelected
-                        ? (entry.subscriptionPrice
-                            ?? (entry.proposedPrice > 0 ? entry.proposedPrice : null)
-                            ?? (catalogPricingRow && catalogPricingRow.price > 0 ? catalogPricingRow.price : null))
-                        : (catalogPricingRow && catalogPricingRow.price > 0 ? catalogPricingRow.price : null);
-                      const rowHighlight = isClientPreferred || isSelected
+                      const catalogMarginInRupees = isSelected ? catalogMarginForTier(tier) : null;
+                      const rowHighlight = isSelected
                         ? 'bg-[var(--color-sh-lime-soft)]/50'
                         : 'bg-white';
                       return (
                         <tr
                           key={tier}
-                          className={`align-middle ${rowIdx > 0 ? 'border-t border-[var(--color-sh-warm-border)]' : ''} ${rowHighlight}`}
+                          className={`align-middle ${rowIdx > 0 ? 'border-t border-[var(--color-sh-warm-border)]' : ''} ${rowHighlight} ${
+                            isEditable ? 'cursor-pointer' : ''
+                          }`}
+                          onClick={isEditable ? () => toggleTier(tier) : undefined}
+                          title={
+                            isEditable
+                              ? (isSelected ? `Deselect ${tier} (will not publish)` : `Select ${tier} for publish`)
+                              : undefined
+                          }
                         >
                           <td className="px-2.5 py-1.5">
                             <div className="flex items-center gap-1.5">
-                              {(isClientPreferred || isSelected) && (
+                              {isSelected && (
                                 <span
                                   className="h-1.5 w-1.5 flex-shrink-0 rounded-full bg-[var(--color-sh-ink)]"
-                                  title={isClientPreferred ? 'Client preferred' : 'Selected for publish'}
+                                  title="Selected for publish"
                                 />
                               )}
                               <span className={`text-xs font-semibold ${
-                                isClientPreferred || isSelected
+                                isSelected
                                   ? 'text-[var(--color-sh-ink)]'
                                   : 'text-[var(--color-sh-ink-muted)]'
                               }`}>
                                 {tier}
                               </span>
                             </div>
-                            {(isClientPreferred || isSelected) && (
+                            {isSelected ? (
                               <span className="mt-0.5 block text-[9px] font-medium text-[var(--color-sh-ink-muted)]">
-                                {isClientPreferred ? 'Client selected' : 'Selected'}
+                                {showClientBadge ? 'Client selected' : 'Selected'}
+                              </span>
+                            ) : (
+                              <span className="mt-0.5 block text-[9px] font-medium text-[var(--color-sh-ink-faint)]">
+                                Not publishing
                               </span>
                             )}
                           </td>
@@ -1263,18 +1289,19 @@ export default function AdminCardEditor({
 
                           {/* Client proposed price — brief budget for preferred levels only */}
                           <td className="px-2 py-1.5">
-                            {isClientPreferred && clientProposed != null ? (
+                            {clientProposed != null ? (
                               <div className="text-xs font-semibold tabular-nums text-[var(--color-sh-ink)]">
                                 {catalogCurrency}{clientProposed.toLocaleString()}
                               </div>
-                            ) : isClientPreferred ? (
-                              <span className="text-[var(--color-sh-ink-faint)]">—</span>
                             ) : (
                               <span className="text-[var(--color-sh-ink-faint)]">—</span>
                             )}
                           </td>
 
-                          <td className={`px-2 py-1.5 ${isSelected ? 'bg-[var(--color-sh-cream)]/80' : ''}`}>
+                          <td
+                            className={`px-2 py-1.5 ${isSelected ? 'bg-[var(--color-sh-cream)]/80' : ''}`}
+                            onClick={(e) => { if (isSelected) e.stopPropagation(); }}
+                          >
                             {isSelected ? (
                               <PriceInput
                                 value={entry.subscriptionPrice ?? ''}
@@ -1295,13 +1322,14 @@ export default function AdminCardEditor({
                                 currency={catalogCurrency}
                               />
                             ) : (
-                              <span className="tabular-nums text-[var(--color-sh-ink-muted)]">
-                                {effectiveFinal != null ? `${catalogCurrency}${effectiveFinal.toLocaleString()}` : '—'}
-                              </span>
+                              <span className="tabular-nums text-[var(--color-sh-ink-faint)]">—</span>
                             )}
                           </td>
 
-                          <td className="px-2 py-1.5">
+                          <td
+                            className="px-2 py-1.5"
+                            onClick={(e) => { if (isSelected) e.stopPropagation(); }}
+                          >
                             {isSelected ? (
                               <PriceInput
                                 value={entry.markup ?? ''}
@@ -1315,20 +1343,18 @@ export default function AdminCardEditor({
                                 currency={catalogCurrency}
                               />
                             ) : (
-                              <span className="tabular-nums text-[var(--color-sh-ink-muted)]">
-                                {catalogMarginInRupees != null
-                                  ? `${catalogCurrency}${catalogMarginInRupees.toLocaleString()}`
-                                  : '—'}
-                              </span>
+                              <span className="tabular-nums text-[var(--color-sh-ink-faint)]">—</span>
                             )}
                           </td>
 
                           <td className={`px-2.5 py-1.5 tabular-nums font-semibold ${
-                            isSelected || isClientPreferred
+                            isSelected
                               ? 'bg-[var(--color-sh-cream)]/80 text-[var(--color-sh-ink)]'
-                              : 'text-[var(--color-sh-ink-muted)]'
+                              : 'text-[var(--color-sh-ink-faint)]'
                           }`}>
-                            {partnerPrice != null ? `${catalogCurrency}${partnerPrice.toLocaleString()}` : '—'}
+                            {isSelected && partnerPrice != null
+                              ? `${catalogCurrency}${partnerPrice.toLocaleString()}`
+                              : '—'}
                           </td>
                         </tr>
                       );
@@ -1338,7 +1364,7 @@ export default function AdminCardEditor({
               </div>
 
               <p className="px-0.5 text-[10px] leading-snug text-[var(--color-sh-ink-faint)]">
-                ₹/mo · Highlighted = client-selected · <strong className="font-medium text-[var(--color-sh-ink-muted)]">Client proposed</strong> = budget from brief · <strong className="font-medium text-[var(--color-sh-ink-muted)]">Final</strong> = what the client pays · <strong className="font-medium text-[var(--color-sh-ink-muted)]">Partner</strong> = Final − Margin
+                Click a row to select/deselect for publish · <strong className="font-medium text-[var(--color-sh-ink-muted)]">Subscription</strong> = catalog min price (bid floor) · <strong className="font-medium text-[var(--color-sh-ink-muted)]">Client proposed</strong> = budget from brief · <strong className="font-medium text-[var(--color-sh-ink-muted)]">Final</strong> = what the client pays · <strong className="font-medium text-[var(--color-sh-ink-muted)]">Partner</strong> = Final − Margin (% ceils up to ₹100; stays live while bidding) · Only selected levels are broadcast
               </p>
             </div>
           </Section>

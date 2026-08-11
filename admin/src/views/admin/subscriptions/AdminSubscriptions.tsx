@@ -731,9 +731,10 @@ function PlanPricingStrip({
   const marginN = parseInt(marginValue, 10);
   const hasPrice = price.trim() !== '' && !isNaN(priceN) && priceN >= 0;
   const hasMargin = !isNaN(marginN) && marginN >= 0;
+  // Percent margins: rupee cut rounds UP to the nearest hundred.
   const marginAmount = hasMargin
     ? marginType === 'percent'
-      ? Math.round(((hasPrice ? priceN : 0) * marginN) / 100)
+      ? Math.ceil((((hasPrice ? priceN : 0) * marginN) / 100) / 100) * 100
       : marginN
     : null;
   const marginPct =
@@ -753,11 +754,11 @@ function PlanPricingStrip({
   if (!editing) {
     return (
       <div className="flex flex-wrap items-end gap-x-6 gap-y-3">
-        <PriceField label="Customer price">
+        <PriceField label="Min. price">
           {hasPrice ? (
             <>
               <span className="text-sm font-medium text-foreground">{fmt(priceN)}</span>
-              <span className="text-[11px] text-foreground-dim">/ mo</span>
+              <span className="text-[11px] text-foreground-dim">/ mo · bid floor</span>
             </>
           ) : (
             <span className="text-sm text-foreground-dim">—</span>
@@ -766,9 +767,13 @@ function PlanPricingStrip({
         <PriceField label="Margin">
           <span className="text-sm font-medium text-foreground">{marginAmount == null ? '—' : fmt(marginAmount)}</span>
           {marginPct != null && <span className="text-[11px] text-foreground-dim">· {marginPct}%</span>}
+          {marginType === 'percent' && marginAmount != null && (
+            <span className="text-[10px] text-foreground-dim">ceil ₹100</span>
+          )}
         </PriceField>
-        <PriceField label="Partner price">
+        <PriceField label="Partner min">
           <span className="text-sm font-semibold text-emerald-600">{partner == null ? '—' : fmt(partner)}</span>
+          <span className="text-[11px] text-foreground-dim">talent floor</span>
         </PriceField>
       </div>
     );
@@ -788,8 +793,8 @@ function PlanPricingStrip({
 
   return (
     <div className="flex flex-wrap items-end gap-x-6 gap-y-3">
-      {/* Customer price (minimum monthly) */}
-      <PriceField label="Customer price">
+      {/* Min. price — business bid floor; talent floor = min − margin */}
+      <PriceField label="Min. price">
         <span className="text-xs text-foreground-dim">{sym}</span>
         <input
           type="number"
@@ -797,9 +802,10 @@ function PlanPricingStrip({
           value={price}
           onChange={(e) => patch({ price: e.target.value })}
           placeholder="—"
+          title="Business cannot bid below this. Talent floor is min minus margin."
           className="w-24 rounded-md border border-divider px-2 py-1 text-sm text-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
         />
-        <span className="text-[11px] text-foreground-dim">/ mo</span>
+        <span className="text-[11px] text-foreground-dim">/ mo · bid floor</span>
       </PriceField>
 
       {/* Margin — rupee amount and percent shown together; toggle picks which is editable */}
@@ -825,7 +831,7 @@ function PlanPricingStrip({
         {/* Percent (%) */}
         <label
           className={`flex items-center gap-1 rounded-md border px-2 py-1 ${marginType === 'percent' ? 'border-accent bg-surface' : 'border-divider bg-surface-alt'}`}
-          title={marginType === 'percent' ? 'Editable — margin as a percentage of the customer price' : 'Auto-calculated from the rupee amount'}
+          title={marginType === 'percent' ? 'Editable — % of the business price; rupee cut rounds up to the nearest ₹100' : 'Auto-calculated from the rupee amount'}
         >
           <input
             type="number"
@@ -861,14 +867,15 @@ function PlanPricingStrip({
         </div>
       </PriceField>
 
-      {/* Partner price (computed = customer − margin) */}
-      <PriceField label="Partner price">
+      {/* Partner min (talent bid floor = min. price − margin) */}
+      <PriceField label="Partner min">
         <span
           className="text-sm font-semibold text-emerald-600"
-          title="What the partner is paid = customer price − margin"
+          title="Talent bid floor = min. price − margin (percent cuts round up to the nearest ₹100)"
         >
           {partner == null ? '—' : fmt(partner)}
         </span>
+        <span className="text-[11px] text-foreground-dim">talent floor</span>
       </PriceField>
     </div>
   );

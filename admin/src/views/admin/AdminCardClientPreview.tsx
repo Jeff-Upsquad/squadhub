@@ -4,7 +4,7 @@ import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import api from '@/services/api';
 import { useSquadhireConfig } from '@/hooks/useSquadhireConfig';
-import { resolveFinalizedPrice } from '@squadhub/shared';
+import { resolveFinalizedPrice, resolvePartnerPrice } from '@squadhub/shared';
 import CardViewToggle, { type CardViewMode } from './CardViewToggle';
 import AdminAssignmentOffers from './AdminAssignmentOffers';
 import {
@@ -125,8 +125,20 @@ export default function AdminCardClientPreview({
   const priceCurrency = planPrice?.country?.currency || card.submission?.country?.currency || '';
   const cur = priceCurrency || '₹';
   const finalizedPrice = resolveFinalizedPrice(card);
+  const partnerPrice = resolvePartnerPrice(card, planPrice);
+  const per = isAssignment ? '' : '/mo';
+  const hasAgreedBid =
+    card.subscription_price != null &&
+    card.subscription_price > 0 &&
+    (card.state === 'assigned' || !!card.selected_recipient_id || card.partner_price_override != null);
   const priceDisplay =
-    finalizedPrice != null ? `${cur} ${finalizedPrice.toLocaleString()}${isAssignment ? '' : '/mo'}` : null;
+    finalizedPrice != null
+      ? hasAgreedBid
+        ? `Final ${cur} ${finalizedPrice.toLocaleString()}${per}${
+            partnerPrice != null ? ` · talent ${cur} ${partnerPrice.toLocaleString()}${per}` : ''
+          }`
+        : `${cur} ${finalizedPrice.toLocaleString()}${per}`
+      : null;
 
   const serviceDisplay = card.submission_subscription?.subscription?.name || card.service_type || null;
   const planNameDisplay = plan?.plan || card.plan_name || null;

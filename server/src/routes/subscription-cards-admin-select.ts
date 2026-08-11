@@ -33,6 +33,7 @@ import {
   type CardActor,
   type CardLifecycleResult,
 } from '../utils/clientCardLink';
+import { lockAcceptedBidPrice } from '../utils/lockAcceptedBidPrice';
 import crypto from 'crypto';
 
 const router = Router();
@@ -198,6 +199,15 @@ router.post('/subscription-cards/:id/assign', async (req: Request, res: Response
         .is('archived_at', null)
         .is('selected_at', null)
         .is('passed_over_at', null);
+
+      // Freeze the selected talent's accepted bid onto the card (final price
+      // for admin + Leads). One primary talent when multi-select — first id.
+      lockAcceptedBidPrice({
+        cardId,
+        talentUserId: talent_ids[0],
+      }).catch((err) => {
+        console.error('[assign] lock bid price failed', err);
+      });
     }
 
     // If only partners were selected, still pass over non-selected talents (and vice versa)
@@ -516,6 +526,13 @@ router.post('/subscription-cards/:id/finalize-selection', async (req: Request, r
     if (!recipientType || !recipientId) {
       res.status(409).json({ success: false, error: 'No selected recipient found to finalize' });
       return;
+    }
+
+    // Ensure final agreed bid is locked before the billing term snapshots it.
+    if (recipientType === 'talent') {
+      await lockAcceptedBidPrice({ cardId, talentUserId: recipientId }).catch((err) => {
+        console.error('[finalize] lock bid price failed', err);
+      });
     }
 
     const { error: updErr } = await supabaseAdmin

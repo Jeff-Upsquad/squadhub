@@ -1336,7 +1336,15 @@ function CardDetails({ card, activeCard, isSecondaryView, countries, squadhireCa
         hoursDeliverable.per_month ? `${hoursDeliverable.per_month} hrs/month` : null,
       ].filter(Boolean).join(' · ') || EMPTY
     : EMPTY;
-  const planPriceDisplay = finalizedPrice != null ? `${cur} ${finalizedPrice.toLocaleString()}/mo` : EMPTY;
+  const isAssignmentCard = card.card_type === 'assignment';
+  const per = isAssignmentCard ? '' : '/mo';
+  const planPriceDisplay = finalizedPrice != null ? `${cur} ${finalizedPrice.toLocaleString()}${per}` : EMPTY;
+  const hasAgreedBid =
+    card.subscription_price != null &&
+    card.subscription_price > 0 &&
+    (card.state === 'assigned' ||
+      !!card.selected_recipient_id ||
+      card.partner_price_override != null);
 
   return (
     <div className="px-5 py-5 space-y-5 text-sm">
@@ -1344,6 +1352,28 @@ function CardDetails({ card, activeCard, isSecondaryView, countries, squadhireCa
         <div className="rounded-lg bg-[var(--color-sh-lime-soft)] border border-[var(--color-sh-warm-border)] px-3 py-2">
           <p className="text-[11px] font-semibold text-[var(--color-sh-ink)]">
             Secondary card — content inherited from primary
+          </p>
+        </div>
+      )}
+
+      {hasAgreedBid && (
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3.5 py-3">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-emerald-800">
+            Final agreed price
+          </p>
+          <p className="mt-1 text-sm font-semibold text-emerald-950">
+            Business {cur} {Number(card.subscription_price).toLocaleString()}
+            {per}
+            {partnerPrice != null && (
+              <span className="font-medium text-emerald-800">
+                {' '}
+                · Talent {cur} {partnerPrice.toLocaleString()}
+                {per}
+              </span>
+            )}
+          </p>
+          <p className="mt-0.5 text-[11px] text-emerald-800/80">
+            Locked from the accepted bid after talent selection
           </p>
         </div>
       )}
