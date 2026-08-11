@@ -7,6 +7,7 @@ import { STATES_BY_COUNTRY_NAME, LANGUAGE_OPTIONS } from './locationLanguageOpti
 import ShareCardLinkModal from './ShareCardLinkModal';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import { showToast } from '@/components/Toast';
+import CardViewToggle, { type CardViewMode } from './CardViewToggle';
 
 // Map the upsquad-style service_type label to the subscriptions catalog slug.
 const SERVICE_TYPE_TO_SLUG: Record<string, string> = {
@@ -129,19 +130,36 @@ const SERVICE_TYPES = ['Designers', 'Editors', 'Designer plus Editor', 'Accounta
 export default function AdminCardEditor({
   cardId,
   onClose,
+  // When set, the editor is embedded as the "Deal details" tab on a
+  // published/broadcast card detail — header shows the Admin / Client /
+  // Deal details toggle + Card Details, and the form is forced view-only.
+  viewMode,
+  onSetViewMode,
+  onOpenPanel,
+  forceReadOnly = false,
 }: {
   cardId: string;
   onClose: () => void;
+  viewMode?: CardViewMode;
+  onSetViewMode?: (m: CardViewMode) => void;
+  onOpenPanel?: () => void;
+  forceReadOnly?: boolean;
 }) {
   const queryClient = useQueryClient();
+  const isEmbeddedDetail = !!viewMode && !!onSetViewMode;
 
   const { data: cardRes, isLoading } = useQuery({
     queryKey: ['admin-card-editor', cardId],
     queryFn: async () => {
-      // Look in non-archived first, then archived — covers cards in any
-      // state (new / draft / published / assigned / closed) and any archive
-      // bucket so the editor doesn't 404 on a New Deal, an assigned card, or a
-      // card moved to Archive.
+      // card_id force-includes the row regardless of state/archive filters, so
+      // one request covers New Deals drafts, published/broadcast cards, and
+      // Archive. Falls back to the legacy state loop only if force-include is
+      // somehow empty (older API).
+      const byId = await api.get('/admin/subscription-cards', {
+        params: { card_id: cardId },
+      });
+      const direct = (byId.data?.data || []).find((c: any) => c.id === cardId);
+      if (direct) return direct;
       for (const archived of ['false', 'true'] as const) {
         for (const state of ['new', 'draft', 'published', 'assigned', 'closed']) {
           const params: Record<string, string> = { state };
@@ -667,7 +685,9 @@ export default function AdminCardEditor({
   // A freshly-submitted New Deal. Editable like a draft, but the shareable link
   // and Publish actions stay hidden until "Save Draft" promotes it (new → draft).
   const isNew = card?.state === 'new';
-  const isEditable = isDraft || isNew;
+  // forceReadOnly is set when this form is mounted as the post-broadcast
+  // "Deal details" tab — same layout as New Deals, never editable.
+  const isEditable = !forceReadOnly && (isDraft || isNew);
 
   // Publish gate: every selected tier must have a client-facing price —
   // either a proposed price or a finalized subscription price (catalog-
@@ -704,32 +724,55 @@ export default function AdminCardEditor({
           within the content area — the outer app shell/sidebar never scrolls. */}
       <div className="flex-1 min-h-0 overflow-y-auto">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 pt-6 pb-4">
-        <div className="space-y-2">
+        <div className="flex items-center justify-between gap-3 px-6 pt-6 pb-4">
+        <div className="min-w-0 space-y-2">
           <button onClick={onClose} className="sh-btn-ghost sh-btn-ghost-sm">
             <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
             </svg>
-            Back
+            {isEmbeddedDetail ? 'Back to Subscription Cards' : 'Back'}
           </button>
-          <h1 className="sh-display text-2xl sm:text-3xl">
-            {card.source === 'request' ? 'Card from Request' : card.source === 'internal_brief' ? 'Client Brief' : 'Custom Card'}
-            {card.subscription_request_id && (
-              <span className="ml-2 text-base font-normal text-[var(--color-sh-ink-muted)]">
-                (Request #{card.subscription_request_id})
-              </span>
-            )}
-          </h1>
-          {card.source === 'internal_brief' && (
-            <p className="text-sm font-medium text-[var(--color-sh-ink-muted)]">
-              Filled out by{' '}
-              {card.created_by_user?.display_name ||
-                card.created_by_user?.email ||
-                'a team member'}
-            </p>
+          {isEmbeddedDetail ? (
+            <h1 className="sh-display text-2xl sm:text-3xl">Deal details</h1>
+          ) : (
+            <>
+              <h1 className="sh-display text-2xl sm:text-3xl">
+                {card.source === 'request' ? 'Card from Request' : card.source === 'internal_brief' ? 'Client Brief' : 'Custom Card'}
+                {card.subscription_request_id && (
+                  <span className="ml-2 text-base font-normal text-[var(--color-sh-ink-muted)]">
+                    (Request #{card.subscription_request_id})
+                  </span>
+                )}
+              </h1>
+              {card.source === 'internal_brief' && (
+                <p className="text-sm font-medium text-[var(--color-sh-ink-muted)]">
+                  Filled out by{' '}
+                  {card.created_by_user?.display_name ||
+                    card.created_by_user?.email ||
+                    'a team member'}
+                </p>
+              )}
+            </>
           )}
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex shrink-0 items-center gap-2">
+          {isEmbeddedDetail && (
+            <>
+              <CardViewToggle viewMode={viewMode!} onSetViewMode={onSetViewMode!} />
+              {onOpenPanel && (
+                <button onClick={onOpenPanel} className="sh-btn-ghost sh-btn-ghost-sm">
+                  <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M10.5 6h9.75M10.5 6a1.5 1.5 0 11-3 0m3 0a1.5 1.5 0 10-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-9.75 0h9.75"
+                    />
+                  </svg>
+                  Card Details
+                </button>
+              )}
+            </>
+          )}
           {isEditable && (
             <>
               {/* Shareable client link only appears once it's a saved draft. */}
@@ -785,6 +828,17 @@ export default function AdminCardEditor({
           )}
         </div>
       </div>
+
+      {isEmbeddedDetail && (
+        <div className="mx-6 mb-2 flex items-start gap-2 rounded-xl border border-[var(--color-sh-warm-border)] bg-[var(--color-sh-cream)] px-4 py-2.5">
+          <svg className="mt-0.5 h-4 w-4 shrink-0 text-[var(--color-sh-ink-subtle)]" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <p className="text-xs text-[var(--color-sh-ink-muted)]">
+            View-only copy of the New Deal form — every field that was filled when this card was drafted and published. Switch to <span className="font-semibold">Admin</span> to manage recipients, or <span className="font-semibold">Client view</span> to see the business review screen.
+          </p>
+        </div>
+      )}
 
       {showShareModal && (
         <ShareCardLinkModal cardId={card.id} onClose={() => setShowShareModal(false)} />

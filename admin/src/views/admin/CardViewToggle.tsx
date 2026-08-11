@@ -2,12 +2,14 @@
 
 import React from 'react';
 
-export type CardViewMode = 'admin' | 'client';
+export type CardViewMode = 'admin' | 'client' | 'details';
 
-// Segmented control that flips a card-detail screen between the admin working
-// view (the recipients funnel) and the read-only "Client view" — a faithful
-// mirror of what the business sees for this card in SquadHire, with pending
-// talents additionally revealed to admins.
+// Segmented control that flips a card-detail screen between:
+//   · Admin — recipients funnel (working view)
+//   · Client view — read-only mirror of what the business sees in SquadHire
+//     (admins also see Pending talents the business never does)
+//   · Deal details — the New Deal form layout, view-only, with every field
+//     that was available when the card was drafted/published
 export default function CardViewToggle({
   viewMode,
   onSetViewMode,
@@ -18,6 +20,7 @@ export default function CardViewToggle({
   const opts: { key: CardViewMode; label: string }[] = [
     { key: 'admin', label: 'Admin' },
     { key: 'client', label: 'Client view' },
+    { key: 'details', label: 'Deal details' },
   ];
   return (
     <div className="inline-flex items-center gap-0.5 rounded-lg border border-[var(--color-sh-warm-border)] bg-[var(--color-sh-cream)] p-0.5">

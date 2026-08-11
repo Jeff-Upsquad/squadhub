@@ -9,6 +9,7 @@ import { showToast } from '@/components/Toast';
 import AdminSubscriptionCardRecipientsPanel from './AdminSubscriptionCardRecipientsPanel';
 import AdminSubscriptionCardRecipientsView from './AdminSubscriptionCardRecipientsView';
 import AdminCardClientPreview from './AdminCardClientPreview';
+import AdminCardEditor from './AdminCardEditor';
 import type { CardViewMode } from './CardViewToggle';
 import AdminRequestsList from './AdminRequestsList';
 import AdminCustomCardsList from './AdminCustomCardsList';
@@ -383,9 +384,11 @@ export default function AdminSubscriptionCards({
   }, [search]);
   const [groupBy, setGroupBy] = useState<GroupBy>('status');
   const [showPanel, setShowPanel] = useState(false);
-  // Card-detail view mode: the admin recipients funnel ('admin') or the
-  // read-only "Client view" ('client') that mirrors the SquadHire business
-  // review screen. Reset to 'admin' whenever the detail collapses to the list.
+  // Card-detail view mode:
+  //   'admin'   — recipients funnel (working view)
+  //   'client'  — read-only mirror of the SquadHire business review screen
+  //   'details' — New Deal form layout, view-only (every field from draft/publish)
+  // Reset to 'admin' whenever the detail collapses to the list.
   const [cardViewMode, setCardViewMode] = useState<CardViewMode>('admin');
   const [showBriefSlider, setShowBriefSlider] = useState(false);
   // The chosen launcher: which product (subscription/assignment) + role type
@@ -824,6 +827,16 @@ export default function AdminSubscriptionCards({
                 onSelectAll={selectAllTiers}
               />
             ) : undefined}
+          />
+        ) : cardViewMode === 'details' ? (
+          <AdminCardEditor
+            key={`details-${selectedCard.id}`}
+            cardId={selectedCard.id}
+            onClose={() => { setSelectedCardId(null); setShowPanel(false); }}
+            viewMode={cardViewMode}
+            onSetViewMode={setCardViewMode}
+            onOpenPanel={() => setShowPanel(true)}
+            forceReadOnly
           />
         ) : (
           <AdminSubscriptionCardRecipientsView
