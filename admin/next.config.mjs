@@ -21,6 +21,8 @@ const nextConfig = {
       { source: '/api/auth/:path*', destination: `${API_URL}/auth/:path*` },
       { source: '/api/admin/clients/:path*', destination: `${API_URL}/admin/clients/:path*` },
       { source: '/api/admin/:path*', destination: `${API_URL}/admin/:path*` },
+      // Support Tickets triage — served to admins and `support` mini-app holders.
+      { source: '/api/support/:path*', destination: `${API_URL}/support/:path*` },
       // Collaborative LMS endpoints (shares/comments/review) — admins pass the
       // per-item access gate, so the admin editor reuses the same routes.
       { source: '/api/lms/:path*', destination: `${API_URL}/lms/:path*` },

@@ -5,6 +5,7 @@ import { requireAdmin } from '../middleware/admin';
 import { checkResourceAccess, meetsAccessLevel, requirePermission, isWorkspaceAdmin } from '../middleware/permissions';
 import { supabaseAdmin } from '../supabase';
 import { findFirstUrl, unfurl } from '../services/unfurl';
+import { isSupportChannel, isSupportAgent, userOwnsSupportTicketRoot } from '../utils/supportAccess';
 import { deleteR2Object } from '../r2';
 import { config } from '../config';
 
@@ -69,6 +70,15 @@ router.get('/', requireAuth, async (req: Request, res: Response) => {
       if (!userLevel) {
         res.status(403).json({ success: false, error: 'You do not have access to this channel' });
         return;
+      }
+      // Support help-desk isolation: a member of the Support channel must not be
+      // able to read the whole ticket stream. Non-agents only reach their own
+      // tickets, and only via the scoped /support endpoints or the thread route.
+      if (await isSupportChannel(channelId)) {
+        if (!(await isSupportAgent(req.userId!))) {
+          res.status(403).json({ success: false, error: 'Use the Support tab to view your tickets' });
+          return;
+        }
       }
     }
 
@@ -605,15 +615,23 @@ router.get('/:id/thread', requireAuth, async (req: Request, res: Response) => {
       return;
     }
 
+    const rootId = (msg as any).parent_message_id || id;
+
     if ((msg as any).channel_id) {
       const access = await checkResourceAccess(req.userId!, 'channel', (msg as any).channel_id);
       if (!access) {
         res.status(403).json({ success: false, error: 'You do not have access to this message' });
         return;
       }
+      // Support isolation: a non-agent may only open the thread of a ticket they
+      // opened, even though they're a member of the shared Support channel.
+      if (await isSupportChannel((msg as any).channel_id)) {
+        if (!(await isSupportAgent(req.userId!)) && !(await userOwnsSupportTicketRoot(req.userId!, rootId))) {
+          res.status(403).json({ success: false, error: 'You do not have access to this ticket' });
+          return;
+        }
+      }
     }
-
-    const rootId = (msg as any).parent_message_id || id;
 
     const [{ data: root }, { data: replies }] = await Promise.all([
       supabaseAdmin
@@ -802,6 +820,21 @@ router.delete('/:id', requireAuth, async (req: Request, res: Response) => {
       } catch (e) {
         console.error('R2 cleanup failed for deleted message', id, e);
       }
+    }
+
+    // Remove any notifications this message generated (dm_received /
+    // message_mention triggers stamp reference_type='message', reference_id=id).
+    // Otherwise recipients keep a dead inbox entry and unread badge pointing at
+    // a message that no longer exists. Best-effort; the inbox/unread polls pick
+    // up the removal on their next tick.
+    try {
+      await supabaseAdmin
+        .from('notifications')
+        .delete()
+        .eq('reference_type', 'message')
+        .eq('reference_id', id);
+    } catch (e) {
+      console.error('Notification cleanup failed for deleted message', id, e);
     }
 
     const io = req.app.get('io');

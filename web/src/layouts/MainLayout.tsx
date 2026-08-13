@@ -11,6 +11,9 @@ import type { Workspace, Channel } from '@squadhub/shared';
 import { connectSocket, disconnectSocket, getSocket } from '../services/socket';
 import { usePresenceStore } from '../stores/presenceStore';
 import ChatPanel from '../views/app/chat/ChatPanel';
+import SupportChannelView from '../views/app/support/SupportChannelView';
+import SupportAdminPage from '../views/app/support-admin/SupportAdminPage';
+import { useSupportOverview } from '../hooks/useSupport';
 import ChatSearch from '../views/app/chat/ChatSearch';
 import CreateChannelModal from '../views/app/chat/CreateChannelModal';
 import GlobalCreateTaskModal from '../views/app/pm/GlobalCreateTaskModal';
@@ -81,7 +84,7 @@ import { canonicalKey, buildHomeSnapshot, type TabSnapshot } from '../lib/tabSna
 
 // ---- Types ----
 export type ActiveSection = 'home' | 'cal' | 'docs' | 'teams' | 'apps' | 'learning' | 'more';
-export type HomeView = 'hub' | 'chat' | 'tasks' | 'inbox' | 'my-tasks' | 'checkin' | 'checkin-partners' | 'check-ins' | 'candidates' | 'time-management' | 'sales-leads' | 'leads' | 'cashbook' | 'opportunities' | 'subscription-cards' | 'job-cards' | 'day-planner' | 'routines' | 'clips' | 'meetings';
+export type HomeView = 'hub' | 'chat' | 'tasks' | 'inbox' | 'my-tasks' | 'checkin' | 'checkin-partners' | 'check-ins' | 'candidates' | 'time-management' | 'sales-leads' | 'leads' | 'support-admin' | 'cashbook' | 'opportunities' | 'subscription-cards' | 'job-cards' | 'day-planner' | 'routines' | 'clips' | 'meetings';
 
 // One entry in the in-app navigation history: everything needed to bring the
 // user back to a view. Views switch via local state rather than URLs, so the
@@ -246,6 +249,10 @@ export default function MainLayout() {
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
   const pmReset = usePMStore((s) => s.reset);
+  // The special Support help-desk channel renders the ticket UI, not chat.
+  const { data: supportOverview } = useSupportOverview(currentWorkspace?.id ?? null);
+  const supportChannelId = supportOverview?.channel.id ?? null;
+  const supportUnread = supportOverview?.unread ?? 0;
   const activeSpaceId = usePMStore((s) => s.activeSpaceId);
   const activeListId = usePMStore((s) => s.activeListId);
   const activeFolderId = usePMStore((s) => s.activeFolderId);
@@ -797,7 +804,7 @@ export default function MainLayout() {
   //   • embedded standalone apps (Squad Clips, Daily Check-In, Time Management,
   //     Sales Leads) — each renders its own header/actions; the global "+" was
   //     overlapping e.g. Squad Clips' "New recording ▾" dropdown chevron.
-  const EMBEDDED_APP_VIEWS: HomeView[] = ['clips', 'checkin', 'checkin-partners', 'check-ins', 'candidates', 'time-management', 'sales-leads'];
+  const EMBEDDED_APP_VIEWS: HomeView[] = ['clips', 'checkin', 'checkin-partners', 'check-ins', 'candidates', 'time-management', 'sales-leads', 'support-admin'];
   // Day Planner gets the create button as a bottom-right floating FAB instead of
   // the top-right "+", which otherwise collides with the calendar's header.
   const onDayPlanner = activeSection === 'home' && homeView === 'day-planner';
@@ -961,6 +968,7 @@ export default function MainLayout() {
       if (hv === 'time-management') return <TimeManagementPage />;
       if (hv === 'sales-leads') return <SalesLeadsPage />;
       if (hv === 'leads') return <LeadsPage />;
+      if (hv === 'support-admin') return <SupportAdminPage />;
       if (hv === 'clips') return <ClipsView />;
       if (hv === 'meetings') return <MeetingsView />;
       if (hv === 'cashbook' && isPartner) return <PartnerCashBook />;
@@ -988,7 +996,12 @@ export default function MainLayout() {
     if (hv === 'my-tasks') return <MyTasksView />;
     if (hv === 'day-planner') return <DayPlannerView />;
     if (hv === 'routines') return <RoutinesView />;
-    if (hv === 'chat') return renderChat(snap);
+    if (hv === 'chat') {
+      if (snap.channelId && snap.channelId === supportChannelId) {
+        return <SupportChannelView workspaceId={currentWorkspace?.id ?? null} />;
+      }
+      return renderChat(snap);
+    }
     if (hv === 'tasks') {
       if (snap.designFolderId) return <ClientDesignDashboard folderId={snap.designFolderId} />;
       if (snap.folderId && !snap.listId) return <FolderPage folderId={snap.folderId} />;
@@ -1002,6 +1015,7 @@ export default function MainLayout() {
     if (hv === 'time-management') return <TimeManagementPage />;
     if (hv === 'sales-leads') return <SalesLeadsPage />;
     if (hv === 'leads') return <LeadsPage />;
+    if (hv === 'support-admin') return <SupportAdminPage />;
     if (hv === 'clips') return <ClipsView />;
     if (hv === 'meetings') return <MeetingsView />;
     if (hv === 'hub' && (userType === 'client' || userType === 'client_staff')) return <ClientDashboard />;
@@ -1154,8 +1168,30 @@ export default function MainLayout() {
           }}
         />
 
-        {/* Bottom group: theme + avatar with profile popover */}
+        {/* Bottom group: support + theme + avatar with profile popover */}
         <div className="flex w-full flex-col items-center gap-[6px]">
+          {supportChannelId && (
+            <RailBtn
+              icon={
+                <svg className="h-[19px] w-[19px]" fill="none" stroke="currentColor" strokeWidth={1.7} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M18.364 5.636l-3.536 3.536m0 5.656l3.536 3.536M9.172 9.172L5.636 5.636m3.536 9.192l-3.536 3.536M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-6 0a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+              }
+              label="Support"
+              anchorKey="rail.support"
+              badge={supportUnread > 0 ? supportUnread : undefined}
+              badgeAlert={supportUnread > 0}
+              active={activeSection === 'home' && homeView === 'chat' && activeChannelId === supportChannelId}
+              onClick={() => {
+                setExternalUrl(null);
+                setExternalTitle(null);
+                setActiveSection('home');
+                setActiveChannel(supportChannelId, 'channel');
+                setHomeView('chat');
+                setMobileDrawerOpen(false);
+              }}
+            />
+          )}
           <div className="sh-rail-util">
             <ThemeToggle />
             <span className="sh-rail-lb">Theme</span>
