@@ -1,8 +1,15 @@
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import { supabaseAdmin, supabase } from '../supabase';
-import { getDefaultRoleIdForUserType } from '../utils/defaultRole';
-import { grantClientUserAccess } from '../utils/ensureClientPortalAccess';
+import {
+  applyAcceptedInvitation,
+  INVITATION_COLUMNS,
+  type PendingInvitation,
+} from '../utils/applyInvitation';
+import { seedSquadhireClientLogin } from '../utils/seedSquadhireClientLogin';
+import { requireAuth } from '../middleware/auth';
+import { rateLimit } from '../utils/rateLimit';
+import * as passwordReset from '../services/passwordReset';
 import type { UserType } from '@squadhub/shared';
 
 const router = Router();
@@ -45,10 +52,10 @@ router.post('/register', async (req: Request, res: Response) => {
     // Check if this email has a pending, non-expired invitation
     const { data: invitation } = await supabaseAdmin
       .from('invitations')
-      .select('id, role_id, user_type, client_id, expires_at, invited_by, crm_access')
+      .select(INVITATION_COLUMNS)
       .eq('email', body.email)
       .eq('status', 'pending')
-      .maybeSingle();
+      .maybeSingle<PendingInvitation & { expires_at: string }>();
 
     const isInvited = invitation && new Date(invitation.expires_at) > new Date();
 
@@ -70,146 +77,11 @@ router.post('/register', async (req: Request, res: Response) => {
 
     // If invited: auto-approve, assign role, add to workspace
     if (isInvited) {
-      // Mark invitation as accepted
-      await supabaseAdmin
-        .from('invitations')
-        .update({ status: 'accepted', accepted_at: new Date().toISOString() })
-        .eq('id', invitation.id);
-
-      // Add user to workspace with assigned role
-      const { data: workspace } = await supabaseAdmin
-        .from('workspaces')
-        .select('id')
-        .limit(1)
-        .single();
-
-      if (workspace) {
-        let roleId = invitation.role_id;
-        if (!roleId) {
-          roleId = await getDefaultRoleIdForUserType(userType as UserType);
-        }
-
-        await supabaseAdmin.from('workspace_members').insert({
-          workspace_id: workspace.id,
-          user_id: authData.user.id,
-          role: 'member',
-          role_id: roleId,
-        });
-      }
-
-      // Share the daily check-in mini app by default, picking the variant that
-      // matches the user's type. Teammates app for internal users and partner
-      // employees; partners app for partner users. Clients and client staff
-      // don't get a default check-in app.
-      const defaultMiniAppSlug =
-        userType === 'internal' || userType === 'partner_employee'
-          ? 'daily-checkin'
-          : userType === 'partner'
-            ? 'daily-checkin-partners'
-            : null;
-
-      if (defaultMiniAppSlug) {
-        const { data: miniApp } = await supabaseAdmin
-          .from('mini_apps')
-          .select('id')
-          .eq('slug', defaultMiniAppSlug)
-          .maybeSingle();
-
-        if (miniApp) {
-          const { error: shareError } = await supabaseAdmin
-            .from('mini_app_user_access')
-            .upsert(
-              { mini_app_id: miniApp.id, user_id: authData.user.id },
-              { onConflict: 'mini_app_id,user_id', ignoreDuplicates: true },
-            );
-          if (shareError) {
-            console.error('Failed to share default daily check-in mini app:', shareError);
-          }
-        }
-      }
-
-      // Apply CRM access from the invitation (set in the admin CRM-access UI).
-      if (invitation.crm_access) {
-        const crm = invitation.crm_access as {
-          app?: string;
-          workspace_id?: string;
-          role?: string;
-          modules?: Record<string, string>;
-        };
-        if (crm.workspace_id && crm.role) {
-          const crmApp = crm.app || 'squadcrm';
-          await supabaseAdmin.from('crm_app_access').upsert(
-            {
-              user_id: authData.user.id,
-              workspace_id: crm.workspace_id,
-              app: crmApp,
-              role: crm.role,
-              enabled: true,
-              granted_by: invitation.invited_by,
-            },
-            { onConflict: 'user_id,workspace_id,app' },
-          );
-          const moduleRows = Object.entries(crm.modules || {}).map(([module, level]) => ({
-            user_id: authData.user.id,
-            workspace_id: crm.workspace_id,
-            app: crmApp,
-            module,
-            level,
-            granted_by: invitation.invited_by,
-          }));
-          if (moduleRows.length > 0) {
-            await supabaseAdmin
-              .from('crm_module_access')
-              .upsert(moduleRows, { onConflict: 'user_id,workspace_id,app,module' });
-          }
-        }
-      }
-
-      // If invitation links to a client, create the partner-client assignment
-      if (invitation.client_id && (userType === 'partner' || userType === 'partner_employee' || userType === 'client' || userType === 'client_staff')) {
-        await supabaseAdmin.from('partner_client_assignments').insert({
-          user_id: authData.user.id,
-          client_id: invitation.client_id,
-        });
-      }
-
-      // Phase 5: client / client_staff invitations grant client_user_access so
-      // the client appears under Areas / Shared with me after signup.
-      if (
-        invitation.client_id &&
-        (userType === 'client' || userType === 'client_staff')
-      ) {
-        await grantClientUserAccess({
-          clientId: invitation.client_id,
-          userId: authData.user.id,
-          createdBy: invitation.invited_by,
-        });
-      }
-
-      // If invitation links to a client with cash book access, create cash_book_users entry
-      if (invitation.client_id) {
-        const { data: cbAccess } = await supabaseAdmin
-          .from('cash_book_client_access')
-          .select('id')
-          .eq('client_id', invitation.client_id)
-          .eq('is_enabled', true)
-          .maybeSingle();
-
-        if (cbAccess) {
-          // Check if this is the first cash book user for the client
-          const { count } = await supabaseAdmin
-            .from('cash_book_users')
-            .select('*', { count: 'exact', head: true })
-            .eq('client_id', invitation.client_id);
-
-          await supabaseAdmin.from('cash_book_users').insert({
-            user_id: authData.user.id,
-            client_id: invitation.client_id,
-            role: (count === 0) ? 'client_admin' : 'staff',
-            invited_by: invitation.invited_by,
-          });
-        }
-      }
+      await applyAcceptedInvitation({
+        userId: authData.user.id,
+        userType: userType as UserType,
+        invitation,
+      });
 
       res.status(201).json({
         success: true,
@@ -240,12 +112,30 @@ router.post('/login', async (req: Request, res: Response) => {
     const body = loginSchema.parse(req.body);
 
     // Use the PUBLIC client for signInWithPassword (not admin) to avoid contaminating admin client
-    const { data, error } = await supabase.auth.signInWithPassword({
+    let { data, error } = await supabase.auth.signInWithPassword({
       email: body.email,
       password: body.password,
     });
 
+    // A SquadHire business user signing in here for the first time has no
+    // SquadHub account yet — only a pending client invitation. If the password
+    // they typed is their real SquadHire password, create the account with it
+    // and sign in for real. Only reachable after a failed sign-in, and the
+    // retry below is what actually authenticates.
     if (error) {
+      const seeded = await seedSquadhireClientLogin({
+        email: body.email,
+        password: body.password,
+      });
+      if (seeded) {
+        ({ data, error } = await supabase.auth.signInWithPassword({
+          email: body.email,
+          password: body.password,
+        }));
+      }
+    }
+
+    if (error || !data?.user) {
       res.status(401).json({ success: false, error: 'Invalid email or password' });
       return;
     }
@@ -325,6 +215,102 @@ router.post('/refresh', async (req: Request, res: Response) => {
     }
     console.error('Refresh error:', err);
     res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// ─── Self-serve password reset (phone → WhatsApp temp password) ─────────────
+// See services/passwordReset.ts. These are unauthenticated and hand out a live
+// credential, so each step is rate-limited by IP on top of the per-ticket
+// attempt cap in the service.
+
+const resetLookupSchema = z.object({ phone: z.string().trim().min(6).max(24) });
+const resetSendSchema = z.object({ reset_ticket: z.string().min(1) });
+const resetVerifySchema = z.object({
+  reset_ticket: z.string().min(1),
+  temp_password: z.string().trim().min(1).max(64),
+});
+const changePasswordSchema = z.object({
+  new_password: z.string().min(8, 'Password must be at least 8 characters'),
+});
+
+function handleResetError(err: unknown, res: Response, label: string): void {
+  if (err instanceof z.ZodError) {
+    res.status(400).json({ success: false, error: err.errors[0].message });
+    return;
+  }
+  if (err instanceof passwordReset.PasswordResetError) {
+    res.status(err.status).json({ success: false, error: err.message });
+    return;
+  }
+  console.error(`${label} error:`, err);
+  res.status(500).json({ success: false, error: 'Internal server error' });
+}
+
+// POST /auth/password-reset/lookup — phone → masked hint + reset ticket.
+router.post(
+  '/password-reset/lookup',
+  rateLimit({ windowMs: 15 * 60 * 1000, max: 10 }),
+  async (req: Request, res: Response) => {
+    try {
+      const body = resetLookupSchema.parse(req.body);
+      const result = await passwordReset.lookupAccountByPhone(body.phone);
+      res.json({ success: true, data: result });
+    } catch (err) {
+      handleResetError(err, res, 'Password reset lookup');
+    }
+  },
+);
+
+// POST /auth/password-reset/send — mint + apply a temp password, WhatsApp it.
+router.post(
+  '/password-reset/send',
+  rateLimit({ windowMs: 15 * 60 * 1000, max: 5 }),
+  async (req: Request, res: Response) => {
+    try {
+      const body = resetSendSchema.parse(req.body);
+      const result = await passwordReset.sendTempPassword(body.reset_ticket);
+      res.json({ success: true, data: result });
+    } catch (err) {
+      handleResetError(err, res, 'Password reset send');
+    }
+  },
+);
+
+// POST /auth/password-reset/verify — exchange the temp password for a session.
+router.post(
+  '/password-reset/verify',
+  rateLimit({ windowMs: 15 * 60 * 1000, max: 15 }),
+  async (req: Request, res: Response) => {
+    try {
+      const body = resetVerifySchema.parse(req.body);
+      const result = await passwordReset.verifyTempPassword(
+        body.reset_ticket,
+        body.temp_password,
+      );
+      res.json({ success: true, data: result });
+    } catch (err) {
+      handleResetError(err, res, 'Password reset verify');
+    }
+  },
+);
+
+// POST /auth/change-password — set a new password for the signed-in user and
+// clear the must_reset_password flag. The last step of the reset flow, and
+// usable on its own from account settings.
+router.post('/change-password', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const body = changePasswordSchema.parse(req.body);
+    const { error } = await supabaseAdmin.auth.admin.updateUserById(req.userId as string, {
+      password: body.new_password,
+      user_metadata: { must_reset_password: false },
+    });
+    if (error) {
+      res.status(400).json({ success: false, error: error.message });
+      return;
+    }
+    res.json({ success: true, message: 'Password updated' });
+  } catch (err) {
+    handleResetError(err, res, 'Change password');
   }
 });
 
