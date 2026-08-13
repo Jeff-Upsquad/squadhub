@@ -2161,6 +2161,123 @@ export interface SubscriptionCardTargetRegion {
   region: string;
 }
 
+// ---- Additional requirements (optional skills & tools on a brief) ----
+// Descriptive-only: captured on the brief, shown on the talent's card, and
+// compared (presence-only) against accepted talents for the business's
+// reference. NEVER fed into match_rules or the broadcast matcher.
+// Shape: group key ('skills' | 'tools' | 'ai_tools' | …) → selected labels
+// (catalog picks + custom free-text, deduped). null/empty = feature off.
+export type AdditionalRequirements = Record<string, string[]>;
+
+export interface AdditionalRequirementGroup {
+  /** Stable slug used as the storage key. */
+  key: string;
+  /** Display label, e.g. 'Skill sets' | 'Software' | 'AI tools'. */
+  label: string;
+  /** Seed chips; not exhaustive — businesses may add their own. */
+  options: string[];
+}
+
+const AR_ACCOUNTANT: AdditionalRequirementGroup[] = [
+  { key: 'skills', label: 'Skill sets', options: ['Bookkeeping', 'GST / VAT filing', 'Payroll', 'Tax planning', 'Financial reporting', 'Accounts payable / receivable', 'Auditing', 'Budgeting & forecasting'] },
+  { key: 'tools', label: 'Software', options: ['QuickBooks', 'Xero', 'Zoho Books', 'Tally', 'Sage', 'FreshBooks', 'Wave'] },
+  { key: 'ai_tools', label: 'AI tools', options: ['ChatGPT', 'Docyt', 'Vic.ai', 'Puzzle'] },
+];
+const AR_DESIGNER: AdditionalRequirementGroup[] = [
+  { key: 'skills', label: 'Skill sets', options: ['Brand identity', 'Social media creatives', 'Motion graphics', 'Illustration', 'UI/UX', 'Print design', 'Packaging', 'Typography'] },
+  { key: 'tools', label: 'Tools', options: ['Figma', 'Adobe Photoshop', 'Adobe Illustrator', 'Adobe InDesign', 'Canva', 'After Effects', 'Sketch'] },
+  { key: 'ai_tools', label: 'AI tools', options: ['Midjourney', 'Adobe Firefly', 'DALL·E', 'ChatGPT'] },
+];
+const AR_VIDEO: AdditionalRequirementGroup[] = [
+  { key: 'skills', label: 'Skill sets', options: ['Short-form editing', 'Long-form editing', 'Color grading', 'Motion graphics', 'Sound design', 'Subtitling', 'VFX compositing'] },
+  { key: 'tools', label: 'Tools', options: ['Adobe Premiere Pro', 'DaVinci Resolve', 'Final Cut Pro', 'After Effects', 'CapCut', 'Filmora'] },
+  { key: 'ai_tools', label: 'AI tools', options: ['Runway', 'Descript', 'Opus Clip', 'ElevenLabs'] },
+];
+
+/** Seed catalogs per service slug. Missing slug → the designer set as a safe default. */
+export const ADDITIONAL_REQUIREMENT_CATALOG: Record<string, AdditionalRequirementGroup[]> = {
+  accountant: AR_ACCOUNTANT,
+  designer: AR_DESIGNER,
+  video_editor: AR_VIDEO,
+  designer_video_editor: AR_DESIGNER,
+};
+
+export function additionalRequirementCatalog(slug: string | null | undefined): AdditionalRequirementGroup[] {
+  return (slug && ADDITIONAL_REQUIREMENT_CATALOG[slug]) || AR_DESIGNER;
+}
+
+/**
+ * Normalise a brief's additional_requirements before persisting: trim + dedupe
+ * labels per group (case-insensitive), drop blanks and empty groups. Returns
+ * null when nothing survives so the column stays NULL, not an empty object.
+ */
+export function sanitizeAdditionalRequirements(
+  raw: Record<string, unknown> | null | undefined,
+): AdditionalRequirements | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const out: AdditionalRequirements = {};
+  for (const [group, list] of Object.entries(raw)) {
+    const g = typeof group === 'string' ? group.trim() : '';
+    if (!g || !Array.isArray(list)) continue;
+    const seen = new Set<string>();
+    const labels: string[] = [];
+    for (const label of list) {
+      const l = typeof label === 'string' ? label.trim() : '';
+      if (!l) continue;
+      const k = l.toLowerCase();
+      if (seen.has(k)) continue;
+      seen.add(k);
+      labels.push(l);
+    }
+    if (labels.length) out[g] = labels;
+  }
+  return Object.keys(out).length ? out : null;
+}
+
+/** Flatten selected requirements into a trimmed label list (for display counts / matching). */
+export function additionalRequirementLabels(req: AdditionalRequirements | null | undefined): string[] {
+  if (!req) return [];
+  const out: string[] = [];
+  for (const list of Object.values(req)) {
+    if (!Array.isArray(list)) continue;
+    for (const l of list) if (typeof l === 'string' && l.trim()) out.push(l.trim());
+  }
+  return out;
+}
+
+/** True when at least one requirement label is present. */
+export function hasAdditionalRequirements(req: AdditionalRequirements | null | undefined): boolean {
+  return additionalRequirementLabels(req).length > 0;
+}
+
+/**
+ * Presence match for the business review list: for each selected requirement,
+ * does the talent list that name anywhere in their skills/tools/ai-tools?
+ * Case-insensitive; group alignment is intentionally ignored.
+ */
+export interface AdditionalRequirementMatch {
+  group: string;
+  label: string;
+  matched: boolean;
+}
+export function matchAdditionalRequirements(
+  req: AdditionalRequirements | null | undefined,
+  talentNames: string[] | null | undefined,
+): AdditionalRequirementMatch[] {
+  if (!req) return [];
+  const have = new Set((talentNames || []).map((n) => n.trim().toLowerCase()).filter(Boolean));
+  const out: AdditionalRequirementMatch[] = [];
+  for (const [group, list] of Object.entries(req)) {
+    if (!Array.isArray(list)) continue;
+    for (const label of list) {
+      const l = typeof label === 'string' ? label.trim() : '';
+      if (!l) continue;
+      out.push({ group, label: l, matched: have.has(l.toLowerCase()) });
+    }
+  }
+  return out;
+}
+
 export interface SubscriptionCard {
   id: string;
   submission_subscription_id: string;
@@ -2180,6 +2297,12 @@ export interface SubscriptionCard {
   min_experience_years: number;
   target_languages: string[];
   custom_deliverables: SubscriptionCardCustomDeliverable[];
+  /**
+   * Optional skills/tools the business would like the talent to have.
+   * Descriptive only — shown on the card and matched (presence) for the
+   * business's reference; NEVER used by the broadcast matcher. Null = none.
+   */
+  additional_requirements?: AdditionalRequirements | null;
   /**
    * IDs (FK on subscription_plan_deliverables) of the plan's default
    * deliverables that the sales user has explicitly disabled for this client.

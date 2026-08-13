@@ -1,6 +1,6 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
-import { isValidStoredPhone, normalizeStoredPhone } from '@squadhub/shared';
+import { isValidStoredPhone, normalizeStoredPhone, sanitizeAdditionalRequirements } from '@squadhub/shared';
 import { supabaseAdmin } from '../supabase';
 import { ensureHubContact } from '../utils/leadLookup';
 import { generateBriefVoiceUploadUrl } from '../r2';
@@ -391,6 +391,15 @@ const submissionSchema = z.object({
         // budget as an offer (accept/decline/counter); 'unpriced' hides it and
         // invites talents to submit their own offer.
         pricing_mode: z.enum(['priced', 'unpriced']).optional(),
+        // Optional skills/tools the business would like the talent to have.
+        // Descriptive only — stored on the card and shown to talent; NEVER fed
+        // into match_rules / the broadcast matcher. { group: [label, …] }.
+        additional_requirements: z
+          .record(
+            z.string().trim().min(1).max(40),
+            z.array(z.string().trim().min(1).max(80)).max(40),
+          )
+          .optional(),
       }),
     )
     .optional()
@@ -719,6 +728,7 @@ router.post('/landing', ipRateLimit, async (req: Request, res: Response) => {
           requirement_note: roleReq?.note || null,
           requirement_voice_url: body.requirement_voice_url || null,
           hours_note: roleReq?.hours || null,
+          additional_requirements: sanitizeAdditionalRequirements(roleReq?.additional_requirements),
           publish_targets: ['partner', 'talent'],
           brand_id: brandId,
           lead_submission_id: submission.id,

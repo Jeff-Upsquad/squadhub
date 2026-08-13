@@ -160,7 +160,7 @@ export async function buildSquadhirePayloadForCard(
   const { data: card } = await supabaseAdmin
     .from('subscription_cards')
     .select(
-      'id, state, distribution, card_type, assignment_details, submission_subscription_id, working_days, brand_name, business_nature, notes, requirement_note, requirement_voice_url, customer_location, custom_deliverables, disabled_default_deliverable_ids, target_tiers, min_experience_years, target_languages, squadhire_category_ids, published_at, partner_price_override, parent_card_id, brief_group_id, recalled_at, archived_at, paused_at, cancelled_at, source, proposed_price, subscription_price, markup, customer_company, customer_email, customer_phone, customer_name, service_type, plan_name, plan_snapshot, lead_submission_id',
+      'id, state, distribution, card_type, assignment_details, submission_subscription_id, working_days, brand_name, business_nature, notes, requirement_note, requirement_voice_url, additional_requirements, customer_location, custom_deliverables, disabled_default_deliverable_ids, target_tiers, min_experience_years, target_languages, squadhire_category_ids, published_at, partner_price_override, parent_card_id, brief_group_id, recalled_at, archived_at, paused_at, cancelled_at, source, proposed_price, subscription_price, markup, customer_company, customer_email, customer_phone, customer_name, service_type, plan_name, plan_snapshot, lead_submission_id',
     )
     .eq('id', cardId)
     .maybeSingle();
@@ -185,7 +185,7 @@ export async function buildSquadhirePayloadForCard(
     const { data: parent } = await supabaseAdmin
       .from('subscription_cards')
       .select(
-        'id, submission_subscription_id, working_days, brand_name, business_nature, notes, requirement_note, requirement_voice_url, customer_location, custom_deliverables, disabled_default_deliverable_ids, target_tiers, min_experience_years, target_languages, squadhire_category_ids, proposed_price, subscription_price, markup, partner_price_override',
+        'id, submission_subscription_id, working_days, brand_name, business_nature, notes, requirement_note, requirement_voice_url, additional_requirements, customer_location, custom_deliverables, disabled_default_deliverable_ids, target_tiers, min_experience_years, target_languages, squadhire_category_ids, proposed_price, subscription_price, markup, partner_price_override',
       )
       .eq('id', card.parent_card_id)
       .maybeSingle();
@@ -820,6 +820,10 @@ export async function buildSquadhirePayloadForCard(
     // Client's recorded requirement voice note (public R2 URL). Talent can
     // listen to it in SquadHire before accepting.
     requirement_voice_url: ((contentSource as any).requirement_voice_url ?? null) || null,
+    // Optional skills/tools the business requested. Descriptive only — rendered
+    // on the talent card and presence-matched on the business review list.
+    // Deliberately kept OUT of match_rules so it never affects broadcast.
+    additional_requirements: (contentSource as any).additional_requirements ?? null,
     subscription_name: subscriptionName,
     plan_name: planName,
     // Tier is the partner-skill bracket (Junior/Pro/Top Talents). Sent as a
