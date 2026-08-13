@@ -108,6 +108,30 @@ function catalogMarginAbs(
   return Math.max(0, row.margin_value);
 }
 
+// Read-only display of a brief's optional additional_requirements: group key →
+// labels. Display labels for the common groups; unknown keys are title-cased.
+const AR_GROUP_LABELS: Record<string, string> = {
+  skills: 'Skill sets',
+  tools: 'Tools',
+  software: 'Software',
+  ai_tools: 'AI tools',
+  accounting_software: 'Accounting software',
+};
+function arGroupLabel(key: string): string {
+  return AR_GROUP_LABELS[key] || key.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+}
+function parseAdditionalRequirements(
+  raw: Record<string, string[]> | null | undefined,
+): { key: string; label: string; items: string[] }[] {
+  if (!raw || typeof raw !== 'object') return [];
+  const out: { key: string; label: string; items: string[] }[] = [];
+  for (const [key, val] of Object.entries(raw)) {
+    const items = Array.isArray(val) ? val.filter((s) => typeof s === 'string' && s.trim()) : [];
+    if (items.length) out.push({ key, label: arGroupLabel(key), items });
+  }
+  return out;
+}
+
 interface CardData {
   id: string;
   state: string;
@@ -120,6 +144,9 @@ interface CardData {
   requirement_note: string | null;
   requirement_voice_url: string | null;
   hours_note: string | null;
+  // Optional skills/tools the client attached to the brief (read-only here):
+  // { group: [label, …] }. Descriptive only — never affects matching.
+  additional_requirements: Record<string, string[]> | null;
   target_tiers: string[];
   min_experience_years: number;
   target_languages: string[];
@@ -1598,6 +1625,40 @@ export default function AdminCardEditor({
                 ) : (
                   <p className="text-sm text-foreground-muted">No voice note was submitted with this brief.</p>
                 )}
+              </Field>
+              <Field label="Additional Requirements" optional>
+                {(() => {
+                  const groups = parseAdditionalRequirements(card?.additional_requirements);
+                  if (groups.length === 0) {
+                    return (
+                      <p className="text-sm text-foreground-muted">
+                        No additional skills or tools were requested on this brief.
+                      </p>
+                    );
+                  }
+                  return (
+                    <div className="space-y-2.5">
+                      {groups.map((g) => (
+                        <div key={g.key}>
+                          <p className="mb-1 text-xs font-medium text-foreground-muted">{g.label}</p>
+                          <div className="flex flex-wrap gap-1.5">
+                            {g.items.map((it, i) => (
+                              <span
+                                key={i}
+                                className="inline-flex items-center rounded-full border border-border bg-surface px-2.5 py-0.5 text-xs font-medium text-foreground"
+                              >
+                                {it}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                      <p className="text-xs text-foreground-muted">
+                        Client&apos;s nice-to-haves — shared with talent, not used to match or filter.
+                      </p>
+                    </div>
+                  );
+                })()}
               </Field>
               <Field label="Hours" optional>
                 <input
