@@ -6233,9 +6233,9 @@ textarea.td-input-shell {
   flex-wrap: wrap;
 }
 .sqc-msg__author {
-  font-weight: 800;
-  font-size: 15px;
-  color: var(--sh-text);
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--sh-ink);
 }
 .sqc-msg__author-role {
   color: var(--sh-text-3);
@@ -6247,14 +6247,14 @@ textarea.td-input-shell {
   margin-left: -4px;
 }
 .sqc-msg__time {
-  font-size: 12px;
-  color: var(--sh-text-2);
+  font-size: 11px;
+  color: var(--sh-ink-4);
 }
 .sqc-msg__content {
-  font-size: 15px;
-  line-height: 1.46;
+  font-size: 13.5px;
+  line-height: 1.55;
   word-wrap: break-word;
-  color: var(--sh-text);
+  color: var(--sh-ink-2);
 }
 .sqc-msg__content .sqc-paragraph { margin: 0 0 4px; }
 .sqc-msg__content .sqc-paragraph:last-child { margin-bottom: 0; }
