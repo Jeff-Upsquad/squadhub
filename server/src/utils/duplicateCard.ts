@@ -33,6 +33,7 @@ export async function copyCardToNewDraft(
     hours_note: s.hours_note,
     requirement_note: s.requirement_note,
     requirement_voice_url: s.requirement_voice_url,
+    additional_requirements: s.additional_requirements,
     min_experience_years: s.min_experience_years,
     target_languages: s.target_languages,
     target_tiers: s.target_tiers,

@@ -6,7 +6,9 @@ import {
   isValidNationalNumber,
   normalizeNationalNumber,
   splitStoredPhone,
+  type AdditionalRequirements,
 } from '@squadhub/shared';
+import ConnectAdditionalRequirements from '@/components/connect/ConnectAdditionalRequirements';
 
 // Imperative handle the parent form uses to flush a still-running recording at
 // submit time — so forgetting to press Stop can't drop the voice note.
@@ -349,6 +351,9 @@ export default function ConnectBriefForm({
     useState<Record<RoleSlug, RoleRequirement>>(emptyRoleRequirements);
   // Slug of the role whose "Compare plans" modal is open (null = closed).
   const [comparePlanRole, setComparePlanRole] = useState<RoleSlug | null>(null);
+  // Optional skills/tools per role, keyed by service-type slug (designer /
+  // video_editor / designer_video_editor). Forwarded in role_requirements.
+  const [additionalReqs, setAdditionalReqs] = useState<Record<string, AdditionalRequirements>>({});
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState('');
@@ -581,6 +586,18 @@ export default function ConnectBriefForm({
       setError('Please pick at least one working day.');
       return;
     }
+    // Subscription briefs require a weekly plan per selected role.
+    if (product !== 'assignment') {
+      const missingPlan = roles.filter((r) => !roleRequirements[r]?.plan);
+      if (missingPlan.length > 0) {
+        setError(
+          missingPlan.length === 1
+            ? 'Please select a weekly plan.'
+            : 'Please select a weekly plan for each role.',
+        );
+        return;
+      }
+    }
     if (!isValidNationalNumber(form.phone, form.country_code)) {
       setError(
         form.country_code === '+91'
@@ -601,6 +618,7 @@ export default function ConnectBriefForm({
         tier_budgets?: Record<string, number>;
         budget?: number; duration?: string; start_date?: string; deadline?: string;
         pricing_mode?: 'priced' | 'unpriced';
+        additional_requirements?: AdditionalRequirements;
       }
     > = {};
     for (const r of roles) {
@@ -663,6 +681,16 @@ export default function ConnectBriefForm({
         ...(budget !== undefined ? { budget } : {}),
         ...(Object.keys(tierBudgets).length ? { tier_budgets: tierBudgets } : {}),
       };
+    }
+
+    // Attach optional skills/tools per role (keyed by service-type slug). Creates
+    // an entry if the role had no other requirement details.
+    for (const r of roles) {
+      const key = roleToServiceTypeSlug(r);
+      const extra = additionalReqs[key];
+      if (extra && Object.values(extra).some((l) => l.some((s) => s.trim()))) {
+        roleReqsPayload[key] = { ...(roleReqsPayload[key] ?? {}), additional_requirements: extra };
+      }
     }
 
     setSubmitting(true);
@@ -1025,7 +1053,7 @@ export default function ConnectBriefForm({
               hint={
                 product === 'assignment'
                   ? 'Pick the talent experience levels you want, set a project budget per level, and describe the timeline. All optional — we can finalize on the call.'
-                  : 'Pick a weekly plan, choose which experience levels you want, and set a monthly budget for each. All optional — we can finalize on the call.'
+                  : 'Pick a weekly plan (required), then choose experience levels and a monthly budget for each if you know them.'
               }
             >
               {product === 'assignment' && (
@@ -1073,7 +1101,7 @@ export default function ConnectBriefForm({
                         <div className="mb-1 flex items-center justify-between gap-2">
                           <label className="flex items-baseline gap-2 text-sm font-medium text-[#222]">
                             <span>Plan</span>
-                            <span className="text-xs font-normal text-[#9C9486]">(optional)</span>
+                            <span className="text-[#C13515]">*</span>
                           </label>
                           <button
                             type="button"
@@ -1295,6 +1323,23 @@ export default function ConnectBriefForm({
                 />
               )}
             </Section>
+
+            {/* Optional skills & tools per selected role — descriptive, not a filter. */}
+            {roles.length > 0 && (
+              <ConnectAdditionalRequirements
+                roles={roles.map((r) => ({
+                  slug: roleToServiceTypeSlug(r),
+                  label:
+                    r === 'designer'
+                      ? 'Designer'
+                      : r === 'editor'
+                        ? 'Video Editor'
+                        : 'Designer + Editor',
+                }))}
+                values={additionalReqs}
+                onChange={(slug, v) => setAdditionalReqs((prev) => ({ ...prev, [slug]: v }))}
+              />
+            )}
 
             {/* Submit (sticky on mobile) */}
             <div className="connect-submit-wrap">

@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
+import { sanitizeAdditionalRequirements } from '@squadhub/shared';
 import { requireAuth } from '../middleware/auth';
 import { requireMiniAppOrAdmin } from '../middleware/miniApp';
 import { supabaseAdmin } from '../supabase';
@@ -469,6 +470,11 @@ const clientBriefSchema = z.object({
   // an offer (accept/decline/counter); 'unpriced' invites talents to submit
   // their own offer. Stored in assignment_details.pricing_mode.
   pricing_mode: z.enum(['priced', 'unpriced']).optional(),
+  // Optional skills/tools the business would like the talent to have.
+  // Descriptive only — stored on the card; NEVER fed into match_rules.
+  additional_requirements: z
+    .record(z.string().trim().min(1).max(40), z.array(z.string().trim().min(1).max(80)).max(40))
+    .optional(),
 });
 
 // POST /admin/subscription-cards/voice-upload-url — presigned R2 PUT URL for
@@ -599,6 +605,7 @@ router.post('/subscription-cards/client-brief', async (req: Request, res: Respon
         requirement_note: body.requirement_note || null,
         requirement_voice_url: body.requirement_voice_url || null,
         hours_note: body.hours_note || null,
+        additional_requirements: sanitizeAdditionalRequirements(body.additional_requirements),
         target_tiers: briefTiers,
         // Assignment cards have no weekly plan; their budget IS the one-time
         // proposed/offer price. Subscriptions leave proposed_price at 0 and

@@ -5,10 +5,19 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   formatStoredPhone,
   normalizeNationalNumber,
+  type AdditionalRequirements,
 } from '@squadhub/shared';
 import api from '@/services/api';
 import { showToast } from '@/components/Toast';
 import { STATES_BY_COUNTRY_NAME, LANGUAGE_OPTIONS } from './locationLanguageOptions';
+import ClientBriefAdditionalRequirements from './ClientBriefAdditionalRequirements';
+
+// Map an admin role slug to the additional-requirements catalog slug.
+function catalogSlug(roleSlug: string): string {
+  if (roleSlug === 'editor') return 'video_editor';
+  if (roleSlug === 'designer_plus_editor') return 'designer_video_editor';
+  return roleSlug; // 'designer' | 'accountant'
+}
 
 // The internal-facing clone of the public /connect brief form — identical UI,
 // layout, copy, and fields. The salesperson fills out exactly what the client
@@ -220,6 +229,9 @@ export default function ClientBriefForm({
   const audioBlobRef = useRef<Blob | null>(null);
   const audioNoteRef = useRef<AudioNoteHandle>(null);
   const [requirementNote, setRequirementNote] = useState('');
+  // Optional skills/tools per role, keyed by catalog slug. Descriptive only —
+  // stored on the card and never used to match talent.
+  const [additionalReqs, setAdditionalReqs] = useState<Record<string, AdditionalRequirements>>({});
 
   const countriesQuery = useQuery({
     queryKey: ['admin-countries'],
@@ -299,10 +311,20 @@ export default function ClientBriefForm({
     // If a recording is still running, capture it now so forgetting to press
     // Stop doesn't silently drop the voice note.
     await audioNoteRef.current?.flush();
-    // Admin-only clone: no field is mandatory here (unlike the public /connect
-    // form). The salesperson may only have partial client details and fill the
-    // rest in later, so we skip required-field checks. The backend accepts
-    // every field as optional — only service_type is required server-side.
+    // Admin-only clone: most fields stay optional so sales can save partial
+    // client details. Plan is required on subscription briefs so catalog
+    // pricing and hours can resolve.
+    if (product !== 'assignment') {
+      const missingPlan = selectedRoles.filter((r) => !getReq(r.slug).plan);
+      if (missingPlan.length > 0) {
+        const msg =
+          missingPlan.length === 1
+            ? 'Please select a weekly plan.'
+            : 'Please select a weekly plan for each role.';
+        setError(msg);
+        return;
+      }
+    }
 
     const shared = {
       brand_name: form.brand_name.trim() || undefined,
@@ -357,11 +379,15 @@ export default function ClientBriefForm({
             budgetValues.length > 0 && budgetValues.every((v) => v === budgetValues[0]);
           const proposed =
             allSame || budgetValues.length === 1 ? budgetValues[0] : undefined;
+          const extra = additionalReqs[catalogSlug(r.slug)];
+          const hasExtra =
+            extra && Object.values(extra).some((l) => l.some((s) => s.trim()));
           return api.post('/admin/subscription-cards/client-brief', {
             ...shared,
             service_type: r.service_type,
             card_type: product,
             requirement_note: briefNote,
+            ...(hasExtra ? { additional_requirements: extra } : {}),
             ...(requirementVoiceUrl ? { requirement_voice_url: requirementVoiceUrl } : {}),
             target_tiers: req.tiers.length ? req.tiers : undefined,
             // Per-level budgets the client stated; also a scalar proposed_price
@@ -647,7 +673,7 @@ export default function ClientBriefForm({
               hint={
                 product === 'assignment'
                   ? 'Pick the talent experience levels, set a project budget per level, and describe the timeline. All optional — we can finalize on the call.'
-                  : 'Pick a weekly plan, choose experience levels, and set a monthly budget for each. All optional — we can finalize on the call.'
+                  : 'Pick a weekly plan (required), then choose experience levels and a monthly budget for each if known.'
               }
             >
               {product === 'assignment' && (
@@ -695,7 +721,7 @@ export default function ClientBriefForm({
                         <div className="mb-1 flex items-center justify-between gap-2">
                           <label className="flex items-baseline gap-2 text-sm font-medium text-foreground">
                             <span>Plan</span>
-                            <span className="text-xs font-normal text-foreground-muted">(optional)</span>
+                            <span className="text-[#C13515]">*</span>
                           </label>
                           <button
                             type="button"
@@ -913,6 +939,15 @@ export default function ClientBriefForm({
                 />
               )}
             </Section>
+
+            {/* Optional skills & tools per selected role — descriptive, not a filter. */}
+            {selectedRoles.length > 0 && (
+              <ClientBriefAdditionalRequirements
+                roles={selectedRoles.map((r) => ({ slug: catalogSlug(r.slug), label: r.title }))}
+                values={additionalReqs}
+                onChange={(slug, v) => setAdditionalReqs((prev) => ({ ...prev, [slug]: v }))}
+              />
+            )}
 
             <div className="connect-submit-wrap">
               <button type="submit" disabled={submitting} className="connect-submit">

@@ -6,7 +6,9 @@ import {
   isValidNationalNumber,
   normalizeNationalNumber,
   splitStoredPhone,
+  type AdditionalRequirements,
 } from '@squadhub/shared';
+import ConnectAdditionalRequirements from '@/components/connect/ConnectAdditionalRequirements';
 
 // Imperative handle the parent form uses to flush a still-running recording at
 // submit time — so forgetting to press Stop can't drop the voice note.
@@ -237,6 +239,9 @@ export default function AccountantBriefForm({
   // Assignment only: whether the card is broadcast WITH a price (talents
   // accept/decline/counter) or WITHOUT (talents submit an offer). Brief-level.
   const [pricingMode, setPricingMode] = useState<'priced' | 'unpriced'>('priced');
+  // Optional skills/tools the client would like (keyed by role slug). Forwarded
+  // as role_requirements.accountant.additional_requirements. Descriptive only.
+  const [additionalReqs, setAdditionalReqs] = useState<Record<string, AdditionalRequirements>>({});
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState('');
@@ -449,6 +454,10 @@ export default function AccountantBriefForm({
       setError('Please pick at least one working day.');
       return;
     }
+    if (!isAssignment && !subscription.plan) {
+      setError('Please select a weekly plan.');
+      return;
+    }
     if (!isValidNationalNumber(form.phone, form.country_code)) {
       setError(
         form.country_code === '+91'
@@ -493,6 +502,7 @@ export default function AccountantBriefForm({
       start_date?: string;
       deadline?: string;
       pricing_mode?: 'priced' | 'unpriced';
+      additional_requirements?: AdditionalRequirements;
     } = isAssignment
       ? {
           ...(combinedNote ? { note: combinedNote } : {}),
@@ -511,6 +521,10 @@ export default function AccountantBriefForm({
           ...(budget !== undefined ? { budget } : {}),
           ...(Object.keys(tierBudgets).length ? { tier_budgets: tierBudgets } : {}),
         };
+    const accExtra = additionalReqs.accountant;
+    if (accExtra && Object.values(accExtra).some((l) => l.some((s) => s.trim()))) {
+      accountantReq.additional_requirements = accExtra;
+    }
     const roleReqsPayload: Record<string, typeof accountantReq> =
       Object.keys(accountantReq).length > 0 ? { accountant: accountantReq } : {};
 
@@ -852,7 +866,7 @@ export default function AccountantBriefForm({
               hint={
                 isAssignment
                   ? 'Pick the experience levels you want, set a project budget per level, and describe the timeline. All optional — we can finalize on the call.'
-                  : 'Pick a weekly plan, choose experience levels, and set a monthly budget for each. All optional — we can finalize on the call.'
+                  : 'Pick a weekly plan (required), then choose experience levels and a monthly budget for each if you know them.'
               }
             >
               {isAssignment && (
@@ -897,7 +911,7 @@ export default function AccountantBriefForm({
                     <div className="mb-1 flex items-center justify-between gap-2">
                       <label className="flex items-baseline gap-2 text-sm font-medium text-[#222]">
                         <span>Plan</span>
-                        <span className="text-xs font-normal text-[#9C9486]">(optional)</span>
+                        <span className="text-[#C13515]">*</span>
                       </label>
                       <button
                         type="button"
@@ -1124,6 +1138,13 @@ export default function AccountantBriefForm({
                 />
               )}
             </Section>
+
+            {/* Optional skills & tools — descriptive, not a match filter. */}
+            <ConnectAdditionalRequirements
+              roles={[{ slug: 'accountant', label: 'Accountant' }]}
+              values={additionalReqs}
+              onChange={(slug, v) => setAdditionalReqs((prev) => ({ ...prev, [slug]: v }))}
+            />
 
             {/* Submit (sticky on mobile) */}
             <div className="connect-submit-wrap">
