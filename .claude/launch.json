@@ -13,6 +13,15 @@
       "port": 4000
     },
     {
+      "name": "Support Server",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": [
+        "-lc",
+        "cd '/Users/jeffzeena/squadhub web/server' && PORT=4000 DISABLE_CRONS=true exec npx tsx watch src/index.ts"
+      ],
+      "port": 4000
+    },
+    {
       "name": "Web App",
       "runtimeExecutable": "npm",
       "runtimeArgs": [
@@ -105,6 +114,25 @@
       ],
       "port": 3180,
       "autoPort": true
+    },
+    {
+      "name": "SquadHire Portal",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": [
+        "-lc",
+        "cd '/Users/jeffzeena/Profiles/frontend' && exec npx next dev -p 3201"
+      ],
+      "port": 3201,
+      "autoPort": true
+    },
+    {
+      "name": "SquadHire Backend",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": [
+        "-lc",
+        "cd '/Users/jeffzeena/Profiles/backend' && PORT=5201 exec npm run dev"
+      ],
+      "port": 5201
     },
     {
       "name": "Squad CRM Server",

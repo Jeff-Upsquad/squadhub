@@ -64,6 +64,14 @@ export const config = {
   // a deploy (complements the mini_apps.is_enabled=false kill switch).
   candidatesProxyEnabled: (process.env.CANDIDATES_PROXY_ENABLED || 'true') !== 'false',
 
+  // Squad CRM system events — delivers the self-serve password-reset temp
+  // password over WhatsApp (the CRM owns the approved template and the sender
+  // number). When unset, the reset still works but reports "not delivered", so
+  // dev boxes need no CRM wiring; set PASSWORD_RESET_DEBUG=1 locally to print
+  // the temp password to the server log instead (never in production).
+  squadCrmSystemEventsUrl: process.env.SQUAD_CRM_SYSTEM_EVENTS_URL || '',
+  squadCrmInboundSecret: process.env.SQUAD_CRM_INBOUND_SECRET || '',
+
   // upsquad website — admin API for subscription requests.
   // When unset, the proxy endpoints return 503 and local dev works without it.
   upsquadApiUrl: process.env.UPSQUAD_API_URL || '',
