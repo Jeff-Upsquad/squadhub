@@ -87,6 +87,8 @@ export interface Channel {
   is_private: boolean;
   created_by: string;
   created_at: string;
+  /** 'standard' for normal channels; 'support' for the workspace help-desk channel. */
+  channel_kind?: 'standard' | 'support';
   // When set, this channel is linked to a PM container (space/folder/list) or a
   // CRM entity (deal/contact/lead). Container headers open PM links in a side
   // panel; CRM links appear under "CRM Chats" in the home sidebar.
@@ -131,6 +133,60 @@ export interface CrmChatGroupItem {
   subtitle: string | null;
   last_message_at: string | null;
   active: boolean;
+}
+
+// ---- Support Tickets ----
+export type SupportTicketCategory = 'technical' | 'accounts' | 'financial' | 'general';
+export type SupportTicketStatus = 'open' | 'closed';
+export type SupportTicketPriority = 'low' | 'normal' | 'high' | 'urgent';
+
+/** The four ticket categories, with display labels, shown in the create form. */
+export const SUPPORT_TICKET_CATEGORIES: { value: SupportTicketCategory; label: string; blurb: string }[] = [
+  { value: 'technical', label: 'Technical', blurb: 'Bugs, errors, access & how-to' },
+  { value: 'accounts', label: 'Accounts', blurb: 'Login, profile, workspace & members' },
+  { value: 'financial', label: 'Financial', blurb: 'Billing, payouts, invoices & pricing' },
+  { value: 'general', label: 'General', blurb: 'Anything else' },
+];
+
+export interface SupportTicket {
+  id: string;
+  workspace_id: string;
+  channel_id: string;
+  root_message_id: string | null;
+  ticket_number: number;
+  category: SupportTicketCategory;
+  subject: string;
+  status: SupportTicketStatus;
+  priority: SupportTicketPriority;
+  created_by: string;
+  assigned_to: string | null;
+  assigned_by: string | null;
+  assigned_at: string | null;
+  closed_by: string | null;
+  closed_at: string | null;
+  last_activity_at: string;
+  created_at: string;
+  updated_at: string;
+  // Joined / computed fields (populated by the API).
+  creator?: Pick<User, 'id' | 'display_name' | 'avatar_url' | 'email'>;
+  assignee?: Pick<User, 'id' | 'display_name' | 'avatar_url' | 'email'> | null;
+  reply_count?: number;
+  last_message_preview?: string | null;
+}
+
+/** A user who can be assigned support tickets (admins + `support` mini-app holders). */
+export interface SupportAgent {
+  id: string;
+  display_name: string | null;
+  avatar_url: string | null;
+  email: string | null;
+}
+
+/** Auto-assign rule: default agent for a category in a workspace. */
+export interface SupportRoutingRule {
+  category: SupportTicketCategory;
+  assignee_id: string | null;
+  assignee?: SupportAgent | null;
 }
 
 // ---- Messages ----
@@ -934,7 +990,9 @@ export type NotificationType =
   | 'lms_shared'
   | 'lms_review_requested'
   | 'lms_review_decided'
-  | 'lms_comment';
+  | 'lms_comment'
+  | 'support_ticket_reply'
+  | 'support_ticket_assigned';
 
 export interface Notification {
   id: string;
@@ -1111,6 +1169,9 @@ export interface ServerToClientEvents {
   // Live meeting state (votes/suggestions/status) pushed to everyone in the
   // meeting:{id} room — keeps the mini-app detail and every in-chat card synced.
   meeting_event_updated: (detail: MeetingEventDetail) => void;
+  // Support ticket activity, pushed to the support_ticket:{id} room.
+  support_ticket_message: (data: { ticket_id: string; message: Message }) => void;
+  support_ticket_updated: (data: { ticket_id: string; status?: string; assigned_to?: string | null }) => void;
 }
 
 export interface ClientToServerEvents {

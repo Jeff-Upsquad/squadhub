@@ -679,10 +679,10 @@ export default function HomeSidebar({
           />
           {expandedSections.channels && (
             <div className="px-2 pb-1">
-              {channels.length === 0 ? (
+              {channels.filter((c) => c.channel_kind !== 'support').length === 0 ? (
                 <p className="px-2 py-2 text-center text-[11.5px] text-[var(--sh-ink-4)]">No channels yet</p>
               ) : (
-                channels.map((ch) => {
+                channels.filter((c) => c.channel_kind !== 'support').map((ch) => {
                   const isActive = activeChannelId === ch.id && homeView === 'chat';
                   return (
                     <button

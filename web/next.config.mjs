@@ -42,6 +42,7 @@ const nextConfig = {
       { source: '/sso/:path*', destination: `${API_URL}/sso/:path*` },
       { source: '/workspaces/:path*', destination: `${API_URL}/workspaces/:path*` },
       { source: '/channels/:path*', destination: `${API_URL}/channels/:path*` },
+      { source: '/support/:path*', destination: `${API_URL}/support/:path*` },
       { source: '/messages/:path*', destination: `${API_URL}/messages/:path*` },
       { source: '/users/:path*', destination: `${API_URL}/users/:path*` },
       { source: '/dms/:path*', destination: `${API_URL}/dms/:path*` },
