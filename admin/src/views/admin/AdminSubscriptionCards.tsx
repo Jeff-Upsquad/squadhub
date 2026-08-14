@@ -541,13 +541,13 @@ export default function AdminSubscriptionCards({
   }, [archivedCards]);
 
   const tabCounts = useMemo(() => ({
-    published: bucketed.published.length,
-    broadcaster: bucketed.broadcaster.length,
-    selected: bucketed.selected.length,
-    assigned: bucketed.assigned.length,
-    paused: bucketed.paused.length,
-    cancelled: bucketed.cancelled.length,
-    archive: archiveCards.length,
+    published: buildCardListEntries(bucketed.published).length,
+    broadcaster: buildCardListEntries(bucketed.broadcaster).length,
+    selected: buildCardListEntries(bucketed.selected).length,
+    assigned: buildCardListEntries(bucketed.assigned).length,
+    paused: buildCardListEntries(bucketed.paused).length,
+    cancelled: buildCardListEntries(bucketed.cancelled).length,
+    archive: buildCardListEntries(archiveCards).length,
   }), [bucketed, archiveCards]);
 
   const unreviewedAssignedCount = useMemo(

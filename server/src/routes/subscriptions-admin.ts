@@ -2,38 +2,13 @@ import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import { requireAuth } from '../middleware/auth';
 import { requireAdmin } from '../middleware/admin';
+import { requireMiniAppOrAdmin } from '../middleware/miniApp';
 import { supabaseAdmin } from '../supabase';
 import { hydrateSubscription } from '../utils/subscriptions';
 
 const router = Router();
 
 router.use(requireAuth);
-router.use(requireAdmin);
-
-// ============================================================
-// Subscriptions catalog (hardcoded 2 rows — no create/delete)
-// ============================================================
-
-// GET /admin/subscriptions — list both subscriptions fully hydrated
-router.get('/', async (_req: Request, res: Response) => {
-  try {
-    const { data: subs, error } = await supabaseAdmin
-      .from('subscriptions')
-      .select('*')
-      .order('sort_order');
-
-    if (error) {
-      res.status(500).json({ success: false, error: error.message });
-      return;
-    }
-
-    const hydrated = await Promise.all((subs || []).map((s: any) => hydrateSubscription(s.id)));
-    res.json({ success: true, data: hydrated.filter(Boolean) });
-  } catch (err) {
-    console.error('List subscriptions error:', err);
-    res.status(500).json({ success: false, error: 'Internal server error' });
-  }
-});
 
 // ============================================================
 // Plan lookup for the card editor: given service slug + tier + plan,
@@ -41,10 +16,14 @@ router.get('/', async (_req: Request, res: Response) => {
 // admin-set daily/weekly hours. Used by AdminCardEditor to derive
 // the "Deliverables (from plan)" block and the partner price.
 //
+// The Leads mini app reuses the admin card editor, so this read-only
+// endpoint must accept Leads-app users as well as admins. Everything
+// else in this router stays admin-only below.
+//
 // MUST be defined before `GET /:id` so Express doesn't match
 // `/lookup` against the :id wildcard.
 // ============================================================
-router.get('/lookup', async (req: Request, res: Response) => {
+router.get('/lookup', requireMiniAppOrAdmin('leads'), async (req: Request, res: Response) => {
   try {
     const service = String(req.query.service || '').trim();
     const tier = String(req.query.tier || '').trim();
@@ -91,6 +70,34 @@ router.get('/lookup', async (req: Request, res: Response) => {
     });
   } catch (err) {
     console.error('Plan lookup error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// Everything after the read-only /lookup endpoint stays admin-only.
+router.use(requireAdmin);
+
+// ============================================================
+// Subscriptions catalog (hardcoded 2 rows — no create/delete)
+// ============================================================
+
+// GET /admin/subscriptions — list both subscriptions fully hydrated
+router.get('/', async (_req: Request, res: Response) => {
+  try {
+    const { data: subs, error } = await supabaseAdmin
+      .from('subscriptions')
+      .select('*')
+      .order('sort_order');
+
+    if (error) {
+      res.status(500).json({ success: false, error: error.message });
+      return;
+    }
+
+    const hydrated = await Promise.all((subs || []).map((s: any) => hydrateSubscription(s.id)));
+    res.json({ success: true, data: hydrated.filter(Boolean) });
+  } catch (err) {
+    console.error('List subscriptions error:', err);
     res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });
