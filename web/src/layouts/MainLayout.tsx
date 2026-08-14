@@ -770,6 +770,17 @@ export default function MainLayout() {
     }
   }, [currentWorkspace?.id]);
 
+  // A task or resource row elsewhere fired "open this resource". Switch the live
+  // view to the Resources module so LearningShell can pick up the target.
+  useEffect(() => {
+    const onOpenResource = () => {
+      setActiveSection('learning');
+      setMobileDrawerOpen(false);
+    };
+    window.addEventListener('squadhub:open-resource', onOpenResource);
+    return () => window.removeEventListener('squadhub:open-resource', onOpenResource);
+  }, [setActiveSection]);
+
   // Loading state
   if (workspacesLoading) {
     return (
@@ -955,7 +966,7 @@ export default function MainLayout() {
   const renderPane = (snap: TabSnapshot, active = true) => {
     const { section, homeView: hv } = snap;
     if (snap.externalUrl) return <ExternalTabPane url={snap.externalUrl} title={snap.externalTitle} />;
-    if (section === 'learning') return <LearningShell />;
+    if (section === 'learning') return <LearningShell key="learning" />;
     if (section === 'docs') return <NotesShell />;
     if (section === 'cal') return <CalendarView />;
     if (section === 'apps') {

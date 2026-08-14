@@ -1,8 +1,9 @@
 'use client';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import LearningSidebar from './LearningSidebar';
 import LearningItemView from './LearningItemView';
 import LearningOverview from './LearningOverview';
+import { useLearningStore } from '../../../stores/learningStore';
 
 // Resources module shell.
 //   • No item open  → a persistent catalog pane (left) + the Resources overview
@@ -15,21 +16,41 @@ import LearningOverview from './LearningOverview';
 export default function LearningShell() {
   const [activeItemId, setActiveItemId] = useState<string | null>(null);
   const [activeLessonId, setActiveLessonId] = useState<string | null>(null);
+  const [sectionAnchor, setSectionAnchor] = useState<string | null>(null);
   const [query, setQuery] = useState('');
+  const learningTarget = useLearningStore((s) => s.target);
 
   const open = useCallback((itemId: string, lessonId?: string | null) => {
     setActiveItemId(itemId);
     setActiveLessonId(lessonId ?? null);
+    setSectionAnchor(null);
   }, []);
   const back = useCallback(() => {
     setActiveItemId(null);
     setActiveLessonId(null);
+    setSectionAnchor(null);
   }, []);
+
+  // Apply a navigation target fired from outside the Resources module (e.g. a
+  // mirrored task's "Open resource" button). The nonce makes re-firing the same
+  // target take effect again.
+  useEffect(() => {
+    if (!learningTarget) return;
+    setActiveItemId(learningTarget.itemId);
+    setActiveLessonId(learningTarget.lessonId ?? null);
+    setSectionAnchor(learningTarget.sectionAnchor ?? null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [learningTarget?.nonce]);
 
   if (activeItemId) {
     return (
       <div className="h-full overflow-hidden bg-surface">
-        <LearningItemView itemId={activeItemId} initialLessonId={activeLessonId} onBack={back} />
+        <LearningItemView
+          itemId={activeItemId}
+          initialLessonId={activeLessonId}
+          initialSectionAnchor={sectionAnchor}
+          onBack={back}
+        />
       </div>
     );
   }

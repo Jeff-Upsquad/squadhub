@@ -375,6 +375,75 @@ router.get('/categories', async (_req: Request, res: Response) => {
 });
 
 // ------------------------------------------------------------
+// GET /lms/task-target?task_id=xxx — resolve a mirrored resource task back to
+// its source page/subpage/section (or course/post). Used by the task detail
+// panel's "Open resource" button.
+// ------------------------------------------------------------
+router.get('/task-target', async (req: Request, res: Response) => {
+  try {
+    const taskId = req.query.task_id as string;
+    if (!taskId) { res.status(400).json({ success: false, error: 'task_id is required' }); return; }
+
+    const { data: task } = await supabaseAdmin
+      .from('tasks')
+      .select('id, source_kind, source_id, source_user_id')
+      .eq('id', taskId)
+      .maybeSingle();
+    if (!task) { res.status(404).json({ success: false, error: 'Task not found' }); return; }
+
+    const kind = (task as any).source_kind as string | null;
+    const sourceId = (task as any).source_id as string | null;
+
+    // Legacy course mirrors (source_kind='course', source_id=assignment id).
+    if (kind === 'course' && sourceId) {
+      const { data: assignment } = await supabaseAdmin
+        .from('lms_assignments')
+        .select('item_id')
+        .eq('id', sourceId)
+        .maybeSingle();
+      if (assignment) {
+        const access = await getItemAccess((assignment as any).item_id, req.userId!);
+        if (!access) { res.status(403).json({ success: false, error: 'Not assigned to this content' }); return; }
+        res.json({ success: true, data: { item_id: (assignment as any).item_id, lesson_id: null, section_anchor: null, section_label: null } });
+        return;
+      }
+    }
+
+    // Resource send mirrors: source_kind = 'course' | 'sop' | 'post', source_id = recipient id.
+    if (['course', 'sop', 'post'].includes(kind || '') && sourceId) {
+      const { data: recipient } = await supabaseAdmin
+        .from('lms_task_send_recipients')
+        .select('id, user_id, send:lms_task_sends(id, item_id, scope, lesson_id, section_anchor, section_label)')
+        .eq('id', sourceId)
+        .maybeSingle();
+      if (recipient && (recipient as any).send) {
+        const send = (recipient as any).send;
+        const itemId = send.item_id as string;
+        const access = await getItemAccess(itemId, req.userId!);
+        if (!access) { res.status(403).json({ success: false, error: 'You do not have access to this resource' }); return; }
+        const lessonId = send.scope === 'item' ? null : send.lesson_id;
+        const section = send.scope === 'section' ? { anchor: send.section_anchor, label: send.section_label } : null;
+        res.json({
+          success: true,
+          data: {
+            item_id: itemId,
+            lesson_id: lessonId ?? null,
+            section_anchor: section?.anchor ?? null,
+            section_label: section?.label ?? null,
+          },
+        });
+        return;
+      }
+    }
+
+    res.status(404).json({ success: false, error: 'No resource target for this task' });
+  } catch (err) {
+    console.error('Resolve task-target error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// ------------------------------------------------------------
 // GET /lms/items/:id — full item with lessons + blocks
 // Only accessible if user is assigned OR is admin.
 // ------------------------------------------------------------

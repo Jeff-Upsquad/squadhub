@@ -3,8 +3,10 @@ import type { Task } from '@squadhub/shared';
 import { useMyTasksSummary } from './useMyTasksSummary';
 import { useUpdateTask } from './useTasks';
 import { usePMStore } from '../stores/pmStore';
+import { useLearningStore } from '../stores/learningStore';
 import { formatWhen } from '../views/app/pm/taskHelpers';
 import { isFutureDay, isTaskFocused } from '../lib/taskGrouping';
+import api from '../services/api';
 
 // One normalized row for a Home "disappearing card". Every card maps its tasks
 // into this shape so SecondaryCardRow / SecondaryCardPanel stay source-agnostic.
@@ -59,6 +61,7 @@ export function useSecondaryCards(): SecondaryCardsResult {
   const setActiveTask = usePMStore((s) => s.setActiveTask);
   const setActiveSecondaryCard = usePMStore((s) => s.setActiveSecondaryCard);
   const updateTask = useUpdateTask(null);
+  const setLearningTarget = useLearningStore((s) => s.setLearningTarget);
   const tz = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC', []);
 
   return useMemo<SecondaryCardsResult>(() => {
@@ -86,7 +89,22 @@ export function useSecondaryCards(): SecondaryCardsResult {
         overdue: when.state === 'overdue',
         kind,
         task: t,
-        open: () => { setActiveSecondaryCard(null); setActiveTask(t.id); },
+        open: async () => {
+          if (t.source_kind === 'course' || t.source_kind === 'sop' || t.source_kind === 'post') {
+            try {
+              const res = await api.get(`/lms/task-target?task_id=${t.id}`);
+              const target = res.data.data as { item_id: string; lesson_id: string | null; section_anchor: string | null };
+              if (target?.item_id) {
+                setLearningTarget({ itemId: target.item_id, lessonId: target.lesson_id, sectionAnchor: target.section_anchor });
+                setActiveSecondaryCard(null);
+                window.dispatchEvent(new CustomEvent('squadhub:open-resource'));
+                return;
+              }
+            } catch { /* fall through to normal task open */ }
+          }
+          setActiveSecondaryCard(null);
+          setActiveTask(t.id);
+        },
         toggleDone: () => updateTask.mutate({ id: t.id, status: 'done' }),
       };
     };
@@ -126,5 +144,5 @@ export function useSecondaryCards(): SecondaryCardsResult {
       sops: { items: sourceCard('sop'), isLoading },
       posts: { items: sourceCard('post'), isLoading },
     };
-  }, [data, isLoading, tz, setActiveTask, setActiveSecondaryCard, updateTask]);
+  }, [data, isLoading, tz, setActiveTask, setActiveSecondaryCard, updateTask, setLearningTarget]);
 }

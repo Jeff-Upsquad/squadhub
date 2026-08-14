@@ -41,10 +41,12 @@ function snippetAround(text: string, q: string): string {
 export default function LearningItemView({
   itemId,
   initialLessonId,
+  initialSectionAnchor,
   onBack,
 }: {
   itemId: string;
   initialLessonId?: string | null;
+  initialSectionAnchor?: string | null;
   onBack: () => void;
 }) {
   const { data, isLoading, refetch } = useLmsItem(itemId);
@@ -55,6 +57,7 @@ export default function LearningItemView({
   const [showComments, setShowComments] = useState(false);
   const [submittedNote, setSubmittedNote] = useState(false);
   const contentRef = useRef<HTMLElement>(null);
+  const pendingSectionRef = useRef<string | null>(initialSectionAnchor ?? null);
 
   // Mark in_progress on first open (if still not_started)
   useEffect(() => {
@@ -74,8 +77,9 @@ export default function LearningItemView({
   // Deep-link target (from a search result) wins once, when it arrives.
   useEffect(() => {
     if (initialLessonId) setActiveLessonId(initialLessonId);
+    if (initialSectionAnchor) pendingSectionRef.current = initialSectionAnchor;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialLessonId]);
+  }, [initialLessonId, initialSectionAnchor]);
 
   // Default selection: course → first incomplete; SOP → first top-level page.
   useEffect(() => {
@@ -91,7 +95,25 @@ export default function LearningItemView({
   }, [isCourse, isSop, lessons.length]);
 
   useEffect(() => {
-    contentRef.current?.scrollTo({ top: 0 });
+    const root = contentRef.current;
+    const anchor = pendingSectionRef.current;
+    if (!root || !anchor) {
+      if (root) root.scrollTo({ top: 0 });
+      return;
+    }
+    pendingSectionRef.current = null;
+    // The heading exists only after the active lesson's content renders.
+    const tryJump = (attempt = 0) => {
+      const el = document.getElementById(anchor);
+      if (el) {
+        const top = el.getBoundingClientRect().top - root.getBoundingClientRect().top + root.scrollTop - 16;
+        root.scrollTo({ top, behavior: 'smooth' });
+        return;
+      }
+      if (attempt < 10) requestAnimationFrame(() => tryJump(attempt + 1));
+    };
+    tryJump();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeLessonId]);
 
   const access = item?.my_access;

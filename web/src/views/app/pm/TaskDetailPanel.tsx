@@ -45,6 +45,7 @@ import {
   useOpenWorkBlockTaskTime,
 } from '../../../hooks/useWorkBlocks';
 import { useParallelTimers } from '../../../hooks/useParallelTimers';
+import { useLearningStore } from '../../../stores/learningStore';
 
 function parseTimeInput(input: string): number | null {
   const trimmed = input.trim().toLowerCase();
@@ -346,6 +347,15 @@ export default function TaskDetailPanel({
   const updateChecklistItem = useUpdateChecklistItem(effectiveTaskId);
   const deleteChecklistItem = useDeleteChecklistItem(effectiveTaskId);
   const qc = useQueryClient();
+  const setLearningTarget = useLearningStore((s) => s.setLearningTarget);
+  const openLearning = async () => {
+    if (!task) return;
+    const res = await api.get(`/lms/task-target?task_id=${task.id}`);
+    const target = res.data.data as { item_id: string; lesson_id: string | null; section_anchor: string | null };
+    setLearningTarget({ itemId: target.item_id, lessonId: target.lesson_id, sectionAnchor: target.section_anchor });
+    setActiveTask(null);
+    window.dispatchEvent(new CustomEvent('squadhub:open-resource'));
+  };
 
   // Read-only "Elapsed (idle)" for design/video spaces: the task's folder's
   // elapsed time for today (a per-space/day figure, written by the elapsed-time
@@ -1325,6 +1335,22 @@ export default function TaskDetailPanel({
                   <span className="label">Details</span>
                 </div>
                 <div className="td-settings-card" data-twocol="true" style={{ border: 'none', borderRadius: 0, marginBottom: 0 }}>
+                {/* Resource source — mirrored tasks link back to their page/section. */}
+                {(task.source_kind === 'course' || task.source_kind === 'sop' || task.source_kind === 'post') && (
+                  <div className="td-settings-row" data-half="false" style={{ gridColumn: '1 / -1', cursor: 'default' }}>
+                    <span className="k">{META_ICONS.Type}Resource</span>
+                    <span className="v">
+                      <button
+                        type="button"
+                        onClick={openLearning}
+                        className="td-prop-chip"
+                        style={{ cursor: 'pointer', background: 'var(--surface-alt)', color: 'var(--sh-ink)' }}
+                      >
+                        Open {task.source_kind === 'sop' ? 'SOP' : task.source_kind === 'course' ? 'Course' : 'Post'} ↗
+                      </button>
+                    </span>
+                  </div>
+                )}
                 {/* Type — read-only; resolved from the cached useTaskTypes() list
                     since /pm/tasks/:id doesn't hydrate the task_type join */}
                 <div className="td-settings-row" data-half="true" style={{ cursor: 'default' }}>
