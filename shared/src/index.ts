@@ -3027,8 +3027,25 @@ export interface LmsAudienceInput {
 // global-admin, and (legacy) assignment.
 // ============================================================
 export type LmsAccessLevel = 'viewer' | 'commenter' | 'contributor' | 'admin';
-export type LmsPrincipalType = 'user' | 'role';
+export type LmsPrincipalType = 'user' | 'role' | 'user_type';
 export type LmsReviewState = 'none' | 'draft' | 'submitted' | 'changes_requested';
+
+// The five user-type keys a share can target. principal_id holds a
+// deterministic UUID derived from the key (md5('user_type:' || key)::uuid).
+export const LMS_SHARE_USER_TYPES: { value: UserType; label: string; description: string; color: string }[] = [
+  { value: 'internal', label: 'Internal', description: 'All internal employees', color: '#2563eb' },
+  { value: 'client', label: 'Clients', description: 'Primary client contacts', color: '#059669' },
+  { value: 'client_staff', label: 'Client staff', description: 'Client team members', color: '#0d9488' },
+  { value: 'partner', label: 'Partners', description: 'External partners / contractors', color: '#7c3aed' },
+  { value: 'partner_employee', label: 'Partner employees', description: 'Staff working under a partner', color: '#9333ea' },
+];
+
+/** Display label + color for a user-type share key (or undefined if unknown). */
+export function lmsUserTypeMeta(key: string | null | undefined): { label: string; color: string } | undefined {
+  if (!key) return undefined;
+  const found = LMS_SHARE_USER_TYPES.find((t) => t.value === key);
+  return found ? { label: found.label, color: found.color } : undefined;
+}
 
 export interface LmsItemShare {
   id: string;
@@ -3042,6 +3059,8 @@ export interface LmsItemShare {
   // Joined for display (one of these, keyed by principal_type)
   user?: Pick<User, 'id' | 'display_name' | 'email' | 'avatar_url' | 'user_type'> | null;
   role?: Pick<Role, 'id' | 'name' | 'color'> | null;
+  // Present when principal_type === 'user_type' — the user-type key
+  user_type?: string | null;
 }
 
 // One grant in a replace-set PUT (admin/collab share management).

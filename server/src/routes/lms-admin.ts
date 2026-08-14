@@ -18,6 +18,12 @@ import {
   type Principal,
   type SendScope,
 } from '../services/lmsTaskSends';
+import {
+  userTypeShareKeyToUuid,
+  userTypeShareUuidToKey,
+} from '../utils/lmsShares';
+import { LMS_SHARE_USER_TYPES } from '@squadhub/shared';
+import type { UserType } from '@squadhub/shared';
 
 const router = Router();
 router.use(requireAuth);
@@ -631,10 +637,29 @@ router.post('/items/:id/publish', async (req: Request, res: Response) => {
     //    have no audience/assignments). Role members aren't pinged (no spam);
     //    skip anyone already notified via an assignment above.
     if (firstPublish) {
-      const { data: shareUsers } = await supabaseAdmin
-        .from('lms_item_shares').select('principal_id').eq('item_id', itemId).eq('principal_type', 'user');
+      const { data: shareRows } = await supabaseAdmin
+        .from('lms_item_shares').select('principal_type, principal_id').eq('item_id', itemId);
       const assignedSet = new Set(userIds);
-      const ids = Array.from(new Set((shareUsers || []).map((s: any) => s.principal_id))).filter((id) => !assignedSet.has(id));
+
+      // Direct user shares ping the person; user_type shares ping every member
+      // of that type (roles stay silent to avoid spam).
+      const shareUserIds = new Set(
+        (shareRows || [])
+          .filter((s: any) => s.principal_type === 'user')
+          .map((s: any) => s.principal_id),
+      );
+      const typeKeys = (shareRows || [])
+        .filter((s: any) => s.principal_type === 'user_type')
+        .map((s: any) => userTypeShareUuidToKey(s.principal_id))
+        .filter((k): k is UserType => !!k);
+
+      if (typeKeys.length) {
+        const { data: typeUsers } = await supabaseAdmin
+          .from('users').select('id').in('user_type', typeKeys).neq('status', 'banned').neq('status', 'suspended');
+        for (const u of typeUsers || []) shareUserIds.add((u as any).id);
+      }
+
+      const ids = Array.from(shareUserIds).filter((id) => !assignedSet.has(id));
       if (ids.length) {
         await notifyLms(
           ids.map((uid) => ({ user_id: uid, type: 'lms_shared' as const, title: `New: ${(updated as any).title}` })),
@@ -748,7 +773,8 @@ router.get('/items/:id/assignments', async (req: Request, res: Response) => {
 const ACCESS_LEVELS = ['viewer', 'commenter', 'contributor', 'admin'] as const;
 
 // GET /admin/lms/items/:id/shares — current grants with user/role details.
-// principal_id is polymorphic (no FK), so users + roles are stitched in code.
+// principal_id is polymorphic (no FK), so users + roles are stitched in code;
+// user_type principals carry their key back in the joined `user_type` field.
 router.get('/items/:id/shares', async (req: Request, res: Response) => {
   try {
     const { data: shares, error } = await supabaseAdmin
@@ -776,6 +802,10 @@ router.get('/items/:id/shares', async (req: Request, res: Response) => {
       ...s,
       user: s.principal_type === 'user' ? userMap.get(s.principal_id) ?? null : null,
       role: s.principal_type === 'role' ? roleMap.get(s.principal_id) ?? null : null,
+      user_type:
+        s.principal_type === 'user_type'
+          ? (userTypeShareUuidToKey(s.principal_id) ?? null)
+          : null,
     }));
     res.json({ success: true, data });
   } catch (err) {
@@ -786,18 +816,39 @@ router.get('/items/:id/shares', async (req: Request, res: Response) => {
 
 const sharesPutSchema = z.object({
   shares: z.array(z.object({
-    principal_type: z.enum(['user', 'role']),
-    principal_id: z.string().uuid(),
+    principal_type: z.enum(['user', 'role', 'user_type']),
+    principal_id: z.string().min(1),
     access_level: z.enum(ACCESS_LEVELS),
   })).default([]),
 });
 
+// Normalize incoming share rows: user_type principals arrive as their key
+// (e.g. 'internal') and are stored as a deterministic UUID; user/role rows
+// pass through untouched.
+function normalizeShareRows(shares: z.infer<typeof sharesPutSchema>['shares']) {
+  return shares.map((s) =>
+    s.principal_type === 'user_type'
+      ? { ...s, principal_id: userTypeShareKeyToUuid(s.principal_id as UserType) }
+      : s,
+  );
+}
+
 // PUT /admin/lms/items/:id/shares — replace the full share set. Notifies any
-// newly added USER principals (role members aren't pinged to avoid spam).
+// newly added USER principals (role/type members aren't pinged to avoid spam).
 router.put('/items/:id/shares', async (req: Request, res: Response) => {
   try {
     const itemId = req.params.id as string;
-    const { shares } = sharesPutSchema.parse(req.body);
+    const { shares: raw } = sharesPutSchema.parse(req.body);
+
+    // Validate user_type keys up front (reject unknown keys with a 400).
+    for (const s of raw) {
+      if (s.principal_type === 'user_type' &&
+          !LMS_SHARE_USER_TYPES.some((t) => t.value === s.principal_id)) {
+        res.status(400).json({ success: false, error: `Unknown user type: ${s.principal_id}` });
+        return;
+      }
+    }
+    const shares = normalizeShareRows(raw);
 
     const { data: existing } = await supabaseAdmin
       .from('lms_item_shares').select('principal_type, principal_id').eq('item_id', itemId);

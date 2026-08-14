@@ -427,6 +427,14 @@ function AddBlock({ onAdd }: { onAdd: (type: string) => void }) {
 }
 
 /* ---- Read-only "who has access" panel ---- */
+const USER_TYPE_LABELS: Record<string, string> = {
+  internal: 'Internal',
+  client: 'Clients',
+  client_staff: 'Client staff',
+  partner: 'Partners',
+  partner_employee: 'Partner employees',
+};
+
 function SharedWith({ itemId, status }: { itemId: string; status: string }) {
   const [open, setOpen] = useState(false);
   const { data: shares } = useCollabShares(itemId, open);
@@ -451,13 +459,17 @@ function SharedWith({ itemId, status }: { itemId: string; status: string }) {
                 <li key={`${s.principal_type}:${s.principal_id}`} className="flex items-center gap-2 text-[12.5px] text-[var(--sh-ink)]">
                   {s.principal_type === 'role' ? (
                     <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: s.role?.color || '#9ca3af' }} />
+                  ) : s.principal_type === 'user_type' ? (
+                    <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: '#6366f1' }} />
                   ) : (
                     <span className="grid h-6 w-6 place-items-center rounded-full bg-[var(--sh-hair-3)] text-[9.5px] font-semibold text-[var(--sh-ink-2)]">
                       {(s.user?.display_name || s.user?.email || '?').slice(0, 2).toUpperCase()}
                     </span>
                   )}
                   <span className="flex-1 truncate">
-                    {s.principal_type === 'role' ? s.role?.name : s.user?.display_name || s.user?.email || 'Unknown'}
+                    {s.principal_type === 'role' ? s.role?.name
+                      : s.principal_type === 'user_type' ? (USER_TYPE_LABELS[s.user_type || ''] || s.user_type || 'User type')
+                      : s.user?.display_name || s.user?.email || 'Unknown'}
                   </span>
                   <span className="rounded-full bg-[var(--sh-hair-3)] px-2 py-0.5 text-[10.5px] capitalize text-[var(--sh-ink-2)]">{s.access_level}</span>
                 </li>

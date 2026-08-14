@@ -138,11 +138,13 @@ export function useEditorMutations(draftItemId: string) {
 // Read-only share list for an item (who has access, and at what level).
 export type CollabShare = {
   id: string;
-  principal_type: 'user' | 'role';
+  principal_type: 'user' | 'role' | 'user_type';
   principal_id: string;
   access_level: LmsAccessLevel;
   user?: { id: string; display_name: string | null; email: string | null; avatar_url: string | null } | null;
   role?: { id: string; name: string; color: string | null } | null;
+  // Present when principal_type === 'user_type' — the user-type key
+  user_type?: string | null;
 };
 
 export function useCollabShares(itemId: string | null, enabled: boolean) {

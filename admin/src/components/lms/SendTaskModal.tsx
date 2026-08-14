@@ -94,13 +94,15 @@ export default function SendTaskModal({ itemId, itemTitle, itemKind, itemTrack, 
       setPrincipals((prev) =>
         prev.length
           ? prev
-          : shares.map((s) => ({
-              type: s.principal_type,
-              id: s.principal_id,
-              label: s.principal_type === 'user' ? (s.user?.display_name || s.user?.email || 'Unknown') : (s.role?.name || 'Role'),
-              sub: s.principal_type === 'user' ? s.user?.email ?? undefined : 'Role',
-              color: s.principal_type === 'role' ? s.role?.color ?? undefined : undefined,
-            })),
+          : shares
+              .filter((s) => s.principal_type !== 'user_type')
+              .map((s) => ({
+                type: (s.principal_type === 'user_type' ? 'user' : s.principal_type) as 'user' | 'role',
+                id: s.principal_id,
+                label: s.principal_type === 'user' ? (s.user?.display_name || s.user?.email || 'Unknown') : (s.role?.name || 'Role'),
+                sub: s.principal_type === 'user' ? s.user?.email ?? undefined : 'Role',
+                color: s.principal_type === 'role' ? s.role?.color ?? undefined : undefined,
+              })),
       );
       return shares;
     },

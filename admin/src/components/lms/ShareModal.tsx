@@ -3,6 +3,7 @@ import { useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../services/api';
 import type { LmsAccessLevel, LmsItemShare, Role, User } from '@squadhub/shared';
+import { LMS_SHARE_USER_TYPES, lmsUserTypeMeta } from '@squadhub/shared';
 
 interface Props {
   itemId: string;
@@ -11,7 +12,7 @@ interface Props {
 }
 
 type Row = {
-  principal_type: 'user' | 'role';
+  principal_type: 'user' | 'role' | 'user_type';
   principal_id: string;
   access_level: LmsAccessLevel;
   label: string;
@@ -30,7 +31,7 @@ export default function ShareModal({ itemId, itemTitle, onClose }: Props) {
   const qc = useQueryClient();
   const [rows, setRows] = useState<Row[] | null>(null);
   const [q, setQ] = useState('');
-  const [tab, setTab] = useState<'people' | 'roles'>('people');
+  const [tab, setTab] = useState<'people' | 'roles' | 'user_types'>('people');
 
   // Seed local rows from the saved shares (once).
   useQuery({
@@ -39,14 +40,27 @@ export default function ShareModal({ itemId, itemTitle, onClose }: Props) {
       const res = await api.get(`/admin/lms/items/${itemId}/shares`).then((r) => r.data);
       const shares: LmsItemShare[] = res?.data || [];
       setRows(
-        shares.map((s) => ({
-          principal_type: s.principal_type,
-          principal_id: s.principal_id,
-          access_level: s.access_level,
-          label: s.principal_type === 'user' ? (s.user?.display_name || s.user?.email || 'Unknown') : (s.role?.name || 'Role'),
-          sub: s.principal_type === 'user' ? s.user?.email ?? undefined : 'Role',
-          color: s.principal_type === 'role' ? s.role?.color ?? undefined : undefined,
-        })),
+        shares.map((s) => {
+          if (s.principal_type === 'user_type') {
+            const meta = lmsUserTypeMeta(s.user_type);
+            return {
+              principal_type: 'user_type' as const,
+              principal_id: s.user_type || s.principal_id,
+              access_level: s.access_level,
+              label: meta?.label || s.user_type || 'User type',
+              sub: 'User type',
+              color: meta?.color,
+            };
+          }
+          return {
+            principal_type: s.principal_type,
+            principal_id: s.principal_id,
+            access_level: s.access_level,
+            label: s.principal_type === 'user' ? (s.user?.display_name || s.user?.email || 'Unknown') : (s.role?.name || 'Role'),
+            sub: s.principal_type === 'user' ? s.user?.email ?? undefined : 'Role',
+            color: s.principal_type === 'role' ? s.role?.color ?? undefined : undefined,
+          };
+        }),
       );
       return shares;
     },
@@ -105,6 +119,7 @@ export default function ShareModal({ itemId, itemTitle, onClose }: Props) {
           <div className="mb-2 flex gap-1 rounded-lg bg-canvas p-1 text-[13px]">
             <button onClick={() => setTab('people')} className={`flex-1 rounded-md px-3 py-1 font-medium transition ${tab === 'people' ? 'bg-surface text-foreground shadow-sm' : 'text-foreground-muted'}`}>People</button>
             <button onClick={() => setTab('roles')} className={`flex-1 rounded-md px-3 py-1 font-medium transition ${tab === 'roles' ? 'bg-surface text-foreground shadow-sm' : 'text-foreground-muted'}`}>Roles</button>
+            <button onClick={() => setTab('user_types')} className={`flex-1 rounded-md px-3 py-1 font-medium transition ${tab === 'user_types' ? 'bg-surface text-foreground shadow-sm' : 'text-foreground-muted'}`}>User types</button>
           </div>
 
           {tab === 'people' ? (
@@ -140,6 +155,25 @@ export default function ShareModal({ itemId, itemTitle, onClose }: Props) {
                 </ul>
               )}
             </>
+          ) : tab === 'user_types' ? (
+            <ul className="max-h-40 overflow-y-auto rounded-md border border-divider">
+              {LMS_SHARE_USER_TYPES.filter((t) => !takenIds.has(`user_type:${t.value}`)).map((t) => (
+                <li key={t.value}>
+                  <button
+                    type="button"
+                    onClick={() => add({ principal_type: 'user_type', principal_id: t.value, access_level: 'viewer', label: t.label, sub: 'User type', color: t.color })}
+                    className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-surface-alt"
+                  >
+                    <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: t.color }} />
+                    <span className="flex-1 truncate">
+                      <span className="text-foreground">{t.label}</span>
+                      <span className="ml-1.5 text-[11px] text-foreground-dim">{t.description}</span>
+                    </span>
+                    <span className="text-[11px] text-ink">+ Add</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
           ) : (
             <ul className="max-h-40 overflow-y-auto rounded-md border border-divider">
               {roles.filter((r) => !takenIds.has(`role:${r.id}`)).map((r) => (
@@ -171,6 +205,10 @@ export default function ShareModal({ itemId, itemTitle, onClose }: Props) {
               {rows.map((r, i) => (
                 <li key={`${r.principal_type}:${r.principal_id}`} className="flex items-center gap-2 rounded-md border border-divider bg-surface px-2.5 py-1.5">
                   {r.principal_type === 'role' ? (
+                    <span className="grid h-7 w-7 place-items-center rounded-full" style={{ backgroundColor: (r.color || '#6b7280') + '22' }}>
+                      <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: r.color || '#6b7280' }} />
+                    </span>
+                  ) : r.principal_type === 'user_type' ? (
                     <span className="grid h-7 w-7 place-items-center rounded-full" style={{ backgroundColor: (r.color || '#6b7280') + '22' }}>
                       <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: r.color || '#6b7280' }} />
                     </span>

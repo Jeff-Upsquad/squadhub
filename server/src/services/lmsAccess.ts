@@ -1,6 +1,7 @@
 import { supabaseAdmin } from '../supabase';
 import { getUserRoleIds, getUserIdsByRoleId } from '../utils/roles';
-import type { LmsAccessLevel } from '@squadhub/shared';
+import { userTypeShareKeyToUuid, userTypeShareUuidToKey } from '../utils/lmsShares';
+import type { LmsAccessLevel, UserType } from '@squadhub/shared';
 
 // Higher number = more capable. Effective access = the max grant a user has.
 export const ACCESS_RANK: Record<LmsAccessLevel, number> = {
@@ -70,6 +71,17 @@ export async function getItemAccess(itemId: string, userId: string): Promise<Lms
     for (const r of roleShares || []) level = maxAccess(level, (r as any).access_level);
   }
 
+  // User-type shares — a grant to the requesting user's own user_type.
+  if (profile && (profile as any).user_type) {
+    const { data: typeShares } = await supabaseAdmin
+      .from('lms_item_shares')
+      .select('access_level')
+      .eq('item_id', itemId)
+      .eq('principal_type', 'user_type')
+      .eq('principal_id', userTypeShareKeyToUuid((profile as any).user_type as UserType));
+    for (const t of typeShares || []) level = maxAccess(level, (t as any).access_level);
+  }
+
   // Legacy assignment keeps read access even without a share row.
   if (!level || ACCESS_RANK[level] < ACCESS_RANK.viewer) {
     const { data: assignment } = await supabaseAdmin
@@ -110,13 +122,26 @@ export async function getItemApproverUserIds(itemId: string, ownerId: string | n
     .eq('item_id', itemId)
     .eq('access_level', 'admin');
 
+  // user_type admin grants → every member of that type (like the audience).
+  const typeKeys: UserType[] = [];
+
   for (const s of adminShares || []) {
     if ((s as any).principal_type === 'user') {
       ids.add((s as any).principal_id);
+    } else if ((s as any).principal_type === 'user_type') {
+      const key = userTypeShareUuidToKey((s as any).principal_id);
+      if (key) typeKeys.push(key);
     } else {
       const members = await getUserIdsByRoleId((s as any).principal_id);
       for (const m of members) ids.add(m);
     }
   }
+
+  if (typeKeys.length) {
+    const { data: typeUsers } = await supabaseAdmin
+      .from('users').select('id').in('user_type', typeKeys).neq('status', 'banned').neq('status', 'suspended');
+    for (const u of typeUsers || []) ids.add((u as any).id);
+  }
+
   return Array.from(ids);
 }

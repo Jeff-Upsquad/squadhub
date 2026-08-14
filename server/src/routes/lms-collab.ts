@@ -5,6 +5,7 @@ import { supabaseAdmin } from '../supabase';
 import type { LmsAccessLevel } from '@squadhub/shared';
 import { getItemAccess, meetsAccess, getItemApproverUserIds } from '../services/lmsAccess';
 import { cloneItemForReview, notifyLms } from '../services/lmsAuthoring';
+import { userTypeShareUuidToKey } from '../utils/lmsShares';
 
 // ============================================================
 // Collaborative (non-admin) LMS authoring + comments, gated by per-item
@@ -496,6 +497,10 @@ router.get('/items/:id/shares', async (req: Request, res: Response) => {
         ...s,
         user: s.principal_type === 'user' ? uById.get(s.principal_id) ?? null : null,
         role: s.principal_type === 'role' ? rById.get(s.principal_id) ?? null : null,
+        user_type:
+          s.principal_type === 'user_type'
+            ? (userTypeShareUuidToKey(s.principal_id) ?? null)
+            : null,
       })),
     });
   } catch (err) {

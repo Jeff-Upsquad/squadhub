@@ -5,6 +5,8 @@ import { supabaseAdmin } from '../supabase';
 import { mirrorCourseAssignment } from '../services/taskMirror';
 import { getItemAccess } from '../services/lmsAccess';
 import { getUserRoleIds } from '../utils/roles';
+import { userTypeShareKeyToUuid } from '../utils/lmsShares';
+import type { UserType } from '@squadhub/shared';
 
 const router = Router();
 router.use(requireAuth);
@@ -164,10 +166,16 @@ router.get('/my-due', async (req: Request, res: Response) => {
 router.get('/shared-with-me', async (req: Request, res: Response) => {
   try {
     const roleIds = await getUserRoleIds(req.userId!);
+    const { data: profile } = await supabaseAdmin
+      .from('users').select('user_type').eq('id', req.userId!).maybeSingle();
+    const userType = (profile as any)?.user_type as UserType | undefined;
 
     const orFilters = [`and(principal_type.eq.user,principal_id.eq.${req.userId!})`];
     if (roleIds.length) {
       orFilters.push(`and(principal_type.eq.role,principal_id.in.(${roleIds.join(',')}))`);
+    }
+    if (userType) {
+      orFilters.push(`and(principal_type.eq.user_type,principal_id.eq.${userTypeShareKeyToUuid(userType)})`);
     }
 
     const { data: shares, error } = await supabaseAdmin
@@ -236,8 +244,9 @@ router.get('/search', async (req: Request, res: Response) => {
     // 1. Accessible published, non-clone item ids: owner, assignment, direct or
     //    role share, or (global admin) everything.
     const { data: profile } = await supabaseAdmin
-      .from('users').select('is_admin').eq('id', req.userId!).single();
+      .from('users').select('is_admin, user_type').eq('id', req.userId!).single();
     const isAdmin = !!(profile as any)?.is_admin;
+    const userType = (profile as any)?.user_type as UserType | undefined;
 
     const accessible = new Set<string>();
     if (isAdmin) {
@@ -255,6 +264,7 @@ router.get('/search', async (req: Request, res: Response) => {
       const roleIds = await getUserRoleIds(req.userId!);
       const orFilters = [`and(principal_type.eq.user,principal_id.eq.${req.userId!})`];
       if (roleIds.length) orFilters.push(`and(principal_type.eq.role,principal_id.in.(${roleIds.join(',')}))`);
+      if (userType) orFilters.push(`and(principal_type.eq.user_type,principal_id.eq.${userTypeShareKeyToUuid(userType)})`);
       const { data: shares } = await supabaseAdmin
         .from('lms_item_shares').select('item_id').or(orFilters.join(','));
       for (const r of shares || []) accessible.add((r as any).item_id);
