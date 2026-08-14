@@ -428,8 +428,8 @@ router.put('/lessons/:lessonId/blocks/reorder', async (req: Request, res: Respon
 // instead of global admin. Any user with edit access on the live item can send
 // the item, a page, or a section to people/roles as a trackable task.
 const sendPrincipalSchema = z.object({
-  type: z.enum(['user', 'role']),
-  id: z.string().uuid(),
+  type: z.enum(['user', 'role', 'user_type']),
+  id: z.string(),
 });
 const sendCreateSchema = z.object({
   scope: z.enum(['item', 'lesson', 'section']),

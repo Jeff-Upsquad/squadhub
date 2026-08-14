@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { LMS_SHARE_USER_TYPES } from '@squadhub/shared';
 import api from '../../../services/api';
 
 type Lesson = { id: string; title: string; blocks?: any[] };
@@ -10,11 +11,13 @@ interface Props {
   itemKind: string;
   itemTrack: string;
   lessons: Lesson[];
+  initialLessonId?: string | null;
   onClose: () => void;
 }
 
 type Scope = 'item' | 'lesson' | 'section';
-type Principal = { type: 'user' | 'role'; id: string; label: string; sub?: string; color?: string };
+type PrincipalType = 'user' | 'role' | 'user_type';
+type Principal = { type: PrincipalType; id: string; label: string; sub?: string; color?: string };
 type Heading = { anchor: string; label: string; level: number; index: number };
 
 function slugifyHeading(text: string, i: number) {
@@ -51,18 +54,23 @@ function extractHeadings(blocks: any[] | undefined): Heading[] {
   return out;
 }
 
-export default function SendTaskModal({ itemId, itemTitle, itemKind, itemTrack, lessons, onClose }: Props) {
+function todayLocal(): string {
+  const d = new Date();
+  return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+}
+
+export default function SendTaskModal({ itemId, itemTitle, itemKind, itemTrack, lessons, initialLessonId, onClose }: Props) {
   const qc = useQueryClient();
   const isCourse = itemKind === 'course';
 
-  const [scope, setScope] = useState<Scope>(isCourse ? 'lesson' : 'item');
-  const [lessonId, setLessonId] = useState<string>(lessons[0]?.id || '');
+  const [scope, setScope] = useState<Scope>(initialLessonId ? 'lesson' : 'item');
+  const [lessonId, setLessonId] = useState<string>(initialLessonId || lessons[0]?.id || '');
   const [sectionAnchor, setSectionAnchor] = useState<string>('');
-  const [dueDate, setDueDate] = useState<string>('');
+  const [dueDate, setDueDate] = useState<string>(todayLocal());
   const [autoResend, setAutoResend] = useState(false);
   const [principals, setPrincipals] = useState<Principal[]>([]);
   const [q, setQ] = useState('');
-  const [tab, setTab] = useState<'people' | 'roles'>('people');
+  const [tab, setTab] = useState<'people' | 'roles' | 'user_types'>('people');
   const [title, setTitle] = useState('');
   const [titleTouched, setTitleTouched] = useState(false);
 
@@ -73,28 +81,37 @@ export default function SendTaskModal({ itemId, itemTitle, itemKind, itemTrack, 
   const kindWord = itemTrack === 'sop' ? 'SOP' : isCourse ? 'Course' : 'Post';
 
   const derivedTitle = useMemo(() => {
-    if (scope === 'item') return `${kindWord}: ${itemTitle}`;
-    if (scope === 'lesson') return `${kindWord}: ${itemTitle} — ${activeLesson?.title || 'Lesson'}`;
-    return `${kindWord}: ${itemTitle} › ${activeHeading?.label || 'Section'}`;
-  }, [scope, kindWord, itemTitle, activeLesson, activeHeading]);
+    if (scope === 'item') return itemTitle;
+    if (scope === 'lesson') return activeLesson?.title || itemTitle;
+    return activeHeading?.label || activeLesson?.title || itemTitle;
+  }, [scope, itemTitle, activeLesson, activeHeading]);
   const effectiveTitle = titleTouched ? title : derivedTitle;
 
-  // Prefill recipients from the item's current shares.
+  // Prefill recipients from the item's current shares (users, roles, user types).
   const { data: shares } = useQuery({
     queryKey: ['lms-collab-send-shares', itemId],
     queryFn: async () => (await api.get(`/lms/collab/items/${itemId}/shares`)).data.data as any[],
   });
   useEffect(() => {
     if (!shares || principals.length) return;
-    const mapped = shares
-      .filter((s) => s.principal_type !== 'user_type')
-      .map((s) => ({
-        type: s.principal_type as 'user' | 'role',
+    const mapped = shares.map((s) => {
+      if (s.principal_type === 'user_type') {
+        return {
+          type: 'user_type' as PrincipalType,
+          id: s.user_type || s.principal_id,
+          label: s.user_type ? (LMS_SHARE_USER_TYPES.find((t) => t.value === s.user_type)?.label || s.user_type) : 'User type',
+          sub: 'User type',
+          color: LMS_SHARE_USER_TYPES.find((t) => t.value === s.user_type)?.color,
+        };
+      }
+      return {
+        type: s.principal_type as PrincipalType,
         id: s.principal_id,
         label: s.principal_type === 'user' ? (s.user?.display_name || s.user?.email || 'Unknown') : (s.role?.name || 'Role'),
         sub: s.principal_type === 'user' ? s.user?.email ?? undefined : 'Role',
         color: s.principal_type === 'role' ? s.role?.color ?? undefined : undefined,
-      }));
+      };
+    });
     if (mapped.length) setPrincipals(mapped);
   }, [shares, principals.length]);
 
@@ -247,6 +264,7 @@ export default function SendTaskModal({ itemId, itemTitle, itemKind, itemTrack, 
             <div className="mb-2 flex gap-1 rounded-lg bg-[var(--sidebar)] p-1 text-[13px]">
               <button onClick={() => setTab('people')} className={`flex-1 rounded-md px-3 py-1 font-medium transition ${tab === 'people' ? 'bg-[var(--surface)] text-[var(--sh-ink)] shadow-sm' : 'text-[var(--sh-ink-3)]'}`}>People</button>
               <button onClick={() => setTab('roles')} className={`flex-1 rounded-md px-3 py-1 font-medium transition ${tab === 'roles' ? 'bg-[var(--surface)] text-[var(--sh-ink)] shadow-sm' : 'text-[var(--sh-ink-3)]'}`}>Roles</button>
+              <button onClick={() => setTab('user_types')} className={`flex-1 rounded-md px-3 py-1 font-medium transition ${tab === 'user_types' ? 'bg-[var(--surface)] text-[var(--sh-ink)] shadow-sm' : 'text-[var(--sh-ink-3)]'}`}>User types</button>
             </div>
             {tab === 'people' ? (
               <>
@@ -272,6 +290,18 @@ export default function SendTaskModal({ itemId, itemTitle, itemKind, itemTrack, 
                   </ul>
                 )}
               </>
+            ) : tab === 'user_types' ? (
+              <ul className="max-h-36 overflow-y-auto rounded-md border border-[var(--sh-hair)]">
+                {LMS_SHARE_USER_TYPES.filter((t) => !takenIds.has(`user_type:${t.value}`)).map((t) => (
+                  <li key={t.value}>
+                    <button type="button" onClick={() => add({ type: 'user_type', id: t.value, label: t.label, sub: 'User type', color: t.color })} className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-[var(--sh-hair-3)]">
+                      <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: t.color }} />
+                      <span className="flex-1 truncate text-[var(--sh-ink)]">{t.label}</span>
+                      <span className="text-[11px] text-[var(--sh-ink)]">+ Add</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
             ) : (
               <ul className="max-h-36 overflow-y-auto rounded-md border border-[var(--sh-hair)]">
                 {roles.filter((r) => !takenIds.has(`role:${r.id}`)).map((r) => (
@@ -291,12 +321,12 @@ export default function SendTaskModal({ itemId, itemTitle, itemKind, itemTrack, 
               <ul className="mt-2 space-y-1.5">
                 {principals.map((p, i) => (
                   <li key={`${p.type}:${p.id}`} className="flex items-center gap-2 rounded-md border border-[var(--sh-hair)] bg-[var(--surface)] px-2.5 py-1.5">
-                    {p.type === 'role' ? (
+                    {p.type === 'user' ? (
+                      <span className="grid h-7 w-7 place-items-center rounded-full bg-[var(--sidebar)] text-[10px] font-semibold text-[var(--sh-ink-2)]">{p.label.slice(0, 2).toUpperCase()}</span>
+                    ) : (
                       <span className="grid h-7 w-7 place-items-center rounded-full" style={{ backgroundColor: (p.color || '#6b7280') + '22' }}>
                         <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: p.color || '#6b7280' }} />
                       </span>
-                    ) : (
-                      <span className="grid h-7 w-7 place-items-center rounded-full bg-[var(--sidebar)] text-[10px] font-semibold text-[var(--sh-ink-2)]">{p.label.slice(0, 2).toUpperCase()}</span>
                     )}
                     <span className="flex-1 truncate">
                       <span className="block truncate text-sm text-[var(--sh-ink)]">{p.label}</span>
@@ -311,7 +341,7 @@ export default function SendTaskModal({ itemId, itemTitle, itemKind, itemTrack, 
         </div>
 
         <div className="flex items-center justify-between border-t border-[var(--sh-hair)] px-5 py-3">
-          <span className="text-[11px] text-[var(--sh-ink-3)]">Roles cover their current & future members.</span>
+          <span className="text-[11px] text-[var(--sh-ink-3)]">Roles & user types cover their current & future members.</span>
           <div className="flex gap-2">
             <button onClick={onClose} disabled={send.isPending} className="rounded-lg border border-[var(--sh-hair)] bg-[var(--surface)] px-4 py-2 text-sm text-[var(--sh-ink-2)] hover:bg-[var(--sh-hair-3)] disabled:opacity-50">Cancel</button>
             <button onClick={() => send.mutate()} disabled={!canSend || send.isPending} className="rounded-lg bg-[var(--sh-ink)] px-4 py-2 text-sm font-medium text-[var(--sidebar)] hover:opacity-90 disabled:opacity-50">

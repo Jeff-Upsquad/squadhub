@@ -1,5 +1,7 @@
 import { supabaseAdmin } from '../supabase';
 import { getUserIdsByRoleId } from '../utils/roles';
+import { userTypeShareKeyToUuid } from '../utils/lmsShares';
+import type { UserType } from '@squadhub/shared';
 import { notifyLms } from './lmsAuthoring';
 import {
   mirrorResourceSend,
@@ -19,7 +21,7 @@ import {
 
 export type SendScope = 'item' | 'lesson' | 'section';
 export interface Principal {
-  type: 'user' | 'role';
+  type: 'user' | 'role' | 'user_type';
   id: string;
 }
 export interface SectionRef {
@@ -35,17 +37,28 @@ export function sourceKindForItem(item: { kind: string; track: string }): 'cours
   return item.kind === 'course' ? 'course' : 'post';
 }
 
-// Expand picked principals to concrete user ids (roles → members), dropping
-// banned/suspended and unknown users.
+// Expand picked principals to concrete user ids (roles → members, user_types →
+// every active user of that type), dropping banned/suspended and unknown users.
 export async function resolvePrincipalUserIds(principals: Principal[]): Promise<string[]> {
   const ids = new Set<string>();
   const roleIds: string[] = [];
+  const userTypes: UserType[] = [];
   for (const p of principals) {
     if (p.type === 'user') ids.add(p.id);
     else if (p.type === 'role') roleIds.push(p.id);
+    else if (p.type === 'user_type') userTypes.push(p.id as UserType);
   }
   for (const rid of roleIds) {
     for (const uid of await getUserIdsByRoleId(rid)) ids.add(uid);
+  }
+  if (userTypes.length) {
+    const { data: typeUsers } = await supabaseAdmin
+      .from('users')
+      .select('id')
+      .in('user_type', userTypes)
+      .neq('status', 'banned')
+      .neq('status', 'suspended');
+    for (const u of typeUsers || []) ids.add((u as any).id);
   }
   if (!ids.size) return [];
   const { data } = await supabaseAdmin
@@ -64,7 +77,7 @@ async function grantViewerAccess(itemId: string, principals: Principal[], grante
   const rows = principals.map((p) => ({
     item_id: itemId,
     principal_type: p.type,
-    principal_id: p.id,
+    principal_id: p.type === 'user_type' ? userTypeShareKeyToUuid(p.id as UserType) : p.id,
     access_level: 'viewer',
     granted_by: grantedBy,
   }));

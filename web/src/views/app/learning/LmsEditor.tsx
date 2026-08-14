@@ -306,6 +306,7 @@ export default function LmsEditor({ draftItemId, isClone, onExit, onSubmitted }:
           itemKind={item.kind}
           itemTrack={item.track}
           lessons={lessons}
+          initialLessonId={activeLesson?.id ?? null}
           onClose={() => setSendOpen(false)}
         />
       )}
