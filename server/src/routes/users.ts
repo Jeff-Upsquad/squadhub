@@ -327,23 +327,66 @@ router.get('/me/design-folders', requireAuth, async (req: Request, res: Response
 });
 
 // GET /users/me/subscription-cards — subscription cards for any client the user
-// has access to (via client_user_access). Mirrors the admin list shape.
+// has access to (via client_user_access), PLUS cards hard-linked to the user's
+// Hub contact submissions via lead_submission_id (legacy cards without a
+// staged subscription). Mirrors the admin list shape.
 // `/me/published-cards` is kept as a back-compat alias for older/native clients.
 router.get(['/me/subscription-cards', '/me/published-cards'], requireAuth, async (req: Request, res: Response) => {
   try {
-    const stagedIds = await getStagedSubIdsForUser(req.userId!);
-    if (stagedIds.length === 0) {
+    const userId = req.userId!;
+
+    // Path 1 — staged subscriptions via client_user_access → clients.
+    const stagedIds = await getStagedSubIdsForUser(userId);
+
+    // Path 2 — submissions hard-linked to this user: resolve via the same
+    // client_user_access → clients.submission_id chain, plus any submission
+    // whose email matches the account email (covers legacy/email-repaired rows).
+    const { data: accessClients } = await supabaseAdmin
+      .from('client_user_access')
+      .select('clients(submission_id)')
+      .eq('user_id', userId);
+    const accessSubmissionIds = Array.from(
+      new Set(
+        (accessClients ?? [])
+          .map((a: any) => a.clients?.submission_id)
+          .filter(Boolean),
+      ),
+    );
+    const email = (req.userEmail || '').trim().toLowerCase();
+    const emailSubmissionIds: string[] = [];
+    if (email) {
+      const { data: emailSubs } = await supabaseAdmin
+        .from('client_submissions')
+        .select('id')
+        .ilike('email', email);
+      (emailSubs ?? []).forEach((s: any) => emailSubmissionIds.push(s.id));
+    }
+    const linkedSubmissionIds = Array.from(
+      new Set([...accessSubmissionIds, ...emailSubmissionIds]),
+    );
+
+    if (stagedIds.length === 0 && linkedSubmissionIds.length === 0) {
       res.json({ success: true, data: [] });
       return;
     }
 
-    const { data: cards, error } = await supabaseAdmin
+    // Fetch cards from either path: staged subscription FK, or lead link.
+    let query = supabaseAdmin
       .from('subscription_cards')
       .select('*')
-      .in('submission_subscription_id', stagedIds)
       .eq('state', 'published')
       .is('archived_at', null)
       .order('published_at', { ascending: false });
+    if (stagedIds.length > 0 && linkedSubmissionIds.length > 0) {
+      query = query.or(
+        `submission_subscription_id.in.(${stagedIds.join(',')}),lead_submission_id.in.(${linkedSubmissionIds.join(',')})`,
+      );
+    } else if (stagedIds.length > 0) {
+      query = query.in('submission_subscription_id', stagedIds);
+    } else {
+      query = query.in('lead_submission_id', linkedSubmissionIds);
+    }
+    const { data: cards, error } = await query;
     if (error) {
       res.status(500).json({ success: false, error: error.message });
       return;
@@ -355,14 +398,22 @@ router.get(['/me/subscription-cards', '/me/published-cards'], requireAuth, async
       return;
     }
 
-    const cardStagedIds = list.map((c: any) => c.submission_subscription_id);
+    const cardStagedIds = Array.from(
+      new Set(list.map((c: any) => c.submission_subscription_id).filter(Boolean)),
+    );
+    const cardLeadSubmissionIds = Array.from(
+      new Set(list.map((c: any) => c.lead_submission_id).filter(Boolean)),
+    );
     const { data: stagedRows } = await supabaseAdmin
       .from('client_submission_subscriptions')
       .select('*')
       .in('id', cardStagedIds);
 
     const submissionIds = Array.from(
-      new Set((stagedRows || []).map((r: any) => r.submission_id)),
+      new Set([
+        ...(stagedRows || []).map((r: any) => r.submission_id),
+        ...cardLeadSubmissionIds,
+      ]),
     );
     const subscriptionIds = Array.from(
       new Set((stagedRows || []).map((r: any) => r.subscription_id)),
@@ -414,7 +465,11 @@ router.get(['/me/subscription-cards', '/me/published-cards'], requireAuth, async
 
     const hydrated = await Promise.all(list.map(async (card: any) => {
       const staged = stagedById[card.submission_subscription_id] || null;
-      const submission = staged ? submissionById[staged.submission_id] || null : null;
+      // Lead-linked legacy cards resolve their submission directly.
+      const leadSubmission = card.lead_submission_id
+        ? submissionById[card.lead_submission_id] || null
+        : null;
+      const submission = staged ? submissionById[staged.submission_id] || null : leadSubmission;
       const country = submission ? countryById[submission.country_id] || null : null;
       const plan = staged ? planById[staged.plan_id] || null : null;
       const subscription = staged ? subById[staged.subscription_id] || null : null;
