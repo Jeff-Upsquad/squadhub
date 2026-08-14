@@ -1008,6 +1008,13 @@ export interface Notification {
   created_at: string;
 }
 
+// Broadcast to a user's socket room whenever any of their devices marks
+// notification(s) read. The originating device is echoed too — clients dedupe
+// against ids they already flipped locally, so the event is just a fast-forward.
+export type NotificationsReadPayload =
+  | { kind: 'ids'; ids: string[] }
+  | { kind: 'all' };
+
 // ---- Favorites ----
 export type FavoriteItemType = 'channel' | 'list' | 'folder' | 'space';
 
@@ -1163,6 +1170,9 @@ export interface ServerToClientEvents {
   user_offline: (data: { user_id: string }) => void;
   online_users: (data: { user_ids: string[] }) => void;
   new_notification: (notification: Notification) => void;
+  // Cross-device read/unread sync: another device marked notification(s) read.
+  // Echoed to the originator too — clients dedupe against locally-flipped ids.
+  notifications_read: (payload: NotificationsReadPayload) => void;
   // Content-free nudge: an admin triggered/edited a Feature Tip — clients
   // re-fetch GET /feature-tips/pending. No payload (no per-user fan-out).
   feature_tips_changed: () => void;
@@ -1184,6 +1194,9 @@ export interface ClientToServerEvents {
   // A meeting detail view or in-chat poll card subscribes/unsubscribes to live updates.
   join_meeting: (meeting_event_id: string) => void;
   leave_meeting: (meeting_event_id: string) => void;
+  // Reserved for native clients that mark notifications read over the socket
+  // (web uses the REST endpoints; the server broadcasts from those).
+  notifications_mark_read: (payload: NotificationsReadPayload) => void;
 }
 
 // ---- API Response Types ----
