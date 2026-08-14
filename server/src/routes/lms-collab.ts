@@ -5,6 +5,7 @@ import { supabaseAdmin } from '../supabase';
 import type { LmsAccessLevel } from '@squadhub/shared';
 import { getItemAccess, meetsAccess, getItemApproverUserIds } from '../services/lmsAccess';
 import { cloneItemForReview, notifyLms } from '../services/lmsAuthoring';
+import { createSend, listSendsForItem, recipientsForSend, type SendScope, type Principal } from '../services/lmsTaskSends';
 import { userTypeShareUuidToKey } from '../utils/lmsShares';
 
 // ============================================================
@@ -418,6 +419,86 @@ router.put('/lessons/:lessonId/blocks/reorder', async (req: Request, res: Respon
     res.json({ success: true });
   } catch (err) {
     if (err instanceof z.ZodError) { res.status(400).json({ success: false, error: err.errors[0].message }); return; }
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// --- Send as task (per-item admin) -----------------------------------------
+// Mirrors the admin task-sends endpoint, but is gated by per-item ADMIN access
+// instead of global admin. Any user with edit access on the live item can send
+// the item, a page, or a section to people/roles as a trackable task.
+const sendPrincipalSchema = z.object({
+  type: z.enum(['user', 'role']),
+  id: z.string().uuid(),
+});
+const sendCreateSchema = z.object({
+  scope: z.enum(['item', 'lesson', 'section']),
+  lesson_id: z.string().uuid().nullable().optional(),
+  section: z
+    .object({
+      anchor: z.string().min(1),
+      label: z.string().min(1),
+      index: z.number().int().nullable().optional(),
+    })
+    .nullable()
+    .optional(),
+  title: z.string().min(1).max(300),
+  due_date: z.string().datetime().nullable().optional(),
+  auto_resend: z.boolean().optional(),
+  principals: z.array(sendPrincipalSchema).min(1),
+});
+
+router.post('/items/:id/task-sends', async (req: Request, res: Response) => {
+  try {
+    const itemId = param(req.params.id);
+    if (!(await gate(itemId, req.userId!, 'admin', res))) return;
+
+    const body = sendCreateSchema.parse(req.body);
+    const result = await createSend({
+      itemId,
+      scope: body.scope as SendScope,
+      lessonId: body.lesson_id ?? null,
+      section: body.section ?? null,
+      title: body.title,
+      dueDate: body.due_date ?? null,
+      autoResend: body.auto_resend ?? false,
+      principals: body.principals as Principal[],
+      createdBy: req.userId ?? null,
+    });
+    res.status(201).json({ success: true, data: result });
+  } catch (err: any) {
+    if (err instanceof z.ZodError) {
+      res.status(400).json({ success: false, error: err.errors[0].message });
+      return;
+    }
+    console.error('Collab create task-send error:', err);
+    res.status(500).json({ success: false, error: err?.message || 'Internal server error' });
+  }
+});
+
+// Read-only tracker for per-item admins: every task send on this item plus a
+// per-send recipient roster. Mirrors the admin task-sends endpoints.
+router.get('/items/:id/task-sends', async (req: Request, res: Response) => {
+  try {
+    const itemId = param(req.params.id);
+    if (!(await gate(itemId, req.userId!, 'admin', res))) return;
+    res.json({ success: true, data: await listSendsForItem(itemId) });
+  } catch (err) {
+    console.error('Collab list task-sends error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+router.get('/task-sends/:sendId/recipients', async (req: Request, res: Response) => {
+  try {
+    const sendId = param(req.params.sendId);
+    const { data: send } = await supabaseAdmin
+      .from('lms_task_sends').select('item_id').eq('id', sendId).maybeSingle();
+    if (!send) { res.status(404).json({ success: false, error: 'Not found' }); return; }
+    if (!(await gate((send as any).item_id, req.userId!, 'admin', res))) return;
+    res.json({ success: true, data: await recipientsForSend(sendId) });
+  } catch (err) {
+    console.error('Collab send recipients error:', err);
     res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });

@@ -6,6 +6,8 @@ import Link from '@tiptap/extension-link';
 import Image from '@tiptap/extension-image';
 import { useCollabFull, useEditorMutations, useSubmitReview, useDiscardDraft, useCollabRoles, useCollabUserSearch, useCollabShares } from '../../../hooks/useLmsCollab';
 import NotionEditor from './NotionEditor';
+import SendTaskModal from './SendTaskModal';
+import TaskSendsPanel from './TaskSendsPanel';
 
 type Props = {
   draftItemId: string;
@@ -27,6 +29,8 @@ export default function LmsEditor({ draftItemId, isClone, onExit, onSubmitted }:
   const submit = useSubmitReview();
   const discard = useDiscardDraft();
   const [activeLessonId, setActiveLessonId] = useState<string | null>(null);
+  const [sendOpen, setSendOpen] = useState(false);
+  const [rosterOpen, setRosterOpen] = useState(false);
 
   const lessons = useMemo(() => item?.lessons || [], [item]);
   const isCourse = item?.kind === 'course';
@@ -76,6 +80,22 @@ export default function LmsEditor({ draftItemId, isClone, onExit, onSubmitted }:
           <span className="w-full rounded bg-white/60 px-2 py-1 text-[12px]">“{item.review_note}”</span>
         )}
         <span className="ml-auto flex items-center gap-2">
+          {!isClone && (
+            <>
+              <button
+                onClick={() => setRosterOpen((o) => !o)}
+                className="rounded-md border border-[var(--sh-hair)] bg-white px-2.5 py-1 text-[12px] font-medium text-[var(--sh-ink-2)] hover:bg-black/5"
+              >
+                Roster
+              </button>
+              <button
+                onClick={() => setSendOpen(true)}
+                className="rounded-md border border-[var(--sh-hair)] bg-white px-2.5 py-1 text-[12px] font-medium text-[var(--sh-ink-2)] hover:bg-black/5"
+              >
+                Send as task
+              </button>
+            </>
+          )}
           {!isClone && item.status === 'published' ? (
             <button
               onClick={() => { if (confirm('Unpublish this content? Users keep access to already-assigned content.')) m.unpublish.mutate(); }}
@@ -110,6 +130,16 @@ export default function LmsEditor({ draftItemId, isClone, onExit, onSubmitted }:
           )}
         </span>
       </div>
+
+      {rosterOpen && !isClone && (
+        <div className="border-b border-[var(--sh-hair)] bg-[var(--surface)] px-4 py-3">
+          <div className="mb-2 flex items-center justify-between">
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-[var(--sh-ink-3)]">Task roster</span>
+            <button onClick={() => setRosterOpen(false)} className="text-[12px] text-[var(--sh-ink-3)] hover:text-[var(--sh-ink)]">Close</button>
+          </div>
+          <TaskSendsPanel itemId={item.id} />
+        </div>
+      )}
 
       <div className={`grid min-h-0 flex-1 grid-cols-1 ${hasNav ? 'lg:grid-cols-[240px_1fr]' : ''}`}>
         {/* Course: flat lesson list */}
@@ -268,6 +298,17 @@ export default function LmsEditor({ draftItemId, isClone, onExit, onSubmitted }:
           </div>
         </main>
       </div>
+
+      {sendOpen && !isClone && (
+        <SendTaskModal
+          itemId={item.id}
+          itemTitle={item.title}
+          itemKind={item.kind}
+          itemTrack={item.track}
+          lessons={lessons}
+          onClose={() => setSendOpen(false)}
+        />
+      )}
     </div>
   );
 }
