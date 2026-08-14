@@ -4,7 +4,7 @@ import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Link from '@tiptap/extension-link';
 import Image from '@tiptap/extension-image';
-import { useCollabFull, useEditorMutations, useSubmitReview, useDiscardDraft, useCollabRoles, useCollabUserSearch } from '../../../hooks/useLmsCollab';
+import { useCollabFull, useEditorMutations, useSubmitReview, useDiscardDraft, useCollabRoles, useCollabUserSearch, useCollabShares } from '../../../hooks/useLmsCollab';
 import NotionEditor from './NotionEditor';
 
 type Props = {
@@ -76,6 +76,21 @@ export default function LmsEditor({ draftItemId, isClone, onExit, onSubmitted }:
           <span className="w-full rounded bg-white/60 px-2 py-1 text-[12px]">“{item.review_note}”</span>
         )}
         <span className="ml-auto flex items-center gap-2">
+          {!isClone && item.status === 'published' ? (
+            <button
+              onClick={() => { if (confirm('Unpublish this content? Users keep access to already-assigned content.')) m.unpublish.mutate(); }}
+              className="rounded-md border border-amber-300 bg-white px-2.5 py-1 text-[12px] font-medium text-amber-800 hover:bg-amber-100 disabled:opacity-60"
+            >
+              {m.unpublish.isPending ? 'Unpublishing…' : 'Unpublish'}
+            </button>
+          ) : !isClone ? (
+            <button
+              onClick={() => { if (confirm("Publish this content? It becomes visible to everyone it's shared with.")) m.publish.mutate(); }}
+              className="rounded-md bg-[var(--sh-ink)] px-3 py-1 text-[12px] font-semibold text-[var(--sidebar)] hover:opacity-90 disabled:opacity-60"
+            >
+              {m.publish.isPending ? 'Publishing…' : 'Publish'}
+            </button>
+          ) : null}
           {isClone && (
             <button onClick={onDiscard} className="rounded-md border border-amber-300 bg-white px-2.5 py-1 text-[12px] font-medium text-amber-800 hover:bg-amber-100">
               Discard
@@ -216,6 +231,9 @@ export default function LmsEditor({ draftItemId, isClone, onExit, onSubmitted }:
 
             {/* Draft state + per-page access (SOP pages & course chapters) */}
             {(isSop || isCourse) && activeLesson && <PageAccessBar key={activeLesson.id} lesson={activeLesson} m={m} />}
+
+            {/* Who the item is shared with (read-only) */}
+            <SharedWith itemId={item.id} status={item.status} />
 
             {/* Content */}
             {isSop ? (
@@ -404,6 +422,50 @@ function AddBlock({ onAdd }: { onAdd: (type: string) => void }) {
         ))}
       </div>
       <button onClick={() => setOpen(false)} className="mt-2 text-[11px] text-[var(--sh-ink-3)] hover:text-[var(--sh-ink)]">Cancel</button>
+    </div>
+  );
+}
+
+/* ---- Read-only "who has access" panel ---- */
+function SharedWith({ itemId, status }: { itemId: string; status: string }) {
+  const [open, setOpen] = useState(false);
+  const { data: shares } = useCollabShares(itemId, open);
+  if (status !== 'published') return null; // draft items: nothing to show yet
+  return (
+    <div className="mt-4">
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className="rounded-full border border-[var(--sh-hair)] bg-[var(--surface)] px-2.5 py-1 text-[11.5px] text-[var(--sh-ink-2)] hover:border-[var(--sh-ink-3)]"
+      >
+        👥 Shared with {shares?.length !== undefined ? `(${shares.length})` : '…'}
+      </button>
+      {open && (
+        <div className="mt-2 rounded-xl border border-[var(--sh-hair)] bg-[var(--surface)] p-3">
+          {shares === undefined ? (
+            <p className="text-[12px] text-[var(--sh-ink-3)]">Loading…</p>
+          ) : shares.length === 0 ? (
+            <p className="text-[12px] text-[var(--sh-ink-3)]">Not shared with anyone yet. Share it from the admin app.</p>
+          ) : (
+            <ul className="space-y-1">
+              {shares.map((s) => (
+                <li key={`${s.principal_type}:${s.principal_id}`} className="flex items-center gap-2 text-[12.5px] text-[var(--sh-ink)]">
+                  {s.principal_type === 'role' ? (
+                    <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: s.role?.color || '#9ca3af' }} />
+                  ) : (
+                    <span className="grid h-6 w-6 place-items-center rounded-full bg-[var(--sh-hair-3)] text-[9.5px] font-semibold text-[var(--sh-ink-2)]">
+                      {(s.user?.display_name || s.user?.email || '?').slice(0, 2).toUpperCase()}
+                    </span>
+                  )}
+                  <span className="flex-1 truncate">
+                    {s.principal_type === 'role' ? s.role?.name : s.user?.display_name || s.user?.email || 'Unknown'}
+                  </span>
+                  <span className="rounded-full bg-[var(--sh-hair-3)] px-2 py-0.5 text-[10.5px] capitalize text-[var(--sh-ink-2)]">{s.access_level}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
     </div>
   );
 }

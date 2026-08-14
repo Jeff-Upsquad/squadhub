@@ -421,6 +421,89 @@ router.put('/lessons/:lessonId/blocks/reorder', async (req: Request, res: Respon
   }
 });
 
+// --- Item publish / unpublish (per-item admin) -----------------------------
+// Collab publish only flips lms_items.status (+ post pages live). It does NOT
+// materialize assignments / mirror tasks / send share notifications — those
+// stay admin-only privileges (POST /admin/lms/items/:id/publish).
+router.post('/items/:id/publish', async (req: Request, res: Response) => {
+  try {
+    const itemId = param(req.params.id);
+    if (!(await gate(itemId, req.userId!, 'admin', res))) return;
+
+    const { data: item } = await supabaseAdmin.from('lms_items').select('kind, published_at').eq('id', itemId).maybeSingle();
+    if (!item) { res.status(404).json({ success: false, error: 'Not found' }); return; }
+
+    const now = new Date().toISOString();
+    // First publish sets published_at (matches admin route's "new content" signal).
+    const { data, error } = await supabaseAdmin
+      .from('lms_items')
+      .update({ status: 'published', published_at: (item as any).published_at || now, updated_at: now })
+      .eq('id', itemId).select().single();
+    if (error) { res.status(500).json({ success: false, error: error.message }); return; }
+
+    // A post is a single document — publishing it publishes its page (matches admin).
+    if ((data as any).kind === 'post') {
+      await supabaseAdmin.from('lms_lessons').update({ is_active: true }).eq('item_id', itemId);
+    }
+    res.json({ success: true, data });
+  } catch (err) {
+    console.error('Collab publish error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// Unpublish is only meaningful on a live item (clones are never 'published').
+router.post('/items/:id/unpublish', async (req: Request, res: Response) => {
+  try {
+    const itemId = param(req.params.id);
+    if (!(await gate(itemId, req.userId!, 'admin', res))) return;
+
+    const { data: item } = await supabaseAdmin.from('lms_items').select('origin_item_id').eq('id', itemId).single();
+    if (!item) { res.status(404).json({ success: false, error: 'Not found' }); return; }
+    if ((item as any).origin_item_id) { res.status(400).json({ success: false, error: 'Cannot unpublish a draft' }); return; }
+
+    const { data, error } = await supabaseAdmin
+      .from('lms_items').update({ status: 'draft', updated_at: new Date().toISOString() }).eq('id', itemId).select().single();
+    if (error) { res.status(500).json({ success: false, error: error.message }); return; }
+    res.json({ success: true, data });
+  } catch (err) {
+    console.error('Collab unpublish error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// --- Item share list (read-only; who has access) ---------------------------
+// Mirrors GET /admin/lms/items/:id/shares (lms-admin.ts:752). Editing shares
+// stays an admin-app action.
+router.get('/items/:id/shares', async (req: Request, res: Response) => {
+  try {
+    const itemId = param(req.params.id);
+    if (!(await gate(itemId, req.userId!, 'viewer', res))) return;
+
+    const { data: shares } = await supabaseAdmin
+      .from('lms_item_shares').select('*').eq('item_id', itemId).order('created_at', { ascending: true });
+    const userIds = (shares || []).filter((s: any) => s.principal_type === 'user').map((s: any) => s.principal_id);
+    const roleIds = (shares || []).filter((s: any) => s.principal_type === 'role').map((s: any) => s.principal_id);
+    const [{ data: users }, { data: roles }] = await Promise.all([
+      userIds.length ? supabaseAdmin.from('users').select('id, display_name, email, avatar_url').in('id', userIds) : Promise.resolve({ data: [] as any[] }),
+      roleIds.length ? supabaseAdmin.from('roles').select('id, name, color').in('id', roleIds) : Promise.resolve({ data: [] as any[] }),
+    ]);
+    const uById = new Map((users || []).map((u: any) => [u.id, u]));
+    const rById = new Map((roles || []).map((r: any) => [r.id, r]));
+    res.json({
+      success: true,
+      data: (shares || []).map((s: any) => ({
+        ...s,
+        user: s.principal_type === 'user' ? uById.get(s.principal_id) ?? null : null,
+        role: s.principal_type === 'role' ? rById.get(s.principal_id) ?? null : null,
+      })),
+    });
+  } catch (err) {
+    console.error('Collab list shares error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
 // --- Submit for review ------------------------------------------------------
 router.post('/items/:id/submit-review', async (req: Request, res: Response) => {
   try {

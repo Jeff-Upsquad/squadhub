@@ -87,6 +87,14 @@ export function useEditorMutations(draftItemId: string) {
     mutationFn: (body: any) => api.patch(`/lms/collab/items/${draftItemId}`, body),
     onSuccess: invalidate,
   });
+  const publish = useMutation({
+    mutationFn: () => api.post(`/lms/collab/items/${draftItemId}/publish`),
+    onSuccess: invalidate,
+  });
+  const unpublish = useMutation({
+    mutationFn: () => api.post(`/lms/collab/items/${draftItemId}/unpublish`),
+    onSuccess: invalidate,
+  });
   const addLesson = useMutation({
     mutationFn: (body: any = {}) => api.post(`/lms/collab/items/${draftItemId}/lessons`, body),
     onSuccess: invalidate,
@@ -124,7 +132,26 @@ export function useEditorMutations(draftItemId: string) {
       api.put(`/lms/collab/lessons/${lessonId}/blocks/reorder`, { items }),
     onSuccess: invalidate,
   });
-  return { patchItem, addLesson, patchLesson, deleteLesson, setLessonAccess, addBlock, patchBlock, deleteBlock, reorderBlocks };
+  return { patchItem, publish, unpublish, addLesson, patchLesson, deleteLesson, setLessonAccess, addBlock, patchBlock, deleteBlock, reorderBlocks };
+}
+
+// Read-only share list for an item (who has access, and at what level).
+export type CollabShare = {
+  id: string;
+  principal_type: 'user' | 'role';
+  principal_id: string;
+  access_level: LmsAccessLevel;
+  user?: { id: string; display_name: string | null; email: string | null; avatar_url: string | null } | null;
+  role?: { id: string; name: string; color: string | null } | null;
+};
+
+export function useCollabShares(itemId: string | null, enabled: boolean) {
+  return useQuery<CollabShare[]>({
+    queryKey: ['lms-collab-shares', itemId],
+    queryFn: async () => (await api.get(`/lms/collab/items/${itemId}/shares`)).data.data,
+    enabled: enabled && !!itemId,
+    staleTime: 30_000,
+  });
 }
 
 // Roles + user search for the per-page "hide from" picker.

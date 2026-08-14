@@ -292,6 +292,10 @@ export default function CardShareTokenPage() {
       setError('Please select at least one working day.');
       return;
     }
+    if (!form.plan) {
+      setError('Please select a weekly plan.');
+      return;
+    }
     if (!isValidNationalNumber(form.phone, form.country_code)) {
       setError(
         form.country_code === '+91'
@@ -589,12 +593,12 @@ export default function CardShareTokenPage() {
           <Section
             eyebrow="Subscription"
             title="Plan, levels & budget"
-            hint="Confirm the weekly plan, pick the experience levels you want, and set a monthly budget for each."
+            hint="Confirm the weekly plan (required), then pick experience levels and a monthly budget for each if you know them."
           >
             <div>
               <label className="mb-1 flex items-baseline gap-2 text-sm font-medium text-[#222]">
                 <span>Plan</span>
-                <span className="text-xs font-normal text-[#9C9486]">(optional)</span>
+                <span className="text-[#C13515]">*</span>
               </label>
               <p className="mb-3 text-xs text-[#7A7568]">
                 Plans differ by availability — how much of a creative partner you get each week.
