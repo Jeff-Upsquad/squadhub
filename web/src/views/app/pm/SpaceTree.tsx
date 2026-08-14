@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { useSpaces, useSpace, useCreateList } from '../../../hooks/useSpaces';
+import { useSpaces, useSpace, useWorkspaces, useCreateList } from '../../../hooks/useSpaces';
 import { useSharedTree } from '../../../hooks/useSharedWithMe';
 import { useIsPartner, useIsClient } from '../../../hooks/useUserType';
 import { useHasPermission } from '../../../hooks/usePermissions';
@@ -664,6 +664,103 @@ function SpaceItem({ spaceId, initial }: { spaceId: string; initial?: Space }) {
         </div>
         </>
       ), document.body)}
+    </div>
+  );
+}
+
+// ---- Workspace root (Workspaces section) ----
+// A workspace space renders only its children (client folders, template spaces
+// and root lists) — no "Client Spaces" wrapper row. The wrapper row is gone,
+// so the client folders are the top-level items under Workspaces.
+function WorkspaceRoot({ workspaceId }: { workspaceId: string }) {
+  const { data: fullSpace } = useSpace(workspaceId);
+  const canCreateLists = useHasPermission('can_create_lists');
+  const canCreateSpaces = useHasPermission('can_create_spaces');
+
+  const space = fullSpace;
+  if (!space) return null;
+
+  const myAccess = space.my_access_level;
+  const canAddItems = canAtLeast(myAccess, 'member');
+  const isManager = canAtLeast(myAccess, 'manager');
+
+  const allFolders = space.folders || [];
+  const childFolders: Record<string, Folder[]> = {};
+  const rootFolders: Folder[] = [];
+  for (const f of allFolders) {
+    if (f.parent_folder_id) {
+      if (!childFolders[f.parent_folder_id]) childFolders[f.parent_folder_id] = [];
+      childFolders[f.parent_folder_id].push(f);
+    } else {
+      rootFolders.push(f);
+    }
+  }
+
+  const clientFolders = rootFolders.filter((f) => f.folder_type === 'client');
+  const otherRootFolders = rootFolders.filter((f) => f.folder_type !== 'client' && !f.client_space_template_id);
+  const standaloneSpaces = rootFolders.filter((f) => f.client_space_template_id);
+
+  return (
+    <div className="px-1.5">
+      {clientFolders.map((folder) => (
+        <ClientItem
+          key={folder.id}
+          folder={folder}
+          childSpaces={childFolders[folder.id] || []}
+          spaceId={workspaceId}
+          canAddLists={canAddItems && canCreateLists}
+          canAddSpaces={canAddItems && canCreateSpaces}
+          canDelete={isManager}
+          isManager={isManager}
+          myAccess={myAccess}
+        />
+      ))}
+      {otherRootFolders.map((folder) => (
+        <FolderItem
+          key={folder.id}
+          folder={folder}
+          spaceId={workspaceId}
+          canAdd={canAddItems && canCreateLists}
+          canDelete={isManager}
+          isManager={isManager}
+          myAccess={myAccess}
+        />
+      ))}
+      {standaloneSpaces.map((folder) => (
+        <FolderItem
+          key={folder.id}
+          folder={folder}
+          spaceId={workspaceId}
+          canAdd={canAddItems && canCreateLists}
+          canDelete={isManager}
+          isManager={isManager}
+          myAccess={myAccess}
+        />
+      ))}
+      {space.lists?.map((list) => (
+        <ListItem key={list.id} list={list} isManager={isManager} myAccess={myAccess} />
+      ))}
+    </div>
+  );
+}
+
+// ---- Workspaces tree ----
+export function WorkspaceTree({ workspaceId }: { workspaceId: string }) {
+  const { data: workspaces, isLoading } = useWorkspaces(workspaceId);
+
+  if (isLoading) {
+    return <p className="px-3 py-[5px] text-[11.5px] text-[var(--sh-ink-4)]">Loading…</p>;
+  }
+
+  if (!workspaces || workspaces.length === 0) {
+    return <p className="px-3 py-2 text-center text-[11.5px] text-[var(--sh-ink-4)]">No workspaces yet</p>;
+  }
+
+  return (
+    <div className="flex w-full flex-col">
+      {workspaces.map((workspace) => (
+        <WorkspaceRoot key={workspace.id} workspaceId={workspace.id} />
+      ))}
     </div>
   );
 }

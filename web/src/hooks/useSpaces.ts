@@ -14,6 +14,17 @@ export function useSpaces(workspaceId: string | undefined) {
   });
 }
 
+export function useWorkspaces(workspaceId: string | undefined) {
+  return useQuery<Space[]>({
+    queryKey: ['workspaces', workspaceId],
+    queryFn: async () => {
+      const res = await api.get(`/pm/workspaces?workspace_id=${workspaceId}`);
+      return res.data.data;
+    },
+    enabled: !!workspaceId,
+  });
+}
+
 export function useSpace(spaceId: string | null) {
   return useQuery<Space>({
     queryKey: ['space', spaceId],

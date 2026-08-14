@@ -27,6 +27,7 @@ const router = Router();
 // Completed) while internal users saw them correctly grouped.
 router.use(requireAuth);
 router.use('/spaces', requireUserType('internal', ...PARTNER_USER_TYPES, 'client', 'client_staff'));
+router.use('/workspaces', requireUserType('internal', ...PARTNER_USER_TYPES));
 
 const createSchema = z.object({
   workspace_id: z.string().uuid(),
@@ -54,6 +55,7 @@ router.get('/spaces', async (req: Request, res: Response) => {
         .eq('workspace_id', workspaceId)
         .is('deleted_at', null)
         .neq('kind', 'personal') // personal spaces are private per-user; surfaced via My Tasks only
+        .neq('kind', 'workspace') // workspace roots render in the Workspaces section
         .order('position');
 
       if (error) {
@@ -80,6 +82,7 @@ router.get('/spaces', async (req: Request, res: Response) => {
       .is('deleted_at', null)
       .eq('status', 'active')
       .neq('kind', 'personal') // exclude the user's own personal space
+      .neq('kind', 'workspace') // workspace roots render in the Workspaces section
       .eq('created_by', req.userId!);
 
     const createdIds = (createdSpaces || []).map((s: any) => s.id);
@@ -97,6 +100,7 @@ router.get('/spaces', async (req: Request, res: Response) => {
       .is('deleted_at', null)
       .eq('status', 'active')
       .neq('kind', 'personal') // safety net: personal space may be in allIds via its manager membership row
+      .neq('kind', 'workspace') // workspace roots render in the Workspaces section
       .in('id', allIds)
       .order('position');
 
@@ -114,6 +118,87 @@ router.get('/spaces', async (req: Request, res: Response) => {
     res.json({ success: true, data: enriched });
   } catch (err) {
     console.error('Get spaces error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// GET /pm/workspaces?workspace_id=xxx — list workspace roots (internal/partner).
+router.get('/workspaces', async (req: Request, res: Response) => {
+  try {
+    const workspaceId = req.query.workspace_id as string;
+    if (!workspaceId) {
+      res.status(400).json({ success: false, error: 'workspace_id is required' });
+      return;
+    }
+
+    // Admins see all workspace roots.
+    const admin = await isWorkspaceAdmin(req.userId!);
+    if (admin) {
+      const { data, error } = await supabaseAdmin
+        .from('spaces')
+        .select('*, space_statuses(*)')
+        .eq('workspace_id', workspaceId)
+        .is('deleted_at', null)
+        .eq('kind', 'workspace')
+        .order('position');
+
+      if (error) {
+        res.status(500).json({ success: false, error: error.message });
+        return;
+      }
+      res.json({ success: true, data });
+      return;
+    }
+
+    // Non-admins: only workspace roots they have membership for, or they created.
+    const { data: memberships } = await supabaseAdmin
+      .from('resource_memberships')
+      .select('resource_id, access_level')
+      .eq('resource_type', 'space')
+      .eq('user_id', req.userId!);
+
+    const memberMap = new Map((memberships || []).map((m: any) => [m.resource_id, m.access_level]));
+
+    const { data: createdSpaces } = await supabaseAdmin
+      .from('spaces')
+      .select('id')
+      .eq('workspace_id', workspaceId)
+      .is('deleted_at', null)
+      .eq('status', 'active')
+      .eq('kind', 'workspace')
+      .eq('created_by', req.userId!);
+
+    const createdIds = (createdSpaces || []).map((s: any) => s.id);
+    const allIds = [...new Set([...memberMap.keys(), ...createdIds])];
+
+    if (allIds.length === 0) {
+      res.json({ success: true, data: [] });
+      return;
+    }
+
+    const { data, error } = await supabaseAdmin
+      .from('spaces')
+      .select('*, space_statuses(*)')
+      .eq('workspace_id', workspaceId)
+      .is('deleted_at', null)
+      .eq('status', 'active')
+      .eq('kind', 'workspace')
+      .in('id', allIds)
+      .order('position');
+
+    if (error) {
+      res.status(500).json({ success: false, error: error.message });
+      return;
+    }
+
+    const enriched = (data || []).map((space: any) => ({
+      ...space,
+      my_access_level: createdIds.includes(space.id) ? 'manager' : memberMap.get(space.id) || 'viewer',
+    }));
+
+    res.json({ success: true, data: enriched });
+  } catch (err) {
+    console.error('Get workspaces error:', err);
     res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });

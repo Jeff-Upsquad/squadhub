@@ -384,8 +384,8 @@ export interface Space {
   updated_at: string;
   position: number;
   client_id?: string | null;
-  /** 'personal' = a private per-user space backing the My Tasks view, hidden from the normal Spaces sidebar. */
-  kind?: 'normal' | 'personal';
+  /** 'personal' = a private per-user space backing the My Tasks view; 'workspace' = a top-level workspace root shown in the Workspaces section (both hidden from the normal Areas list). */
+  kind?: 'normal' | 'personal' | 'workspace';
   /** When true, this space's tasks collapse into one "Grouped tasks under {name}" row on Home. */
   group_tasks?: boolean;
   /** Members auto-added to any task created under this space (nearest-wins down the tree). */

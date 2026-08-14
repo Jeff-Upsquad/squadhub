@@ -5,12 +5,14 @@ import type { HomeView } from '../../layouts/MainLayout';
 import api from '../../services/api';
 import { useFavorites, useRemoveFavorite } from '../../hooks/useFavorites';
 import { useSharedWithMe } from '../../hooks/useSharedWithMe';
+import { useWorkspaces } from '../../hooks/useSpaces';
 import { useHasPermission } from '../../hooks/usePermissions';
 import { usePMStore } from '../../stores/pmStore';
 import { useTabsStore } from '../../stores/tabsStore';
 import { wantsNewTab, buildListSnapshot, buildFolderSnapshot, buildSpaceSnapshot, buildChatSnapshot, buildAppSnapshot } from '../../lib/tabSnapshots';
-import SpaceTree from './pm/SpaceTree';
+import SpaceTree, { WorkspaceTree } from './pm/SpaceTree';
 import CreateSpaceModal from './pm/CreateSpaceModal';
+import CreateFolderListModal from './pm/CreateFolderListModal';
 import { useAvailableApps } from '../../hooks/useApps';
 import { useAppFavorites, useMigrateLocalAppFavorites } from '../../hooks/useAppFavorites';
 import { AppIcon, type AppDef } from '../../config/apps';
@@ -232,7 +234,9 @@ export default function HomeSidebar({
   const { setActiveSpace, setActiveList, setActiveFolder, setActiveSpacePage } = usePMStore();
   const canCreateChannels = useHasPermission('can_create_channels');
   const canCreateSpaces = useHasPermission('can_create_spaces');
+  const canCreateFolders = useHasPermission('can_create_folders');
   const [showCreateSpace, setShowCreateSpace] = useState(false);
+  const [showCreateWorkspace, setShowCreateWorkspace] = useState(false);
   const isClient = useIsClient();
   const isPartner = useIsPartner();
   // Apps the user can access + their pinned subset (shown in the Apps section).
@@ -243,10 +247,13 @@ export default function HomeSidebar({
   const favoriteApps = availableApps.filter((a) => appFavorites.includes(a.slug));
   const { data: inboxUnreadCount } = useUnreadCount();
 
+  const { data: workspaces } = useWorkspaces(isClient || isPartner ? undefined : workspaceId);
+
   const [expandedSections, setExpandedSections] = useState({
     apps: true,
     favorites: true,
     sharedWithMe: true,
+    workspaces: true,
     spaces: true,
     channels: true,
     dms: true,
@@ -617,6 +624,48 @@ export default function HomeSidebar({
 
         {/* Divider */}
         <div className="mx-2 border-t border-[var(--sh-hair)]" />
+
+        {/* Workspaces section — shown for internal users only. Workspace roots
+            (client folders and their template spaces) render here, above Areas. */}
+        {!isPartner && !isClient && (
+          <>
+            <div className="pb-1">
+              <SectionHeader
+                title="Workspaces"
+                expanded={expandedSections.workspaces}
+                onToggle={() => toggleSection('workspaces')}
+                action={
+                  canCreateFolders && workspaces?.length ? (
+                    <button
+                      onClick={() => setShowCreateWorkspace(true)}
+                      className="text-[var(--sh-ink-4)] transition hover:text-[var(--sh-ink)]"
+                      title="Create workspace"
+                    >
+                      <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M12 4v16m8-8H4" />
+                      </svg>
+                    </button>
+                  ) : undefined
+                }
+              />
+              {expandedSections.workspaces && (
+                <div className="pb-1">
+                  <WorkspaceTree workspaceId={workspaceId} />
+                </div>
+              )}
+              {showCreateWorkspace && workspaces?.[0] && (
+                <CreateFolderListModal
+                  type="client"
+                  spaceId={workspaces[0].id}
+                  onClose={() => setShowCreateWorkspace(false)}
+                />
+              )}
+            </div>
+
+            {/* Divider */}
+            <div className="mx-2 border-t border-[var(--sh-hair)]" />
+          </>
+        )}
 
         {/* Areas section — shown for all user types. Clients & partners have no
             owned areas, so SpaceTree surfaces their shared roots here instead of
