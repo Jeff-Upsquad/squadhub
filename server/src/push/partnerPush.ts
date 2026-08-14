@@ -3,6 +3,7 @@ import { supabaseAdmin } from '../supabase';
 
 // A row from the `notifications` table (only the fields we forward).
 export interface PartnerNotification {
+  id?: string;
   user_id: string;
   type: string;
   title: string;
@@ -36,6 +37,9 @@ export async function sendPartnerPush(notification: PartnerNotification): Promis
   const data: Record<string, string> = {
     title: notification.title || 'SquadHub',
     body: notification.body || '',
+    // The notifications-table id, so a tapped push can mark the row read and
+    // the read-state syncs to every device (see notifications_read socket event).
+    notification_id: notification.id || '',
     type: notification.type || '',
     reference_type: notification.reference_type || '',
     reference_id: notification.reference_id || '',

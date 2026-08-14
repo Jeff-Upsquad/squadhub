@@ -1,9 +1,21 @@
 import { Router, Request, Response } from 'express';
 import { supabaseAdmin } from '../supabase';
 import { requireAuth } from '../middleware/auth';
+import type { NotificationsReadPayload } from '@squadhub/shared';
 
 const router = Router();
 router.use(requireAuth);
+
+// Broadcast read-state changes to every device on the user's socket room.
+// Echoed to the originator too — clients dedupe against locally-flipped ids,
+// so this is a fast-forward, never a source of truth.
+function emitRead(io: unknown, userId: string, payload: NotificationsReadPayload) {
+  try {
+    (io as any)?.to(`chat_user:${userId}`).emit('notifications_read', payload);
+  } catch (err) {
+    console.error('Emit notifications_read error:', err);
+  }
+}
 
 // GET /notifications?unread_only=false&limit=50
 router.get('/', async (req: Request, res: Response) => {
@@ -71,6 +83,8 @@ router.patch('/:id/read', async (req: Request, res: Response) => {
       return;
     }
 
+    emitRead(req.app.get('io'), req.userId!, { kind: 'ids', ids: [id] });
+
     res.json({ success: true, data });
   } catch (err) {
     console.error('Mark notification read error:', err);
@@ -96,17 +110,21 @@ router.post('/read-conversation', async (req: Request, res: Response) => {
     const metaKey = dmId ? 'dm_conversation_id' : 'channel_id';
     const metaVal = (dmId || channelId) as string;
 
-    const { error } = await supabaseAdmin
+    const { data, error } = await supabaseAdmin
       .from('notifications')
       .update({ is_read: true })
       .eq('user_id', req.userId!)
       .eq('is_read', false)
-      .eq(`metadata->>${metaKey}`, metaVal);
+      .eq(`metadata->>${metaKey}`, metaVal)
+      .select('id');
 
     if (error) {
       res.status(500).json({ success: false, error: error.message });
       return;
     }
+
+    const ids = (data || []).map((n) => n.id as string);
+    emitRead(req.app.get('io'), req.userId!, { kind: 'ids', ids });
 
     res.json({ success: true });
   } catch (err) {
@@ -128,6 +146,8 @@ router.post('/mark-all-read', async (_req: Request, res: Response) => {
       res.status(500).json({ success: false, error: error.message });
       return;
     }
+
+    emitRead(req.app.get('io'), _req.userId!, { kind: 'all' });
 
     res.json({ success: true });
   } catch (err) {

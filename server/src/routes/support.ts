@@ -499,6 +499,11 @@ router.post('/tickets/:id/read', requireAuth, async (req: Request, res: Response
       .eq('reference_type', 'support_ticket')
       .eq('reference_id', String(req.params.id))
       .eq('is_read', false);
+
+    // Broadcast so every device (web badge, mobile inbox) catches up instantly.
+    const io = req.app.get('io');
+    if (io) io.to(`chat_user:${req.userId!}`).emit('notifications_read', { kind: 'all' });
+
     res.json({ success: true });
   } catch (err) {
     console.error('Mark ticket read error:', err);
