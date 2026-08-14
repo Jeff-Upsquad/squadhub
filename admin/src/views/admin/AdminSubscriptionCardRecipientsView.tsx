@@ -1076,7 +1076,7 @@ export default function AdminSubscriptionCardRecipientsView({
   };
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="flex min-h-0 h-full flex-col">
       {/* Header, plan/customer, tiers, broadcast and recipients all share ONE
           scroll region so they scroll together — the header no longer stays
           pinned while only the list moves. Scroll is owned by this inner

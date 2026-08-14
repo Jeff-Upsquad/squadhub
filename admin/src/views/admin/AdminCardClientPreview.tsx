@@ -186,7 +186,7 @@ export default function AdminCardClientPreview({
   );
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="flex min-h-0 h-full flex-col">
       <div className="flex-1 space-y-4 overflow-y-auto px-6 pt-6 pb-10">
         {headerRow}
 
