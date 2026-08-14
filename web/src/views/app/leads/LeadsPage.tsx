@@ -100,7 +100,7 @@ export default function LeadsPage() {
         a tall list query, so keeping all three alive would have them fight over
         the same param and triple the polling.
       */}
-      <div className="min-h-0 flex-1">
+      <div className="min-h-0 flex-1 overflow-hidden">
         {activeTab === 'job-cards' && <AdminJobCards />}
         {activeTab === 'subscription-cards' && <AdminSubscriptionCards productLine="subscription" />}
         {activeTab === 'assignments' && <AdminSubscriptionCards productLine="assignment" />}

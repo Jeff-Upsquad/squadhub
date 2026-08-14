@@ -233,7 +233,7 @@ export default function AdminJobCards() {
   const headerCount = `${cardsForTab.length} card${cardsForTab.length === 1 ? '' : 's'}`;
 
   return (
-    <div className="flex h-full flex-col sh-surface">
+    <div className="flex min-h-0 h-full flex-col sh-surface">
       {!selectedCardId && (
         <div className="px-6 pt-6 pb-4 space-y-4">
           <header className="flex flex-wrap items-start justify-between gap-x-4 gap-y-3 border-b border-[var(--color-sh-warm-border)] pb-4">
@@ -306,7 +306,7 @@ export default function AdminJobCards() {
       {selectedCardId ? (
         <JobCardDetailView key={selectedCardId} cardId={selectedCardId} fallback={selectedCard} onBack={() => setSelectedCardId(null)} />
       ) : (
-        <div className="flex-1 overflow-y-auto px-6 pb-8">
+        <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-8">
           {isFetching && !isLoading && (
             <div className="mb-3 flex items-center gap-2 text-[11px] font-medium text-[var(--color-sh-ink-faint)]">
               <span className="inline-flex h-3 w-3 animate-spin rounded-full border-[1.5px] border-current border-t-transparent" />
@@ -575,7 +575,7 @@ function JobCardDetailView({
     'rounded-md border border-divider px-3 py-1.5 text-xs font-semibold text-foreground-muted transition hover:border-ink hover:text-foreground disabled:opacity-50';
 
   return (
-    <div className="flex flex-1 flex-col overflow-hidden">
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
       <div className="border-b border-[var(--color-sh-warm-border)] px-6 pt-6 pb-4">
         <button type="button" onClick={onBack} className="-ml-1 mb-3 flex items-center gap-1 text-sm text-foreground-muted transition hover:text-foreground">
           <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
@@ -738,7 +738,7 @@ function JobCardDetailView({
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-6 py-5">
+      <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
         {detailTab === 'overview' && <JobCardOverview card={card} onOpenOnboarding={() => setOnboardingOpen(true)} onOpenEditor={() => setEditorOpen(true)} />}
         {detailTab === 'candidates' && <JobCandidatesView card={card} />}
         {detailTab === 'qa' && <JobCardQnA card={card} />}

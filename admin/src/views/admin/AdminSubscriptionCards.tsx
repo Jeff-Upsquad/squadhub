@@ -665,7 +665,7 @@ export default function AdminSubscriptionCards({
   const headerMeta = { ...HEADER_META[activeTab], count: headerCount };
 
   return (
-    <div className="flex h-full flex-col sh-surface">
+    <div className="flex min-h-0 h-full flex-col sh-surface">
       {!showDetailView && (
         <div className="px-6 pt-6 pb-4 space-y-4">
           {/* Header — compact, functional. Title + live count on one row, CTA
@@ -861,7 +861,7 @@ export default function AdminSubscriptionCards({
           />
         )
       ) : isCardListTab ? (
-        <div className="flex-1 overflow-y-auto px-6 pb-8">
+        <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-8">
           <RefreshingBar show={isFetching && !isLoading} />
           {isLoading ? (
             <CardListSkeleton />
