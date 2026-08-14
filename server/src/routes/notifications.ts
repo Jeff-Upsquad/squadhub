@@ -147,7 +147,7 @@ router.post('/mark-all-read', async (_req: Request, res: Response) => {
       return;
     }
 
-    emitRead(req.app.get('io'), _req.userId!, { kind: 'all' });
+    emitRead(_req.app.get('io'), _req.userId!, { kind: 'all' });
 
     res.json({ success: true });
   } catch (err) {

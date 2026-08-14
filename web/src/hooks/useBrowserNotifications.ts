@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import type { Notification } from '@squadhub/shared';
+import type { Notification, NotificationsReadPayload } from '@squadhub/shared';
 import api from '../services/api';
 import { connectSocket } from '../services/socket';
 import {
@@ -10,6 +10,27 @@ import {
 } from '../services/browserNotifications';
 
 const POLL_MS = 12_000;
+
+// Fast-forward the inbox list cache to read for the broadcast ids (or everything
+// on a mark-all). Idempotent: already-read rows are left untouched, so the echo
+// of this device's own optimistic mutation is a no-op.
+function applyReadPayload(
+  queryClient: ReturnType<typeof useQueryClient>,
+  workspaceId: string | undefined,
+  payload: NotificationsReadPayload,
+) {
+  queryClient.setQueryData<Notification[]>(['notifications', 'list'], (old) =>
+    (old || []).map((n) =>
+      payload.kind === 'all' || payload.ids.includes(n.id) ? { ...n, is_read: true } : n,
+    ),
+  );
+  queryClient.invalidateQueries({ queryKey: ['notifications', 'unread-count'] });
+  // Support-rail badge is driven by support_ticket notifications; a read
+  // broadcast may have cleared them, so refresh the overview too.
+  if (workspaceId) {
+    queryClient.invalidateQueries({ queryKey: ['support', 'overview', workspaceId] });
+  }
+}
 
 /** Socket + polling inbox refresh + native OS notifications. */
 export function useBrowserNotifications(workspaceId: string | undefined) {
@@ -32,9 +53,15 @@ export function useBrowserNotifications(workspaceId: string | undefined) {
       showBrowserNotification(notification);
     };
 
+    const handleRead = (payload: NotificationsReadPayload) => {
+      applyReadPayload(queryClient, workspaceId, payload);
+    };
+
     socket.on('new_notification', handle);
+    socket.on('notifications_read', handleRead);
     return () => {
       socket.off('new_notification', handle);
+      socket.off('notifications_read', handleRead);
     };
   }, [queryClient, workspaceId]);
 
