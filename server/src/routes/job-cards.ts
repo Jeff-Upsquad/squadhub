@@ -25,12 +25,36 @@ router.get('/mine', async (req: Request, res: Response) => {
       return;
     }
 
-    const [{ data: clients }, { data: submissions }] = await Promise.all([
-      supabaseAdmin.from('clients').select('id').ilike('email', email),
+    // Resolve the user's clients/submissions by email first (the historical
+    // path), then fall back to id-based resolution via client_user_access so
+    // job cards keep showing even if the email copies are stale.
+    let [{ data: clients }, { data: submissions }] = await Promise.all([
+      supabaseAdmin.from('clients').select('id, submission_id').ilike('email', email),
       supabaseAdmin.from('client_submissions').select('id').ilike('email', email),
     ]);
-    const clientIds = (clients ?? []).map((c: any) => c.id as string);
-    const submissionIds = (submissions ?? []).map((s: any) => s.id as string);
+    let clientIds = (clients ?? []).map((c: any) => c.id as string);
+    let submissionIds = (submissions ?? []).map((s: any) => s.id as string);
+
+    if (clientIds.length === 0 && submissionIds.length === 0 && req.userId) {
+      const { data: access } = await supabaseAdmin
+        .from('client_user_access')
+        .select('client_id')
+        .eq('user_id', req.userId);
+      const accessClientIds = Array.from(
+        new Set((access ?? []).map((a: any) => a.client_id as string)),
+      );
+      if (accessClientIds.length > 0) {
+        const { data: accessClients } = await supabaseAdmin
+          .from('clients')
+          .select('id, submission_id')
+          .in('id', accessClientIds);
+        clientIds = (accessClients ?? []).map((c: any) => c.id as string);
+        submissionIds = (accessClients ?? [])
+          .map((c: any) => c.submission_id as string)
+          .filter(Boolean);
+      }
+    }
+
     if (clientIds.length === 0 && submissionIds.length === 0) {
       res.json({ success: true, data: [] });
       return;

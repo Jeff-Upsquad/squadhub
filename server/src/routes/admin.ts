@@ -4,6 +4,7 @@ import { requireAuth } from '../middleware/auth';
 import { requireAdmin } from '../middleware/admin';
 import { supabaseAdmin } from '../supabase';
 import { getDefaultRoleIdForUserType } from '../utils/defaultRole';
+import { propagateEmailChange } from '../utils/propagateEmailChange';
 import { notifySquadhireOfCardRecall } from '../utils/squadhireWebhook';
 import type { UserType } from '@squadhub/shared';
 
@@ -299,9 +300,12 @@ router.put('/users/:id/profile', async (req: Request, res: Response) => {
       return;
     }
 
-    // Also update email in Supabase Auth if changed
+    // Also update email in Supabase Auth if changed, and propagate it to the
+    // denormalized customer-email copies (clients, submissions, card snapshots)
+    // so client-facing card lists keep resolving the user by email.
     if (body.email) {
       await supabaseAdmin.auth.admin.updateUserById(id, { email: body.email });
+      await propagateEmailChange(id, body.email);
     }
 
     res.json({ success: true, data });
