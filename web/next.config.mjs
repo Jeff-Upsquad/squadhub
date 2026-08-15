@@ -46,6 +46,10 @@ const nextConfig = {
       { source: '/messages/:path*', destination: `${API_URL}/messages/:path*` },
       { source: '/users/:path*', destination: `${API_URL}/users/:path*` },
       { source: '/dms/:path*', destination: `${API_URL}/dms/:path*` },
+      // LMS / Jobs image uploads (presign-lms, presign-jobs) — without this,
+      // Next serves a 404 HTML page and the editor alerts axios's default
+      // "Request failed with status code 404".
+      { source: '/upload/:path*', destination: `${API_URL}/upload/:path*` },
       { source: '/favorites/:path*', destination: `${API_URL}/favorites/:path*` },
       { source: '/app-favorites/:path*', destination: `${API_URL}/app-favorites/:path*` },
       { source: '/notes/:path*', destination: `${API_URL}/notes/:path*` },
