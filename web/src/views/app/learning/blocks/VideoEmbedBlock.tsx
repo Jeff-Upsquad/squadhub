@@ -44,7 +44,7 @@ export default function VideoEmbedBlock({ block }: { block: LmsContentBlock }) {
   // Always wired up; it only acts once an embedded clips iframe announces itself
   // (gated /embed/lms pages do — public /embed pages don't), so it's a no-op for
   // public clips and ReactPlayer URLs.
-  useClipsAuthBridge(iframeRef);
+  const { sendAuth } = useClipsAuthBridge(iframeRef);
 
   const clip = block.embed_url ? clipEmbedSrc(block.embed_url) : null;
 
@@ -72,6 +72,9 @@ export default function VideoEmbedBlock({ block }: { block: LmsContentBlock }) {
               style={{ border: 0 }}
               allow="autoplay; fullscreen; picture-in-picture"
               allowFullScreen
+              onLoad={() => {
+                if (clip.gated) void sendAuth();
+              }}
             />
           ) : (
             <ReactPlayer
