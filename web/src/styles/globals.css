@@ -8205,6 +8205,19 @@ ol.sqc-list {
   color: var(--color-sh-ink);
   box-shadow: inset 0 0 0 1px var(--color-sh-ink);
 }
+/* Compact variant — product tabs + status subtabs on the Cards hub. */
+.sh-tab-bar-sm {
+  gap: 0.125rem;
+  padding: 0.125rem;
+  border-radius: 8px;
+}
+.sh-tab-bar-sm .sh-tab {
+  padding: 0.2rem 0.5rem;
+  border-radius: 6px;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  gap: 0.25rem;
+}
 
 /* Form input/select shell */
 .sh-input {
@@ -8268,6 +8281,8 @@ ol.sqc-list {
 .sh-btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
 .sh-btn-primary-sm { padding: 0.4rem 0.875rem; font-size: 0.8125rem; box-shadow: 3px 3px 0 0 var(--sh-offset); }
 .sh-btn-primary-sm:hover:not(:disabled) { box-shadow: 5px 5px 0 0 var(--sh-offset); }
+.sh-btn-primary-xs { padding: 0.25rem 0.625rem; font-size: 0.6875rem; box-shadow: 2px 2px 0 0 var(--sh-offset); border-radius: 8px; }
+.sh-btn-primary-xs:hover:not(:disabled) { box-shadow: 3px 3px 0 0 var(--sh-offset); }
 
 /* Ghost button — white with warm border + ink text, no shadow */
 .sh-btn-ghost {

@@ -361,12 +361,16 @@ const EMPTY_COPY: Record<(typeof CARD_LIST_TABS)[number], { title: string; hint:
 
 export default function AdminSubscriptionCards({
   productLine = 'subscription',
+  compact = false,
 }: {
   // Which product line this module renders. 'subscription' (default) is the
   // Subscription Cards module; 'assignment' is the separate Assignments module.
   // Every card query is scoped to it so the two modules never show each other's
   // cards, and the brief launcher only offers the matching brief types.
   productLine?: 'subscription' | 'assignment';
+  // When true (CardsHub / Leads mini app) drop the large page title so the
+  // product tabs + these status subtabs sit in one compact chrome stack.
+  compact?: boolean;
 } = {}) {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -645,10 +649,16 @@ export default function AdminSubscriptionCards({
 
   // When switching primary tabs, drop any stale ?card= so the detail view
   // doesn't unexpectedly re-open when the user comes back to this tab.
+  // Other query params (the hub's ?leadTab=) must stay — a bare pathname
+  // bounce used to reset the Leads mini app back to its default product tab.
   const switchTab = useCallback((next: Tab) => {
     setActiveTab(next);
     if (searchParams.get('card')) {
-      router.replace(pathname);
+      const params = new URLSearchParams(searchParams.toString());
+      params.delete('card');
+      params.delete('rv');
+      const qs = params.toString();
+      router.replace(qs ? `${pathname}?${qs}` : pathname);
     }
   }, [pathname, router, searchParams]);
 
@@ -665,89 +675,101 @@ export default function AdminSubscriptionCards({
   const headerMeta = { ...HEADER_META[activeTab], count: headerCount };
 
   return (
-    <div className="flex min-h-0 h-full flex-col sh-surface">
+    <div className={`flex min-h-0 h-full flex-col ${compact ? '' : 'sh-surface'}`}>
       {!showDetailView && (
-        <div className="px-6 pt-6 pb-4 space-y-4">
-          {/* Header — compact, functional. Title + live count on one row, CTA
-              aligned right; reclaims the vertical space the old masthead card ate. */}
-          <header className="flex flex-wrap items-start justify-between gap-x-4 gap-y-3 border-b border-[var(--color-sh-warm-border)] pb-4">
-            <div className="min-w-0 space-y-1">
-              <div className="flex items-center gap-2.5">
-                <h1 className="sh-display text-2xl leading-none sm:text-[28px]">
-                  {headerMeta.title}
-                </h1>
-                <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-[var(--color-sh-warm-border)] bg-[var(--color-surface)] px-2.5 py-1 text-xs font-bold text-[var(--color-sh-ink)]">
-                  <span className="h-1.5 w-1.5 rounded-full" style={{ background: 'var(--color-sh-lime)' }} />
-                  {headerMeta.count}
-                </span>
+        <div className={compact ? 'px-6 pt-2.5 pb-3 space-y-2.5' : 'px-6 pt-6 pb-4 space-y-4'}>
+          {!compact && (
+            <header className="flex flex-wrap items-start justify-between gap-x-4 gap-y-3 border-b border-[var(--color-sh-warm-border)] pb-4">
+              <div className="min-w-0 space-y-1">
+                <div className="flex items-center gap-2.5">
+                  <h1 className="sh-display text-2xl leading-none sm:text-[28px]">
+                    {headerMeta.title}
+                  </h1>
+                  <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-[var(--color-sh-warm-border)] bg-[var(--color-surface)] px-2.5 py-1 text-xs font-bold text-[var(--color-sh-ink)]">
+                    <span className="h-1.5 w-1.5 rounded-full" style={{ background: 'var(--color-sh-lime)' }} />
+                    {headerMeta.count}
+                  </span>
+                </div>
+                <p className="max-w-xl text-[13px] text-[var(--color-sh-ink-muted)]">
+                  {headerMeta.subtitle}
+                </p>
               </div>
-              <p className="max-w-xl text-[13px] text-[var(--color-sh-ink-muted)]">
-                {headerMeta.subtitle}
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={() => setShowBriefSlider(true)}
-              className="sh-btn-primary sh-btn-primary-sm shrink-0"
-            >
-              + Create client brief form
-            </button>
-          </header>
+              <button
+                type="button"
+                onClick={() => setShowBriefSlider(true)}
+                className="sh-btn-primary sh-btn-primary-sm shrink-0"
+              >
+                + Create client brief form
+              </button>
+            </header>
+          )}
 
           {/* Tabs — one row across the whole deal lifecycle: the New deals
               inbound queue, the published-card buckets, Archive, then Custom. */}
-          <div className="overflow-x-auto">
-            <div className="sh-tab-bar">
-              {TABS.map(({ key, label }) => {
-                const count =
-                  key === 'published' || key === 'broadcaster' || key === 'selected' || key === 'assigned'
-                  || key === 'paused' || key === 'cancelled'
-                    ? tabCounts[key]
-                    : key === 'archive'
-                      ? tabCounts.archive
-                      : null;
-                return (
-                  <button
-                    key={key}
-                    type="button"
-                    data-active={activeTab === key}
-                    onClick={() => switchTab(key)}
-                    className="sh-tab"
-                  >
-                    {label}
-                    {count != null && <span className="opacity-70"> ({count})</span>}
-                    {key === 'requests' && pendingRequestCount > 0 && (
-                      <span
-                        className="ml-1 inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full px-1.5 text-[10px] font-bold leading-none"
-                        style={{
-                          // Lime fill doesn't flip between themes, so pin the
-                          // ink dark — the global --sh-ink flips light in dark
-                          // mode and would vanish on the yellow badge.
-                          background: 'var(--color-sh-lime)',
-                          color: '#0a0a0a',
-                          boxShadow: 'inset 0 0 0 1px #0a0a0a',
-                        }}
-                        title={`${pendingRequestCount} pending review`}
-                      >
-                        {pendingRequestCount}
-                      </span>
-                    )}
-                    {((key === 'assigned' && unreviewedAssignedCount > 0) ||
-                      (key === 'selected' && unreviewedSelectedCount > 0)) && (
-                      <span
-                        className="ml-1 inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full px-1.5 text-[10px] font-bold leading-none"
-                        style={{ background: '#DC2626', color: 'white' }}
-                        title={`${
-                          key === 'assigned' ? unreviewedAssignedCount : unreviewedSelectedCount
-                        } new — admin review pending`}
-                      >
-                        {key === 'assigned' ? unreviewedAssignedCount : unreviewedSelectedCount} new
-                      </span>
-                    )}
-                  </button>
-                );
-              })}
+          <div className="flex items-center gap-2">
+            <div className="min-w-0 flex-1 overflow-x-auto">
+              <div className={compact ? 'sh-tab-bar sh-tab-bar-sm' : 'sh-tab-bar'}>
+                {TABS.map(({ key, label }) => {
+                  const count =
+                    key === 'published' || key === 'broadcaster' || key === 'selected' || key === 'assigned'
+                    || key === 'paused' || key === 'cancelled'
+                      ? tabCounts[key]
+                      : key === 'archive'
+                        ? tabCounts.archive
+                        : null;
+                  return (
+                    <button
+                      key={key}
+                      type="button"
+                      data-active={activeTab === key}
+                      onClick={() => switchTab(key)}
+                      className="sh-tab"
+                      title={HEADER_META[key].subtitle}
+                    >
+                      {label}
+                      {count != null && <span className="opacity-70"> ({count})</span>}
+                      {key === 'requests' && pendingRequestCount > 0 && (
+                        <span
+                          className="ml-1 inline-flex h-[14px] min-w-[14px] items-center justify-center rounded-full px-1 text-[9px] font-bold leading-none"
+                          style={{
+                            // Lime fill doesn't flip between themes, so pin the
+                            // ink dark — the global --sh-ink flips light in dark
+                            // mode and would vanish on the yellow badge.
+                            background: 'var(--color-sh-lime)',
+                            color: '#0a0a0a',
+                            boxShadow: 'inset 0 0 0 1px #0a0a0a',
+                          }}
+                          title={`${pendingRequestCount} pending review`}
+                        >
+                          {pendingRequestCount}
+                        </span>
+                      )}
+                      {((key === 'assigned' && unreviewedAssignedCount > 0) ||
+                        (key === 'selected' && unreviewedSelectedCount > 0)) && (
+                        <span
+                          className="ml-1 inline-flex h-[14px] min-w-[14px] items-center justify-center rounded-full px-1 text-[9px] font-bold leading-none"
+                          style={{ background: '#DC2626', color: 'white' }}
+                          title={`${
+                            key === 'assigned' ? unreviewedAssignedCount : unreviewedSelectedCount
+                          } new — admin review pending`}
+                        >
+                          {key === 'assigned' ? unreviewedAssignedCount : unreviewedSelectedCount} new
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
+            {compact && (
+              <button
+                type="button"
+                onClick={() => setShowBriefSlider(true)}
+                className="sh-btn-primary sh-btn-primary-xs shrink-0"
+              >
+                + Create brief
+              </button>
+            )}
           </div>
 
           {/* Filters */}

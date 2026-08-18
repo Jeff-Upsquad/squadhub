@@ -1,3 +1,5 @@
 'use client';
-import AdminSubscriptionCards from '@/views/admin/AdminSubscriptionCards';
-export default function SubscriptionCardsPage() { return <AdminSubscriptionCards />; }
+import CardsHub from '@/views/admin/CardsHub';
+export default function SubscriptionCardsPage() {
+  return <CardsHub defaultTab="subscription-cards" />;
+}

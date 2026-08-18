@@ -158,7 +158,13 @@ function formatPublishedAt(iso: string | null): string {
   return `${date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} at ${time}`;
 }
 
-export default function AdminJobCards() {
+export default function AdminJobCards({
+  compact = false,
+}: {
+  // When true (CardsHub / Leads mini app) drop the large page title so the
+  // product tabs + these status subtabs sit in one compact chrome stack.
+  compact?: boolean;
+} = {}) {
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
@@ -224,7 +230,14 @@ export default function AdminJobCards() {
   const switchTab = useCallback(
     (next: Tab) => {
       setActiveTab(next);
-      if (searchParams.get('card')) router.replace(pathname);
+      // Keep ?leadTab= (and anything else) when collapsing a card — a bare
+      // pathname replace used to bounce the Leads hub back to its default tab.
+      if (searchParams.get('card')) {
+        const params = new URLSearchParams(searchParams.toString());
+        params.delete('card');
+        const qs = params.toString();
+        router.replace(qs ? `${pathname}?${qs}` : pathname);
+      }
     },
     [pathname, router, searchParams],
   );
@@ -233,38 +246,54 @@ export default function AdminJobCards() {
   const headerCount = `${cardsForTab.length} card${cardsForTab.length === 1 ? '' : 's'}`;
 
   return (
-    <div className="flex min-h-0 h-full flex-col sh-surface">
+    <div className={`flex min-h-0 h-full flex-col ${compact ? '' : 'sh-surface'}`}>
       {!selectedCardId && (
-        <div className="px-6 pt-6 pb-4 space-y-4">
-          <header className="flex flex-wrap items-start justify-between gap-x-4 gap-y-3 border-b border-[var(--color-sh-warm-border)] pb-4">
-            <div className="min-w-0 space-y-1">
-              <div className="flex items-center gap-2.5">
-                <h1 className="sh-display text-2xl leading-none sm:text-[28px]">{headerMeta.title}</h1>
-                <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-[var(--color-sh-warm-border)] bg-[var(--color-surface)] px-2.5 py-1 text-xs font-bold text-[var(--color-sh-ink)]">
-                  <span className="h-1.5 w-1.5 rounded-full" style={{ background: 'var(--color-sh-lime)' }} />
-                  {headerCount}
-                </span>
+        <div className={compact ? 'px-6 pt-2.5 pb-3 space-y-2.5' : 'px-6 pt-6 pb-4 space-y-4'}>
+          {!compact && (
+            <header className="flex flex-wrap items-start justify-between gap-x-4 gap-y-3 border-b border-[var(--color-sh-warm-border)] pb-4">
+              <div className="min-w-0 space-y-1">
+                <div className="flex items-center gap-2.5">
+                  <h1 className="sh-display text-2xl leading-none sm:text-[28px]">{headerMeta.title}</h1>
+                  <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-[var(--color-sh-warm-border)] bg-[var(--color-surface)] px-2.5 py-1 text-xs font-bold text-[var(--color-sh-ink)]">
+                    <span className="h-1.5 w-1.5 rounded-full" style={{ background: 'var(--color-sh-lime)' }} />
+                    {headerCount}
+                  </span>
+                </div>
+                <p className="max-w-xl text-[13px] text-[var(--color-sh-ink-muted)]">{headerMeta.subtitle}</p>
               </div>
-              <p className="max-w-xl text-[13px] text-[var(--color-sh-ink-muted)]">{headerMeta.subtitle}</p>
-            </div>
-            <button type="button" onClick={() => setShowBriefForm(true)} className="sh-btn-primary sh-btn-primary-sm shrink-0">
-              + Create hiring brief
-            </button>
-          </header>
+              <button type="button" onClick={() => setShowBriefForm(true)} className="sh-btn-primary sh-btn-primary-sm shrink-0">
+                + Create hiring brief
+              </button>
+            </header>
+          )}
 
           {/* Tabs — the full hiring lifecycle in one row. */}
-          <div className="overflow-x-auto">
-            <div className="sh-tab-bar">
-              {TABS.map(({ key, label }) => {
-                const count = bucketed[key]?.length ?? 0;
-                return (
-                  <button key={key} type="button" data-active={activeTab === key} onClick={() => switchTab(key)} className="sh-tab">
-                    {label}
-                    <span className="opacity-70"> ({count})</span>
-                  </button>
-                );
-              })}
+          <div className="flex items-center gap-2">
+            <div className="min-w-0 flex-1 overflow-x-auto">
+              <div className={compact ? 'sh-tab-bar sh-tab-bar-sm' : 'sh-tab-bar'}>
+                {TABS.map(({ key, label }) => {
+                  const count = bucketed[key]?.length ?? 0;
+                  return (
+                    <button
+                      key={key}
+                      type="button"
+                      data-active={activeTab === key}
+                      onClick={() => switchTab(key)}
+                      className="sh-tab"
+                      title={HEADER_META[key].subtitle}
+                    >
+                      {label}
+                      <span className="opacity-70"> ({count})</span>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
+            {compact && (
+              <button type="button" onClick={() => setShowBriefForm(true)} className="sh-btn-primary sh-btn-primary-xs shrink-0">
+                + Create brief
+              </button>
+            )}
           </div>
 
           {/* Search */}

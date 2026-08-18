@@ -1,3 +1,5 @@
 'use client';
-import AdminJobCards from '@/views/admin/jobs/AdminJobCards';
-export default function JobCardsPage() { return <AdminJobCards />; }
+import CardsHub from '@/views/admin/CardsHub';
+export default function JobCardsPage() {
+  return <CardsHub defaultTab="job-cards" />;
+}

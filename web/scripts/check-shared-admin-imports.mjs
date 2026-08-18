@@ -47,9 +47,11 @@ if (!existsSync(ADMIN_SRC) || !existsSync(WEB_SRC)) {
 }
 
 // Entry points = the admin modules web imports from web/src/views/app/leads/
-// (LeadsPage + useLeadBadges). Everything reachable from here is compiled into
+// (LeadsPage → CardsHub). Everything reachable from here is compiled into
 // the web bundle and must obey the `@/`-only rule for web-overridden modules.
 const ENTRY_POINTS = [
+  'views/admin/CardsHub.tsx',
+  'views/admin/useLeadBadges.ts',
   'views/admin/jobs/AdminJobCards.tsx',
   'views/admin/AdminSubscriptionCards.tsx',
 ].map((p) => resolve(ADMIN_SRC, p));
