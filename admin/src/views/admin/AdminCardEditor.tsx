@@ -949,7 +949,7 @@ export default function AdminCardEditor({
             <path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
           <p className="text-xs text-[var(--color-sh-ink-muted)]">
-            View-only copy of the New Deal form — every field that was filled when this card was drafted and published. Switch to <span className="font-semibold">Admin</span> to manage recipients, or <span className="font-semibold">Client view</span> to see the business review screen.
+            View-only copy of the New Deal form — every field that was filled when this card was drafted and published. Switch to <span className="font-semibold">Admin</span> to manage recipients, or <span className="font-semibold">Client view</span> to work the business review screen.
           </p>
         </div>
       )}
@@ -1712,6 +1712,12 @@ const EVENT_META: Record<string, { color: string; label: string }> = {
   reinstated: { color: '#3b82f6', label: 'Reinstated' },
   republished: { color: '#22c55e', label: 'Republished' },
   assigned: { color: '#a855f7', label: 'Assigned' },
+  client_shortlisted: { color: '#8b5cf6', label: 'Shortlisted (Client view)' },
+  client_rejected: { color: '#ef4444', label: 'Rejected (Client view)' },
+  client_unshortlisted: { color: '#9ca3af', label: 'Removed from shortlist (Client view)' },
+  client_selected: { color: '#3b82f6', label: 'Selected (Client view)' },
+  client_chat_opened: { color: '#0ea5e9', label: 'Opened chatroom (Client view)' },
+  client_chat_message: { color: '#0ea5e9', label: 'Sent a chat message (Client view)' },
 };
 
 function formatEventTime(iso: string): string {

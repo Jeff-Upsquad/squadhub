@@ -1,12 +1,14 @@
 'use client';
 
-import { useMemo } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useMemo, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import api from '@/services/api';
+import { showToast } from '@/components/Toast';
 import { useSquadhireConfig } from '@/hooks/useSquadhireConfig';
 import { resolveFinalizedPrice, resolvePartnerPrice } from '@squadhub/shared';
 import CardViewToggle, { type CardViewMode } from './CardViewToggle';
 import AdminAssignmentOffers from './AdminAssignmentOffers';
+import ClientViewChatPanel from './ClientViewChatPanel';
 import {
   buildUnifiedRecipients,
   formatRelative,
@@ -15,15 +17,12 @@ import {
 import type { RecipientsResponse } from './AdminSubscriptionCardRecipientsPanel';
 import type { AdminSubscriptionCard } from './AdminSubscriptionCards';
 
-// ─── The SquadHire business "review" view, mirrored for admins ───────────────
-// After a card is broadcast, the business (client) sees a curated review screen
-// in SquadHire: the card's brief up top, then Assigned / Selected / Shortlisted
-// / "New talents for review" sections of accepted talents. This component
-// reproduces that exact layout on the admin side so an admin can see precisely
-// what the client sees — with one privileged difference: admins ALSO see the
-// talents who are still Pending (haven't responded to the broadcast), which the
-// business is never shown. The view is read-only: the admin drives selection /
-// assignment from the "Admin" funnel view, not here.
+// ─── The SquadHire business review view, live for Leads / admin ──────────────
+// After a card is broadcast, the business sees a curated review screen in
+// SquadHire. This is that same screen: brief, bidding, Assigned / Selected /
+// Shortlisted / New talents — plus the same actions (shortlist, reject, select,
+// chatroom). Actions are taken by the signed-in Leads user and logged. Chat
+// rooms opened here send as that person, not as the business.
 
 // The full talent list SquadHire holds for a card (includes not-yet-responded
 // pending talents). Same shape the funnel view fetches — cache is shared.
@@ -63,6 +62,43 @@ export default function AdminCardClientPreview({
   tierTabs?: React.ReactNode;
 }) {
   const { adminUrl } = useSquadhireConfig();
+  const qc = useQueryClient();
+  const [confirmSelect, setConfirmSelect] = useState<UnifiedRecipient | null>(null);
+  const [chatTarget, setChatTarget] = useState<{ id: string; name: string } | null>(null);
+
+  const invalidateCard = () => {
+    qc.invalidateQueries({ queryKey: ['admin-card-recipients', card.id] });
+    qc.invalidateQueries({ queryKey: ['admin-card-squadhire-recipients', card.id] });
+    qc.invalidateQueries({ queryKey: ['admin-card-events', card.id] });
+    qc.invalidateQueries({ queryKey: ['admin-subscription-cards'] });
+    qc.invalidateQueries({ queryKey: ['admin-card'] });
+    qc.invalidateQueries({ queryKey: ['admin-card-detail', card.id] });
+    qc.invalidateQueries({ queryKey: ['admin-assignment-offers', card.id] });
+  };
+
+  const review = useMutation({
+    mutationFn: (v: { talent_user_id: string; action: 'shortlist' | 'reject' | 'unshortlist'; talent_name?: string }) =>
+      api.post(`/admin/subscription-cards/${card.id}/client-view/review`, v),
+    onSuccess: (_d, v) => {
+      invalidateCard();
+      showToast(
+        v.action === 'shortlist' ? 'Talent shortlisted' : v.action === 'reject' ? 'Talent rejected' : 'Removed from shortlist',
+        'success',
+      );
+    },
+    onError: (e: any) => showToast(e?.response?.data?.error || 'Could not update review', 'error'),
+  });
+
+  const selectMut = useMutation({
+    mutationFn: (v: { talent_user_id: string; talent_name?: string }) =>
+      api.post(`/admin/subscription-cards/${card.id}/client-view/select`, v),
+    onSuccess: () => {
+      setConfirmSelect(null);
+      invalidateCard();
+      showToast('Talent selected — awaiting admin confirmation', 'success');
+    },
+    onError: (e: any) => showToast(e?.response?.data?.error || 'Could not select talent', 'error'),
+  });
 
   // Reuse the SAME query keys the funnel view uses, so the React Query cache is
   // shared: opening either view warms the other, and no request is duplicated.
@@ -91,7 +127,7 @@ export default function AdminCardClientPreview({
   // ─── Funnel buckets, mirroring SubscriptionCardReview.tsx ──────────────────
   // Assigned = the card's confirmed pick. Selected = business picked, pending
   // admin confirmation. Shortlisted / review = accepted talents the business is
-  // curating. Pending = accepted-broadcast not-yet-answered — ADMIN-ONLY.
+  // curating. Same buckets the business portal shows.
   const assigned = useMemo(() => allRecipients.filter((r) => r.assigned), [allRecipients]);
   const selectedPending = useMemo(
     () => allRecipients.filter((r) => r.selected_at && !r.assigned),
@@ -116,7 +152,35 @@ export default function AdminCardClientPreview({
   );
   // Admin-only: talents still awaiting a broadcast response. The business never
   // sees these; admins do.
-  const pending = useMemo(() => allRecipients.filter((r) => r.status === 'pending'), [allRecipients]);
+  const hasSelection = selectedPending.length > 0 || assigned.length > 0;
+  const isClosed = !!card.archived_at || !!card.cancelled_at || !!card.recalled_at || card.state === 'closed';
+
+  const { data: events } = useQuery({
+    queryKey: ['admin-card-events', card.id],
+    queryFn: async () => {
+      const r = await api.get(`/admin/subscription-cards/${card.id}/events`);
+      return (r.data?.data || []) as Array<{
+        id: string;
+        event_type: string;
+        actor_label: string | null;
+        actor_type: string | null;
+        metadata: Record<string, unknown> | null;
+        created_at: string;
+      }>;
+    },
+  });
+  const clientEvents = useMemo(
+    () =>
+      (events ?? [])
+        .filter((e) => e.event_type.startsWith('client_'))
+        .slice()
+        .reverse(),
+    [events],
+  );
+
+  const busy = review.isPending || selectMut.isPending;
+  const canActOn = (r: UnifiedRecipient) =>
+    r.type === 'talent' && !isClosed && !hasSelection && !r.passed_over_at;
 
   // ─── Card brief header, derived from the admin card (no extra fetch) ────────
   const isAssignment = card.card_type === 'assignment';
@@ -159,7 +223,6 @@ export default function AdminCardClientPreview({
   const customDeliverables = card.custom_deliverables || [];
   const timeline = card.assignment_details ?? null;
   const description = card.notes ?? null;
-  const isClosed = !!card.archived_at || !!card.cancelled_at || !!card.recalled_at || card.state === 'closed';
 
   const headerRow = (
     <div className="flex items-center justify-between gap-3">
@@ -190,15 +253,14 @@ export default function AdminCardClientPreview({
       <div className="flex-1 space-y-4 overflow-y-auto px-6 pt-6 pb-10">
         {headerRow}
 
-        {/* A subtle banner clarifying this is the client's-eye view. */}
         <div className="flex items-start gap-2 rounded-xl border border-[var(--color-sh-warm-border)] bg-[var(--color-sh-cream)] px-4 py-2.5">
           <svg className="mt-0.5 h-4 w-4 shrink-0 text-[var(--color-sh-ink-subtle)]" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
             <path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
           </svg>
           <p className="text-xs text-[var(--color-sh-ink-muted)]">
-            This is the read-only view the client sees for this card in SquadHire. As an admin you also
-            see <span className="font-semibold">Pending</span> talents (still awaiting a response) — the client does not.
+            Same review screen the business sees in SquadHire — shortlist, reject, select, bidding, and
+            chatrooms. Actions are yours (logged below). Chat messages show <span className="font-semibold">your name</span>, not the business.
           </p>
         </div>
 
@@ -357,11 +419,17 @@ export default function AdminCardClientPreview({
               Selected — pending confirmation
             </h2>
             <p className="mb-3 text-xs text-amber-700 dark:text-amber-400">
-              The client picked this talent; it&rsquo;s awaiting admin confirmation to activate.
+              We&rsquo;re finalising this assignment. You&rsquo;ll see it confirmed here shortly.
             </p>
             <div className="space-y-3">
               {selectedPending.map((r) => (
-                <RecipientRow key={`${r.type}-${r.id}`} r={r} adminUrl={adminUrl} rightPill={{ label: 'Selected', tone: 'amber' }} />
+                <RecipientRow
+                  key={`${r.type}-${r.id}`}
+                  r={r}
+                  adminUrl={adminUrl}
+                  rightPill={{ label: 'Selected', tone: 'amber' }}
+                  onChat={r.type === 'talent' && !isClosed ? () => setChatTarget({ id: r.id, name: r.name }) : undefined}
+                />
               ))}
             </div>
           </div>
@@ -371,12 +439,59 @@ export default function AdminCardClientPreview({
         {tierTabs && <div>{tierTabs}</div>}
 
         {/* ═══ Bidding (above Shortlisted) — live from SquadHire ═══ */}
-        <AdminAssignmentOffers cardId={card.id} />
+        <AdminAssignmentOffers
+          cardId={card.id}
+          clientView
+          onOpenChat={
+            isClosed
+              ? undefined
+              : (talentUserId, talentName) => setChatTarget({ id: talentUserId, name: talentName })
+          }
+        />
 
         {/* ═══ Shortlisted ═══ */}
-        <ListCard title="Shortlisted" count={shortlisted.length} emptyText="No shortlisted talents yet.">
+        <ListCard
+          title="Shortlisted"
+          count={shortlisted.length}
+          emptyText="No shortlisted talents yet. Review talents below to add them here."
+        >
           {shortlisted.map((r) => (
-            <RecipientRow key={`${r.type}-${r.id}`} r={r} adminUrl={adminUrl} rightPill={{ label: 'Shortlisted', tone: 'violet' }} />
+            <RecipientRow
+              key={`${r.type}-${r.id}`}
+              r={r}
+              adminUrl={adminUrl}
+              rightPill={{ label: 'Shortlisted', tone: 'violet' }}
+              dimmed={(hasSelection || isClosed) && !r.selected_at}
+            >
+              {r.type === 'talent' && (
+                <div className="mt-3 grid grid-cols-3 gap-2 sm:flex sm:justify-end">
+                  <button
+                    type="button"
+                    disabled={isClosed}
+                    onClick={() => setChatTarget({ id: r.id, name: r.name })}
+                    className="rounded-lg border border-[var(--color-sh-warm-border)] px-2 py-2 text-xs font-semibold text-[var(--color-sh-ink)] transition hover:bg-[var(--color-sh-cream)] disabled:opacity-40 sm:px-3 sm:py-1.5"
+                  >
+                    Chatroom
+                  </button>
+                  <button
+                    type="button"
+                    disabled={!canActOn(r) || busy}
+                    onClick={() => review.mutate({ talent_user_id: r.id, action: 'unshortlist', talent_name: r.name })}
+                    className="rounded-lg border border-[var(--color-sh-warm-border)] px-2 py-2 text-xs font-semibold text-[var(--color-sh-ink-subtle)] transition hover:bg-[var(--color-sh-cream)] disabled:opacity-40 sm:px-3 sm:py-1.5"
+                  >
+                    Remove
+                  </button>
+                  <button
+                    type="button"
+                    disabled={!canActOn(r) || busy}
+                    onClick={() => setConfirmSelect(r)}
+                    className="rounded-lg bg-[var(--color-sh-ink)] px-2 py-2 text-xs font-semibold text-white transition hover:opacity-90 disabled:opacity-40 sm:px-3 sm:py-1.5"
+                  >
+                    Select
+                  </button>
+                </div>
+              )}
+            </RecipientRow>
           ))}
         </ListCard>
 
@@ -393,28 +508,75 @@ export default function AdminCardClientPreview({
               r={r}
               adminUrl={adminUrl}
               rightText={r.responded_at ? `Accepted ${formatRelative(r.responded_at)}` : 'Accepted'}
-            />
+              dimmed={(hasSelection || isClosed) && !r.selected_at}
+            >
+              {r.type === 'talent' && (
+                <div className="mt-3 grid grid-cols-2 gap-2 sm:flex sm:justify-end">
+                  <button
+                    type="button"
+                    disabled={!canActOn(r) || busy}
+                    onClick={() => review.mutate({ talent_user_id: r.id, action: 'shortlist', talent_name: r.name })}
+                    className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-emerald-700 disabled:opacity-40 sm:py-1.5"
+                  >
+                    Shortlist
+                  </button>
+                  <button
+                    type="button"
+                    disabled={!canActOn(r) || busy}
+                    onClick={() => review.mutate({ talent_user_id: r.id, action: 'reject', talent_name: r.name })}
+                    className="rounded-lg border border-[var(--color-sh-warm-border)] px-3 py-2 text-xs font-semibold text-[var(--color-sh-ink-subtle)] transition hover:border-red-200 hover:text-red-600 disabled:opacity-40 sm:py-1.5"
+                  >
+                    Reject
+                  </button>
+                </div>
+              )}
+            </RecipientRow>
           ))}
         </ListCard>
 
-        {/* ═══ Pending — awaiting response (ADMIN-ONLY) ═══ */}
-        <ListCard
-          title="Pending — awaiting response"
-          count={pending.length}
-          adminOnly
-          emptyText="No talents are awaiting a response."
-        >
-          {pending.map((r) => (
-            <RecipientRow
-              key={`${r.type}-${r.id}`}
-              r={r}
-              adminUrl={adminUrl}
-              muted
-              rightPill={{ label: 'Pending', tone: 'slate' }}
-            />
-          ))}
-        </ListCard>
+        <ActivityLog events={clientEvents} />
       </div>
+
+      {confirmSelect && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <button type="button" className="absolute inset-0 bg-black/40" aria-label="Cancel" onClick={() => setConfirmSelect(null)} />
+          <div className="relative mx-4 w-full max-w-md rounded-2xl border border-[var(--color-sh-warm-border)] bg-[var(--color-surface)] p-6 shadow-2xl">
+            <h3 className="text-lg font-semibold text-[var(--color-sh-ink)]">Confirm selection</h3>
+            <p className="mt-2 text-sm text-[var(--color-sh-ink-muted)]">
+              You are about to select <strong>{confirmSelect.name || 'this talent'}</strong>. Only one talent can be selected per card.
+            </p>
+            <p className="mt-2 text-sm text-amber-700">
+              Your pick goes to the Squad team for confirmation. Once approved it&rsquo;ll show as Assigned and the subscription starts.
+            </p>
+            <div className="mt-6 flex items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setConfirmSelect(null)}
+                className="rounded-lg border border-[var(--color-sh-warm-border)] px-4 py-2 text-sm font-semibold text-[var(--color-sh-ink-muted)]"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={selectMut.isPending}
+                onClick={() => selectMut.mutate({ talent_user_id: confirmSelect.id, talent_name: confirmSelect.name })}
+                className="rounded-lg bg-[var(--color-sh-ink)] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+              >
+                {selectMut.isPending ? 'Selecting…' : 'Select talent'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {chatTarget && (
+        <ClientViewChatPanel
+          cardId={card.id}
+          talentUserId={chatTarget.id}
+          talentName={chatTarget.name}
+          onClose={() => setChatTarget(null)}
+        />
+      )}
     </div>
   );
 }
@@ -504,18 +666,24 @@ function RecipientRow({
   rightPill,
   rightText,
   muted = false,
+  dimmed = false,
+  onChat,
+  children,
 }: {
   r: UnifiedRecipient;
   adminUrl: string | null | undefined;
   rightPill?: { label: string; tone: keyof typeof PILL_TONES | string };
   rightText?: string;
   muted?: boolean;
+  dimmed?: boolean;
+  onChat?: () => void;
+  children?: React.ReactNode;
 }) {
   const tone = rightPill ? PILL_TONES[rightPill.tone] ?? PILL_TONES.slate : null;
   const isTalent = r.type === 'talent';
   const profileHref = isTalent && adminUrl ? `${adminUrl}/admin/users/${r.id}` : null;
   return (
-    <li className={`px-5 py-3 sm:px-6 ${muted ? 'opacity-70' : ''}`}>
+    <li className={`px-5 py-3 sm:px-6 ${muted || dimmed ? 'opacity-70' : ''}`}>
       <div className="flex items-center gap-4">
         <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[var(--color-sh-lime-soft)] font-[family-name:var(--font-jakarta)] text-sm font-semibold text-[var(--color-sh-ink)] ring-1 ring-[var(--color-sh-warm-border)]">
           {initials(r.name)}
@@ -535,6 +703,15 @@ function RecipientRow({
           {rightText && <p className="mt-0.5 truncate text-xs text-[var(--color-sh-ink-faint)]">{rightText}</p>}
         </div>
         <div className="flex shrink-0 items-center gap-2">
+          {onChat && (
+            <button
+              type="button"
+              onClick={onChat}
+              className="rounded-lg border border-[var(--color-sh-warm-border)] px-2.5 py-1.5 text-xs font-semibold text-[var(--color-sh-ink)] transition hover:bg-[var(--color-sh-cream)]"
+            >
+              Chatroom
+            </button>
+          )}
           {tone && (
             <span
               className="rounded-full px-2.5 py-0.5 text-[11px] font-semibold"
@@ -558,6 +735,70 @@ function RecipientRow({
           )}
         </div>
       </div>
+      {children}
     </li>
+  );
+}
+
+const CLIENT_EVENT_LABEL: Record<string, string> = {
+  client_shortlisted: 'Shortlisted',
+  client_rejected: 'Rejected',
+  client_unshortlisted: 'Removed from shortlist',
+  client_selected: 'Selected',
+  client_chat_opened: 'Opened a chatroom',
+  client_chat_message: 'Sent a chat message',
+};
+
+function ActivityLog({
+  events,
+}: {
+  events: Array<{
+    id: string;
+    event_type: string;
+    actor_label: string | null;
+    metadata: Record<string, unknown> | null;
+    created_at: string;
+  }>;
+}) {
+  return (
+    <div className="sh-card">
+      <div className="flex items-center justify-between border-b border-[var(--color-sh-warm-border)] px-5 py-4 sm:px-6">
+        <h2 className="font-[family-name:var(--font-jakarta)] text-sm font-semibold text-[var(--color-sh-ink)]">
+          Activity log
+        </h2>
+        <span className="text-xs text-[var(--color-sh-ink-faint)]">{events.length} total</span>
+      </div>
+      {events.length === 0 ? (
+        <div className="px-6 py-10 text-center">
+          <p className="text-sm text-[var(--color-sh-ink-subtle)]">
+            Actions taken from this Client view — shortlist, reject, select, chat — appear here.
+          </p>
+        </div>
+      ) : (
+        <ol className="divide-y divide-[var(--color-sh-warm-border)]">
+          {events.map((e) => {
+            const talent = typeof e.metadata?.talent_name === 'string' ? e.metadata.talent_name : null;
+            const preview = typeof e.metadata?.preview === 'string' ? e.metadata.preview : null;
+            return (
+              <li key={e.id} className="px-5 py-3 sm:px-6">
+                <div className="flex items-baseline justify-between gap-3">
+                  <p className="text-sm font-medium text-[var(--color-sh-ink)]">
+                    {CLIENT_EVENT_LABEL[e.event_type] || e.event_type}
+                    {talent ? <span className="font-normal text-[var(--color-sh-ink-muted)]"> · {talent}</span> : null}
+                  </p>
+                  <span className="shrink-0 text-[11px] text-[var(--color-sh-ink-faint)]">
+                    {formatRelative(e.created_at)}
+                  </span>
+                </div>
+                <p className="mt-0.5 text-xs text-[var(--color-sh-ink-subtle)]">
+                  {e.actor_label ? `by ${e.actor_label}` : 'by a Leads user'}
+                </p>
+                {preview && <p className="mt-1 text-xs text-[var(--color-sh-ink-muted)]">&ldquo;{preview}&rdquo;</p>}
+              </li>
+            );
+          })}
+        </ol>
+      )}
+    </div>
   );
 }

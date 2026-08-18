@@ -61,6 +61,7 @@ import subscriptionCardsAdminRequestsRoutes from './routes/subscription-cards-ad
 import subscriptionCardsAdminAssignRoutes from './routes/subscription-cards-admin-assign';
 import subscriptionCardsAdminSelectRoutes from './routes/subscription-cards-admin-select';
 import subscriptionCardsAdminOffersRoutes from './routes/subscription-cards-admin-offers';
+import subscriptionCardsAdminClientViewRoutes from './routes/subscription-cards-admin-client-view';
 import subscriptionCardsPartnerRoutes from './routes/subscription-cards-partner';
 import subscriptionCardsLinkingRoutes from './routes/subscription-cards-linking';
 import subscriptionsAdminRoutes from './routes/subscriptions-admin';
@@ -213,6 +214,7 @@ app.use('/admin/onboarding-links', onboardingLinksAdminRoutes);
 app.use('/subscription-cards', subscriptionCardsRoutes);
 app.use('/admin/subscription-cards', subscriptionCardsAdminRoutes);
 app.use('/admin/subscription-cards', subscriptionCardsAdminOffersRoutes);
+app.use('/admin/subscription-cards', subscriptionCardsAdminClientViewRoutes);
 app.use('/admin', subscriptionCardsAdminRequestsRoutes);
 app.use('/admin', subscriptionCardsAdminAssignRoutes);
 app.use('/admin', subscriptionCardsAdminSelectRoutes);

@@ -312,7 +312,8 @@ export default function AdminSubscriptionCardRecipientsView({
   groupCards?: AdminSubscriptionCard[];
   // True when the "All" tier tab is active — render the merged cross-tier view.
   allTiersMode?: boolean;
-  // Card-detail view switcher (Admin / Client view / Deal details). When
+  // Card-detail view switcher (Admin / Client view / Deal details). Client view
+  // is the live business review screen (actions + chat). When
   // provided, a CardViewToggle renders in the header. Undefined = no toggle.
   viewMode?: CardViewMode;
   onSetViewMode?: (m: CardViewMode) => void;

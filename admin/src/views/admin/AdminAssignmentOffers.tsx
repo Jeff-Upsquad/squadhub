@@ -78,7 +78,16 @@ function fmtDate(s: string): string {
   return Number.isNaN(d.getTime()) ? s : d.toLocaleString();
 }
 
-export default function AdminAssignmentOffers({ cardId }: { cardId: string }) {
+export default function AdminAssignmentOffers({
+  cardId,
+  onOpenChat,
+  clientView = false,
+}: {
+  cardId: string;
+  onOpenChat?: (talentUserId: string, talentName: string) => void;
+  /** Hide admin-only pricing (margin / talent floor) so the section matches the business review screen. */
+  clientView?: boolean;
+}) {
   const qc = useQueryClient();
   const { data, isLoading } = useQuery({
     queryKey: ['admin-assignment-offers', cardId],
@@ -167,7 +176,7 @@ export default function AdminAssignmentOffers({ cardId }: { cardId: string }) {
       <div className="flex items-center justify-between border-b border-[#E7E7EA] px-5 py-4">
         <div>
           <h2 className="text-sm font-semibold text-foreground">Bidding</h2>
-          {(minBusiness != null || marginHint) && (
+          {!clientView && (minBusiness != null || marginHint) && (
             <p className="mt-0.5 text-[11px] text-foreground-muted">
               {minBusiness != null && (
                 <>Min business {fmtMoney(minBusiness)} · Min talent {fmtMoney(bidPricing?.min_partner_price)}</>
@@ -178,7 +187,7 @@ export default function AdminAssignmentOffers({ cardId }: { cardId: string }) {
           )}
         </div>
         <div className="flex items-center gap-2">
-          {source === 'live' && (
+          {!clientView && source === 'live' && (
             <span className="inline-flex items-center gap-1 rounded-full bg-[#DCFCE7] px-2 py-0.5 text-[10px] font-semibold text-[#166534]">
               <span className="h-1.5 w-1.5 rounded-full bg-[#16A34A]" /> Live
             </span>
@@ -207,7 +216,8 @@ export default function AdminAssignmentOffers({ cardId }: { cardId: string }) {
       ) : (
         <ul className="divide-y divide-[#E7E7EA]">
           {offers.map((o) => {
-            const meta = STATUS_META[o.status] ?? { label: o.status, cls: 'bg-[#F1F1F3] text-[#737373]' };
+            const meta = { ...(STATUS_META[o.status] ?? { label: o.status, cls: 'bg-[#F1F1F3] text-[#737373]' }) };
+            if (clientView && o.status === 'pending_business') meta.label = 'Your move';
             const canAct = o.status === 'pending_business';
             return (
               <li key={o.id} className="px-5 py-4">
@@ -242,8 +252,19 @@ export default function AdminAssignmentOffers({ cardId }: { cardId: string }) {
                     )}
                   </div>
 
-                  {canAct && (
+                  {(canAct || onOpenChat) && (
                     <div className="flex shrink-0 flex-wrap items-center gap-2">
+                      {onOpenChat && o.talent_user_id && (
+                        <button
+                          type="button"
+                          onClick={() => onOpenChat(o.talent_user_id, o.talent_name)}
+                          className="rounded-lg border border-[#E7E7EA] px-3 py-1.5 text-xs font-semibold text-foreground transition-colors hover:bg-[#F5F5F6]"
+                        >
+                          Chatroom
+                        </button>
+                      )}
+                      {canAct && (
+                        <>
                       <button
                         type="button"
                         disabled={busy}
@@ -271,6 +292,8 @@ export default function AdminAssignmentOffers({ cardId }: { cardId: string }) {
                       >
                         Accept bid
                       </button>
+                        </>
+                      )}
                     </div>
                   )}
                   {o.status === 'pending_talent' && (
