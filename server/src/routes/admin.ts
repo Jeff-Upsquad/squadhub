@@ -6,6 +6,7 @@ import { supabaseAdmin } from '../supabase';
 import { getDefaultRoleIdForUserType } from '../utils/defaultRole';
 import { propagateEmailChange } from '../utils/propagateEmailChange';
 import { notifySquadhireOfCardRecall } from '../utils/squadhireWebhook';
+import { applyTempPassword, PasswordResetError } from '../services/passwordReset';
 import type { UserType } from '@squadhub/shared';
 
 const router = Router();
@@ -644,6 +645,52 @@ router.put('/users/:id/ban', async (req: Request, res: Response) => {
       return;
     }
     console.error('Admin ban user error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// POST /admin/users/:id/reset-password — mint a temp password, force a change
+// on next login, and return the temp password so the admin can relay it.
+// Same credential shape as the self-serve WhatsApp flow (word-word).
+router.post('/users/:id/reset-password', async (req: Request, res: Response) => {
+  try {
+    const id = req.params.id as string;
+
+    const { data: target, error: userErr } = await supabaseAdmin
+      .from('users')
+      .select('id, email, display_name, status')
+      .eq('id', id)
+      .maybeSingle();
+
+    if (userErr) {
+      res.status(500).json({ success: false, error: userErr.message });
+      return;
+    }
+    if (!target) {
+      res.status(404).json({ success: false, error: 'User not found' });
+      return;
+    }
+    if (target.status === 'banned' || target.status === 'rejected') {
+      res.status(400).json({ success: false, error: 'Cannot reset password for a banned or rejected account' });
+      return;
+    }
+
+    const { tempPassword, email } = await applyTempPassword(id);
+
+    res.json({
+      success: true,
+      data: {
+        email,
+        display_name: target.display_name,
+        temp_password: tempPassword,
+      },
+    });
+  } catch (err) {
+    if (err instanceof PasswordResetError) {
+      res.status(err.status).json({ success: false, error: err.message });
+      return;
+    }
+    console.error('Admin reset password error:', err);
     res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });

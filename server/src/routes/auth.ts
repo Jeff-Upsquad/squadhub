@@ -175,6 +175,9 @@ router.post('/login', async (req: Request, res: Response) => {
         },
         access_token: data.session!.access_token,
         refresh_token: data.session!.refresh_token,
+        // Set by self-serve reset and by admin Users → Reset password.
+        // Clients must collect a new password before entering the app.
+        must_reset_password: data.user.user_metadata?.must_reset_password === true,
       },
     });
   } catch (err) {

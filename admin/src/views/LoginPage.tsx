@@ -1,12 +1,22 @@
 import { useState } from 'react';
+import axios from 'axios';
 import { useAuthStore } from '../stores/authStore';
 import api from '../services/api';
+
+type PendingReset = {
+  user: unknown;
+  access_token: string;
+  refresh_token: string;
+};
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [pendingReset, setPendingReset] = useState<PendingReset | null>(null);
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const setAuth = useAuthStore((s) => s.setAuth);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -15,7 +25,7 @@ export default function LoginPage() {
     setLoading(true);
     try {
       const res = await api.post('/auth/login', { email, password });
-      const { user, access_token, refresh_token } = res.data.data;
+      const { user, access_token, refresh_token, must_reset_password } = res.data.data;
 
       // Only allow admin users into the admin panel
       if (!user.is_admin) {
@@ -24,9 +34,42 @@ export default function LoginPage() {
         return;
       }
 
+      if (must_reset_password) {
+        setPendingReset({ user, access_token, refresh_token });
+        return;
+      }
+
       setAuth(user, access_token, refresh_token);
     } catch (err: any) {
       setError(err.response?.data?.error || 'Login failed');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSetPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    if (newPassword.length < 8) {
+      setError('Password must be at least 8 characters.');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setError("Those passwords don't match.");
+      return;
+    }
+    if (!pendingReset) return;
+
+    setLoading(true);
+    try {
+      await axios.post(
+        '/api/auth/change-password',
+        { new_password: newPassword },
+        { headers: { Authorization: `Bearer ${pendingReset.access_token}` } },
+      );
+      setAuth(pendingReset.user as never, pendingReset.access_token, pendingReset.refresh_token);
+    } catch (err: any) {
+      setError(err.response?.data?.error || 'Could not set your new password. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -46,9 +89,47 @@ export default function LoginPage() {
       </div>
       <div className="w-full rounded-2xl border border-divider bg-surface px-8 py-10 shadow-md ring-1 ring-black/5">
         <h1 className="text-center font-[family-name:var(--font-display)] text-xl font-semibold tracking-tight text-foreground sm:text-2xl">
-          Admin sign in
+          {pendingReset ? 'Set a new password' : 'Admin sign in'}
         </h1>
 
+        {pendingReset ? (
+        <form onSubmit={handleSetPassword} className="mt-5 space-y-3">
+          {error && (
+            <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300">{error}</p>
+          )}
+          <p className="text-sm text-foreground-muted">Your password was reset. Choose one you’ll remember.</p>
+          <div>
+            <label className="mb-1 block text-xs font-medium text-foreground-muted">New password</label>
+            <input
+              type="password"
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              required
+              autoFocus
+              className="w-full rounded-md border border-divider-strong bg-surface px-3 py-2 text-sm text-foreground placeholder-foreground-dim outline-none transition focus:border-accent focus:ring-1 focus:ring-accent"
+              placeholder="At least 8 characters"
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-medium text-foreground-muted">Confirm new password</label>
+            <input
+              type="password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              required
+              className="w-full rounded-md border border-divider-strong bg-surface px-3 py-2 text-sm text-foreground placeholder-foreground-dim outline-none transition focus:border-accent focus:ring-1 focus:ring-accent"
+              placeholder="Re-enter password"
+            />
+          </div>
+          <button
+            type="submit"
+            disabled={loading}
+            className="h-10 w-full rounded-md bg-accent text-sm font-medium text-white transition hover:bg-accent-strong disabled:opacity-50"
+          >
+            {loading ? 'Saving…' : 'Save and sign in'}
+          </button>
+        </form>
+        ) : (
         <form onSubmit={handleSubmit} className="mt-5 space-y-3">
           {error && (
             <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300">{error}</p>
@@ -86,6 +167,7 @@ export default function LoginPage() {
             {loading ? 'Signing in...' : 'Sign In'}
           </button>
         </form>
+        )}
       </div>
     </>
   );

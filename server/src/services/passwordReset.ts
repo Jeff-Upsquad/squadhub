@@ -1,11 +1,12 @@
 /**
  * Self-serve password reset over WhatsApp.
  *
- * SquadHub had no forgot-password flow at all — an admin had to reset by hand.
- * This mirrors SquadHire's phone-keyed flow (see Profiles
- * backend/src/services/password-reset.service.ts) so a business user who signed
- * in here with their SquadHire credentials meets the same three steps they
- * already know:
+ * SquadHub had no forgot-password flow at all — an admin had to reset by hand
+ * in Supabase. Self-serve (phone → WhatsApp) and admin Users → Reset password
+ * now share applyTempPassword(). This mirrors SquadHire's phone-keyed flow
+ * (see Profiles backend/src/services/password-reset.service.ts) so a business
+ * user who signed in here with their SquadHire credentials meets the same
+ * three steps they already know:
  *
  *   1. lookup(phone)  → is this number registered? Returns a MASKED identity
  *                       hint to confirm, plus a signed short-lived reset ticket.
@@ -251,11 +252,54 @@ async function deliverTempPasswordWhatsApp(args: {
   }
 }
 
+/**
+ * Mint a two-word temp password, apply it to the auth user, and force a
+ * change on next sign-in via must_reset_password. Shared by the self-serve
+ * WhatsApp flow and the admin Users "Reset password" action.
+ */
+export async function applyTempPassword(
+  userId: string,
+): Promise<{ tempPassword: string; email: string }> {
+  const { data: existing, error: getErr } = await supabaseAdmin.auth.admin.getUserById(userId);
+  if (getErr || !existing?.user?.email) {
+    throw new PasswordResetError(400, 'This account has no email on file.');
+  }
+  const email = existing.user.email;
+  const tempPassword = generateWordTempPassword();
+
+  // updateUserById MERGES user_metadata, so this sets the flag without
+  // clobbering display_name and friends.
+  const { error: updErr } = await supabaseAdmin.auth.admin.updateUserById(userId, {
+    password: tempPassword,
+    user_metadata: { must_reset_password: true },
+  });
+  if (updErr) throw new PasswordResetError(400, updErr.message);
+
+  // Smoke-test the credential before handing it out, so we never WhatsApp
+  // or show an admin a temp password that silently doesn't work.
+  const { error: signInErr } = await supabase.auth.signInWithPassword({
+    email,
+    password: tempPassword,
+  });
+  if (signInErr) {
+    throw new PasswordResetError(500, 'Failed to set a temporary password. Please try again.');
+  }
+  // Don't leave the smoke-test session sitting on the shared public client.
+  await supabase.auth.signOut().catch(() => undefined);
+
+  // The temp password is a live credential — never log it by default. Opt in
+  // explicitly for local debugging; must NOT be set in production.
+  if (process.env.PASSWORD_RESET_DEBUG === '1') {
+    console.log(`[password-reset] temp password for user ${userId}: ${tempPassword}`);
+  }
+
+  return { tempPassword, email };
+}
+
 export async function sendTempPassword(
   ticketToken: string,
 ): Promise<{ sent: true; delivered: boolean }> {
   const ticket = verifyTicket(ticketToken);
-  const tempPassword = generateWordTempPassword();
 
   const { data: user } = await supabaseAdmin
     .from('users')
@@ -267,35 +311,7 @@ export async function sendTempPassword(
     throw new PasswordResetError(400, 'This account is no longer available for reset.');
   }
 
-  const { data: existing, error: getErr } = await supabaseAdmin.auth.admin.getUserById(ticket.sub);
-  if (getErr || !existing?.user?.email) {
-    throw new PasswordResetError(400, 'This account has no email on file.');
-  }
-  const email = existing.user.email;
-
-  // updateUserById MERGES user_metadata, so this sets the flag without
-  // clobbering display_name and friends.
-  const { error: updErr } = await supabaseAdmin.auth.admin.updateUserById(ticket.sub, {
-    password: tempPassword,
-    user_metadata: { must_reset_password: true },
-  });
-  if (updErr) throw new PasswordResetError(400, updErr.message);
-
-  // Smoke-test the credential before handing it out, so we never WhatsApp a
-  // temp password that silently doesn't work.
-  const { error: signInErr } = await supabase.auth.signInWithPassword({
-    email,
-    password: tempPassword,
-  });
-  if (signInErr) {
-    throw new PasswordResetError(500, 'Failed to set a temporary password. Please try again.');
-  }
-
-  // The temp password is a live credential — never log it by default. Opt in
-  // explicitly for local debugging; must NOT be set in production.
-  if (process.env.PASSWORD_RESET_DEBUG === '1') {
-    console.log(`[password-reset] temp password for user ${ticket.sub}: ${tempPassword}`);
-  }
+  const { tempPassword } = await applyTempPassword(ticket.sub);
 
   const delivered = user.phone
     ? await deliverTempPasswordWhatsApp({

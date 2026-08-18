@@ -1,6 +1,8 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../services/api';
+import ConfirmDialog from '../../components/ConfirmDialog';
+import { showToast } from '../../components/Toast';
 import { useSquadhireConfig, useSquadhireUserLookup } from '../../hooks/useSquadhireConfig';
 import type { User, Role } from '@squadhub/shared';
 
@@ -36,12 +38,14 @@ function EditUserSlider({
   user,
   roles,
   onClose,
+  onResetPassword,
   squadhireMatch,
   squadhireAdminUrl,
 }: {
   user: UserWithRole;
   roles: Role[];
   onClose: () => void;
+  onResetPassword: (user: UserWithRole) => void;
   squadhireMatch?: { talent_user_id: string; name: string };
   squadhireAdminUrl?: string | null;
 }) {
@@ -323,6 +327,28 @@ function EditUserSlider({
               </div>
             )}
 
+            {/* Password */}
+            {user.status !== 'banned' && user.status !== 'rejected' && (
+            <div>
+              <label className="mb-1.5 block text-xs font-medium text-foreground-muted">Password</label>
+              <div className="rounded-md border border-divider bg-canvas px-3 py-2.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    close();
+                    onResetPassword(user);
+                  }}
+                  className="rounded-md border border-divider-strong bg-surface px-2.5 py-1 text-xs text-foreground-muted hover:border-divider-strong hover:text-foreground"
+                >
+                  Reset password
+                </button>
+                <p className="mt-1.5 text-[11px] text-foreground-dim">
+                  Sets a temporary password you can share. They must pick a new one on next sign-in.
+                </p>
+              </div>
+            </div>
+            )}
+
             {/* Platform Access */}
             <div>
               <label className="mb-1.5 block text-xs font-medium text-foreground-muted">Access</label>
@@ -403,6 +429,7 @@ function UserRow({
   roles,
   onAction,
   onEdit,
+  onResetPassword,
   squadhireMatch,
   squadhireAdminUrl,
 }: {
@@ -411,6 +438,7 @@ function UserRow({
   roles: Role[];
   onAction: () => void;
   onEdit: (user: UserWithRole) => void;
+  onResetPassword: (user: UserWithRole) => void;
   squadhireMatch?: { talent_user_id: string; name: string };
   squadhireAdminUrl?: string | null;
 }) {
@@ -523,6 +551,14 @@ function UserRow({
           >
             Edit
           </button>
+          {!isBanned && user.status !== 'rejected' && (
+            <button
+              onClick={() => onResetPassword(user)}
+              className="rounded-md border border-divider-strong bg-transparent px-2.5 py-1 text-xs text-foreground-muted hover:border-divider-strong hover:text-foreground"
+            >
+              Reset password
+            </button>
+          )}
           {squadhireMatch && squadhireAdminUrl && (
             <a
               href={`${squadhireAdminUrl}/admin/users/${squadhireMatch.talent_user_id}`}
@@ -594,6 +630,13 @@ export default function AdminUsers() {
   const [page, setPage] = useState(1);
   const [userTypeFilter, setUserTypeFilter] = useState<string>('all');
   const [editingUser, setEditingUser] = useState<UserWithRole | null>(null);
+  const [resetTarget, setResetTarget] = useState<UserWithRole | null>(null);
+  const [resetResult, setResetResult] = useState<{
+    email: string;
+    display_name: string;
+    temp_password: string;
+  } | null>(null);
+  const [copied, setCopied] = useState(false);
 
   const authState = JSON.parse(localStorage.getItem('squadhub-admin-auth') || '{}');
   const currentUserId = authState?.state?.user?.id || '';
@@ -634,6 +677,29 @@ export default function AdminUsers() {
   const refreshStats = () => {
     queryClient.invalidateQueries({ queryKey: ['admin-stats'] });
   };
+
+  const resetPassword = useMutation({
+    mutationFn: (user: UserWithRole) =>
+      api.post(`/admin/users/${user.id}/reset-password`).then((r) => r.data),
+    onSuccess: (res, user) => {
+      setResetTarget(null);
+      const temp = res?.data?.temp_password as string | undefined;
+      const email = (res?.data?.email as string | undefined) || user.email;
+      if (temp) {
+        setResetResult({
+          email,
+          display_name: user.display_name,
+          temp_password: temp,
+        });
+      } else {
+        showToast('Password reset, but no temporary password was returned.', 'error');
+      }
+    },
+    onError: (err: any) => {
+      setResetTarget(null);
+      showToast(err?.response?.data?.error || err.message || 'Failed to reset password', 'error');
+    },
+  });
 
   return (
     <div>
@@ -692,6 +758,7 @@ export default function AdminUsers() {
                     roles={roles}
                     onAction={refreshStats}
                     onEdit={setEditingUser}
+                    onResetPassword={setResetTarget}
                     squadhireMatch={shMatches[user.email]}
                     squadhireAdminUrl={adminUrl}
                   />
@@ -729,9 +796,83 @@ export default function AdminUsers() {
           user={editingUser}
           roles={roles}
           onClose={() => setEditingUser(null)}
+          onResetPassword={setResetTarget}
           squadhireMatch={shMatches[editingUser.email]}
           squadhireAdminUrl={adminUrl}
         />
+      )}
+
+      <ConfirmDialog
+        open={!!resetTarget}
+        title="Reset password?"
+        description={
+          resetTarget
+            ? `This sets a temporary password for ${
+                resetTarget.display_name || resetTarget.email
+              } and forces them to choose a new one on their next login. Their current password stops working immediately.`
+            : ''
+        }
+        confirmLabel="Reset password"
+        variant="warning"
+        isPending={resetPassword.isPending}
+        pendingLabel="Resetting…"
+        onCancel={() => setResetTarget(null)}
+        onConfirm={() => {
+          if (resetTarget) resetPassword.mutate(resetTarget);
+        }}
+      />
+
+      {resetResult && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center">
+          <div
+            className="absolute inset-0 bg-black/50"
+            onClick={() => {
+              setResetResult(null);
+              setCopied(false);
+            }}
+          />
+          <div className="relative w-[440px] rounded-lg bg-surface p-5 shadow-xl">
+            <h4 className="text-base font-semibold text-foreground">Temporary password set</h4>
+            <p className="mt-2 text-sm text-foreground-muted">
+              Share this one-time password with{' '}
+              <span className="font-medium text-foreground">
+                {resetResult.display_name} ({resetResult.email})
+              </span>
+              . They&apos;ll be required to set a new password the next time they sign in. It
+              won&apos;t be shown again.
+            </p>
+            <div className="mt-3 flex items-center gap-2">
+              <input
+                readOnly
+                value={resetResult.temp_password}
+                onFocus={(e) => e.currentTarget.select()}
+                className="min-w-0 flex-1 rounded-md border border-divider-strong bg-canvas px-3 py-2 font-mono text-sm text-foreground"
+              />
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(resetResult.temp_password);
+                  setCopied(true);
+                  showToast('Password copied', 'success');
+                  setTimeout(() => setCopied(false), 1500);
+                }}
+                className="shrink-0 rounded-md bg-ink px-3 py-2 text-xs font-medium text-white transition hover:bg-ink-hover"
+              >
+                {copied ? 'Copied!' : 'Copy'}
+              </button>
+            </div>
+            <div className="mt-4 flex justify-end">
+              <button
+                onClick={() => {
+                  setResetResult(null);
+                  setCopied(false);
+                }}
+                className="rounded-md bg-ink px-3 py-1.5 text-xs font-medium text-white transition hover:bg-ink-hover"
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
