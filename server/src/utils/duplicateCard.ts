@@ -30,6 +30,7 @@ export async function copyCardToNewDraft(
     phone: s.customer_phone,
     primarySalesPersonId: s.assignee_id,
     secondarySalesPersonId: Array.isArray(s.collaborator_ids) ? s.collaborator_ids[0] : null,
+    serviceLabel: s.service_type ?? null,
   });
   // If CRM has no one, keep the source card's owners (including extra secondaries).
   const ownerPatch =

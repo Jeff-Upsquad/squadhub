@@ -233,12 +233,23 @@ export async function getOrCreateDraftCard(submissionSubscriptionId: string) {
     .maybeSingle();
 
   let prefillCategoryIds: string[] = [];
+  // The staged subscription's catalog name ("Accountant", "Designer + Editor")
+  // is this card's service line — it decides which CRM pipeline owns it.
+  let serviceLabel: string | null = null;
   if (stagedRow?.subscription_id) {
-    const { data: mappings } = await supabaseAdmin
-      .from('subscription_squadhire_profiles')
-      .select('squadhire_category_id')
-      .eq('subscription_id', stagedRow.subscription_id);
+    const [{ data: mappings }, { data: subRow }] = await Promise.all([
+      supabaseAdmin
+        .from('subscription_squadhire_profiles')
+        .select('squadhire_category_id')
+        .eq('subscription_id', stagedRow.subscription_id),
+      supabaseAdmin
+        .from('subscriptions')
+        .select('name, slug')
+        .eq('id', stagedRow.subscription_id)
+        .maybeSingle(),
+    ]);
     prefillCategoryIds = (mappings || []).map((m: any) => m.squadhire_category_id);
+    serviceLabel = subRow?.name || subRow?.slug || null;
   }
 
   let submission: any = null;
@@ -250,7 +261,7 @@ export async function getOrCreateDraftCard(submissionSubscriptionId: string) {
       .maybeSingle();
     submission = data;
   }
-  const crmAssignees = await resolveCrmCardAssigneesFromSubmission(submission);
+  const crmAssignees = await resolveCrmCardAssigneesFromSubmission(submission, serviceLabel);
 
   const { data: created, error: insErr } = await supabaseAdmin
     .from('subscription_cards')
