@@ -15,6 +15,7 @@ import AdminRequestsList from './AdminRequestsList';
 import AdminCustomCardsList from './AdminCustomCardsList';
 import SliderPanel from './clients/SliderPanel';
 import ClientBriefForm, { BRIEF_LAUNCHERS, type BriefType, type BriefProduct } from './ClientBriefForm';
+import { CardAssigneeAvatars } from './CardAssigneePicker';
 
 export type AdminSubscriptionCard = {
   id: string;
@@ -123,6 +124,10 @@ export type AdminSubscriptionCard = {
   // "Needs broadcast" badge prompting the admin to open it and click Broadcast.
   needs_broadcast?: boolean;
   published_by_user?: { id: string; display_name: string | null; email: string | null } | null;
+  assignee_id?: string | null;
+  collaborator_ids?: string[];
+  assignee?: { id: string; display_name: string | null; email: string | null; avatar_url?: string | null } | null;
+  collaborators?: { id: string; display_name: string | null; email: string | null; avatar_url?: string | null }[];
 };
 
 /**
@@ -1126,6 +1131,7 @@ function SubscriptionCardRow({ card, onOpen, showCancelledTag, showArchivedTag, 
           </p>
         )}
       </div>
+      <CardAssigneeAvatars card={card} className="ml-1 shrink-0" />
     </div>
   );
   const statusCluster = (

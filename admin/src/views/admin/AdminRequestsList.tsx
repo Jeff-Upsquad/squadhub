@@ -6,6 +6,7 @@ import api from '@/services/api';
 import { showToast } from '@/components/Toast';
 import AdminCardEditor from './AdminCardEditor';
 import ShareCardLinkModal from './ShareCardLinkModal';
+import { CardAssigneeAvatars, type CardAssignees } from './CardAssigneePicker';
 
 interface SubscriptionRequest {
   id: number | string;
@@ -36,6 +37,10 @@ interface SubscriptionRequest {
   verified_by_user?: { id: string; display_name: string | null; email: string | null } | null;
   client_approved_at?: string | null;
   verified_at?: string | null;
+  assignee_id?: string | null;
+  collaborator_ids?: string[];
+  assignee?: CardAssignees['assignee'];
+  collaborators?: CardAssignees['collaborators'];
 }
 
 export default function AdminRequestsList({
@@ -100,6 +105,10 @@ export default function AdminRequestsList({
       verified_by_user: c.verified_by_user || null,
       client_approved_at: c.client_approved_at || null,
       verified_at: c.verified_at || null,
+      assignee_id: c.assignee_id || null,
+      collaborator_ids: c.collaborator_ids || [],
+      assignee: c.assignee || null,
+      collaborators: c.collaborators || [],
     };
   }
 
@@ -407,6 +416,7 @@ function RequestRow({
             </p>
           ) : null}
         </div>
+        <CardAssigneeAvatars card={request} className="ml-1 shrink-0" />
       </div>
       <div className="flex shrink-0 items-center gap-2">
         {request.working_days && (

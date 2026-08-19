@@ -17,6 +17,7 @@ import {
 import { config } from '../config';
 import { logCardEvent } from '../utils/cardEvents';
 import { ensureHubContact } from '../utils/leadLookup';
+import { resolveCrmCardAssigneesFromSubmission } from '../utils/cardCrmAssignees';
 import { generateBriefVoiceUploadUrl } from '../r2';
 import {
   buildCatalogTierPricing,
@@ -282,6 +283,7 @@ router.post('/subscription-cards/from-request', async (req: Request, res: Respon
       business_location: (requestData as any).location_of_business || null,
       country_id: countryId,
     });
+    const crmAssignees = await resolveCrmCardAssigneesFromSubmission(hubContact);
 
     const { data: card, error } = await supabaseAdmin
       .from('subscription_cards')
@@ -289,6 +291,7 @@ router.post('/subscription-cards/from-request', async (req: Request, res: Respon
         source: 'request',
         subscription_request_id,
         state: 'draft',
+        ...crmAssignees,
         proposed_price: requestData.proposed_price,
         // null = inherit the plan catalog margin until an admin adjusts it.
         markup: null,
@@ -381,12 +384,14 @@ router.post('/subscription-cards/custom', async (req: Request, res: Response) =>
       contact_name: body.customer_name || null,
       business_name: body.customer_company || null,
     });
+    const crmAssignees = await resolveCrmCardAssigneesFromSubmission(hubContact);
 
     const { data: card, error } = await supabaseAdmin
       .from('subscription_cards')
       .insert({
         source: 'custom',
         state: 'draft',
+        ...crmAssignees,
         // null = inherit the plan catalog margin until an admin adjusts it.
         markup: null,
         customer_company: body.customer_company || null,
@@ -525,6 +530,7 @@ router.post('/subscription-cards/client-brief', async (req: Request, res: Respon
       business_location: body.business_location || null,
       country_id: countryId,
     });
+    const crmAssignees = await resolveCrmCardAssigneesFromSubmission(hubContact);
 
     const SERVICE_TYPE_TO_SLUG: Record<string, string> = {
       Designers: 'designer',
@@ -642,6 +648,7 @@ router.post('/subscription-cards/client-brief', async (req: Request, res: Respon
         customer_location: body.business_location || null,
         publish_targets: ['partner', 'talent'],
         lead_submission_id: hubContact?.id ?? null,
+        ...crmAssignees,
       })
       .select('*')
       .single();

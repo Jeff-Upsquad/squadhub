@@ -8,6 +8,7 @@ import ShareCardLinkModal from './ShareCardLinkModal';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import { showToast } from '@/components/Toast';
 import CardViewToggle, { type CardViewMode } from './CardViewToggle';
+import CardAssigneePicker, { type CardAssigneeUser } from './CardAssigneePicker';
 
 // Map the upsquad-style service_type label to the subscriptions catalog slug.
 const SERVICE_TYPE_TO_SLUG: Record<string, string> = {
@@ -136,6 +137,12 @@ interface CardData {
   id: string;
   state: string;
   source: string;
+  // Internal owners copied from the matching Squad CRM lead/deal at create
+  // (see CardAssigneePicker). Not the talent placed on the card.
+  assignee_id?: string | null;
+  collaborator_ids?: string[];
+  assignee?: CardAssigneeUser | null;
+  collaborators?: CardAssigneeUser[];
   distribution: string;
   working_days: string[];
   brand_name: string | null;
@@ -847,17 +854,39 @@ export default function AdminCardEditor({
             {isEmbeddedDetail ? 'Back to Subscription Cards' : 'Back'}
           </button>
           {isEmbeddedDetail ? (
-            <h1 className="sh-display text-2xl sm:text-3xl">Deal details</h1>
+            <div className="flex flex-wrap items-center gap-3">
+              <h1 className="sh-display text-2xl sm:text-3xl">Deal details</h1>
+              <CardAssigneePicker
+                cardId={cardId}
+                kind="subscription"
+                assigneeId={card.assignee_id}
+                collaboratorIds={card.collaborator_ids}
+                assignee={card.assignee}
+                collaborators={card.collaborators}
+                invalidateKeys={[['admin-card-editor', cardId], ['admin-subscription-cards'], ['admin-subscription-requests']]}
+              />
+            </div>
           ) : (
             <>
-              <h1 className="sh-display text-2xl sm:text-3xl">
-                {card.source === 'request' ? 'Card from Request' : card.source === 'internal_brief' ? 'Client Brief' : 'Custom Card'}
-                {card.subscription_request_id && (
-                  <span className="ml-2 text-base font-normal text-[var(--color-sh-ink-muted)]">
-                    (Request #{card.subscription_request_id})
-                  </span>
-                )}
-              </h1>
+              <div className="flex flex-wrap items-center gap-3">
+                <h1 className="sh-display text-2xl sm:text-3xl">
+                  {card.source === 'request' ? 'Card from Request' : card.source === 'internal_brief' ? 'Client Brief' : 'Custom Card'}
+                  {card.subscription_request_id && (
+                    <span className="ml-2 text-base font-normal text-[var(--color-sh-ink-muted)]">
+                      (Request #{card.subscription_request_id})
+                    </span>
+                  )}
+                </h1>
+                <CardAssigneePicker
+                  cardId={cardId}
+                  kind="subscription"
+                  assigneeId={card.assignee_id}
+                  collaboratorIds={card.collaborator_ids}
+                  assignee={card.assignee}
+                  collaborators={card.collaborators}
+                  invalidateKeys={[['admin-card-editor', cardId], ['admin-subscription-cards'], ['admin-subscription-requests']]}
+                />
+              </div>
               {card.source === 'internal_brief' && (
                 <p className="text-sm font-medium text-[var(--color-sh-ink-muted)]">
                   Filled out by{' '}

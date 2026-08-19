@@ -6,6 +6,7 @@ import {
   tierHasPublishablePrice,
 } from './subscriptionFormPricing';
 import { notifySquadhireOfCardRecall } from './squadhireWebhook';
+import { resolveCrmCardAssigneesFromSubmission } from './cardCrmAssignees';
 
 /**
  * Hydrate a subscription_cards row into the shape the UI expects:
@@ -227,7 +228,7 @@ export async function getOrCreateDraftCard(submissionSubscriptionId: string) {
   // (subscription_squadhire_profiles). Sales can still override per card.
   const { data: stagedRow } = await supabaseAdmin
     .from('client_submission_subscriptions')
-    .select('subscription_id')
+    .select('subscription_id, submission_id')
     .eq('id', submissionSubscriptionId)
     .maybeSingle();
 
@@ -240,11 +241,24 @@ export async function getOrCreateDraftCard(submissionSubscriptionId: string) {
     prefillCategoryIds = (mappings || []).map((m: any) => m.squadhire_category_id);
   }
 
+  let submission: any = null;
+  if (stagedRow?.submission_id) {
+    const { data } = await supabaseAdmin
+      .from('client_submissions')
+      .select('id, crm_lead_id, email, contact_number, primary_sales_person_id, secondary_sales_person_id')
+      .eq('id', stagedRow.submission_id)
+      .maybeSingle();
+    submission = data;
+  }
+  const crmAssignees = await resolveCrmCardAssigneesFromSubmission(submission);
+
   const { data: created, error: insErr } = await supabaseAdmin
     .from('subscription_cards')
     .insert({
       submission_subscription_id: submissionSubscriptionId,
+      lead_submission_id: stagedRow?.submission_id ?? null,
       squadhire_category_ids: prefillCategoryIds,
+      ...crmAssignees,
     })
     .select('*')
     .single();
@@ -526,6 +540,8 @@ export async function fanOutTierCards(
     'customer_email',
     'customer_phone',
     'customer_location',
+    'assignee_id',
+    'collaborator_ids',
     'squadhire_category_ids',
     'partner_price_override',
     'disabled_default_deliverable_ids',
