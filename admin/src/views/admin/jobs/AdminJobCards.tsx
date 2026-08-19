@@ -13,7 +13,7 @@ import OnboardingPanel from './onboarding/OnboardingPanel';
 import JobCandidatesView from './candidates/JobCandidatesView';
 import JobCardQnA from './qa/JobCardQnA';
 import CloseJobCardDialog from './dialogs/CloseJobCardDialog';
-import CardAssigneePicker, { CardAssigneeAvatars } from '../CardAssigneePicker';
+import CardAssigneePicker, { CardAssigneeChips } from '../CardAssigneePicker';
 
 // Job Cards — the hiring pipeline, sibling of Subscription Cards. Stored card
 // state is deliberately small (new → onboarding → published → closed); the
@@ -472,7 +472,7 @@ function JobCardRow({ card, onOpen }: { card: AdminJobCard; onOpen: () => void }
             </p>
           )}
         </div>
-        <CardAssigneeAvatars card={card} className="ml-1 shrink-0" />
+        <CardAssigneeChips card={card} className="ml-1 shrink-0" />
       </div>
       <div className="flex shrink-0 items-center gap-1.5">
         {card.state === 'published' && delivery === 'skipped' && (

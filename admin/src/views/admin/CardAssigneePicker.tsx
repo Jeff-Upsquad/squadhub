@@ -56,40 +56,69 @@ function Avatar({
   }
   return (
     <span
-      className={`flex ${size} shrink-0 items-center justify-center rounded-full bg-[var(--color-sh-lime-soft)] text-[10px] font-bold text-[var(--color-sh-ink)] ring-1 ring-white ${className}`}
+      className={`flex ${size} shrink-0 items-center justify-center rounded-full bg-[var(--color-sh-lime-soft)] text-[9px] font-bold text-[var(--color-sh-ink)] ring-1 ring-white ${className}`}
     >
       {initials(user)}
     </span>
   );
 }
 
-/** Overlapping avatar stack for list rows. */
-export function CardAssigneeAvatars({
+/**
+ * Compact owner chips for list rows: the primary owner reads solid, secondaries
+ * sit behind a dashed outline so the pecking order is visible at a glance.
+ */
+export function CardAssigneeChips({
   card,
+  max = 2,
   className = '',
 }: {
   card: CardAssignees;
+  /** How many secondary chips to show before collapsing into "+N". */
+  max?: number;
   className?: string;
 }) {
-  const people: CardAssigneeUser[] = [];
-  if (card.assignee) people.push(card.assignee);
-  for (const c of card.collaborators || []) {
-    if (c && c.id !== card.assignee?.id) people.push(c);
-  }
-  if (people.length === 0) return null;
-  const names = people.map((p, i) => `${i === 0 ? 'Primary' : 'Secondary'}: ${labelOf(p)}`).join(' · ');
+  const primary = card.assignee || null;
+  const secondaries = (card.collaborators || []).filter(
+    (c): c is CardAssigneeUser => !!c && c.id !== primary?.id,
+  );
+  if (!primary && secondaries.length === 0) return null;
+
+  const shown = secondaries.slice(0, max);
+  const overflow = secondaries.length - shown.length;
+  const title = [
+    primary ? `Primary: ${labelOf(primary)}` : null,
+    ...secondaries.map((s) => `Secondary: ${labelOf(s)}`),
+  ]
+    .filter(Boolean)
+    .join(' · ');
+
   return (
-    <span className={`inline-flex items-center ${className}`} title={names}>
-      <span className="flex -space-x-1.5">
-        {people.slice(0, 3).map((p) => (
-          <Avatar key={p.id} user={p} />
-        ))}
-      </span>
-      {people.length > 3 && (
-        <span className="ml-1 text-[10px] font-semibold text-[var(--color-sh-ink-faint)]">
-          +{people.length - 3}
+    <span className={`inline-flex items-center gap-1 ${className}`} title={title}>
+      {primary && <OwnerChip user={primary} tone="primary" />}
+      {shown.map((u) => (
+        <OwnerChip key={u.id} user={u} tone="secondary" />
+      ))}
+      {overflow > 0 && (
+        <span className="rounded-full border border-dashed border-[var(--color-sh-warm-border)] px-1.5 py-0.5 text-[10px] font-semibold text-[var(--color-sh-ink-faint)]">
+          +{overflow}
         </span>
       )}
+    </span>
+  );
+}
+
+function OwnerChip({ user, tone }: { user: CardAssigneeUser; tone: 'primary' | 'secondary' }) {
+  const isPrimary = tone === 'primary';
+  return (
+    <span
+      className={`inline-flex max-w-[120px] items-center gap-1 rounded-full py-0.5 pl-0.5 pr-2 text-[10px] leading-none ${
+        isPrimary
+          ? 'border border-[var(--color-sh-warm-border)] bg-[var(--color-sh-cream)] font-semibold text-[var(--color-sh-ink)]'
+          : 'border border-dashed border-[var(--color-sh-warm-border)] font-medium text-[var(--color-sh-ink-muted)]'
+      }`}
+    >
+      <Avatar user={user} size="h-4 w-4" />
+      <span className="truncate">{labelOf(user)}</span>
     </span>
   );
 }

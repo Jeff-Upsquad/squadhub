@@ -15,7 +15,7 @@ import AdminRequestsList from './AdminRequestsList';
 import AdminCustomCardsList from './AdminCustomCardsList';
 import SliderPanel from './clients/SliderPanel';
 import ClientBriefForm, { BRIEF_LAUNCHERS, type BriefType, type BriefProduct } from './ClientBriefForm';
-import { CardAssigneeAvatars } from './CardAssigneePicker';
+import { CardAssigneeChips } from './CardAssigneePicker';
 
 export type AdminSubscriptionCard = {
   id: string;
@@ -1131,7 +1131,7 @@ function SubscriptionCardRow({ card, onOpen, showCancelledTag, showArchivedTag, 
           </p>
         )}
       </div>
-      <CardAssigneeAvatars card={card} className="ml-1 shrink-0" />
+      <CardAssigneeChips card={card} className="ml-1 shrink-0" />
     </div>
   );
   const statusCluster = (
@@ -1595,6 +1595,8 @@ function GroupedSubscriptionCard({ cards, onOpen }: {
           {subtitle && (
             <p className="mt-0.5 truncate text-xs text-[var(--color-sh-ink-muted)]">{subtitle}</p>
           )}
+          {/* Siblings share one brief, so they share owners — show the rep's. */}
+          <CardAssigneeChips card={rep} className="mt-1" />
           {(rep.published_at || publisherLabel) && (
             <p className="mt-1 truncate text-[11px] text-[var(--color-sh-ink-faint)]">
               {rep.published_at ? formatPublishedAt(rep.published_at) : ''}
