@@ -64,6 +64,22 @@ function Avatar({
 }
 
 /**
+ * No owner on a card is a gap someone has to close, not a neutral state — so it
+ * reads red rather than quietly rendering nothing.
+ */
+export function UnassignedChip({ className = '' }: { className?: string }) {
+  return (
+    <span
+      className={`inline-flex items-center gap-1 rounded-full border border-red-200 bg-red-50 px-2 py-0.5 text-[10px] font-semibold leading-none text-red-700 dark:border-red-500/30 dark:bg-red-500/15 dark:text-red-300 ${className}`}
+      title="No owner — no matching Squad CRM lead, and no sales person on the customer record"
+    >
+      <span className="h-1.5 w-1.5 rounded-full bg-red-500" />
+      Unassigned
+    </span>
+  );
+}
+
+/**
  * Compact owner chips for list rows: the primary owner reads solid, secondaries
  * sit behind a dashed outline so the pecking order is visible at a glance.
  */
@@ -81,7 +97,7 @@ export function CardAssigneeChips({
   const secondaries = (card.collaborators || []).filter(
     (c): c is CardAssigneeUser => !!c && c.id !== primary?.id,
   );
-  if (!primary && secondaries.length === 0) return null;
+  if (!primary && secondaries.length === 0) return <UnassignedChip className={className} />;
 
   const shown = secondaries.slice(0, max);
   const overflow = secondaries.length - shown.length;
@@ -248,11 +264,18 @@ export default function CardAssigneePicker({
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="inline-flex items-center gap-1.5 rounded-full border border-[var(--color-sh-warm-border)] bg-[var(--color-surface)] px-2 py-1 text-left text-[11px] font-medium text-[var(--color-sh-ink)] transition hover:border-[var(--color-sh-ink)]"
+        className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-1 text-left text-[11px] font-medium transition ${
+          assignedOrder.length === 0
+            ? 'border-red-200 bg-red-50 text-red-700 hover:border-red-400 dark:border-red-500/30 dark:bg-red-500/15 dark:text-red-300'
+            : 'border-[var(--color-sh-warm-border)] bg-[var(--color-surface)] text-[var(--color-sh-ink)] hover:border-[var(--color-sh-ink)]'
+        }`}
         title="Who owns this card — copied from the Squad CRM lead or deal"
       >
         {assignedOrder.length === 0 ? (
-          <span className="text-[var(--color-sh-ink-faint)]">Unassigned</span>
+          <>
+            <span className="h-1.5 w-1.5 rounded-full bg-red-500" />
+            <span className="font-semibold">Unassigned</span>
+          </>
         ) : (
           <>
             <span className="flex -space-x-1.5">
@@ -268,14 +291,20 @@ export default function CardAssigneePicker({
             </span>
           </>
         )}
-        <svg className="h-3 w-3 text-[var(--color-sh-ink-faint)]" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+        <svg className={`h-3 w-3 ${assignedOrder.length === 0 ? 'text-red-400' : 'text-[var(--color-sh-ink-faint)]'}`} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
         </svg>
       </button>
       {open && (
         <div className="absolute right-0 z-30 mt-1 w-64 overflow-hidden rounded-lg border border-[var(--color-sh-warm-border)] bg-[var(--color-surface)] shadow-lg">
           <div className="flex items-center justify-between border-b border-[var(--color-sh-warm-border)] px-3 py-2">
-            <span className="text-[11px] font-semibold uppercase tracking-wide text-[var(--color-sh-ink-muted)]">
+            <span
+              className={`text-[11px] font-semibold uppercase tracking-wide ${
+                assignedOrder.length === 0
+                  ? 'text-red-600 dark:text-red-300'
+                  : 'text-[var(--color-sh-ink-muted)]'
+              }`}
+            >
               {assignedOrder.length === 0 ? 'Unassigned' : 'Owners'}
             </span>
             {assignedOrder.length > 0 && (

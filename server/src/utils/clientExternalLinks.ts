@@ -73,6 +73,111 @@ async function backfillTable(
   }
 }
 
+// A customer can end up with more than one CRM lead — a re-enquiry, a second
+// number, an import, or the same person tracked in two service pipelines — and
+// Postgres returns those in no particular order. So candidates are returned in
+// full and the pick is made deliberately: callers that know which service line
+// they want (see crmPipelineMatch) can prefer that pipeline; everyone else gets
+// pickBestLead, where a live lead beats a closed/archived/disqualified one and
+// the most recently active wins the tie.
+const LEAD_PICK_COLUMNS =
+  'id, pipeline_id, contact_id, assignee_id, collaborator_ids, archived_at, disqualified_at, closed_at, last_activity_at, updated_at, created_at';
+const LEAD_PICK_LIMIT = 20;
+
+export type CrmLeadCandidate = {
+  id: string;
+  pipeline_id?: string | null;
+  contact_id?: string | null;
+  assignee_id?: string | null;
+  collaborator_ids?: string[] | null;
+  archived_at?: string | null;
+  disqualified_at?: string | null;
+  closed_at?: string | null;
+  last_activity_at?: string | null;
+  updated_at?: string | null;
+  created_at?: string | null;
+};
+
+export function crmLeadIsLive(l: CrmLeadCandidate): boolean {
+  return !l.archived_at && !l.disqualified_at && !l.closed_at;
+}
+
+export function crmLeadLastTouched(l: CrmLeadCandidate): number {
+  return Date.parse(l.last_activity_at || l.updated_at || l.created_at || '') || 0;
+}
+
+export function pickBestLead(
+  rows: CrmLeadCandidate[] | null | undefined,
+): CrmLeadCandidate | null {
+  const leads = rows || [];
+  if (leads.length <= 1) return leads[0] ?? null;
+  return [...leads].sort(
+    (a, b) =>
+      Number(crmLeadIsLive(b)) - Number(crmLeadIsLive(a)) ||
+      crmLeadLastTouched(b) - crmLeadLastTouched(a),
+  )[0];
+}
+
+/**
+ * Every CRM lead this contact could be, from the first identifier that hits:
+ * the Hub submission link, then phone, then email. Returns the whole set for
+ * that identifier — one customer legitimately has several leads — so the caller
+ * can choose which one it wants.
+ */
+export async function findCrmLeadCandidates(
+  fields: ContactFields,
+): Promise<{ matched_by: 'submission_id' | 'phone' | 'email' | null; rows: CrmLeadCandidate[] }> {
+  const submissionId = fields.submission_id?.trim() || null;
+  const phone = fields.contact_number?.trim() || null;
+  const email = fields.email?.trim() || null;
+
+  if (submissionId) {
+    const { data } = await supabaseAdmin
+      .from('crm_leads')
+      .select(LEAD_PICK_COLUMNS)
+      .eq('sh_client_submission_id', submissionId)
+      .is('merged_into_lead_id', null)
+      .limit(LEAD_PICK_LIMIT);
+    if (data?.length) return { matched_by: 'submission_id', rows: data };
+  }
+
+  if (phone) {
+    const cleaned = phone.replace(/\D/g, '');
+    if (cleaned.length >= 7) {
+      const { data } = await supabaseAdmin
+        .from('crm_leads')
+        .select(LEAD_PICK_COLUMNS)
+        .ilike('phone_e164', `%${cleaned}`)
+        .is('merged_into_lead_id', null)
+        .limit(LEAD_PICK_LIMIT);
+      if (data?.length) return { matched_by: 'phone', rows: data };
+    }
+  }
+
+  if (email && email.includes('@')) {
+    const { data } = await supabaseAdmin
+      .from('crm_leads')
+      .select(LEAD_PICK_COLUMNS)
+      .ilike('email', email)
+      .is('merged_into_lead_id', null)
+      .limit(LEAD_PICK_LIMIT);
+    if (data?.length) return { matched_by: 'email', rows: data };
+  }
+
+  return { matched_by: null, rows: [] };
+}
+
+/** Fetch one known lead by id (used when a contact already stores its link). */
+export async function loadCrmLeadById(leadId: string): Promise<CrmLeadCandidate | null> {
+  const { data } = await supabaseAdmin
+    .from('crm_leads')
+    .select(LEAD_PICK_COLUMNS)
+    .eq('id', leadId)
+    .is('merged_into_lead_id', null)
+    .maybeSingle();
+  return data ?? null;
+}
+
 export async function resolveCrmLead(
   fields: ContactFields,
   opts?: { persistTo?: { table: 'clients' | 'client_submissions'; id: string } },
@@ -82,54 +187,8 @@ export async function resolveCrmLead(
     return { found: true, lead_id: fields.crm_lead_id, matched_by: 'stored' };
   }
 
-  const submissionId = fields.submission_id?.trim() || null;
-  const phone = fields.contact_number?.trim() || null;
-  const email = fields.email?.trim() || null;
-
-  let leadId: string | null = null;
-  let matchedBy: 'submission_id' | 'phone' | 'email' | null = null;
-
-  if (submissionId) {
-    const { data } = await supabaseAdmin
-      .from('crm_leads')
-      .select('id')
-      .eq('sh_client_submission_id', submissionId)
-      .is('merged_into_lead_id', null)
-      .maybeSingle();
-    if (data?.id) {
-      leadId = data.id;
-      matchedBy = 'submission_id';
-    }
-  }
-
-  if (!leadId && phone) {
-    const cleaned = phone.replace(/\D/g, '');
-    if (cleaned.length >= 7) {
-      const { data } = await supabaseAdmin
-        .from('crm_leads')
-        .select('id')
-        .ilike('phone_e164', `%${cleaned}`)
-        .is('merged_into_lead_id', null)
-        .limit(1);
-      if (data?.[0]?.id) {
-        leadId = data[0].id;
-        matchedBy = 'phone';
-      }
-    }
-  }
-
-  if (!leadId && email && email.includes('@')) {
-    const { data } = await supabaseAdmin
-      .from('crm_leads')
-      .select('id')
-      .ilike('email', email)
-      .is('merged_into_lead_id', null)
-      .limit(1);
-    if (data?.[0]?.id) {
-      leadId = data[0].id;
-      matchedBy = 'email';
-    }
-  }
+  const { matched_by: matchedBy, rows } = await findCrmLeadCandidates(fields);
+  const leadId = pickBestLead(rows)?.id ?? null;
 
   if (!leadId || !matchedBy) return { found: false };
 

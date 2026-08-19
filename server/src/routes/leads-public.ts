@@ -497,7 +497,6 @@ router.post('/landing', ipRateLimit, async (req: Request, res: Response) => {
       return;
     }
     const submission = ensured;
-    const crmAssignees = await resolveCrmCardAssigneesFromSubmission(submission);
 
     // 2. Find or create the brand for this (lead, brand_name).
     const { data: existingBrand } = await supabaseAdmin
@@ -591,6 +590,12 @@ router.post('/landing', ipRateLimit, async (req: Request, res: Response) => {
         : [];
 
     for (const slug of body.service_types) {
+      // Owners come from the CRM pipeline for THIS role — one brief can span
+      // service lines that different people own.
+      const crmAssignees = await resolveCrmCardAssigneesFromSubmission(
+        submission,
+        SLUG_TO_SERVICE_TYPE[slug],
+      );
       // Pre-resolve SquadHire categories for THIS service_type so the admin
       // doesn't have to re-pick them. Mirrors from-request flow.
       let squadhireCategoryIds: string[] = [];

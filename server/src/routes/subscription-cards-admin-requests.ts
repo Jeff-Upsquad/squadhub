@@ -283,7 +283,10 @@ router.post('/subscription-cards/from-request', async (req: Request, res: Respon
       business_location: (requestData as any).location_of_business || null,
       country_id: countryId,
     });
-    const crmAssignees = await resolveCrmCardAssigneesFromSubmission(hubContact);
+    const crmAssignees = await resolveCrmCardAssigneesFromSubmission(
+      hubContact,
+      requestData.service_type,
+    );
 
     const { data: card, error } = await supabaseAdmin
       .from('subscription_cards')
@@ -384,7 +387,10 @@ router.post('/subscription-cards/custom', async (req: Request, res: Response) =>
       contact_name: body.customer_name || null,
       business_name: body.customer_company || null,
     });
-    const crmAssignees = await resolveCrmCardAssigneesFromSubmission(hubContact);
+    const crmAssignees = await resolveCrmCardAssigneesFromSubmission(
+      hubContact,
+      body.service_type || null,
+    );
 
     const { data: card, error } = await supabaseAdmin
       .from('subscription_cards')
@@ -530,7 +536,10 @@ router.post('/subscription-cards/client-brief', async (req: Request, res: Respon
       business_location: body.business_location || null,
       country_id: countryId,
     });
-    const crmAssignees = await resolveCrmCardAssigneesFromSubmission(hubContact);
+    const crmAssignees = await resolveCrmCardAssigneesFromSubmission(
+      hubContact,
+      body.service_type,
+    );
 
     const SERVICE_TYPE_TO_SLUG: Record<string, string> = {
       Designers: 'designer',

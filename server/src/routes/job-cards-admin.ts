@@ -212,10 +212,10 @@ router.post('/client-brief', async (req: Request, res: Response) => {
       business_location: body.business_location ?? null,
       country_id: body.country_id ?? null,
     });
-    const crmAssignees = await resolveCrmCardAssigneesFromSubmission(submission);
-
     const cards: any[] = [];
     for (const role of body.role_service_types) {
+      // Owners come from the CRM pipeline for THIS role.
+      const crmAssignees = await resolveCrmCardAssigneesFromSubmission(submission, role);
       const { data: card, error } = await supabaseAdmin
         .from('job_cards')
         .insert({
