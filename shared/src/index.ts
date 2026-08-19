@@ -2296,6 +2296,16 @@ export interface SubscriptionCard {
   submission_subscription_id: string;
   /** Direct Hub contact link (Stage B). Null on legacy cards pre-migration 168. */
   lead_submission_id?: string | null;
+  /**
+   * Internal sales owner, copied from the matching Squad CRM lead or deal
+   * (crm_leads/crm_deals.assignee_id) when the card is created. Not the talent
+   * placed on the card.
+   */
+  assignee_id?: string | null;
+  /** Secondary internal owners (CRM collaborator_ids). Disjoint from assignee_id. */
+  collaborator_ids?: string[];
+  assignee?: CardAssigneeUser | null;
+  collaborators?: CardAssigneeUser[];
   state: SubscriptionCardState;
   /** Product line: 'subscription' (default), 'assignment' (freelance) or 'hiring'. */
   card_type: SubscriptionCardType;
@@ -3957,10 +3967,26 @@ export interface JobProfile {
   location?: BusinessLocation | null;
 }
 
+/** Internal owner shown on subscription / assignment / job cards. */
+export interface CardAssigneeUser {
+  id: string;
+  display_name: string | null;
+  email: string | null;
+  avatar_url: string | null;
+}
+
 export interface JobCard {
   id: string;
   lead_submission_id: string | null;
   client_id: string | null;
+  /**
+   * Internal sales owner, copied from the matching Squad CRM lead or deal
+   * when the card is created. Not a hiring candidate.
+   */
+  assignee_id?: string | null;
+  collaborator_ids?: string[];
+  assignee?: CardAssigneeUser | null;
+  collaborators?: CardAssigneeUser[];
   /** NULL while state='new' (brief exists, onboarding not done yet). */
   job_profile_id: string | null;
   source: JobCardSource;

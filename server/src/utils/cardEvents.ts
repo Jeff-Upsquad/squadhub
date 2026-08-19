@@ -25,7 +25,8 @@ export type CardEventType =
   | 'client_unshortlisted'
   | 'client_selected'
   | 'client_chat_opened'
-  | 'client_chat_message';
+  | 'client_chat_message'
+  | 'assignees_updated';
 
 export type CardEventActorType = 'admin' | 'partner' | 'talent' | 'system';
 

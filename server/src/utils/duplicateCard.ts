@@ -1,4 +1,5 @@
 import { supabaseAdmin } from '../supabase';
+import { resolveCrmCardAssignees } from './cardCrmAssignees';
 
 // Copy a subscription card's DETAILS (plan / pricing / targeting / customer) into
 // a brand-new DRAFT card that lands in the New Deals queue — WITHOUT its
@@ -22,6 +23,27 @@ export async function copyCardToNewDraft(
   if (error) return { error: error.message };
   if (!src) return { error: 'Source card not found' };
   const s = src as Record<string, any>;
+
+  const crmAssignees = await resolveCrmCardAssignees({
+    submissionId: s.lead_submission_id,
+    email: s.customer_email,
+    phone: s.customer_phone,
+    primarySalesPersonId: s.assignee_id,
+    secondarySalesPersonId: Array.isArray(s.collaborator_ids) ? s.collaborator_ids[0] : null,
+  });
+  // If CRM has no one, keep the source card's owners (including extra secondaries).
+  const ownerPatch =
+    crmAssignees.assignee_id || crmAssignees.collaborator_ids.length
+      ? {
+          assignee_id: crmAssignees.assignee_id,
+          collaborator_ids: crmAssignees.collaborator_ids.length
+            ? crmAssignees.collaborator_ids
+            : (s.collaborator_ids || []),
+        }
+      : {
+          assignee_id: s.assignee_id ?? null,
+          collaborator_ids: s.collaborator_ids || [],
+        };
 
   const newCard: Record<string, unknown> = {
     // ---- details copied verbatim ----
@@ -57,6 +79,9 @@ export async function copyCardToNewDraft(
     customer_company: s.customer_company,
     customer_phone: s.customer_phone,
     customer_location: s.customer_location,
+    lead_submission_id: s.lead_submission_id,
+    assignee_id: ownerPatch.assignee_id,
+    collaborator_ids: ownerPatch.collaborator_ids,
     client_id: s.client_id,
     billing_start_date: s.billing_start_date,
     // ---- fresh draft in New Deals ----

@@ -12,6 +12,11 @@ import {
   findSubmissionByContact,
 } from '../utils/leadLookup';
 import {
+  hydrateCardAssigneeUsers,
+  normalizeCardAssignees,
+  resolveCrmCardAssigneesFromSubmission,
+} from '../utils/cardCrmAssignees';
+import {
   buildSquadhireJobPayload,
   deliverJobCardToSquadhire,
   postJobsWebhook,
@@ -101,7 +106,7 @@ async function hydrateJobCards(cards: any[]): Promise<any[]> {
     (brands ?? []).forEach((b: any) => { brandById[b.id] = b; });
   }
 
-  return cards.map((card) => {
+  const withProfiles = cards.map((card) => {
     const profile = card.job_profile_id ? profileById[card.job_profile_id] ?? null : null;
     return {
       ...card,
@@ -111,6 +116,7 @@ async function hydrateJobCards(cards: any[]): Promise<any[]> {
       brand_profile: profile?.brand_profile_id ? brandById[profile.brand_profile_id] ?? null : null,
     };
   });
+  return hydrateCardAssigneeUsers(withProfiles);
 }
 
 // ------------------------------------------------------------
@@ -183,6 +189,8 @@ const patchCardSchema = z.object({
   expires_at: z.string().datetime().nullable().optional(),
   rule_overrides: ruleOverridesSchema.optional(),
   distribution: z.enum(['broadcast', 'manual']).optional(),
+  assignee_id: z.string().uuid().nullable().optional(),
+  collaborator_ids: z.array(z.string().uuid()).optional(),
 });
 
 // ============================================================
@@ -204,6 +212,7 @@ router.post('/client-brief', async (req: Request, res: Response) => {
       business_location: body.business_location ?? null,
       country_id: body.country_id ?? null,
     });
+    const crmAssignees = await resolveCrmCardAssigneesFromSubmission(submission);
 
     const cards: any[] = [];
     for (const role of body.role_service_types) {
@@ -214,6 +223,7 @@ router.post('/client-brief', async (req: Request, res: Response) => {
           state: 'new',
           lead_submission_id: submission?.id ?? null,
           client_id: client?.id ?? null,
+          ...crmAssignees,
           role_service_type: role,
           brief_note: body.brief_note ?? null,
           customer_name: body.contact_name ?? null,
@@ -420,9 +430,18 @@ router.patch('/:id', async (req: Request, res: Response) => {
       res.status(404).json({ success: false, error: 'Job card not found' });
       return;
     }
+    const patch: Record<string, unknown> = { ...body };
+    if (body.assignee_id !== undefined || body.collaborator_ids !== undefined) {
+      const next = normalizeCardAssignees(
+        body.assignee_id !== undefined ? body.assignee_id : card.assignee_id,
+        body.collaborator_ids !== undefined ? body.collaborator_ids : card.collaborator_ids,
+      );
+      patch.assignee_id = next.assignee_id;
+      patch.collaborator_ids = next.collaborator_ids;
+    }
     const { data: updated, error } = await supabaseAdmin
       .from('job_cards')
-      .update(body)
+      .update(patch)
       .eq('id', req.params.id)
       .select('*')
       .single();
@@ -929,6 +948,8 @@ router.post('/:id/duplicate', async (req: Request, res: Response) => {
         expected_joining_date: card.expected_joining_date,
         rule_overrides: card.rule_overrides ?? {},
         distribution: card.distribution,
+        assignee_id: card.assignee_id ?? null,
+        collaborator_ids: card.collaborator_ids || [],
         created_by: req.userId!,
       })
       .select('*')

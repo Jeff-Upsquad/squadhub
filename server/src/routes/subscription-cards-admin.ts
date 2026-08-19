@@ -28,6 +28,10 @@ import {
 import { promoteCardLeadToClient } from '../utils/submissionPipeline';
 import { logCardEvent } from '../utils/cardEvents';
 import { copyCardToNewDraft } from '../utils/duplicateCard';
+import {
+  hydrateCardAssigneeUsers,
+  normalizeCardAssignees,
+} from '../utils/cardCrmAssignees';
 
 const router = Router();
 
@@ -202,7 +206,13 @@ router.get('/', async (req: Request, res: Response) => {
     const userIds = Array.from(
       new Set(
         list
-          .flatMap((c: any) => [c.published_by, c.created_by, c.verified_by])
+          .flatMap((c: any) => [
+            c.published_by,
+            c.created_by,
+            c.verified_by,
+            c.assignee_id,
+            ...(Array.isArray(c.collaborator_ids) ? c.collaborator_ids : []),
+          ])
           .filter(Boolean),
       ),
     );
@@ -215,7 +225,7 @@ router.get('/', async (req: Request, res: Response) => {
       userIds.length
         ? supabaseAdmin
             .from('users')
-            .select('id, display_name, email')
+            .select('id, display_name, email, avatar_url')
             .in('id', userIds)
         : Promise.resolve({ data: [] as any[] }),
     ]);
@@ -458,6 +468,10 @@ router.get('/', async (req: Request, res: Response) => {
         verified_by_user: verifier
           ? { id: verifier.id, display_name: verifier.display_name, email: verifier.email }
           : null,
+        assignee: card.assignee_id ? userById[card.assignee_id] || null : null,
+        collaborators: (card.collaborator_ids || [])
+          .map((id: string) => userById[id])
+          .filter(Boolean),
         plan_default_deliverables: planDefaults,
       };
     });
@@ -499,6 +513,62 @@ router.get('/', async (req: Request, res: Response) => {
     res.json({ success: true, data: hydrated });
   } catch (err: any) {
     console.error('Admin list subscription cards error:', err);
+    res.status(500).json({ success: false, error: err?.message || 'Internal server error' });
+  }
+});
+
+// ============================================================
+// PATCH /admin/subscription-cards/:id/assignees — set internal owners
+// (CRM-style primary + secondaries). Works in any card state.
+// ============================================================
+const cardAssigneesSchema = z.object({
+  assignee_id: z.string().uuid().nullable(),
+  collaborator_ids: z.array(z.string().uuid()).optional(),
+});
+
+router.patch('/:id/assignees', async (req: Request, res: Response) => {
+  try {
+    const cardId = req.params.id as string;
+    const parsed = cardAssigneesSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ success: false, error: parsed.error.errors[0].message });
+      return;
+    }
+    const { data: card } = await supabaseAdmin
+      .from('subscription_cards')
+      .select('id, deleted_at')
+      .eq('id', cardId)
+      .maybeSingle();
+    if (!card || card.deleted_at) {
+      res.status(404).json({ success: false, error: 'Card not found' });
+      return;
+    }
+    const next = normalizeCardAssignees(
+      parsed.data.assignee_id,
+      parsed.data.collaborator_ids ?? [],
+    );
+    const { data: updated, error } = await supabaseAdmin
+      .from('subscription_cards')
+      .update(next)
+      .eq('id', cardId)
+      .select('*')
+      .single();
+    if (error) {
+      res.status(500).json({ success: false, error: error.message });
+      return;
+    }
+    await logCardEvent({
+      cardId,
+      eventType: 'assignees_updated',
+      actorId: req.userId ?? null,
+      actorType: 'admin',
+      actorLabel: (req as any).userName ?? null,
+      metadata: next,
+    });
+    const [hydrated] = await hydrateCardAssigneeUsers([await hydrateCard(updated)]);
+    res.json({ success: true, data: hydrated });
+  } catch (err: any) {
+    console.error('Update card assignees error:', err);
     res.status(500).json({ success: false, error: err?.message || 'Internal server error' });
   }
 });
@@ -1138,7 +1208,7 @@ router.post('/:id/secondary-cards', async (req: Request, res: Response) => {
 
     const { data: parent } = await supabaseAdmin
       .from('subscription_cards')
-      .select('id, state, squadhire_category_ids, plan_snapshot')
+      .select('id, state, squadhire_category_ids, plan_snapshot, assignee_id, collaborator_ids')
       .eq('id', parentId)
       .is('parent_card_id', null)
       .maybeSingle();
@@ -1166,6 +1236,8 @@ router.post('/:id/secondary-cards', async (req: Request, res: Response) => {
         // Secondaries display the parent's plan terms; mirror the parent's
         // frozen snapshot so the same freeze rules apply (no live drift).
         plan_snapshot: parent.plan_snapshot ?? null,
+        assignee_id: parent.assignee_id ?? null,
+        collaborator_ids: parent.collaborator_ids || [],
       })
       .select('*')
       .single();

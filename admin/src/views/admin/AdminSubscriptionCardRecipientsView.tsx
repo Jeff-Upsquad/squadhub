@@ -13,6 +13,7 @@ import AdminAssignmentOffers from './AdminAssignmentOffers';
 import CardViewToggle, { type CardViewMode } from './CardViewToggle';
 import type { AdminSubscriptionCard } from './AdminSubscriptionCards';
 import type { RecipientsResponse } from './AdminSubscriptionCardRecipientsPanel';
+import CardAssigneePicker from './CardAssigneePicker';
 
 export type UnifiedRecipient = {
   id: string;
@@ -1141,6 +1142,15 @@ export default function AdminSubscriptionCardRecipientsView({
                 NEW
               </span>
             )}
+            <CardAssigneePicker
+              cardId={card.id}
+              kind="subscription"
+              assigneeId={card.assignee_id}
+              collaboratorIds={card.collaborator_ids}
+              assignee={card.assignee}
+              collaborators={card.collaborators}
+              invalidateKeys={[['admin-subscription-cards']]}
+            />
             {bucket === 'selected' && (
               <button
                 onClick={() => undoMutation.mutate()}

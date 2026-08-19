@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { isValidStoredPhone, normalizeStoredPhone, sanitizeAdditionalRequirements } from '@squadhub/shared';
 import { supabaseAdmin } from '../supabase';
 import { ensureHubContact } from '../utils/leadLookup';
+import { resolveCrmCardAssigneesFromSubmission } from '../utils/cardCrmAssignees';
 import { generateBriefVoiceUploadUrl } from '../r2';
 import {
   buildCatalogTierPricing,
@@ -496,6 +497,7 @@ router.post('/landing', ipRateLimit, async (req: Request, res: Response) => {
       return;
     }
     const submission = ensured;
+    const crmAssignees = await resolveCrmCardAssigneesFromSubmission(submission);
 
     // 2. Find or create the brand for this (lead, brand_name).
     const { data: existingBrand } = await supabaseAdmin
@@ -732,6 +734,7 @@ router.post('/landing', ipRateLimit, async (req: Request, res: Response) => {
           publish_targets: ['partner', 'talent'],
           brand_id: brandId,
           lead_submission_id: submission.id,
+          ...crmAssignees,
         })
         .select('id')
         .single();
