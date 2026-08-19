@@ -32,7 +32,10 @@ export default function RootLayout({
         {/* Anti-flicker: apply dark class before first paint */}
         <script
           dangerouslySetInnerHTML={{
-            __html: `(function(){try{var t=localStorage.getItem('squadhub-theme');var p=t?JSON.parse(t):null;var pref=p&&p.state&&p.state.theme?p.state.theme:'auto';var dark=pref==='dark'||(pref==='auto'&&window.matchMedia('(prefers-color-scheme: dark)').matches);if(dark)document.documentElement.classList.add('dark');}catch(e){}})();`,
+            // `?theme=` wins: embedded surfaces (/embed/*) follow their host
+            // app's theme, and reading it here keeps a framed module from
+            // flashing light inside a dark host before hydration.
+            __html: `(function(){try{var f=new URLSearchParams(location.search).get('theme');if(f==='dark'||f==='light'){document.documentElement.classList.toggle('dark',f==='dark');return;}var t=localStorage.getItem('squadhub-theme');var p=t?JSON.parse(t):null;var pref=p&&p.state&&p.state.theme?p.state.theme:'auto';var dark=pref==='dark'||(pref==='auto'&&window.matchMedia('(prefers-color-scheme: dark)').matches);if(dark)document.documentElement.classList.add('dark');}catch(e){}})();`,
           }}
         />
       </head>

@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useAuthStore } from '../stores/authStore';
 import ThemeToggle from '../components/ThemeToggle';
+import { useCardsAttention } from '../views/admin/useCardsAttention';
 
 const MAIN_APP_URL = process.env.NEXT_PUBLIC_APP_URL || (process.env.NODE_ENV === 'production' ? '/' : 'http://localhost:3000');
 
@@ -11,11 +12,17 @@ function NavLink({
   href,
   end,
   match,
+  badge,
+  badgeTitle,
   children,
 }: {
   href: string;
   end?: boolean;
   match?: (pathname: string) => boolean;
+  /** Count shown on the right. 0 or undefined renders nothing. */
+  badge?: number;
+  /** Tooltip for the badge — what the number is made of. */
+  badgeTitle?: string;
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
@@ -28,12 +35,24 @@ function NavLink({
       }`}
     >
       {children}
+      {badge != null && badge > 0 && (
+        <span
+          title={badgeTitle}
+          className="ml-auto inline-flex min-w-[17px] items-center justify-center rounded-full px-1 text-[10px] font-bold leading-[17px] text-white"
+          style={{ background: 'var(--color-sh-warning)' }}
+        >
+          {badge > 99 ? '99+' : badge}
+        </span>
+      )}
     </Link>
   );
 }
 
 export default function MasterAdminLayout({ children }: { children: React.ReactNode }) {
   const logout = useAuthStore((s) => s.logout);
+  // How much of the card pipeline is waiting on us — the badge next to
+  // Requirement Cards.
+  const attention = useCardsAttention();
 
   // Bound the shell to the viewport (h-screen, not min-h-screen) so <main>'s own
   // overflow-y-auto actually scrolls the content instead of growing the page and
@@ -119,11 +138,13 @@ export default function MasterAdminLayout({ children }: { children: React.ReactN
               p.startsWith('/admin/assignments/') ||
               p.startsWith('/admin/job-cards')
             }
+            badge={attention.total}
+            badgeTitle={attention.parts.join(' · ')}
           >
             <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 7.125C2.25 6.504 2.754 6 3.375 6h6c.621 0 1.125.504 1.125 1.125v3.75c0 .621-.504 1.125-1.125 1.125h-6a1.125 1.125 0 01-1.125-1.125v-3.75zM14.25 8.625c0-.621.504-1.125 1.125-1.125h5.25c.621 0 1.125.504 1.125 1.125v8.25c0 .621-.504 1.125-1.125 1.125h-5.25a1.125 1.125 0 01-1.125-1.125v-8.25zM3.75 16.125c0-.621.504-1.125 1.125-1.125h5.25c.621 0 1.125.504 1.125 1.125v2.25c0 .621-.504 1.125-1.125 1.125h-5.25a1.125 1.125 0 01-1.125-1.125v-2.25z" />
             </svg>
-            Cards
+            Requirement Cards
           </NavLink>
           <NavLink href="/admin/job-offer-templates">
             <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">

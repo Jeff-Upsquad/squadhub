@@ -18,11 +18,13 @@
  *   parent → child: { type: 'sh-cards:auth', accessToken, refreshToken?, user? }
  *   child → parent: { type: 'sh-cards:ready-to-use' } | { type: 'sh-cards:error', message }
  *   child → parent: { type: 'sh-cards:card', cardId } whenever the open card changes
+ *   parent → child: { type: 'sh-cards:theme', theme: 'dark' | 'light' } on toggle
  *
  * Query params:
  *   crmLeadId / crmDealId / crmContactId — scope to one customer's cards
  *   submissionId                        — same, by Hub submission
  *   title                               — heading shown above the tabs
+ *   theme                               — dark | light, the host app's theme
  */
 import { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
@@ -119,6 +121,17 @@ function EmbedCardsInner() {
       if (!parentOriginOk(e.origin)) return;
       if (e.data?.type === 'sh-cards:auth') {
         void applyAuth(e.data);
+        return;
+      }
+      // The host toggled its theme. The initial value rides in on ?theme=
+      // (ThemeProvider and the anti-flicker script both read it); this only
+      // has to handle the change, so it sets the class directly rather than
+      // reloading the frame and losing the open card.
+      if (e.data?.type === 'sh-cards:theme') {
+        const next = e.data.theme;
+        if (next === 'dark' || next === 'light') {
+          document.documentElement.classList.toggle('dark', next === 'dark');
+        }
       }
     }
     window.addEventListener('message', onMessage);

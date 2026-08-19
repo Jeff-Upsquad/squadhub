@@ -6,6 +6,7 @@ import { useAvailableApps } from '../../../hooks/useApps';
 import { useAppFavorites, useToggleAppFavorite } from '../../../hooks/useAppFavorites';
 import { useActiveTipAnchor } from '../../../stores/featureTipStore';
 import { useTabsStore } from '../../../stores/tabsStore';
+import { useCardsAttention } from '@/views/admin/useCardsAttention';
 import { wantsNewTab, buildAppSnapshot } from '../../../lib/tabSnapshots';
 
 // Module side menu bar shown when the Apps rail module is active. Lists the
@@ -101,6 +102,12 @@ export default function AppsSidebar({
   const tourStar = activeAnchor === 'apps.star';
   const firstAppSlug = groups[0]?.apps[0]?.slug ?? null;
 
+  // Requirement Cards is the one app with a queue behind it, so its row carries
+  // how much is waiting. Only fetched when the user actually has the app —
+  // everyone else would just collect a 403.
+  const hasCards = apps.some((a) => a.slug === 'leads');
+  const cardsAttention = useCardsAttention(hasCards);
+
   return (
     <div className="flex h-full w-full flex-col text-[var(--sh-ink-2)]">
       {/* Header — mirrors the home sidebar */}
@@ -188,6 +195,15 @@ export default function AppsSidebar({
                             className={`h-[14px] w-[14px] shrink-0 ${active ? 'text-[var(--sh-ink)]' : 'text-[var(--sh-ink-3)]'}`}
                           />
                           <span className="flex-1 truncate">{app.name}</span>
+                          {app.slug === 'leads' && cardsAttention.total > 0 && (
+                            <span
+                              title={cardsAttention.parts.join(' · ')}
+                              className="shrink-0 inline-flex min-w-[16px] items-center justify-center rounded-full px-1 text-[9.5px] font-bold leading-4 text-white"
+                              style={{ background: 'var(--color-sh-warning)' }}
+                            >
+                              {cardsAttention.total > 99 ? '99+' : cardsAttention.total}
+                            </span>
+                          )}
                           {app.external && (
                             <svg className="h-3 w-3 shrink-0 text-[var(--sh-ink-4)]" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
