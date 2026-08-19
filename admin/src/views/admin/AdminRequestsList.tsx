@@ -6,7 +6,8 @@ import api from '@/services/api';
 import { showToast } from '@/components/Toast';
 import AdminCardEditor from './AdminCardEditor';
 import ShareCardLinkModal from './ShareCardLinkModal';
-import { CardAssigneeChips, type CardAssignees } from './CardAssigneePicker';
+import CardAssigneePicker, { CardAssigneeChips, type CardAssignees } from './CardAssigneePicker';
+import { cardScopeKey, cardScopeParams, isScoped, type CardScope } from './cardScope';
 
 interface SubscriptionRequest {
   id: number | string;
@@ -43,19 +44,35 @@ interface SubscriptionRequest {
   collaborators?: CardAssignees['collaborators'];
 }
 
+// Lists that show a card's owner and therefore need refreshing after a change.
+const REQUEST_LIST_KEYS = [
+  ['admin-subscription-requests'],
+  ['admin-shared-form-submissions'],
+  ['admin-landing-page-submissions'],
+  ['admin-internal-brief-submissions'],
+  ['admin-subscription-cards'],
+];
+
 export default function AdminRequestsList({
   cardType = 'subscription',
+  scope = null,
 }: {
   // Product line this New Deals queue is scoped to. The Assignments module
   // passes 'assignment' so only assignment briefs show; the legacy upsquad
   // subscription-request source is subscription-only and hidden for assignments.
   cardType?: 'subscription' | 'assignment';
+  // Narrow the queue to one customer (Squad CRM's Requirement Cards panel, the
+  // Hub's Contact detail panel). null = the org-wide queue.
+  scope?: CardScope | null;
 } = {}) {
   const [search, setSearch] = useState<string>('');
   const [editingCardId, setEditingCardId] = useState<string | null>(null);
   const [shareCardId, setShareCardId] = useState<string | null>(null);
   const queryClient = useQueryClient();
   const isAssignment = cardType === 'assignment';
+  const scopeParams = cardScopeParams(scope);
+  const scopeKey = cardScopeKey(scope);
+  const scoped = isScoped(scope);
 
   // Server returns all statuses; sub-tabs filter client-side so counts stay
   // accurate without a per-tab fetch. The legacy upsquad subscription-request
@@ -67,7 +84,9 @@ export default function AdminRequestsList({
       if (search.trim()) params.search = search.trim();
       return api.get('/admin/subscription-requests', { params }).then((r) => r.data);
     },
-    enabled: !isAssignment,
+    // The legacy upsquad queue carries no submission link, so a customer-scoped
+    // queue leaves it out rather than showing every business's requests.
+    enabled: !isAssignment && !scoped,
   });
   const upsquadRequests: SubscriptionRequest[] = isAssignment
     ? []
@@ -113,26 +132,41 @@ export default function AdminRequestsList({
   }
 
   const { data: sharedRes, isLoading: sharedLoading } = useQuery({
-    queryKey: ['admin-shared-form-submissions', cardType, search],
+    queryKey: ['admin-shared-form-submissions', cardType, search, scopeKey],
     queryFn: () => {
-      const params: Record<string, string> = { source: 'shared_form', state: 'new,draft', card_type: cardType };
+      const params: Record<string, string> = {
+        source: 'shared_form',
+        state: 'new,draft',
+        card_type: cardType,
+        ...scopeParams,
+      };
       if (search.trim()) params.search = search.trim();
       return api.get('/admin/subscription-cards', { params }).then((r) => r.data);
     },
   });
   const { data: lpRes, isLoading: lpLoading } = useQuery({
-    queryKey: ['admin-landing-page-submissions', cardType, search],
+    queryKey: ['admin-landing-page-submissions', cardType, search, scopeKey],
     queryFn: () => {
-      const params: Record<string, string> = { source: 'landing_page_form', state: 'new,draft', card_type: cardType };
+      const params: Record<string, string> = {
+        source: 'landing_page_form',
+        state: 'new,draft',
+        card_type: cardType,
+        ...scopeParams,
+      };
       if (search.trim()) params.search = search.trim();
       return api.get('/admin/subscription-cards', { params }).then((r) => r.data);
     },
   });
   // Internal client briefs (Workflow 1) also land in the New Deals queue.
   const { data: briefRes, isLoading: briefLoading } = useQuery({
-    queryKey: ['admin-internal-brief-submissions', cardType, search],
+    queryKey: ['admin-internal-brief-submissions', cardType, search, scopeKey],
     queryFn: () => {
-      const params: Record<string, string> = { source: 'internal_brief', state: 'new,draft', card_type: cardType };
+      const params: Record<string, string> = {
+        source: 'internal_brief',
+        state: 'new,draft',
+        card_type: cardType,
+        ...scopeParams,
+      };
       if (search.trim()) params.search = search.trim();
       return api.get('/admin/subscription-cards', { params }).then((r) => r.data);
     },
@@ -416,7 +450,23 @@ function RequestRow({
             </p>
           ) : null}
         </div>
-        <CardAssigneeChips card={request} className="ml-1 shrink-0" />
+        {/* Reassign straight from the queue; rows without a card yet can only show. */}
+        {request.card_id ? (
+          <span className="ml-1 shrink-0">
+            <CardAssigneePicker
+              cardId={String(request.card_id)}
+              kind="subscription"
+              assigneeId={request.assignee_id}
+              collaboratorIds={request.collaborator_ids}
+              assignee={request.assignee}
+              collaborators={request.collaborators}
+              variant="chips"
+              invalidateKeys={REQUEST_LIST_KEYS}
+            />
+          </span>
+        ) : (
+          <CardAssigneeChips card={request} className="ml-1 shrink-0" />
+        )}
       </div>
       <div className="flex shrink-0 items-center gap-2">
         {request.working_days && (

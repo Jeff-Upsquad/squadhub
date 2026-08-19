@@ -13,21 +13,19 @@ const nextConfig = {
     position: 'bottom-right',
   },
 
-  // Allow CRM (and local CRM) to iframe the SquadHub chat embed.
+  // Allow CRM (and local CRM) to iframe the SquadHub embeds: the chat panel and
+  // the Requirement Cards module.
   async headers() {
+    const frameAncestors =
+      "frame-ancestors 'self' https://crm.squadhub.in http://localhost:3100 http://127.0.0.1:3100";
+    const embedHeaders = [
+      { key: 'Content-Security-Policy', value: frameAncestors },
+      // Clear any global DENY so iframe works (Caddy may also set this — keep in sync).
+      { key: 'X-Frame-Options', value: '' },
+    ];
     return [
-      {
-        source: '/embed/crm-chat',
-        headers: [
-          {
-            key: 'Content-Security-Policy',
-            value:
-              "frame-ancestors 'self' https://crm.squadhub.in http://localhost:3100 http://127.0.0.1:3100",
-          },
-          // Clear any global DENY so iframe works (Caddy may also set this — keep in sync).
-          { key: 'X-Frame-Options', value: '' },
-        ],
-      },
+      { source: '/embed/crm-chat', headers: embedHeaders },
+      { source: '/embed/cards', headers: embedHeaders },
     ];
   },
 
