@@ -15,7 +15,8 @@ import AdminRequestsList from './AdminRequestsList';
 import AdminCustomCardsList from './AdminCustomCardsList';
 import SliderPanel from './clients/SliderPanel';
 import ClientBriefForm, { BRIEF_LAUNCHERS, type BriefType, type BriefProduct } from './ClientBriefForm';
-import { CardAssigneeChips } from './CardAssigneePicker';
+import CardAssigneePicker from './CardAssigneePicker';
+import { cardScopeKey, cardScopeParams, isScoped, type CardScope } from './cardScope';
 
 export type AdminSubscriptionCard = {
   id: string;
@@ -367,6 +368,7 @@ const EMPTY_COPY: Record<(typeof CARD_LIST_TABS)[number], { title: string; hint:
 export default function AdminSubscriptionCards({
   productLine = 'subscription',
   compact = false,
+  scope = null,
 }: {
   // Which product line this module renders. 'subscription' (default) is the
   // Subscription Cards module; 'assignment' is the separate Assignments module.
@@ -376,10 +378,19 @@ export default function AdminSubscriptionCards({
   // When true (CardsHub / Leads mini app) drop the large page title so the
   // product tabs + these status subtabs sit in one compact chrome stack.
   compact?: boolean;
+  // Narrow every list to one customer — a Hub submission or a Squad CRM
+  // lead/deal/contact. null (default) is the org-wide module.
+  scope?: CardScope | null;
 } = {}) {
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
+
+  // Customer scoping. `scopeParams` rides along on every list query and
+  // `scopeKey` keeps each customer's cache separate from the org-wide module's.
+  const scopeParams = useMemo(() => cardScopeParams(scope), [scope]);
+  const scopeKey = useMemo(() => cardScopeKey(scope), [scope]);
+  const scoped = isScoped(scope);
 
   const [activeTab, setActiveTab] = useState<Tab>('requests');
   const [publishedBy, setPublishedBy] = useState<string>('');
@@ -432,9 +443,9 @@ export default function AdminSubscriptionCards({
   // the Archive tab folds in); the archived query drives the rest of Archive.
   // Both run regardless of the active tab so every tab's count stays live.
   const { data: activeCardsRes, isLoading: activeLoading, isFetching: activeFetching } = useQuery({
-    queryKey: ['admin-subscription-cards', productLine, publishedBy, debouncedSearch, 'active', selectedCardId],
+    queryKey: ['admin-subscription-cards', productLine, publishedBy, debouncedSearch, 'active', selectedCardId, scopeKey],
     queryFn: () => {
-      const params: Record<string, string> = { card_type: productLine };
+      const params: Record<string, string> = { card_type: productLine, ...scopeParams };
       if (publishedBy) params.published_by = publishedBy;
       if (debouncedSearch.trim()) params.search = debouncedSearch.trim();
       if (selectedCardId) params.card_id = selectedCardId;
@@ -449,9 +460,9 @@ export default function AdminSubscriptionCards({
   const activeCards: AdminSubscriptionCard[] = activeCardsRes?.data || [];
 
   const { data: archivedCardsRes, isLoading: archivedLoading, isFetching: archivedFetching } = useQuery({
-    queryKey: ['admin-subscription-cards', productLine, publishedBy, debouncedSearch, 'archived', selectedCardId],
+    queryKey: ['admin-subscription-cards', productLine, publishedBy, debouncedSearch, 'archived', selectedCardId, scopeKey],
     queryFn: () => {
-      const params: Record<string, string> = { archived: 'true', card_type: productLine };
+      const params: Record<string, string> = { archived: 'true', card_type: productLine, ...scopeParams };
       if (publishedBy) params.published_by = publishedBy;
       if (debouncedSearch.trim()) params.search = debouncedSearch.trim();
       if (selectedCardId) params.card_id = selectedCardId;
@@ -487,29 +498,37 @@ export default function AdminSubscriptionCards({
     queryKey: ['admin-subscription-requests', ''],
     queryFn: () => api.get('/admin/subscription-requests').then((r) => r.data),
     // The legacy upsquad queue predates product lines, so it only belongs to
-    // Subscriptions — same guard AdminRequestsList applies.
-    enabled: productLine === 'subscription',
+    // Subscriptions — same guard AdminRequestsList applies. It also predates
+    // submission links, so there is nothing to scope it by: a customer-scoped
+    // module leaves it out entirely rather than showing the whole org's queue.
+    enabled: productLine === 'subscription' && !scoped,
   });
   const { data: pendingSharedRes } = useQuery({
-    queryKey: ['admin-shared-form-submissions', productLine, ''],
+    queryKey: ['admin-shared-form-submissions', productLine, '', scopeKey],
     queryFn: () =>
       api
-        .get('/admin/subscription-cards', { params: { source: 'shared_form', state: 'new,draft', card_type: productLine } })
+        .get('/admin/subscription-cards', {
+          params: { source: 'shared_form', state: 'new,draft', card_type: productLine, ...scopeParams },
+        })
         .then((r) => r.data),
   });
   const { data: pendingLandingRes } = useQuery({
-    queryKey: ['admin-landing-page-submissions', productLine, ''],
+    queryKey: ['admin-landing-page-submissions', productLine, '', scopeKey],
     queryFn: () =>
       api
-        .get('/admin/subscription-cards', { params: { source: 'landing_page_form', state: 'new,draft', card_type: productLine } })
+        .get('/admin/subscription-cards', {
+          params: { source: 'landing_page_form', state: 'new,draft', card_type: productLine, ...scopeParams },
+        })
         .then((r) => r.data),
   });
   // Internal client briefs (Workflow 1) also land in the New Deals queue.
   const { data: pendingBriefRes } = useQuery({
-    queryKey: ['admin-internal-brief-submissions', productLine, ''],
+    queryKey: ['admin-internal-brief-submissions', productLine, '', scopeKey],
     queryFn: () =>
       api
-        .get('/admin/subscription-cards', { params: { source: 'internal_brief', state: 'new,draft', card_type: productLine } })
+        .get('/admin/subscription-cards', {
+          params: { source: 'internal_brief', state: 'new,draft', card_type: productLine, ...scopeParams },
+        })
         .then((r) => r.data),
   });
   // The upsquad endpoint returns every status, so narrow it to the two the
@@ -923,7 +942,9 @@ export default function AdminSubscriptionCards({
         </div>
       ) : null}
 
-      {!showDetailView && activeTab === 'requests' && <AdminRequestsList cardType={productLine} />}
+      {!showDetailView && activeTab === 'requests' && (
+        <AdminRequestsList cardType={productLine} scope={scope} />
+      )}
       {!showDetailView && activeTab === 'custom' && <AdminCustomCardsList cardType={productLine} />}
 
       {selectedCard && showPanel && (
@@ -1131,7 +1152,18 @@ function SubscriptionCardRow({ card, onOpen, showCancelledTag, showArchivedTag, 
           </p>
         )}
       </div>
-      <CardAssigneeChips card={card} className="ml-1 shrink-0" />
+      <span className="pointer-events-auto ml-1 shrink-0">
+        <CardAssigneePicker
+          cardId={card.id}
+          kind="subscription"
+          assigneeId={card.assignee_id}
+          collaboratorIds={card.collaborator_ids}
+          assignee={card.assignee}
+          collaborators={card.collaborators}
+          variant="chips"
+          invalidateKeys={[['admin-subscription-cards']]}
+        />
+      </span>
     </div>
   );
   const statusCluster = (
@@ -1209,13 +1241,18 @@ function SubscriptionCardRow({ card, onOpen, showCancelledTag, showArchivedTag, 
   }
 
   return (
-    <button
-      onClick={onOpen}
-      className="sh-card sh-card-interactive flex w-full items-center justify-between px-5 py-4 text-left"
-    >
-      {leftBlock}
-      {statusCluster}
-    </button>
+    <div className="sh-card sh-card-interactive relative flex w-full items-center justify-between px-5 py-4 text-left">
+      <button
+        type="button"
+        onClick={onOpen}
+        aria-label={`Open ${business}`}
+        className="absolute inset-0 z-0"
+      />
+      <div className="pointer-events-none relative z-10 flex min-w-0 flex-1 items-center">
+        {leftBlock}
+      </div>
+      <div className="pointer-events-none relative z-10 shrink-0 pl-3">{statusCluster}</div>
+    </div>
   );
 }
 
@@ -1571,11 +1608,14 @@ function GroupedSubscriptionCard({ cards, onOpen }: {
   );
 
   return (
-    <button
-      onClick={() => onOpen(rep.id)}
-      className="sh-card sh-card-interactive flex w-full items-center justify-between px-5 py-4 text-left"
-    >
-      <div className="flex min-w-0 items-center gap-3">
+    <div className="sh-card sh-card-interactive relative flex w-full items-center justify-between px-5 py-4 text-left">
+      <button
+        type="button"
+        onClick={() => onOpen(rep.id)}
+        aria-label={`Open ${business}`}
+        className="absolute inset-0 z-0"
+      />
+      <div className="pointer-events-none relative z-10 flex min-w-0 items-center gap-3">
         <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[var(--color-sh-lime-soft)] text-[var(--color-sh-ink)] text-sm font-bold ring-1 ring-[var(--color-sh-warm-border)]">
           {business.charAt(0).toUpperCase()}
         </div>
@@ -1596,7 +1636,18 @@ function GroupedSubscriptionCard({ cards, onOpen }: {
             <p className="mt-0.5 truncate text-xs text-[var(--color-sh-ink-muted)]">{subtitle}</p>
           )}
           {/* Siblings share one brief, so they share owners — show the rep's. */}
-          <CardAssigneeChips card={rep} className="mt-1" />
+          <span className="pointer-events-auto mt-1 inline-flex">
+            <CardAssigneePicker
+              cardId={rep.id}
+              kind="subscription"
+              assigneeId={rep.assignee_id}
+              collaboratorIds={rep.collaborator_ids}
+              assignee={rep.assignee}
+              collaborators={rep.collaborators}
+              variant="chips"
+              invalidateKeys={[['admin-subscription-cards']]}
+            />
+          </span>
           {(rep.published_at || publisherLabel) && (
             <p className="mt-1 truncate text-[11px] text-[var(--color-sh-ink-faint)]">
               {rep.published_at ? formatPublishedAt(rep.published_at) : ''}
@@ -1606,7 +1657,7 @@ function GroupedSubscriptionCard({ cards, onOpen }: {
           )}
         </div>
       </div>
-      <div className="flex shrink-0 items-center gap-1.5">
+      <div className="pointer-events-none relative z-10 flex shrink-0 items-center gap-1.5 pl-3">
         {anyNeedsBroadcast && (
           <span
             className="sh-status-pill"
@@ -1619,7 +1670,7 @@ function GroupedSubscriptionCard({ cards, onOpen }: {
         <CountChip label="Partners" accepted={agg.pa} rejected={agg.pr} pending={agg.pp} />
         <CountChip label="Talents" accepted={agg.ta} rejected={agg.tr} />
       </div>
-    </button>
+    </div>
   );
 }
 

@@ -95,7 +95,9 @@ export const APPS: AppDef[] = [
   },
   {
     slug: 'leads',
-    name: 'Leads',
+    // Slug stays `leads` — it keys every access grant and the server-side
+    // requireMiniAppOrAdmin('leads') gate. Only the display name changed.
+    name: 'Requirement Cards',
     category: 'Sales',
     description: 'New deals across job cards, subscription cards & assignments.',
     view: 'leads',

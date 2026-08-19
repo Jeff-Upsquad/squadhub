@@ -3,7 +3,7 @@
 import CardsHub from '@/views/admin/CardsHub';
 
 /**
- * Leads — the team-facing home for new deals.
+ * Requirement Cards — the team-facing home for new deals.
  *
  * The three sections are the admin panel's own pipeline modules, rendered from
  * the same CardsHub rather than reimplemented (web/next.config.mjs points `@`
@@ -15,5 +15,5 @@ import CardsHub from '@/views/admin/CardsHub';
  * requireMiniAppOrAdmin('leads') server-side.
  */
 export default function LeadsPage() {
-  return <CardsHub title="Leads" />;
+  return <CardsHub title="Requirement Cards" />;
 }

@@ -10,6 +10,7 @@ import { useHasPermission } from '../../hooks/usePermissions';
 import { usePMStore } from '../../stores/pmStore';
 import { useTabsStore } from '../../stores/tabsStore';
 import { wantsNewTab, buildListSnapshot, buildFolderSnapshot, buildSpaceSnapshot, buildChatSnapshot, buildAppSnapshot } from '../../lib/tabSnapshots';
+import { useCardsAttention } from '@/views/admin/useCardsAttention';
 import SpaceTree, { WorkspaceTree } from './pm/SpaceTree';
 import CreateSpaceModal from './pm/CreateSpaceModal';
 import CreateFolderListModal from './pm/CreateFolderListModal';
@@ -245,6 +246,11 @@ export default function HomeSidebar({
   useMigrateLocalAppFavorites(true);
   const { data: appFavorites = [] } = useAppFavorites();
   const favoriteApps = availableApps.filter((a) => appFavorites.includes(a.slug));
+  // Requirement Cards is the one pinned app with a queue behind it — its row
+  // carries how much of the pipeline is waiting on us. Skipped entirely when
+  // it isn't pinned, so nobody pays for a badge they can't see.
+  const cardsPinned = favoriteApps.some((a) => a.slug === 'leads');
+  const cardsAttention = useCardsAttention(cardsPinned);
   const { data: inboxUnreadCount } = useUnreadCount();
 
   const { data: workspaces } = useWorkspaces(isClient || isPartner ? undefined : workspaceId);
@@ -475,6 +481,15 @@ export default function HomeSidebar({
                             className={`h-[14px] w-[14px] shrink-0 ${active ? 'text-[var(--sh-ink)]' : 'text-[var(--sh-ink-3)]'}`}
                           />
                           <span className="flex-1 truncate">{app.name}</span>
+                          {app.slug === 'leads' && cardsAttention.total > 0 && (
+                            <span
+                              title={cardsAttention.parts.join(' · ')}
+                              className="shrink-0 inline-flex min-w-[16px] items-center justify-center rounded-full px-1 text-[9.5px] font-bold leading-4 text-white"
+                              style={{ background: 'var(--color-sh-warning)' }}
+                            >
+                              {cardsAttention.total > 99 ? '99+' : cardsAttention.total}
+                            </span>
+                          )}
                           {app.external && (
                             <svg className="h-3 w-3 shrink-0 text-[var(--sh-ink-4)]" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />

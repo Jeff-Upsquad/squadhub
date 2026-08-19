@@ -5,6 +5,7 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import AdminJobCards from '@/views/admin/jobs/AdminJobCards';
 import AdminSubscriptionCards from '@/views/admin/AdminSubscriptionCards';
 import { useLeadBadges, type LeadBadge } from '@/views/admin/useLeadBadges';
+import { isScoped, type CardScope } from '@/views/admin/cardScope';
 
 /**
  * Cards hub — one place for the three deal pipelines.
@@ -68,13 +69,22 @@ function AttentionBadge({ badge }: { badge: LeadBadge }) {
 export default function CardsHub({
   title,
   defaultTab = 'subscription-cards',
+  scope = null,
 }: {
   /** Optional compact title to the left of the product tabs (Leads mini app). */
   title?: string;
   /** Tab used when the URL doesn't already pick one. */
   defaultTab?: CardTabId;
+  /**
+   * Narrow the hub to one customer (Squad CRM's Requirement Cards panel). Job
+   * Cards are a separate pipeline with their own tables and no customer link,
+   * so a scoped hub drops that tab rather than showing every job.
+   */
+  scope?: CardScope | null;
 } = {}) {
   const badges = useLeadBadges();
+  const scoped = isScoped(scope);
+  const tabs = scoped ? CARD_TABS.filter((t) => t.id !== 'job-cards') : CARD_TABS;
 
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -83,7 +93,11 @@ export default function CardsHub({
   // Prefer the admin path (so /admin/job-cards lands on Job Cards), then the
   // Leads mini app's ?leadTab=, then the caller's default.
   const pathTab = tabFromPath(pathname);
-  const activeTab = pathTab ?? tabFromParam(searchParams.get('leadTab')) ?? defaultTab;
+  const requestedTab = pathTab ?? tabFromParam(searchParams.get('leadTab')) ?? defaultTab;
+  // A scoped hub has no Job Cards tab, so a stale ?leadTab=job-cards must not
+  // land on a tab that renders nothing.
+  const activeTab =
+    scoped && requestedTab === 'job-cards' ? 'subscription-cards' : requestedTab;
 
   // Card ids belong to exactly one pipeline, so switching tabs drops the
   // param rather than handing it to a module that can't resolve it.
@@ -112,7 +126,7 @@ export default function CardsHub({
               <h1 className="sh-display shrink-0 text-[15px] leading-none">{title}</h1>
             )}
             <div className="sh-tab-bar sh-tab-bar-sm max-w-full overflow-x-auto">
-              {CARD_TABS.map((tab) => (
+              {tabs.map((tab) => (
                 <button
                   key={tab.id}
                   type="button"
@@ -135,9 +149,13 @@ export default function CardsHub({
         the same param and triple the polling.
       */}
       <div className="min-h-0 flex-1 overflow-hidden">
-        {activeTab === 'subscription-cards' && <AdminSubscriptionCards productLine="subscription" compact />}
-        {activeTab === 'assignments' && <AdminSubscriptionCards productLine="assignment" compact />}
-        {activeTab === 'job-cards' && <AdminJobCards compact />}
+        {activeTab === 'subscription-cards' && (
+          <AdminSubscriptionCards productLine="subscription" compact scope={scope} />
+        )}
+        {activeTab === 'assignments' && (
+          <AdminSubscriptionCards productLine="assignment" compact scope={scope} />
+        )}
+        {activeTab === 'job-cards' && !scoped && <AdminJobCards compact />}
       </div>
     </div>
   );

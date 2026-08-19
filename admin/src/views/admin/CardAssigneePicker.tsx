@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import api from '@/services/api';
 import { showToast } from '@/components/Toast';
@@ -141,9 +142,17 @@ function OwnerChip({ user, tone }: { user: CardAssigneeUser; tone: 'primary' | '
 
 type Kind = 'subscription' | 'job';
 
+const MENU_WIDTH = 256;
+const MENU_MAX_HEIGHT = 300;
+
 /**
  * CRM-style primary + secondary picker. Saves immediately.
  * `kind` picks the PATCH endpoint (subscription cards vs job cards).
+ *
+ * `variant` picks the trigger: 'button' is the pill used on card detail pages,
+ * 'chips' shows the owner chips themselves so a list row can be reassigned in
+ * place. In a row the trigger must sit ABOVE the row's own click layer — see
+ * how the rows lay themselves out.
  */
 export default function CardAssigneePicker({
   cardId,
@@ -153,6 +162,7 @@ export default function CardAssigneePicker({
   assignee,
   collaborators = [],
   invalidateKeys,
+  variant = 'button',
 }: {
   cardId: string;
   kind: Kind;
@@ -161,12 +171,18 @@ export default function CardAssigneePicker({
   assignee?: CardAssigneeUser | null;
   collaborators?: CardAssigneeUser[] | null;
   invalidateKeys: string[][];
+  variant?: 'button' | 'chips';
 }) {
   const qc = useQueryClient();
   const primary = assigneeId ?? assignee?.id ?? null;
   const secondaries = collaboratorIds ?? (collaborators || []).map((c) => c.id);
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  // The menu is portaled to <body>: list rows lift on hover via a transform,
+  // which creates a stacking context that would otherwise trap the dropdown
+  // behind the next row no matter how high its z-index.
+  const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null);
 
   const [draft, setDraft] = useState({ primary, collaborators: secondaries });
   useEffect(() => {
@@ -198,11 +214,38 @@ export default function CardAssigneePicker({
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+      const target = e.target as Node;
+      if (ref.current?.contains(target) || menuRef.current?.contains(target)) return;
+      setOpen(false);
     };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, []);
+
+  useLayoutEffect(() => {
+    if (!open) {
+      setMenuPos(null);
+      return;
+    }
+    const place = () => {
+      const anchor = ref.current?.getBoundingClientRect();
+      if (!anchor) return;
+      const height = menuRef.current?.offsetHeight ?? MENU_MAX_HEIGHT;
+      const below = anchor.bottom + 4;
+      const flip = below + height > window.innerHeight && anchor.top - height - 4 > 0;
+      setMenuPos({
+        top: flip ? anchor.top - height - 4 : below,
+        left: Math.max(8, Math.min(anchor.left, window.innerWidth - MENU_WIDTH - 8)),
+      });
+    };
+    place();
+    window.addEventListener('scroll', place, true);
+    window.addEventListener('resize', place);
+    return () => {
+      window.removeEventListener('scroll', place, true);
+      window.removeEventListener('resize', place);
+    };
+  }, [open]);
 
   const save = useMutation({
     mutationFn: (next: { assignee_id: string | null; collaborator_ids: string[] }) => {
@@ -259,6 +302,30 @@ export default function CardAssigneePicker({
       return label(a.id).localeCompare(label(b.id));
     });
 
+  const draftCard: CardAssignees = {
+    assignee: draft.primary ? known.get(draft.primary) ?? { id: draft.primary } : null,
+    collaborators: draft.collaborators.map((id) => known.get(id) ?? { id }),
+  };
+
+  if (variant === 'chips') {
+    return (
+      <div ref={ref} className="relative inline-flex">
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            setOpen((v) => !v);
+          }}
+          title="Change who owns this card"
+          className="rounded-full transition hover:opacity-80 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-sh-ink)]"
+        >
+          <CardAssigneeChips card={draftCard} />
+        </button>
+        {open && <OwnersMenu />}
+      </div>
+    );
+  }
+
   return (
     <div ref={ref} className="relative">
       <button
@@ -295,8 +362,25 @@ export default function CardAssigneePicker({
           <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
         </svg>
       </button>
-      {open && (
-        <div className="absolute right-0 z-30 mt-1 w-64 overflow-hidden rounded-lg border border-[var(--color-sh-warm-border)] bg-[var(--color-surface)] shadow-lg">
+      {open && <OwnersMenu />}
+    </div>
+  );
+
+  function OwnersMenu() {
+    if (typeof document === 'undefined') return null;
+    return createPortal(
+        <div
+          ref={menuRef}
+          onClick={(e) => e.stopPropagation()}
+          style={{
+            position: 'fixed',
+            top: menuPos?.top ?? -9999,
+            left: menuPos?.left ?? -9999,
+            width: MENU_WIDTH,
+            visibility: menuPos ? 'visible' : 'hidden',
+          }}
+          className="z-[100] overflow-hidden rounded-lg border border-[var(--color-sh-warm-border)] bg-[var(--color-surface)] shadow-lg"
+        >
           <div className="flex items-center justify-between border-b border-[var(--color-sh-warm-border)] px-3 py-2">
             <span
               className={`text-[11px] font-semibold uppercase tracking-wide ${
@@ -361,8 +445,8 @@ export default function CardAssigneePicker({
               })
             )}
           </div>
-        </div>
-      )}
-    </div>
-  );
+        </div>,
+      document.body,
+    );
+  }
 }

@@ -13,7 +13,7 @@ import OnboardingPanel from './onboarding/OnboardingPanel';
 import JobCandidatesView from './candidates/JobCandidatesView';
 import JobCardQnA from './qa/JobCardQnA';
 import CloseJobCardDialog from './dialogs/CloseJobCardDialog';
-import CardAssigneePicker, { CardAssigneeChips } from '../CardAssigneePicker';
+import CardAssigneePicker from '../CardAssigneePicker';
 
 // Job Cards — the hiring pipeline, sibling of Subscription Cards. Stored card
 // state is deliberately small (new → onboarding → published → closed); the
@@ -448,8 +448,14 @@ function JobCardRow({ card, onOpen }: { card: AdminJobCard; onOpen: () => void }
   const stage = (card.stage as JobCardStage | undefined) ?? categorizeJobCard(card);
   const delivery = jobDeliveryState(card);
   return (
-    <button onClick={onOpen} className="sh-card sh-card-interactive flex w-full items-center justify-between px-5 py-4 text-left">
-      <div className="flex min-w-0 items-center gap-3">
+    <div className="sh-card sh-card-interactive relative flex w-full items-center justify-between px-5 py-4 text-left">
+      <button
+        type="button"
+        onClick={onOpen}
+        aria-label={`Open ${business}`}
+        className="absolute inset-0 z-0"
+      />
+      <div className="pointer-events-none relative z-10 flex min-w-0 items-center gap-3">
         <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[var(--color-sh-lime-soft)] text-[var(--color-sh-ink)] text-sm font-bold ring-1 ring-[var(--color-sh-warm-border)]">
           {business.charAt(0).toUpperCase()}
         </div>
@@ -472,9 +478,20 @@ function JobCardRow({ card, onOpen }: { card: AdminJobCard; onOpen: () => void }
             </p>
           )}
         </div>
-        <CardAssigneeChips card={card} className="ml-1 shrink-0" />
+        <span className="pointer-events-auto ml-1 shrink-0">
+          <CardAssigneePicker
+            cardId={card.id}
+            kind="job"
+            assigneeId={card.assignee_id}
+            collaboratorIds={card.collaborator_ids}
+            assignee={card.assignee}
+            collaborators={card.collaborators}
+            variant="chips"
+            invalidateKeys={[['admin-job-cards']]}
+          />
+        </span>
       </div>
-      <div className="flex shrink-0 items-center gap-1.5">
+      <div className="pointer-events-none relative z-10 flex shrink-0 items-center gap-1.5 pl-3">
         {card.state === 'published' && delivery === 'skipped' && (
           <span
             className="sh-status-pill"
@@ -512,7 +529,7 @@ function JobCardRow({ card, onOpen }: { card: AdminJobCard; onOpen: () => void }
         <JobStagePill stage={stage} />
         <FunnelCountChip card={card} />
       </div>
-    </button>
+    </div>
   );
 }
 

@@ -109,6 +109,7 @@ import adminChatBroadcastsRoutes from './routes/admin/chat-broadcasts';
 import adminChatAppConfigRoutes from './routes/admin/chat-app-config';
 import jobProfilesAdminRoutes from './routes/job-profiles-admin';
 import jobCardsAdminRoutes from './routes/job-cards-admin';
+import cardsAttentionRoutes from './routes/cards-attention';
 import jobCardsAdminCandidatesRoutes from './routes/job-cards-admin-candidates';
 import jobOfferTemplatesAdminRoutes from './routes/job-offer-templates-admin';
 import jobCardsRoutes from './routes/job-cards';
@@ -226,6 +227,7 @@ app.use('/admin/subscriptions', subscriptionSquadhireProfilesAdminRoutes);
 // Job Cards (hiring service) — admin pipeline + onboarding profiles +
 // candidate proxies + offer templates, and the client-facing view.
 app.use('/admin/jobs', jobProfilesAdminRoutes);
+app.use('/admin/cards', cardsAttentionRoutes);
 app.use('/admin/job-cards', jobCardsAdminRoutes);
 app.use('/admin/job-cards', jobCardsAdminCandidatesRoutes);
 app.use('/admin/job-offer-templates', jobOfferTemplatesAdminRoutes);

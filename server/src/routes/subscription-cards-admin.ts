@@ -32,6 +32,7 @@ import {
   hydrateCardAssigneeUsers,
   normalizeCardAssignees,
 } from '../utils/cardCrmAssignees';
+import { cardIdsForCrmScope, cardIdsForSubmission, resolveCrmScope } from '../utils/crmCardScope';
 
 const router = Router();
 
@@ -55,6 +56,11 @@ router.get('/', async (req: Request, res: Response) => {
     const showArchived = archivedParam === 'true';
     const submissionIdParam = String(req.query.submission_id || '').trim();
     const cardIdParam = String(req.query.card_id || '').trim();
+    // Squad CRM scope — the CRM reads its customers' cards straight out of the
+    // Hub rather than keeping its own copy, so it filters by CRM ids.
+    const crmLeadIdParam = String(req.query.crm_lead_id || '').trim();
+    const crmDealIdParam = String(req.query.crm_deal_id || '').trim();
+    const crmContactIdParam = String(req.query.crm_contact_id || '').trim();
     // Product-line filter for the separate admin modules: 'assignment' shows
     // only freelance assignment cards; 'subscription' excludes them (the
     // Subscription Cards module). Absent = all types (back-compat).
@@ -109,60 +115,29 @@ router.get('/', async (req: Request, res: Response) => {
       query = query.neq('card_type', 'assignment');
     }
 
-    // Scope to a single lead's cards. The Contact detail panel calls this to
-    // list every card associated with a submission via any of the known
-    // linking paths:
-    //   0. lead_submission_id — Stage B direct FK (preferred).
-    //   1. submission_subscription_id — staged subscription path.
-    //   2. customer_email — legacy request/shared_form cards.
-    //   3. customer_phone (digit suffix) — same for phone-led leads.
-    if (submissionIdParam) {
-      const { data: leadRow } = await supabaseAdmin
-        .from('client_submissions')
-        .select('email, contact_number')
-        .eq('id', submissionIdParam)
-        .maybeSingle();
-
-      const { data: stagedForSubmission } = await supabaseAdmin
-        .from('client_submission_subscriptions')
-        .select('id')
-        .eq('submission_id', submissionIdParam);
-      const allowedStagedIds = (stagedForSubmission || []).map((r: any) => r.id);
-
+    // Scope to a single customer's cards, from either side of the CRM boundary:
+    //   submission_id — a Hub lead (the Contact detail panel)
+    //   crm_lead_id / crm_deal_id / crm_contact_id — a Squad CRM record, which
+    //   is how the CRM's Requirement Cards panel opens a business's cards
+    //   without CRM ever holding a copy of them.
+    //
+    // Both resolve to a card-id set through every known linking path (direct
+    // FK, staged subscription, customer_email, customer_phone suffix) and then
+    // narrow the same query, so every other filter still applies.
+    if (submissionIdParam || crmLeadIdParam || crmDealIdParam || crmContactIdParam) {
       const matchingCardIds = new Set<string>();
-      const phoneDigits = leadRow?.contact_number
-        ? String(leadRow.contact_number).replace(/\D/g, '')
-        : '';
-      const phoneSuffix = phoneDigits.length >= 7 ? phoneDigits : '';
 
-      const [byDirect, byStaged, byEmail, byPhone] = await Promise.all([
-        supabaseAdmin
-          .from('subscription_cards')
-          .select('id')
-          .eq('lead_submission_id', submissionIdParam),
-        allowedStagedIds.length > 0
-          ? supabaseAdmin
-              .from('subscription_cards')
-              .select('id')
-              .in('submission_subscription_id', allowedStagedIds)
-          : Promise.resolve({ data: [] as { id: string }[] }),
-        leadRow?.email
-          ? supabaseAdmin
-              .from('subscription_cards')
-              .select('id')
-              .ilike('customer_email', leadRow.email.trim())
-          : Promise.resolve({ data: [] as { id: string }[] }),
-        phoneSuffix
-          ? supabaseAdmin
-              .from('subscription_cards')
-              .select('id')
-              .ilike('customer_phone', `%${phoneSuffix}`)
-          : Promise.resolve({ data: [] as { id: string }[] }),
-      ]);
-      (byDirect.data || []).forEach((r: any) => matchingCardIds.add(r.id));
-      (byStaged.data || []).forEach((r: any) => matchingCardIds.add(r.id));
-      (byEmail.data || []).forEach((r: any) => matchingCardIds.add(r.id));
-      (byPhone.data || []).forEach((r: any) => matchingCardIds.add(r.id));
+      if (submissionIdParam) {
+        (await cardIdsForSubmission(submissionIdParam)).forEach((id) => matchingCardIds.add(id));
+      }
+      if (crmLeadIdParam || crmDealIdParam || crmContactIdParam) {
+        const fromCrm = await cardIdsForCrmScope({
+          leadId: crmLeadIdParam || null,
+          dealId: crmDealIdParam || null,
+          contactId: crmContactIdParam || null,
+        });
+        fromCrm.forEach((id) => matchingCardIds.add(id));
+      }
 
       if (matchingCardIds.size === 0) {
         res.json({ success: true, data: [] });
@@ -513,6 +488,84 @@ router.get('/', async (req: Request, res: Response) => {
     res.json({ success: true, data: hydrated });
   } catch (err: any) {
     console.error('Admin list subscription cards error:', err);
+    res.status(500).json({ success: false, error: err?.message || 'Internal server error' });
+  }
+});
+
+// ============================================================
+// GET /admin/subscription-cards/crm-scope — what a Squad CRM record maps to.
+//
+// Squad CRM asks this before opening its Requirement Cards panel: it knows a
+// lead / deal / contact id, and needs the business name for the panel header
+// plus a card count so the button can show a badge (and say "no cards yet"
+// instead of opening an empty embed).
+//
+// Query: crm_lead_id | crm_deal_id | crm_contact_id (at least one).
+// ============================================================
+router.get('/crm-scope', async (req: Request, res: Response) => {
+  try {
+    const scope = {
+      leadId: String(req.query.crm_lead_id || '').trim() || null,
+      dealId: String(req.query.crm_deal_id || '').trim() || null,
+      contactId: String(req.query.crm_contact_id || '').trim() || null,
+    };
+    if (!scope.leadId && !scope.dealId && !scope.contactId) {
+      res.status(400).json({ success: false, error: 'crm_lead_id, crm_deal_id or crm_contact_id required' });
+      return;
+    }
+
+    const resolution = await resolveCrmScope(scope);
+    const cardIds = await cardIdsForCrmScope(scope);
+
+    // Business name comes from the linked submission when there is one; a card
+    // raised straight off the CRM conversation only has its own brand name.
+    let businessName: string | null = null;
+    if (resolution.submissionIds.length > 0) {
+      const { data: submission } = await supabaseAdmin
+        .from('client_submissions')
+        .select('business_name')
+        .in('id', resolution.submissionIds)
+        .limit(1)
+        .maybeSingle();
+      businessName = (submission?.business_name as string) || null;
+    }
+
+    // Counts must match what the module actually lists, or the button's badge
+    // and the panel disagree: soft-deleted cards live in Trash, tier siblings
+    // are one card each in the table but ONE row in the list (they share a
+    // brief_group_id and render as tabs inside a single card).
+    const byState: Record<string, number> = {};
+    const seenEntries = new Set<string>();
+    if (cardIds.size > 0) {
+      const { data: cards } = await supabaseAdmin
+        .from('subscription_cards')
+        .select('id, state, card_type, brand_name, brief_group_id')
+        .in('id', Array.from(cardIds))
+        .is('parent_card_id', null)
+        .is('deleted_at', null);
+      for (const card of cards || []) {
+        const entryKey = (card as any).brief_group_id || (card as any).id;
+        if (seenEntries.has(entryKey)) continue;
+        seenEntries.add(entryKey);
+        const state = (card as any).state || 'unknown';
+        byState[state] = (byState[state] || 0) + 1;
+        if (!businessName && (card as any).brand_name) businessName = (card as any).brand_name;
+      }
+    }
+    const total = seenEntries.size;
+
+    res.json({
+      success: true,
+      data: {
+        submission_ids: resolution.submissionIds,
+        lead_ids: resolution.leadIds,
+        business_name: businessName,
+        card_count: total,
+        by_state: byState,
+      },
+    });
+  } catch (err: any) {
+    console.error('Admin subscription cards crm-scope error:', err);
     res.status(500).json({ success: false, error: err?.message || 'Internal server error' });
   }
 });
