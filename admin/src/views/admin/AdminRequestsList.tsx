@@ -6,7 +6,7 @@ import api from '@/services/api';
 import { showToast } from '@/components/Toast';
 import AdminCardEditor from './AdminCardEditor';
 import ShareCardLinkModal from './ShareCardLinkModal';
-import { CardAssigneeAvatars, type CardAssignees } from './CardAssigneePicker';
+import { CardAssigneeChips, type CardAssignees } from './CardAssigneePicker';
 
 interface SubscriptionRequest {
   id: number | string;
@@ -416,7 +416,7 @@ function RequestRow({
             </p>
           ) : null}
         </div>
-        <CardAssigneeAvatars card={request} className="ml-1 shrink-0" />
+        <CardAssigneeChips card={request} className="ml-1 shrink-0" />
       </div>
       <div className="flex shrink-0 items-center gap-2">
         {request.working_days && (
