@@ -851,6 +851,17 @@ async function materializeSquadhireMatchesAsQueued(cardId: string): Promise<void
   }
 }
 
+// A queued talent SquadHire rejected on the merits (level mismatch, suspended,
+// archived card) can never be delivered. Remove the local row so the queue
+// stops carrying an offer that will be refused on every future broadcast.
+async function dropRejectedQueueRow(rowId: string): Promise<void> {
+  const { error } = await supabaseAdmin
+    .from('subscription_card_external_recipients')
+    .delete()
+    .eq('id', rowId);
+  if (error) console.error('[broadcast] failed to drop rejected queue row', error);
+}
+
 // ============================================================
 // POST /admin/subscription-cards/:id/broadcast-pending
 // Release all queued (notified_at IS NULL) talent recipients on a
@@ -955,6 +966,11 @@ router.post('/:id/broadcast-pending', async (req: Request, res: Response) => {
       if (outcome.delivered) {
         successfulIds.push(row.id as string);
       } else {
+        // Rejected (409) = SquadHire will refuse this one every time — most
+        // often the talent's level doesn't match the card's tier. Drop it from
+        // the queue so it stops being re-offered on every broadcast, and pass
+        // SquadHire's wording to the admin.
+        if (outcome.rejected) await dropRejectedQueueRow(row.id as string);
         failures.push({ talent_id: row.external_user_id as string, error: outcome.error || 'unknown_error' });
       }
     }
@@ -1061,8 +1077,12 @@ async function releaseQueuedTalentsSoft(
       row.external_user_id as string,
       row.id as string,
     );
-    if (outcome.delivered) successfulIds.push(row.id as string);
-    else failures.push({ talent_id: row.external_user_id as string, error: outcome.error || 'unknown_error' });
+    if (outcome.delivered) {
+      successfulIds.push(row.id as string);
+    } else {
+      if (outcome.rejected) await dropRejectedQueueRow(row.id as string);
+      failures.push({ talent_id: row.external_user_id as string, error: outcome.error || 'unknown_error' });
+    }
   }
   if (successfulIds.length > 0) {
     await supabaseAdmin

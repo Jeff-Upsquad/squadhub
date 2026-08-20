@@ -245,6 +245,22 @@ router.post('/subscription-cards/:id/assign-talent', async (req: Request, res: R
     const recipientRowId = inserted?.id as string | undefined;
     const outcome = await notifySquadhireOfManualAssignment(cardId, talent_id, recipientRowId);
 
+    // A rejection (409) is SquadHire refusing on the merits — the talent's
+    // level doesn't match this card's tier, they're suspended, the card is
+    // archived. The offer will never reach them, so drop the row we just
+    // wrote instead of leaving a recipient the talent can't see, and hand the
+    // admin SquadHire's own wording.
+    if (outcome.rejected) {
+      if (recipientRowId) {
+        await supabaseAdmin
+          .from('subscription_card_external_recipients')
+          .delete()
+          .eq('id', recipientRowId);
+      }
+      res.status(409).json({ success: false, error: outcome.error || 'SquadHire rejected this assignment' });
+      return;
+    }
+
     if (outcome.delivered) {
       res.json({ success: true });
     } else {
@@ -399,10 +415,15 @@ router.get('/partners/search', async (req: Request, res: Response) => {
 });
 
 // ============================================================
-// GET /admin/talents/search?q=...
+// GET /admin/talents/search?q=...&card_id=...
 // Proxies to SquadHire's talent search API. Returns 503 if SquadHire
 // is unreachable so the picker UI can show a clean "couldn't load
 // talents" message rather than a hung spinner.
+//
+// With card_id we forward the card's categories + target tiers, and each hit
+// comes back with the tier(s) it holds and whether they match the card. The
+// picker uses that to disable talents of the wrong level — the same rule
+// SquadHire enforces on assignment, surfaced before the admin clicks.
 // ============================================================
 const TALENT_SEARCH_TIMEOUT_MS = 5_000;
 
@@ -428,6 +449,21 @@ router.get('/talents/search', async (req: Request, res: Response) => {
     url.pathname = '/api/integrations/squadhub/talents/search';
     url.search = '';
     url.searchParams.set('q', q);
+
+    const cardId = String(req.query.card_id || '').trim();
+    if (cardId) {
+      const { data: card } = await supabaseAdmin
+        .from('subscription_cards')
+        .select('squadhire_category_ids, target_tiers')
+        .eq('id', cardId)
+        .maybeSingle();
+      const categoryIds = Array.isArray(card?.squadhire_category_ids)
+        ? (card!.squadhire_category_ids as string[])
+        : [];
+      const targetTiers = Array.isArray(card?.target_tiers) ? (card!.target_tiers as string[]) : [];
+      if (categoryIds.length > 0) url.searchParams.set('category_ids', categoryIds.join(','));
+      if (targetTiers.length > 0) url.searchParams.set('target_tiers', targetTiers.join(','));
+    }
 
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), TALENT_SEARCH_TIMEOUT_MS);
@@ -462,6 +498,9 @@ router.get('/talents/search', async (req: Request, res: Response) => {
           email: t.email ?? null,
           country: t.country ?? t.country_name ?? null,
           tier: t.tier ?? null,
+          tiers: Array.isArray(t.tiers) ? t.tiers.map((x: any) => String(x)) : [],
+          // null when we asked without card context (nothing to judge against).
+          tier_eligible: typeof t.tier_eligible === 'boolean' ? t.tier_eligible : null,
         })),
       });
     } catch (err: any) {
