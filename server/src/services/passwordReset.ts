@@ -218,7 +218,10 @@ async function deliverTempPasswordWhatsApp(args: {
 
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   if (config.squadCrmInboundSecret) {
-    headers['X-SquadHire-Admin-Signature'] = config.squadCrmInboundSecret;
+    // Squad CRM's /integrations/squadhire receiver authorises on
+    // X-SquadCRM-Signature (it compares against SQUADHIRE_PROVISION_SECRET).
+    // Sending SquadHire's admin header here 401s and the code never arrives.
+    headers['X-SquadCRM-Signature'] = config.squadCrmInboundSecret;
   }
 
   const payload = {
