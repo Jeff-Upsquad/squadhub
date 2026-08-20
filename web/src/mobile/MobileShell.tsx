@@ -1,0 +1,423 @@
+'use client';
+
+/**
+ * MobileShell — the phone chrome for SquadHub web.
+ *
+ * This is a port of the SquadHub **Business Android app**'s navigation shell
+ * (`ui/tabs/MainTabs.kt` + `ui/components/SlackKit.kt`) onto the web app:
+ *
+ *   carbon header  →  white sheet (rounded top)  →  flat 4-tab bottom bar
+ *   Home · Chat · Inbox · More, an accent indicator pill, red count badges,
+ *   a carbon FAB on Home, and a left account drawer behind the avatar.
+ *
+ * It does NOT fork the app's features. Tab roots are phone-shaped surfaces
+ * (spaces-first Home, a conversation list, the More menu); everything the
+ * user drills into is the *same* pane the desktop renders, handed in as
+ * `renderPane`. That keeps one implementation of lists, chat, the inbox and
+ * task details, so the mobile view can't drift behind the desktop one.
+ *
+ * Drilled-in screens hide the bottom bar, gain a back app bar, and — as on
+ * Android — respond to a right-swipe and the hardware/browser Back button.
+ */
+
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import type { Channel, DmConversation, User } from '@squadhub/shared';
+import type { ActiveSection, HomeView } from '../layouts/MainLayout';
+import { launchApp, type AppDef } from '../config/apps';
+import { useThemeStore } from '../stores/themeStore';
+import { usePMStore } from '../stores/pmStore';
+import MobileHome, { applyOpenTarget, type OpenTarget } from './MobileHome';
+import MobileChat from './MobileChat';
+import MobileMore, { type MoreTarget } from './MobileMore';
+import { MAvatar, MIcon, MRow } from './MobileKit';
+
+type MTab = 'home' | 'chat' | 'inbox' | 'more';
+
+const TABS: { key: MTab; label: string; outline: ReactNode; filled: ReactNode }[] = [
+  { key: 'home', label: 'Home', outline: MIcon.homeOutline, filled: MIcon.home },
+  { key: 'chat', label: 'Chat', outline: MIcon.chatOutline, filled: MIcon.chat },
+  { key: 'inbox', label: 'Inbox', outline: MIcon.inboxOutline, filled: MIcon.inbox },
+  { key: 'more', label: 'More', outline: MIcon.moreOutline, filled: MIcon.more },
+];
+
+/** Tabs that draw the carbon header behind the status bar (PURPLE_ROUTES). */
+const CARBON_TABS = new Set<MTab>(['home', 'chat']);
+
+export interface MobileShellProps {
+  user: User | null;
+  workspaceId: string | undefined;
+  channels: Channel[];
+  dms: DmConversation[];
+  inboxUnread: number;
+  supportChannelId: string | null;
+  supportUnread: number;
+  /** Renders the live desktop pane for the current nav state. */
+  renderPane: () => ReactNode;
+  setActiveSection: (s: ActiveSection) => void;
+  setHomeView: (v: HomeView) => void;
+  setActiveChannel: (id: string, kind: 'channel' | 'dm') => void;
+  onOpenSearch: () => void;
+  onCreateTask: () => void;
+  onNewDm: () => void;
+  onLogout: () => void;
+  /** In-flow banners (emergency tasks, running timers) — they're not fixed, so
+      they have to live inside the sheet rather than behind it. */
+  banner?: ReactNode;
+  /** Fixed-position widgets that must stack inside the shell's context. */
+  floating?: ReactNode;
+}
+
+export default function MobileShell({
+  user,
+  workspaceId,
+  channels,
+  dms,
+  inboxUnread,
+  supportChannelId,
+  supportUnread,
+  renderPane,
+  setActiveSection,
+  setHomeView,
+  setActiveChannel,
+  onOpenSearch,
+  onCreateTask,
+  onNewDm,
+  onLogout,
+  banner,
+  floating,
+}: MobileShellProps) {
+  const [tab, setTab] = useState<MTab>('home');
+  // Non-null while drilled into a screen; the string is its app-bar title.
+  const [section, setSection] = useState<string | null>(null);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+
+  // Live mirrors of the two pieces of state the popstate listener needs; it's
+  // registered once, so it can't close over their current values.
+  const sectionRef = useRef<string | null>(null);
+  sectionRef.current = section;
+  const tabRef = useRef<MTab>(tab);
+  tabRef.current = tab;
+
+  // ---- Tab roots -------------------------------------------------------
+  // Each root parks the shared nav state on a known view so that if the user
+  // drills in and comes back, `renderPane` isn't left pointing at a stale one.
+  const goRoot = useCallback(
+    (t: MTab) => {
+      setSection(null);
+      setActiveSection('home');
+      setHomeView(t === 'inbox' ? 'inbox' : 'hub');
+    },
+    [setActiveSection, setHomeView],
+  );
+
+  // Only reachable from the tab bar, which is hidden inside a section — so
+  // there's never a pushed history entry to clean up here.
+  const selectTab = (t: MTab) => {
+    setTab(t);
+    goRoot(t);
+  };
+
+  // ---- Drilling in / out ----------------------------------------------
+  // Entering a screen pushes a history entry so the browser's Back button (and
+  // Android's system back) pops it, exactly like the native app's back stack.
+  const openSection = useCallback((title: string) => {
+    setSection(title);
+    window.history.pushState({ mshSection: true }, '');
+  }, []);
+
+  useEffect(() => {
+    const onPop = () => {
+      if (sectionRef.current !== null) goRoot(tabRef.current);
+    };
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, [goRoot]);
+
+  // The visible Back control goes through history so the entry we pushed is
+  // consumed — otherwise Back would need two presses to leave the screen.
+  const goBack = () => {
+    if (section !== null) window.history.back();
+  };
+
+  // Right-swipe from anywhere in a section pops it (MainTabs' drag gesture).
+  const touch = useRef<{ x: number; y: number } | null>(null);
+  const onTouchStart = (e: React.TouchEvent) => {
+    if (section === null) return;
+    const t = e.touches[0];
+    touch.current = { x: t.clientX, y: t.clientY };
+  };
+  const onTouchEnd = (e: React.TouchEvent) => {
+    const start = touch.current;
+    touch.current = null;
+    if (!start || section === null) return;
+    const t = e.changedTouches[0];
+    const dx = t.clientX - start.x;
+    const dy = t.clientY - start.y;
+    // Horizontal, decisive, and started near the left edge — so it can't be
+    // confused with a scroll or with dragging content sideways.
+    if (dx > 80 && Math.abs(dy) < 60 && start.x < 60) goBack();
+  };
+
+  // ---- Openers ---------------------------------------------------------
+  const openTarget = (t: OpenTarget) => {
+    applyOpenTarget(t);
+    setActiveSection('home');
+    setHomeView('tasks');
+    openSection(t.title);
+  };
+
+  const openConversation = (id: string, kind: 'channel' | 'dm', title: string) => {
+    setActiveChannel(id, kind);
+    setActiveSection('home');
+    setHomeView('chat');
+    openSection(title);
+  };
+
+  const openMore = (t: MoreTarget) => {
+    if (t.kind === 'view') {
+      setActiveSection('home');
+      setHomeView(t.view);
+      openSection(t.title);
+      return;
+    }
+    if (t.kind === 'section') {
+      setActiveSection(t.section);
+      openSection(t.title);
+      return;
+    }
+    // Apps: internal ones open a view; link-outs (SquadBooks) hand off with an
+    // SSO token and never become a section here.
+    const app: AppDef = t.app;
+    launchApp(app, {
+      workspace: workspaceId ? { id: workspaceId, name: '' } : null,
+      openView: (v) => {
+        setActiveSection('home');
+        setHomeView(v);
+        openSection(app.name);
+      },
+    });
+  };
+
+  // Inline "+" on a Home card — scope the create modal to that space first.
+  const createIn = (t: OpenTarget) => {
+    applyOpenTarget(t);
+    onCreateTask();
+  };
+
+  // ---- Chrome decisions ------------------------------------------------
+  const onSection = section !== null;
+  const carbonHeader = !onSection && CARBON_TABS.has(tab);
+  const title = section ?? (tab === 'inbox' ? 'Inbox' : 'More');
+
+  return (
+    <div className="msh" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
+      {carbonHeader && (
+        <header className="msh-header">
+          <div className="msh-header-row">
+            <div className="msh-logo" aria-hidden>S</div>
+            <div className="msh-wordmark">
+              <b>SquadHub</b>
+              <span>powered by UpSquad</span>
+            </div>
+            <button type="button" className="msh-hbtn" aria-label="Search" onClick={onOpenSearch}>
+              {MIcon.search}
+            </button>
+            <button
+              type="button"
+              className="msh-hbtn"
+              style={{ background: 'transparent', padding: 0 }}
+              aria-label="Account"
+              onClick={() => setDrawerOpen(true)}
+            >
+              <MAvatar name={user?.display_name || user?.email} url={user?.avatar_url} size={34} presence />
+            </button>
+          </div>
+        </header>
+      )}
+
+      <div className="msh-sheet" data-flush={!carbonHeader ? 'true' : undefined}>
+        {/* Section screens get a back app bar; Inbox/More roots get a plain
+            titled one (they're light-status-bar screens in the native app). */}
+        {!carbonHeader && (
+          <div className="msh-appbar">
+            {onSection ? (
+              <button type="button" className="msh-appbar-btn" aria-label="Back" onClick={goBack}>
+                {MIcon.back}
+              </button>
+            ) : (
+              <span style={{ width: 12 }} />
+            )}
+            <h1 className="msh-appbar-title">{title}</h1>
+            {!onSection && (
+              <button
+                type="button"
+                className="msh-appbar-btn"
+                aria-label="Account"
+                onClick={() => setDrawerOpen(true)}
+              >
+                <MAvatar name={user?.display_name || user?.email} url={user?.avatar_url} size={30} />
+              </button>
+            )}
+          </div>
+        )}
+
+        {banner}
+
+        {/* Hosted desktop panes bring their own scrolling (a chat log pinned
+            above a composer, a virtualized list). They must fill the sheet, so
+            they sit directly in the flex column — wrapping them in .msh-scroll
+            would collapse them to content height. The phone-native roots are
+            plain documents and do scroll inside .msh-scroll. */}
+        {onSection || tab === 'inbox' ? (
+          <div className="msh-pane">{renderPane()}</div>
+        ) : (
+          <div className="msh-scroll">
+            {tab === 'home' ? (
+              <MobileHome workspaceId={workspaceId} onOpen={openTarget} onCreateIn={createIn} />
+            ) : tab === 'chat' ? (
+              <MobileChat
+                channels={channels}
+                dms={dms}
+                meId={user?.id}
+                supportChannelId={supportChannelId}
+                supportUnread={supportUnread}
+                onOpenChannel={(id, t) => openConversation(id, 'channel', t)}
+                onOpenDm={(id, t) => openConversation(id, 'dm', t)}
+                onNewDm={onNewDm}
+              />
+            ) : (
+              <MobileMore onOpen={openMore} onOpenAccount={() => setDrawerOpen(true)} />
+            )}
+          </div>
+        )}
+
+        {/* Create a task — Home only, as on Android. */}
+        {!onSection && tab === 'home' && (
+          <button type="button" className="msh-fab" aria-label="New task" onClick={onCreateTask}>
+            {MIcon.plus}
+          </button>
+        )}
+      </div>
+
+      {!onSection && (
+        <nav className="msh-tabbar">
+          <div className="msh-tabbar-row">
+            {TABS.map((t) => {
+              const on = tab === t.key;
+              const badge = t.key === 'inbox' ? inboxUnread : t.key === 'chat' ? supportUnread : 0;
+              return (
+                <button
+                  key={t.key}
+                  type="button"
+                  className="msh-tab"
+                  data-on={on ? 'true' : undefined}
+                  aria-current={on ? 'page' : undefined}
+                  aria-label={badge > 0 ? `${t.label}, ${badge} unread` : t.label}
+                  onClick={() => selectTab(t.key)}
+                >
+                  <span className="msh-tab-ic">
+                    {on ? t.filled : t.outline}
+                    {badge > 0 && (
+                      <span className="msh-badge" aria-hidden>
+                        {badge > 99 ? '99+' : badge}
+                      </span>
+                    )}
+                  </span>
+                  <span className="msh-tab-lb">{t.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        </nav>
+      )}
+
+      {floating && <div className="msh-floating">{floating}</div>}
+
+      {drawerOpen && (
+        <AccountDrawer
+          user={user}
+          onClose={() => setDrawerOpen(false)}
+          onOpenResources={() => {
+            setDrawerOpen(false);
+            setTab('more');
+            setActiveSection('learning');
+            openSection('Resources');
+          }}
+          onLogout={() => {
+            setDrawerOpen(false);
+            usePMStore.getState().reset();
+            onLogout();
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+/** Left slide-in account panel — the Android app's GlassDrawer. */
+function AccountDrawer({
+  user,
+  onClose,
+  onOpenResources,
+  onLogout,
+}: {
+  user: User | null;
+  onClose: () => void;
+  onOpenResources: () => void;
+  onLogout: () => void;
+}) {
+  const theme = useThemeStore((s) => s.theme);
+  const setTheme = useThemeStore((s) => s.setTheme);
+
+  // Escape closes, and the page behind must not scroll while it's open.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  return (
+    <>
+      <div className="msh-scrim" onClick={onClose} aria-hidden />
+      <aside className="msh-drawer" role="dialog" aria-label="Account">
+        <div className="msh-drawer-head">
+          <MAvatar name={user?.display_name || user?.email} url={user?.avatar_url} size={48} presence />
+          <div className="who">
+            <b>{user?.display_name || 'Me'}</b>
+            <span>{user?.email}</span>
+          </div>
+        </div>
+
+        <div className="msh-drawer-body">
+          <div className="msh-group-head"><b>Appearance</b></div>
+          <div className="msh-seg" role="group" aria-label="Theme">
+            {(['light', 'dark', 'auto'] as const).map((t) => (
+              <button
+                key={t}
+                type="button"
+                data-on={theme === t ? 'true' : undefined}
+                onClick={() => setTheme(t)}
+              >
+                {t === 'auto' ? 'System' : t[0].toUpperCase() + t.slice(1)}
+              </button>
+            ))}
+          </div>
+
+          <div className="msh-group-head"><b>Account</b></div>
+          <MRow icon={MIcon.resources} title="Resources" onClick={onOpenResources} />
+          <MRow
+            icon={MIcon.bell}
+            title="Notifications"
+            subtitle="Manage browser alerts in your browser settings"
+            onClick={onClose}
+            trailing={<span />}
+          />
+        </div>
+
+        <div className="msh-drawer-foot">
+          <MRow icon={MIcon.logout} title="Log out" danger onClick={onLogout} trailing={<span />} />
+        </div>
+      </aside>
+    </>
+  );
+}
