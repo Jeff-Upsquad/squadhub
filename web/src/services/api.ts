@@ -86,6 +86,13 @@ api.interceptors.response.use(
     }
 
     const url = original.url || '';
+    // /auth/sso/squadhire carries a single-use code. Its 401 means the code was
+    // spent or expired — nothing to do with the session in this browser — so
+    // don't retry it (that would burn the code) and don't sign anyone out.
+    if (url.includes('/auth/sso/squadhire')) {
+      return Promise.reject(error);
+    }
+
     if (url.includes('/auth/refresh') || url.includes('/auth/login')) {
       useAuthStore.getState().logout();
       return Promise.reject(error);

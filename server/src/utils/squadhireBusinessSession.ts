@@ -1,0 +1,192 @@
+/**
+ * Start a SquadHub session for a SquadHire business user who arrived over SSO.
+ *
+ * SquadHire has already proven who they are (see redeemSquadhireBusinessSsoCode)
+ * and only mints a code for a business with a live assigned card — the same
+ * event that makes us raise their client invitation. So by the time we get
+ * here, the account either exists or is one invitation away from existing.
+ *
+ * Two paths:
+ *   • Account exists → mint a session for it. No password involved.
+ *   • No account, pending client invitation → create it now with the same
+ *     wiring an invited signup gets (workspace, role, client access), then mint
+ *     the session. This is the passwordless twin of seedSquadhireClientLogin,
+ *     which does the same provisioning when the business types their SquadHire
+ *     password into our login form instead.
+ *
+ * Because there is no password to seed with, the account is created with a
+ * random one and flagged `squadhire_password_pending`. seedSquadhireClientLogin
+ * watches for that flag: the first time the business types their SquadHire
+ * password into our login form, we verify it with SquadHire and adopt it, so
+ * "use your SquadHire login" keeps working for anyone who came in via SSO
+ * first.
+ *
+ * Everything is gated on user_type: SSO can only ever land on a client-side
+ * account. An email that belongs to an internal or partner user is refused
+ * outright — a business account on SquadHire must never be able to open someone
+ * else's staff session here just because the addresses match.
+ */
+
+import { randomBytes } from 'crypto';
+import { supabase, supabaseAdmin } from '../supabase';
+import {
+  applyAcceptedInvitation,
+  INVITATION_COLUMNS,
+  type PendingInvitation,
+} from './applyInvitation';
+import type { SquadhireBusinessSsoIdentity } from './squadhireBusinessSso';
+import type { UserType } from '@squadhub/shared';
+
+/** The only account types a SquadHire business user may sign in as. */
+const CLIENT_USER_TYPES = new Set(['client', 'client_staff']);
+
+/** Account states that block sign-in — mirrors POST /auth/login. */
+const BLOCKED_STATUSES: Record<string, string> = {
+  pending: 'Your account is pending admin approval.',
+  rejected: 'Your account has been rejected.',
+  banned: 'Your account has been banned.',
+  suspended: 'Your account has been suspended.',
+};
+
+export class SquadhireSsoError extends Error {
+  constructor(
+    public status: number,
+    message: string,
+  ) {
+    super(message);
+  }
+}
+
+export interface SquadhireSsoSession {
+  user: Record<string, unknown>;
+  access_token: string;
+  refresh_token: string;
+}
+
+/**
+ * Mint a real Supabase session for an existing user without their password.
+ *
+ * generateLink hands back the magic-link token without sending any email; we
+ * redeem it immediately ourselves. The result is an ordinary session — same
+ * tokens, same expiry, same refresh path as a password sign-in.
+ */
+async function mintSession(email: string): Promise<{ access_token: string; refresh_token: string }> {
+  const { data: link, error: linkError } = await supabaseAdmin.auth.admin.generateLink({
+    type: 'magiclink',
+    email,
+  });
+  const tokenHash = link?.properties?.hashed_token;
+  if (linkError || !tokenHash) {
+    console.error('[squadhire-sso] generateLink failed:', linkError?.message);
+    throw new SquadhireSsoError(500, 'Could not start your SquadHub session. Please try again.');
+  }
+
+  const { data, error } = await supabase.auth.verifyOtp({
+    token_hash: tokenHash,
+    type: 'magiclink',
+  });
+  if (error || !data.session) {
+    console.error('[squadhire-sso] verifyOtp failed:', error?.message);
+    throw new SquadhireSsoError(500, 'Could not start your SquadHub session. Please try again.');
+  }
+
+  return {
+    access_token: data.session.access_token,
+    refresh_token: data.session.refresh_token,
+  };
+}
+
+/** Create the SquadHub account an assigned card entitles this business to. */
+async function provisionFromInvitation(
+  identity: SquadhireBusinessSsoIdentity,
+  invitation: PendingInvitation,
+  userType: UserType,
+): Promise<string> {
+  const displayName =
+    identity.name || identity.company_name || identity.email.split('@')[0];
+
+  // No password to adopt yet — see the flag note in the file header.
+  const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
+    email: identity.email,
+    password: randomBytes(24).toString('base64url'),
+    email_confirm: true,
+    user_metadata: { display_name: displayName, squadhire_password_pending: true },
+  });
+
+  if (authError || !authData?.user) {
+    console.error('[squadhire-sso] createUser failed:', authError?.message);
+    throw new SquadhireSsoError(500, 'Could not set up your SquadHub account. Please try again.');
+  }
+
+  const { error: dbError } = await supabaseAdmin.from('users').insert({
+    id: authData.user.id,
+    email: identity.email,
+    display_name: displayName,
+    status: 'active',
+    user_type: userType,
+    phone: identity.phone,
+  });
+  if (dbError) {
+    console.error('[squadhire-sso] user row insert failed:', dbError.message);
+  }
+
+  await applyAcceptedInvitation({ userId: authData.user.id, userType, invitation });
+  console.log(`[squadhire-sso] provisioned SquadHub account for ${identity.email}`);
+
+  return authData.user.id;
+}
+
+export async function startSquadhireBusinessSession(
+  identity: SquadhireBusinessSsoIdentity,
+): Promise<SquadhireSsoSession> {
+  const { data: existing } = await supabaseAdmin
+    .from('users')
+    .select('*')
+    .ilike('email', identity.email)
+    .maybeSingle();
+
+  if (existing?.id) {
+    if (!CLIENT_USER_TYPES.has(existing.user_type)) {
+      throw new SquadhireSsoError(
+        403,
+        'This email is already used by a SquadHub team account. Please sign in with your password.',
+      );
+    }
+    const blocked = BLOCKED_STATUSES[existing.status as string];
+    if (blocked) throw new SquadhireSsoError(403, blocked);
+
+    const tokens = await mintSession(identity.email);
+    return { user: existing, ...tokens };
+  }
+
+  // No account yet — the invitation raised when their card was assigned is what
+  // says they're allowed one.
+  const { data: invitation } = await supabaseAdmin
+    .from('invitations')
+    .select(INVITATION_COLUMNS)
+    .eq('email', identity.email)
+    .eq('status', 'pending')
+    .maybeSingle<PendingInvitation>();
+
+  const userType = (invitation?.user_type || 'client') as UserType;
+  if (!invitation || !CLIENT_USER_TYPES.has(userType)) {
+    throw new SquadhireSsoError(
+      403,
+      "Your SquadHub workspace isn't ready yet. Please check back shortly.",
+    );
+  }
+
+  const userId = await provisionFromInvitation(identity, invitation, userType);
+  const tokens = await mintSession(identity.email);
+
+  const { data: profile } = await supabaseAdmin
+    .from('users')
+    .select('*')
+    .eq('id', userId)
+    .maybeSingle();
+
+  return {
+    user: profile ?? { id: userId, email: identity.email },
+    ...tokens,
+  };
+}

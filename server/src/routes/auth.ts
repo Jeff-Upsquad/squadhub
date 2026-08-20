@@ -7,6 +7,11 @@ import {
   type PendingInvitation,
 } from '../utils/applyInvitation';
 import { seedSquadhireClientLogin } from '../utils/seedSquadhireClientLogin';
+import { redeemSquadhireBusinessSsoCode } from '../utils/squadhireBusinessSso';
+import {
+  SquadhireSsoError,
+  startSquadhireBusinessSession,
+} from '../utils/squadhireBusinessSession';
 import { requireAuth } from '../middleware/auth';
 import { rateLimit } from '../utils/rateLimit';
 import * as passwordReset from '../services/passwordReset';
@@ -29,6 +34,10 @@ const loginSchema = z.object({
 
 const refreshSchema = z.object({
   refresh_token: z.string().min(1),
+});
+
+const ssoCodeSchema = z.object({
+  code: z.string().min(1),
 });
 
 // POST /auth/register
@@ -189,6 +198,46 @@ router.post('/login', async (req: Request, res: Response) => {
     res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });
+
+// POST /auth/sso/squadhire — auto-login for a SquadHire business user.
+//
+// They tapped the SquadHub tab inside SquadHire's business portal; SquadHire
+// minted a one-time code and sent them here with it. We redeem the code
+// server-to-server for their identity and start their session — no password,
+// because the account was created for them rather than by them. Rate-limited
+// like the other credential-adjacent endpoints; a bad code is always a 401.
+router.post(
+  '/sso/squadhire',
+  rateLimit({ windowMs: 15 * 60 * 1000, max: 30 }),
+  async (req: Request, res: Response) => {
+    try {
+      const body = ssoCodeSchema.parse(req.body);
+
+      const identity = await redeemSquadhireBusinessSsoCode(body.code);
+      if (!identity) {
+        res.status(401).json({
+          success: false,
+          error: 'This sign-in link has expired. Please open SquadHub from SquadHire again.',
+        });
+        return;
+      }
+
+      const session = await startSquadhireBusinessSession(identity);
+      res.json({ success: true, data: session });
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        res.status(400).json({ success: false, error: err.errors[0].message });
+        return;
+      }
+      if (err instanceof SquadhireSsoError) {
+        res.status(err.status).json({ success: false, error: err.message });
+        return;
+      }
+      console.error('SquadHire SSO error:', err);
+      res.status(500).json({ success: false, error: 'Internal server error' });
+    }
+  },
+);
 
 // POST /auth/refresh
 router.post('/refresh', async (req: Request, res: Response) => {

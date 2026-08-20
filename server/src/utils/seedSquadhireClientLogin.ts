@@ -23,7 +23,12 @@
  *   • Only for emails with a pending, unexpired client invitation — i.e. someone
  *     SquadHub already decided to give access to.
  *   • Never creates an account for an email that already has a SquadHub user;
- *     for them a failed login is simply a wrong password.
+ *     for them a failed login is simply a wrong password. The one exception is
+ *     an account provisioned over SSO (see squadhireBusinessSession), which has
+ *     a random password nobody has ever been told — it carries
+ *     `squadhire_password_pending` and is allowed to adopt the SquadHire
+ *     password on the same terms, so arriving via the auto-login link first
+ *     doesn't lock the business out of typing their credentials later.
  *   • The seeded password is never persisted or logged here — it goes straight
  *     to Supabase Auth, which stores only a hash.
  */
@@ -54,6 +59,25 @@ export async function seedSquadhireClientLogin(input: {
   if (!email || !input.password) return false;
 
   try {
+    // 0. An account that came in over the auto-login link has a random password
+    //    nobody was ever given. If this email is one of those, the business is
+    //    typing their SquadHire password here for the first time — verify it
+    //    with SquadHire and adopt it, then let the caller retry.
+    const { data: existingUser } = await supabaseAdmin
+      .from('users')
+      .select('id, user_type')
+      .ilike('email', email)
+      .maybeSingle();
+
+    if (existingUser?.id) {
+      return await adoptSquadhirePassword({
+        userId: existingUser.id as string,
+        userType: (existingUser.user_type as string) || '',
+        email,
+        password: input.password,
+      });
+    }
+
     // 1. Must have a pending, unexpired client invitation.
     const { data: invitation } = await supabaseAdmin
       .from('invitations')
@@ -80,23 +104,14 @@ export async function seedSquadhireClientLogin(input: {
       return false;
     }
 
-    // 2. Must not already have a SquadHub account — a failed login for an
-    //    existing user is just a wrong password, never a seeding opportunity.
-    const { data: existingUser } = await supabaseAdmin
-      .from('users')
-      .select('id')
-      .ilike('email', email)
-      .maybeSingle();
-    if (existingUser?.id) return false;
-
-    // 3. Ask SquadHire whether these really are their credentials.
+    // 2. Ask SquadHire whether these really are their credentials.
     const identity = await verifySquadhireBusinessCredentials({
       email,
       password: input.password,
     });
     if (!identity) return false;
 
-    // 4. Create the SquadHub auth user with the same password.
+    // 3. Create the SquadHub auth user with the same password.
     const displayName = identity.name || identity.company_name || email.split('@')[0];
     const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
       email,
@@ -115,7 +130,7 @@ export async function seedSquadhireClientLogin(input: {
       return alreadyExists;
     }
 
-    // 5. Profile row. Active immediately — the invitation is the approval.
+    // 4. Profile row. Active immediately — the invitation is the approval.
     const { error: dbError } = await supabaseAdmin.from('users').insert({
       id: authData.user.id,
       email,
@@ -128,7 +143,7 @@ export async function seedSquadhireClientLogin(input: {
       console.error('[seed-squadhire-login] user row insert failed:', dbError.message);
     }
 
-    // 6. Same wiring an invited signup gets (workspace, role, client access).
+    // 5. Same wiring an invited signup gets (workspace, role, client access).
     await applyAcceptedInvitation({
       userId: authData.user.id,
       userType,
@@ -141,4 +156,44 @@ export async function seedSquadhireClientLogin(input: {
     console.error('[seed-squadhire-login] unexpected:', err?.message);
     return false;
   }
+}
+
+/**
+ * Adopt the SquadHire password for an account that was provisioned over the
+ * auto-login link and has never had a password of its own.
+ *
+ * Same bar as seeding a brand-new account: the account must be a client-side
+ * one, must still be flagged `squadhire_password_pending`, and SquadHire must
+ * confirm the typed password belongs to this exact email. Any other existing
+ * account gets a plain false — a failed login there is simply a wrong password.
+ */
+async function adoptSquadhirePassword(input: {
+  userId: string;
+  userType: string;
+  email: string;
+  password: string;
+}): Promise<boolean> {
+  if (!SEEDABLE_USER_TYPES.has(input.userType)) return false;
+
+  const { data: authUser } = await supabaseAdmin.auth.admin.getUserById(input.userId);
+  const metadata = authUser?.user?.user_metadata ?? {};
+  if (metadata.squadhire_password_pending !== true) return false;
+
+  const identity = await verifySquadhireBusinessCredentials({
+    email: input.email,
+    password: input.password,
+  });
+  if (!identity) return false;
+
+  const { error } = await supabaseAdmin.auth.admin.updateUserById(input.userId, {
+    password: input.password,
+    user_metadata: { ...metadata, squadhire_password_pending: false },
+  });
+  if (error) {
+    console.error('[seed-squadhire-login] password adoption failed:', error.message);
+    return false;
+  }
+
+  console.log(`[seed-squadhire-login] adopted SquadHire password for ${input.email}`);
+  return true;
 }
