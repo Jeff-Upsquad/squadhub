@@ -79,6 +79,8 @@ import FeatureTipOverlay from '../components/FeatureTipOverlay';
 import { usePendingTips } from '../hooks/usePendingTips';
 import { featureTipStore } from '../stores/featureTipStore';
 import TabBar from '../components/TabBar';
+import MobileShell from '../mobile/MobileShell';
+import NewDmModal from '../views/app/chat/NewDmModal';
 import { useTabsStore } from '../stores/tabsStore';
 import { canonicalKey, buildHomeSnapshot, type TabSnapshot } from '../lib/tabSnapshots';
 
@@ -331,6 +333,9 @@ export default function MainLayout() {
   const isMobile = useIsMobile();
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
   const [showCreateChannel, setShowCreateChannel] = useState(false);
+  // Mobile shell's "New message" row — the desktop sidebar opens this modal
+  // from its own DM section.
+  const [showNewDm, setShowNewDm] = useState(false);
   const [showChannelSettings, setShowChannelSettings] = useState(false);
   const [showCreateTaskModal, setShowCreateTaskModal] = useState(false);
   const [resumingDraft, setResumingDraft] = useState<SavedDraft | null>(null);
@@ -1037,6 +1042,72 @@ export default function MainLayout() {
     if (hv === 'opportunities' && isPartner) return <PartnerOpportunities />;
     return <Home onOpenInbox={() => { setActiveSection('home'); setHomeView('inbox'); }} />;
   };
+
+  // ---- Mobile browser view ------------------------------------------------
+  // Below the md breakpoint the desktop chrome (icon rail + module sidebar +
+  // tab strip) is replaced wholesale by the phone shell, which mirrors the
+  // SquadHub Business Android app: carbon header, white sheet, 4-tab bottom
+  // bar. It hosts the *same* panes via renderPane, so features stay in one
+  // place. Global overlays stay mounted as siblings — they're position:fixed
+  // and several (task detail, toasts, tips) must float above the shell.
+  if (isMobile) {
+    return (
+      <>
+        <MobileShell
+          user={user ?? null}
+          workspaceId={currentWorkspace?.id}
+          channels={channels}
+          dms={dmConversations}
+          inboxUnread={unreadCount}
+          supportChannelId={supportChannelId}
+          supportUnread={supportUnread}
+          renderPane={() => renderPane(navSnapshot)}
+          setActiveSection={setActiveSection}
+          setHomeView={setHomeView}
+          setActiveChannel={setActiveChannel}
+          onOpenSearch={() => setSearchOpen(true)}
+          onCreateTask={() => setShowCreateTaskModal(true)}
+          onNewDm={() => setShowNewDm(true)}
+          onLogout={logout}
+          // ActiveTimer and EmergencyBanner are in-flow strips, not fixed
+          // overlays — outside the shell they'd render behind it.
+          banner={<><EmergencyBanner /><ActiveTimer /></>}
+          // z-[20], so it has to stack inside the shell's context to be seen.
+          floating={
+            <DraftTasksWidget
+              onResumeDraft={(saved) => { setResumingDraft(saved); setShowCreateTaskModal(true); }}
+            />
+          }
+        />
+
+        <TimerConflictDialog />
+        <GlobalTaskDetailPanel />
+        <ChatSidePanel />
+        <GroupRunDetailPanel />
+        <GlobalMeetingPanel />
+        <ToastContainer />
+        <FeatureTipOverlay />
+
+        {showCreateTaskModal && (
+          <GlobalCreateTaskModal
+            onClose={() => { setShowCreateTaskModal(false); setResumingDraft(null); }}
+            resumeDraft={resumingDraft}
+            inListContext={activeSection === 'home' && homeView === 'tasks'}
+          />
+        )}
+        {showNewDm && currentWorkspace && (
+          <NewDmModal workspaceId={currentWorkspace.id} onClose={() => setShowNewDm(false)} />
+        )}
+        {searchOpen && currentWorkspace && (
+          <SearchPalette
+            workspaceId={currentWorkspace.id}
+            onClose={() => setSearchOpen(false)}
+            setHomeView={(v) => { setActiveSection('home'); setHomeView(v); }}
+          />
+        )}
+      </>
+    );
+  }
 
   return (
     <div className="flex h-[100dvh] bg-[var(--sidebar)] text-foreground">

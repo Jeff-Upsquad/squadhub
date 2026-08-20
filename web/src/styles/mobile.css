@@ -1,0 +1,854 @@
+/* ════════════════════════════════════════════════════════════════════════
+   MOBILE BROWSER VIEW — the phone shell for SquadHub web.
+
+   Everything here is scoped under `.msh` (mobile shell) so it can never
+   leak into the desktop layout. The design language is ported 1:1 from the
+   SquadHub Business Android app (`squadhub business android app`,
+   ui/theme/Tokens.kt + Dimens.kt): a Slack-shaped layout on a carbon brand,
+   with the signature carbon header gradient, a white sheet rounded over it,
+   and a flat bottom bar with an accent indicator pill.
+
+   Token names mirror the Kotlin ones (Ink/Hair/Surface/Brand/Accent…) so
+   the two codebases stay diffable — `--m-ink-3` here is `Tokens.Ink3` there.
+   ════════════════════════════════════════════════════════════════════ */
+
+.msh {
+  /* ---- Neutral scales (Tokens.Ink* / Tokens.Hair*) ---- */
+  --m-ink:        #16171B;
+  --m-ink-2:      #3C3E45;
+  --m-ink-3:      #6B6D77;
+  --m-ink-4:      #A0A2AD;
+  --m-hair:       #E7E8EC;
+  --m-hair-2:     #D6D8DE;
+  --m-hair-3:     #F1F2F5;
+
+  /* ---- Surfaces ---- */
+  --m-surface:    #FFFFFF;
+  --m-surface-alt:#F4F5F8;
+  --m-nav:        #FCFCFD;
+  --m-elevated:   #FFFFFF;
+  --m-scrim:      rgba(16, 16, 20, 0.4);
+
+  /* ---- Brand. The header gradient and FAB stay carbon in BOTH themes —
+     that's the brand's signature, exactly as in the Android app. ---- */
+  --m-brand-deep: #101014;
+  --m-brand-soft: #2A2B33;
+  --m-on-header:  #FFFFFF;
+  --m-on-header-dim: rgba(255, 255, 255, 0.72);
+  --m-header-pill: rgba(255, 255, 255, 0.14);
+
+  /* ---- Accent — used sparingly: selection, focus, the nav indicator ---- */
+  --m-accent:      #5B5BF2;
+  --m-accent-soft: #ECECFE;
+  --m-on-accent:   #FFFFFF;
+
+  /* ---- Semantics ---- */
+  --m-badge:      #F04858;
+  --m-on-badge:   #FFFFFF;
+  --m-presence:   #2BAC76;
+  --m-overdue-fg: #B42318;
+  --m-overdue-bg: #FDECEA;
+
+  /* ---- Geometry (Dimens.kt: Radii / Space) ---- */
+  --m-r-xs: 8px;
+  --m-r-sm: 12px;
+  --m-r-md: 16px;
+  --m-r-lg: 20px;
+  --m-r-sheet: 24px;
+  --m-r-pill: 999px;
+  --m-gutter: 16px;
+
+  /* ---- Safe areas (viewportFit=cover is set in app/layout.tsx) ---- */
+  --m-safe-top:    env(safe-area-inset-top, 0px);
+  --m-safe-bottom: env(safe-area-inset-bottom, 0px);
+  /* Content height of the bottom bar, safe-area inset excluded. */
+  --m-tabbar-h: 66px;
+}
+
+.dark .msh {
+  --m-ink:        #F3F3F6;
+  --m-ink-2:      #CACBD3;
+  --m-ink-3:      #9698A3;
+  --m-ink-4:      #6C6E79;
+  --m-hair:       #2F3037;
+  --m-hair-2:     #3E404A;
+  --m-hair-3:     #212227;
+
+  --m-surface:    #121316;
+  --m-surface-alt:#1B1C21;
+  --m-nav:        #141519;
+  --m-elevated:   #212229;
+  --m-scrim:      rgba(0, 0, 0, 0.6);
+
+  --m-brand-deep: #0B0B0E;
+  --m-brand-soft: #24252E;
+
+  --m-accent:      #8B8BFF;
+  --m-accent-soft: #25264A;
+
+  --m-presence:   #32C088;
+  --m-overdue-fg: #F7A6A0;
+  --m-overdue-bg: #3A1E1E;
+}
+
+/* ── Shell ──────────────────────────────────────────────────────────────
+   Fixed to the viewport so the page itself never scrolls — only the sheet
+   does. 100dvh (not vh) so the mobile browser's collapsing URL bar doesn't
+   leave a dead strip under the tab bar. */
+.msh {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--m-brand-deep) 75%, #000) 0%,
+    var(--m-brand-deep) 55%,
+    var(--m-brand-soft) 100%
+  );
+  color: var(--m-ink);
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* ── Carbon header (PurpleHeader) — Home + Chat only ─────────────────── */
+.msh-header {
+  flex: none;
+  padding: calc(var(--m-safe-top) + 10px) 18px 16px;
+  color: var(--m-on-header);
+}
+.msh-header-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.msh-logo {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: var(--m-r-xs);
+  /* Always light — this tile is the brand mark on the carbon header, so it
+     must not follow the surface token into dark mode and disappear. */
+  background: #fff;
+  color: #101014;
+  font-weight: 700;
+  font-size: 16px;
+  font-family: 'Plus Jakarta Sans', 'Inter', sans-serif;
+  letter-spacing: -0.02em;
+}
+.msh-wordmark { min-width: 0; flex: 1 1 auto; }
+.msh-wordmark b {
+  display: block;
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+  color: var(--m-on-header);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.msh-wordmark span {
+  display: block;
+  font-size: 11px;
+  line-height: 1.3;
+  color: rgba(255, 255, 255, 0.7);
+}
+.msh-hbtn {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border: 0;
+  border-radius: var(--m-r-xs);
+  background: var(--m-header-pill);
+  color: var(--m-on-header);
+  cursor: pointer;
+  transition: transform 0.14s cubic-bezier(0.22, 1, 0.36, 1), background 0.14s ease;
+}
+.msh-hbtn:active { transform: scale(0.9); }
+.msh-hbtn svg { width: 20px; height: 20px; }
+
+/* ── White sheet — soft rounded top corners over the carbon header ────── */
+.msh-sheet {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--m-surface);
+  border-radius: var(--m-r-sheet) var(--m-r-sheet) 0 0;
+  overflow: hidden;
+}
+/* A section screen (drilled in) fills the shell edge-to-edge — no sheet
+   rounding, because there's no header behind it to reveal. */
+.msh-sheet[data-flush='true'] { border-radius: 0; }
+
+.msh-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* ── Section app bar (drilled-in screens) ────────────────────────────── */
+.msh-appbar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: calc(var(--m-safe-top) + 6px) 8px 6px;
+  background: var(--m-surface);
+  border-bottom: 1px solid var(--m-hair-3);
+}
+.msh-appbar-btn {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border: 0;
+  border-radius: var(--m-r-sm);
+  background: transparent;
+  color: var(--m-ink);
+  cursor: pointer;
+  transition: transform 0.14s cubic-bezier(0.22, 1, 0.36, 1), background 0.14s ease;
+}
+.msh-appbar-btn:active { transform: scale(0.88); background: var(--m-hair-3); }
+.msh-appbar-btn svg { width: 22px; height: 22px; }
+.msh-appbar-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -0.3px;
+  color: var(--m-ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── Section list rhythm (ClientHeader / SectionHint) ────────────────── */
+.msh-group-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 16px 20px 8px;
+}
+.msh-group-head b {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  color: var(--m-ink-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.msh-group-head span {
+  flex: none;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--m-ink-4);
+  font-variant-numeric: tabular-nums;
+}
+.msh-hint {
+  padding: 8px 20px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--m-ink-4);
+}
+
+/* ── Space card — the Home primitive ─────────────────────────────────── */
+.msh-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: calc(100% - 32px);
+  margin: 5px var(--m-gutter);
+  padding: 13px 14px;
+  border: 0;
+  border-radius: var(--m-r-md);
+  background: var(--m-surface-alt);
+  text-align: left;
+  cursor: pointer;
+  animation: msh-rise 0.34s cubic-bezier(0.22, 1, 0.36, 1) both;
+  transition: transform 0.14s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.msh-card:active { transform: scale(0.975); }
+@keyframes msh-rise {
+  from { opacity: 0; transform: translateY(14px); }
+  to   { opacity: 1; transform: none; }
+}
+.msh-card-ic {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 11px;
+  background: color-mix(in srgb, var(--tint) 15%, transparent);
+  color: var(--tint);
+}
+.msh-card-ic svg { width: 20px; height: 20px; }
+.msh-card-body { flex: 1 1 auto; min-width: 0; }
+.msh-card-body b {
+  display: block;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.1px;
+  color: var(--m-ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.msh-card-body span {
+  display: block;
+  margin-top: 2px;
+  font-size: 12.5px;
+  color: var(--m-ink-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.msh-card-add {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: var(--m-r-xs);
+  background: transparent;
+  color: var(--m-ink-4);
+  cursor: pointer;
+}
+.msh-card-add:active { background: var(--m-hair-3); color: var(--m-ink); }
+.msh-card-add svg { width: 18px; height: 18px; }
+.msh-card-chev { flex: none; color: var(--m-ink-4); display: grid; place-items: center; }
+.msh-card-chev svg { width: 20px; height: 20px; }
+
+/* ── Conversation / menu row ─────────────────────────────────────────── */
+.msh-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 11px 20px;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+.msh-row:active { background: var(--m-hair-3); }
+.msh-row-ic {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 11px;
+  background: var(--m-surface-alt);
+  color: var(--m-ink-3);
+  font-size: 17px;
+  font-weight: 800;
+  line-height: 1;
+}
+.msh-row-ic svg { width: 19px; height: 19px; }
+/* An avatar brings its own fill and squircle — drop the tile behind it so its
+   corners don't peek out. */
+.msh-row-ic:has(.msh-avatar) { background: transparent; }
+.msh-row-body { flex: 1 1 auto; min-width: 0; }
+.msh-row-body b {
+  display: block;
+  font-size: 14.5px;
+  font-weight: 550;
+  color: var(--m-ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.msh-row[data-unread='true'] .msh-row-body b { font-weight: 750; }
+.msh-row-body span {
+  display: block;
+  margin-top: 1px;
+  font-size: 12.5px;
+  color: var(--m-ink-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.msh-row-chev { flex: none; color: var(--m-ink-4); display: grid; place-items: center; }
+.msh-row-chev svg { width: 18px; height: 18px; }
+
+/* Squircle avatar with presence dot (SquadAvatar). */
+.msh-avatar {
+  position: relative;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: 31%;
+  color: #fff;
+  font-weight: 700;
+  overflow: visible;
+  background: var(--fill);
+}
+.msh-avatar > img {
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  object-fit: cover;
+}
+.msh-avatar[data-presence='true']::after {
+  content: '';
+  position: absolute;
+  right: -2px;
+  bottom: -2px;
+  width: 32%;
+  height: 32%;
+  border-radius: 50%;
+  background: var(--m-presence);
+  box-shadow: 0 0 0 2.5px var(--m-surface);
+}
+.msh-header .msh-avatar[data-presence='true']::after {
+  box-shadow: 0 0 0 2.5px var(--m-brand-deep);
+}
+.msh-avatar[data-presence='away']::after { background: var(--m-ink-4); }
+
+/* Count badge — red pill, always-light foreground. */
+.msh-badge {
+  flex: none;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: var(--m-r-pill);
+  background: var(--m-badge);
+  color: var(--m-on-badge);
+  font-size: 10.5px;
+  font-weight: 700;
+  line-height: 18px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Bottom bar (PremiumBottomBar) ───────────────────────────────────── */
+.msh-tabbar {
+  flex: none;
+  background: var(--m-nav);
+  border-top: 1px solid var(--m-hair-3);
+  padding-bottom: var(--m-safe-bottom);
+}
+.msh-tabbar-row {
+  display: flex;
+  align-items: center;
+  padding: 8px 6px;
+}
+.msh-tab {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  padding: 0;
+  transition: transform 0.14s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.msh-tab:active { transform: scale(0.88); }
+.msh-tab-ic {
+  position: relative;
+  display: grid;
+  place-items: center;
+  height: 32px;
+  width: 48px;
+}
+/* The accent indicator pill grows in behind the selected icon. */
+.msh-tab-ic::before {
+  content: '';
+  position: absolute;
+  inset: 1px 0;
+  border-radius: var(--m-r-pill);
+  background: var(--m-accent-soft);
+  opacity: 0;
+  transform: scaleX(0.6);
+  transition: opacity 0.22s cubic-bezier(0.22, 1, 0.36, 1),
+              transform 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.msh-tab[data-on='true'] .msh-tab-ic::before { opacity: 1; transform: none; }
+.msh-tab-ic svg {
+  position: relative;
+  width: 24px;
+  height: 24px;
+  color: var(--m-ink-3);
+  transition: color 0.22s ease, transform 0.24s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.msh-tab[data-on='true'] .msh-tab-ic svg { color: var(--m-accent); transform: scale(1.08); }
+.msh-tab-lb {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--m-ink-3);
+  transition: color 0.22s ease;
+}
+.msh-tab[data-on='true'] .msh-tab-lb { color: var(--m-ink); font-weight: 600; }
+.msh-tab .msh-badge {
+  position: absolute;
+  top: -2px;
+  right: 4px;
+  z-index: 1;
+  box-shadow: 0 0 0 2px var(--m-nav);
+}
+
+/* ── FAB (QuickTaskFab) ──────────────────────────────────────────────── */
+.msh-fab {
+  position: absolute;
+  right: 20px;
+  bottom: 20px;
+  z-index: 5;
+  display: grid;
+  place-items: center;
+  width: 58px;
+  height: 58px;
+  border: 0;
+  border-radius: 50%;
+  background: linear-gradient(180deg, var(--m-brand-soft), var(--m-brand-deep));
+  color: #fff;
+  cursor: pointer;
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.28);
+  transition: transform 0.14s cubic-bezier(0.22, 1, 0.36, 1);
+}
+/* The carbon FAB is the brand's signature in both themes, but on a dark
+   surface it needs an edge to separate from the sheet behind it. */
+.dark .msh-fab {
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.5),
+              inset 0 0 0 1px rgba(255, 255, 255, 0.14);
+}
+.msh-fab:active { transform: scale(0.9); }
+.msh-fab svg { width: 27px; height: 27px; }
+
+/* ── Account drawer (GlassDrawer) ────────────────────────────────────── */
+.msh-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: var(--m-scrim);
+  backdrop-filter: blur(2px);
+  animation: msh-fade 0.2s ease both;
+}
+@keyframes msh-fade { from { opacity: 0; } to { opacity: 1; } }
+.msh-drawer {
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 61;
+  width: min(84vw, 340px);
+  display: flex;
+  flex-direction: column;
+  background: var(--m-surface);
+  box-shadow: 12px 0 40px rgba(0, 0, 0, 0.22);
+  animation: msh-slide-in 0.26s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@keyframes msh-slide-in { from { transform: translateX(-100%); } to { transform: none; } }
+.msh-drawer-head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: calc(var(--m-safe-top) + 20px) 20px 20px;
+  background: linear-gradient(160deg, var(--m-brand-deep), var(--m-brand-soft));
+  color: var(--m-on-header);
+}
+.msh-drawer-head .who { min-width: 0; }
+.msh-drawer-head .who b {
+  display: block;
+  font-size: 16px;
+  font-weight: 650;
+  letter-spacing: -0.2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.msh-drawer-head .who span {
+  display: block;
+  margin-top: 2px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.68);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.msh-drawer-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 10px 0; }
+.msh-drawer-foot {
+  flex: none;
+  padding: 10px 0 calc(var(--m-safe-bottom) + 10px);
+  border-top: 1px solid var(--m-hair-3);
+}
+.msh-danger b { color: var(--m-overdue-fg); }
+.msh-danger .msh-row-ic { color: var(--m-overdue-fg); background: var(--m-overdue-bg); }
+
+/* Segmented control — the drawer's theme switch. */
+.msh-seg {
+  display: flex;
+  gap: 4px;
+  margin: 6px 20px 10px;
+  padding: 3px;
+  border-radius: var(--m-r-sm);
+  background: var(--m-surface-alt);
+}
+.msh-seg button {
+  flex: 1 1 0;
+  height: 32px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--m-ink-3);
+  font-size: 12.5px;
+  font-weight: 550;
+  cursor: pointer;
+  transition: background 0.16s ease, color 0.16s ease;
+}
+.msh-seg button[data-on='true'] {
+  background: var(--m-surface);
+  color: var(--m-ink);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+}
+
+/* ── States ──────────────────────────────────────────────────────────── */
+.msh-center {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 40px 32px;
+  text-align: center;
+}
+.msh-center b { font-size: 16px; font-weight: 650; color: var(--m-ink-2); }
+.msh-center p { font-size: 13px; line-height: 1.55; color: var(--m-ink-4); max-width: 34ch; }
+.msh-spinner {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 2.5px solid var(--m-hair-2);
+  border-top-color: var(--m-ink-3);
+  animation: msh-spin 0.7s linear infinite;
+}
+@keyframes msh-spin { to { transform: rotate(1turn); } }
+.msh-skel {
+  height: 62px;
+  margin: 5px var(--m-gutter);
+  border-radius: var(--m-r-md);
+  background: linear-gradient(90deg, var(--m-hair-3) 25%, var(--m-hair) 37%, var(--m-hair-3) 63%);
+  background-size: 400% 100%;
+  animation: msh-shimmer 1.3s ease infinite;
+}
+@keyframes msh-shimmer { from { background-position: 100% 0; } to { background-position: -100% 0; } }
+
+/* ── Hosted desktop views ────────────────────────────────────────────
+   Views written for a 3-pane desktop (chat, inbox, lists, the task panel)
+   are hosted inside the sheet. These overrides shrink their chrome to
+   phone proportions rather than rebuilding each one. */
+.msh-pane {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+/* The chat header is redundant on a phone — the section app bar already
+   names the conversation and owns Back. */
+.msh-pane .sqc-header { display: none; }
+.msh-pane .hm-home .hm-wrap { padding: 16px 16px 90px; max-width: none; }
+.msh-pane .hm-home .hm-timer { width: 100%; }
+.msh-pane .hm-home .hm-greet { font-size: 24px; }
+/* Desktop views assume they own the viewport; inside the sheet they must
+   scroll within it instead of pushing the shell. */
+.msh-pane > * { min-height: 0; }
+
+/* Hide desktop-only affordances that make no sense on a phone. */
+.msh-pane .lv-newtask-fab { display: none; }
+
+/* The channel intro is sized for a wide column; on a 375px screen its title
+   wraps to three lines and pushes the first message off-screen. */
+.msh-pane .sqc-intro__title { font-size: 21px; line-height: 1.25; }
+.msh-pane .sqc-intro__desc { font-size: 13.5px; }
+
+/* ── Task detail panel ────────────────────────────────────────────────
+ * The panel is a portal, not a child of .msh-pane, so these are guarded by
+ * the same breakpoint the shell switches on rather than by the .msh scope.
+ * globals.css already makes it full-bleed below 768px; what's left is the
+ * two-column property grid, which can't hold two label+value pairs on a
+ * 375px screen without wrapping every value onto three lines.
+ */
+@media (max-width: 767px) {
+  /* Fixed to the viewport, so it needs to clear the shell and its bar. */
+  .td-panel-luma.apple.td-shell { z-index: 90; }
+
+  /* The panel-scoped rules in globals.css are !important, so match their
+     specificity and override in kind. */
+  .td-panel-luma .td-settings-card[data-twocol="true"],
+  .td-panel .td-settings-card[data-twocol="true"],
+  .td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+  .td-panel-luma .td-settings-card[data-twocol="true"] > .td-settings-row,
+  .td-panel .td-settings-card[data-twocol="true"] > .td-settings-row,
+  .td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] > .td-settings-row {
+    border-right: 0 !important;
+  }
+  .td-panel-luma .td-settings-row[data-half="true"],
+  .td-panel .td-settings-row[data-half="true"],
+  .td-panel-luma.apple.td-shell .td-settings-row[data-half="true"] {
+    grid-template-columns: 116px minmax(0, 1fr) !important;
+  }
+  .td-settings-row { grid-template-columns: 116px minmax(0, 1fr); padding: 10px 14px; }
+  .td-meta-row { grid-template-columns: 116px minmax(0, 1fr) !important; }
+}
+
+/* ── Task lists inside the shell ──────────────────────────────────────
+ * The desktop list is a 5–7 column table (~460px of fixed columns), which
+ * forces a horizontal scroll on a 375px screen and pushes the task NAME out
+ * of view — the one thing that has to be readable. So on mobile the row is
+ * re-flowed into the Business app's shape: a checkbox + title line, with the
+ * meta cells wrapping onto a quiet second line beneath it.
+ *
+ * These selectors carry `!important` and sit after globals.css because the
+ * desktop card-row rule is itself `!important`.
+ */
+.msh-pane .lv-card-canvas { padding: 10px; }
+.msh-pane .lv-card { border-radius: var(--m-r-sm); margin-bottom: 10px; }
+
+/* Column labels describe columns that no longer exist here. */
+.msh-pane .lv-card-head {
+  display: flex !important;
+  align-items: center;
+  padding: 0 12px !important;
+}
+.msh-pane .lv-card-head .gh-col { display: none !important; }
+.msh-pane .lv-card-head .gh-left { flex: 1 1 auto; padding-right: 8px; }
+.msh-pane .lv-header { display: none !important; }
+
+.msh-pane .lv-card .lv-row,
+.msh-pane .lv-canvas .lv-card .lv-row,
+.msh-pane .lv-card .lv-card-body .lv-row,
+.msh-pane .lv-row {
+  display: flex !important;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px !important;
+  padding: 10px 12px !important;
+  min-height: 0;
+}
+/* The title claims the rest of line 1, so every meta cell wraps below it.
+   The basis leaves room for the two order:0 items that share that line —
+   the completion checkbox and the row's overflow "…" button. */
+.msh-pane .lv-row > div.min-w-0 {
+  flex: 1 0 calc(100% - 60px);
+  min-width: 0;
+  order: 1;
+}
+.msh-pane .lv-row > .lv-glyph { order: 0; }
+.msh-pane .lv-row > .lv-cell--more { order: 2; }
+.msh-pane .lv-row > .lv-cell {
+  order: 2;
+  flex: 0 0 auto;
+  padding: 2px 6px;
+  font-size: 11.5px;
+}
+/* Indent the meta line to sit under the title, not the checkbox. */
+.msh-pane .lv-row > .lv-cell:nth-of-type(1) { margin-left: 24px; }
+/* Empty cells are placeholders for column alignment — pure noise once the
+   columns are gone. */
+.msh-pane .lv-row > .lv-cell[data-empty="true"] { display: none; }
+.msh-pane .lv-title { font-size: 14px; }
+.msh-pane .lv-row[data-depth="1"] { padding-left: 26px !important; }
+.msh-pane .lv-row[data-depth="2"] { padding-left: 40px !important; }
+.msh-pane .lv-row[data-depth="3"] { padding-left: 54px !important; }
+
+/* The space/list header packs a title, a 220px search and action buttons into
+   one row — on a phone that pushes the buttons off-screen. Let the search
+   shrink so everything stays reachable. */
+.msh-pane .lv-search { width: auto; flex: 1 1 90px; min-width: 0; }
+
+/* Toolbars: let them scroll sideways instead of wrapping into a tall stack
+   that eats half the screen. */
+.msh-pane .dl-groupby,
+.msh-pane .lv-subtoolbar {
+  overflow-x: auto;
+  overflow-y: hidden;
+  flex-wrap: nowrap;
+  scrollbar-width: none;
+  padding-left: 12px;
+  padding-right: 12px;
+}
+.msh-pane .dl-groupby::-webkit-scrollbar,
+.msh-pane .lv-subtoolbar::-webkit-scrollbar { display: none; }
+.msh-pane .dl-groupby > *,
+.msh-pane .lv-subtoolbar > * { flex: none; }
+
+/* Inbox: the desktop two-pane split (list | reading pane) can't fit — show
+   the list full-width and let a notification open its target. */
+.msh-pane .sh-view.inbox-view { grid-template-columns: minmax(0, 1fr); }
+.msh-pane .sh-view.inbox-view > :nth-child(2) { display: none; }
+
+/* Calendar / Day Planner: same story — drop the fixed-width side column, so
+   the task palette stacks above the grid instead of beside it. Cap the
+   palette so the grid still gets most of the screen. */
+.msh-pane .sh-view.cal-view,
+.msh-pane .sh-view.day-planner-view {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(120px, 32%) minmax(0, 1fr);
+}
+.msh-pane .cal-palette {
+  border-right: none;
+  border-bottom: 1px solid var(--sh-hair);
+  min-height: 0;
+}
+/* The calendar's header row never wraps, so at this width its title column
+   collapses to 0 and the month label prints over the view switcher. */
+.msh-pane .cal-head { flex-wrap: wrap; row-gap: 8px; padding: 10px 12px; }
+.msh-pane .cal-head-left { flex: 1 1 100%; min-width: 0; }
+.msh-pane .cal-head-tools {
+  flex: 1 1 100%;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.msh-pane .cal-head-tools::-webkit-scrollbar { display: none; }
+
+/* The list/space page header (title · count | search | actions) is authored
+   with utility classes, so it's addressed structurally: the only header inside
+   a hosted pane that wraps an .lv-search. Nothing in it shrinks by default, so
+   the trailing action buttons fall off a 375px screen. */
+.msh-pane div:has(> div > .lv-search) { gap: 8px; }
+.msh-pane div:has(> div > .lv-search) > div:first-child { flex: 1 1 auto; min-width: 0; }
+.msh-pane div:has(> div > .lv-search) > div:first-child > span {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.msh-pane div:has(> div > .lv-search) > div:last-child {
+  flex: 1 1 auto;
+  min-width: 0;
+  justify-content: flex-end;
+}
+
+/* Fixed widgets handed to the shell (the drafts list) anchor to the viewport
+   bottom-right — on a phone that's underneath the tab bar and the FAB. The
+   wrapper re-anchors them; `bottom: auto` neutralises their own offset. */
+.msh-floating { display: contents; }
+.msh-floating > * {
+  bottom: calc(var(--m-tabbar-h) + var(--m-safe-bottom) + 20px) !important;
+}

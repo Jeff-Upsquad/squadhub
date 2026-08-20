@@ -152,6 +152,16 @@
       ],
       "port": 3100,
       "autoPort": true
+    },
+    {
+      "name": "Squad Clips",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": [
+        "-lc",
+        "cd '/Users/jeffzeena/Squad Clips' && exec npx next dev -p 3200"
+      ],
+      "port": 3200,
+      "autoPort": true
     }
   ]
 }
