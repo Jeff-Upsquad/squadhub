@@ -7,7 +7,18 @@ import api from '@/services/api';
 type Tab = 'partner' | 'talent';
 
 type PartnerHit = { id: string; name: string; email: string | null; tier: string | null };
-type TalentHit = { id: string; name: string; email: string | null; country: string | null; tier: string | null };
+type TalentHit = {
+  id: string;
+  name: string;
+  email: string | null;
+  country: string | null;
+  tier: string | null;
+  // Levels held in the card's category + whether they match the card. null
+  // means SquadHire had no card context to judge against — treat as allowed;
+  // the assignment call re-checks server-side either way.
+  tiers?: string[];
+  tier_eligible?: boolean | null;
+};
 
 export default function MobileAssignModal({
   cardId,
@@ -42,10 +53,12 @@ export default function MobileAssignModal({
     enabled: tab === 'partner' && debouncedQuery.length > 0,
   });
 
+  // cardId goes along so each hit says whether the talent's level matches this
+  // card — a talent only ever receives cards at their own level.
   const talents = useQuery({
-    queryKey: ['admin-talent-search', debouncedQuery],
+    queryKey: ['admin-talent-search', debouncedQuery, cardId],
     queryFn: () =>
-      api.get('/admin/talents/search', { params: { q: debouncedQuery } }).then(
+      api.get('/admin/talents/search', { params: { q: debouncedQuery, card_id: cardId } }).then(
         (r) => (r.data?.data as TalentHit[]) ?? [],
       ),
     enabled: tab === 'talent' && debouncedQuery.length > 0,
@@ -151,8 +164,9 @@ export default function MobileAssignModal({
             items={(talents.data ?? []).map((t) => ({
               id: t.id,
               name: t.name || 'Unnamed talent',
-              subtitle: t.email,
+              subtitle: t.tier_eligible === false ? 'Wrong level for this card' : t.email,
               badge: t.tier,
+              blocked: t.tier_eligible === false,
             }))}
             disabled={isAssigning}
             onPick={(id) => {
@@ -175,7 +189,7 @@ function HitList({
 }: {
   loading: boolean;
   error: unknown;
-  items: { id: string; name: string; subtitle: string | null; badge: string | null }[];
+  items: { id: string; name: string; subtitle: string | null; badge: string | null; blocked?: boolean }[];
   disabled: boolean;
   onPick: (id: string) => void;
 }) {
@@ -189,7 +203,7 @@ function HitList({
         <button
           key={item.id}
           onClick={() => onPick(item.id)}
-          disabled={disabled}
+          disabled={disabled || !!item.blocked}
           className="sh-card sh-card-interactive flex w-full items-center justify-between gap-3 px-4 py-3 text-left disabled:opacity-50"
         >
           <div className="flex min-w-0 items-center gap-3">

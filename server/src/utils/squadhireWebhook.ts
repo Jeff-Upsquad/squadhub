@@ -143,6 +143,11 @@ interface AttemptOutcome {
   delivered: boolean;
   error?: string;
   recipientCount?: number;
+  // SquadHire refused this call on the merits (HTTP 409) — e.g. the talent's
+  // level doesn't match the card's tier, or they're suspended. Unlike a
+  // transport failure this can never succeed on retry, so callers stop
+  // retrying and surface the message to the admin instead.
+  rejected?: boolean;
 }
 
 // ------------------------------------------------------------
@@ -1349,9 +1354,20 @@ async function postManualAssignmentOnce(
     body: JSON.stringify(body),
     signal: controller.signal,
   })
-    .then((res) => {
-      if (!res.ok) return { delivered: false, error: `http_${res.status}` } as AttemptOutcome;
-      return { delivered: true } as AttemptOutcome;
+    .then(async (res) => {
+      if (res.ok) return { delivered: true } as AttemptOutcome;
+      // 409 = SquadHire refused on the merits (level mismatch, suspended
+      // talent, archived card). Carry its own wording through so the admin
+      // reads why instead of "http_409", and mark it non-retryable.
+      if (res.status === 409) {
+        const rejection = (await res.json().catch(() => ({}))) as { error?: string };
+        return {
+          delivered: false,
+          rejected: true,
+          error: (rejection?.error || 'SquadHire rejected this assignment').slice(0, 500),
+        } as AttemptOutcome;
+      }
+      return { delivered: false, error: `http_${res.status}` } as AttemptOutcome;
     })
     .catch((err) => {
       const msg = err instanceof Error ? err.message : String(err);
@@ -1380,7 +1396,11 @@ async function persistManualAssignmentResult(
   }
 
   const patch: Record<string, unknown> = {
-    squadhire_notify_attempts: (current?.squadhire_notify_attempts ?? 0) + attemptsDelta,
+    // A rejection is final — park the row at the attempt cap so the background
+    // sweeper stops re-sending a call SquadHire will refuse every time.
+    squadhire_notify_attempts: outcome.rejected
+      ? MAX_SYNC_ATTEMPTS
+      : (current?.squadhire_notify_attempts ?? 0) + attemptsDelta,
     squadhire_notify_error: outcome.delivered ? null : (outcome.error ?? 'unknown_error'),
   };
   if (outcome.delivered) {
@@ -1410,7 +1430,7 @@ export async function notifySquadhireOfManualAssignment(
   for (let i = 0; i < INLINE_ATTEMPTS; i++) {
     if (INLINE_BACKOFF_MS[i] > 0) await sleep(INLINE_BACKOFF_MS[i]);
     lastOutcome = await postManualAssignmentOnce(cardId, talentId);
-    if (lastOutcome.delivered) break;
+    if (lastOutcome.delivered || lastOutcome.rejected) break;
   }
   if (recipientRowId) {
     await persistManualAssignmentResult(recipientRowId, lastOutcome, INLINE_ATTEMPTS);

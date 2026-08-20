@@ -18,6 +18,12 @@ type TalentHit = {
   email: string | null;
   country: string | null;
   tier: string | null;
+  // Levels this talent holds in the card's category, and whether any of them
+  // matches the card's tier. tier_eligible is null when SquadHire couldn't
+  // judge (card context missing) — treat that as "allowed", the assignment
+  // call re-checks anyway.
+  tiers?: string[];
+  tier_eligible?: boolean | null;
 };
 
 export default function AssignRecipientPicker({
@@ -62,10 +68,13 @@ export default function AssignRecipientPicker({
     enabled: debouncedQuery.length > 0,
   });
 
+  // cardId goes along so SquadHire can tag each hit with its level and whether
+  // that level matches this card — a talent only ever receives cards at their
+  // own level, so the wrong ones are shown but not clickable.
   const talentsQ = useQuery({
-    queryKey: ['admin-talent-search', debouncedQuery],
+    queryKey: ['admin-talent-search', debouncedQuery, cardId],
     queryFn: () =>
-      api.get('/admin/talents/search', { params: { q: debouncedQuery } }).then(
+      api.get('/admin/talents/search', { params: { q: debouncedQuery, card_id: cardId } }).then(
         (r) => (r.data?.data as TalentHit[]) ?? [],
       ),
     enabled: debouncedQuery.length > 0,
@@ -242,44 +251,58 @@ export default function AssignRecipientPicker({
                     Talents <span className="opacity-70">({talents.length})</span>
                   </h4>
                   <div className="space-y-1.5">
-                    {talents.map((t) => (
-                      <button
-                        key={`talent-${t.id}`}
-                        disabled={isAssigning}
-                        onClick={() => assignTalent.mutate(t)}
-                        className="sh-card sh-card-interactive flex w-full items-center justify-between gap-3 px-4 py-3 text-left disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        <div className="flex min-w-0 items-center gap-3">
-                          <div
-                            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-bold ring-1 ring-[var(--color-sh-warm-border)]"
-                            style={{ background: 'var(--color-sh-lime-soft)', color: 'var(--color-sh-ink)' }}
-                          >
-                            {(t.name || 'T').charAt(0).toUpperCase()}
+                    {talents.map((t) => {
+                      const wrongLevel = t.tier_eligible === false;
+                      return (
+                        <button
+                          key={`talent-${t.id}`}
+                          disabled={isAssigning || wrongLevel}
+                          title={
+                            wrongLevel
+                              ? `${t.tiers?.join(' / ') || 'This talent'} — doesn't match this card's level`
+                              : undefined
+                          }
+                          onClick={() => assignTalent.mutate(t)}
+                          className="sh-card sh-card-interactive flex w-full items-center justify-between gap-3 px-4 py-3 text-left disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          <div className="flex min-w-0 items-center gap-3">
+                            <div
+                              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-bold ring-1 ring-[var(--color-sh-warm-border)]"
+                              style={{ background: 'var(--color-sh-lime-soft)', color: 'var(--color-sh-ink)' }}
+                            >
+                              {(t.name || 'T').charAt(0).toUpperCase()}
+                            </div>
+                            <div className="min-w-0">
+                              <p className="truncate text-sm font-semibold text-[var(--color-sh-ink)]">{t.name || 'Unnamed talent'}</p>
+                              {wrongLevel ? (
+                                <p className="truncate text-[11px] text-amber-700">
+                                  Wrong level for this card
+                                </p>
+                              ) : (
+                                t.email && (
+                                  <p className="truncate text-[11px] text-[var(--color-sh-ink-faint)]">{t.email}</p>
+                                )
+                              )}
+                            </div>
                           </div>
-                          <div className="min-w-0">
-                            <p className="truncate text-sm font-semibold text-[var(--color-sh-ink)]">{t.name || 'Unnamed talent'}</p>
-                            {t.email && (
-                              <p className="truncate text-[11px] text-[var(--color-sh-ink-faint)]">{t.email}</p>
+                          <div className="flex shrink-0 items-center gap-1.5">
+                            <span className="sh-status-pill" style={{ backgroundColor: '#F2EBFE', color: '#6B21A8' }}>
+                              Talent
+                            </span>
+                            {t.tier && (
+                              <span className="sh-status-pill" style={{ backgroundColor: '#EEF2F6', color: '#475569' }}>
+                                {t.tier}
+                              </span>
+                            )}
+                            {t.country && (
+                              <span className="sh-status-pill" style={{ backgroundColor: '#EEF2F6', color: '#475569' }}>
+                                {t.country}
+                              </span>
                             )}
                           </div>
-                        </div>
-                        <div className="flex shrink-0 items-center gap-1.5">
-                          <span className="sh-status-pill" style={{ backgroundColor: '#F2EBFE', color: '#6B21A8' }}>
-                            Talent
-                          </span>
-                          {t.tier && (
-                            <span className="sh-status-pill" style={{ backgroundColor: '#EEF2F6', color: '#475569' }}>
-                              {t.tier}
-                            </span>
-                          )}
-                          {t.country && (
-                            <span className="sh-status-pill" style={{ backgroundColor: '#EEF2F6', color: '#475569' }}>
-                              {t.country}
-                            </span>
-                          )}
-                        </div>
-                      </button>
-                    ))}
+                        </button>
+                      );
+                    })}
                   </div>
                   {talentsQ.isFetching && (
                     <p className="mt-2 text-[11px] text-[var(--color-sh-ink-faint)]">Refining…</p>
