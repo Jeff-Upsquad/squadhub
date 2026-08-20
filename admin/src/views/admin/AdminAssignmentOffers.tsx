@@ -82,11 +82,20 @@ export default function AdminAssignmentOffers({
   cardId,
   onOpenChat,
   clientView = false,
+  hideWhenEmpty = false,
 }: {
   cardId: string;
   onOpenChat?: (talentUserId: string, talentName: string) => void;
   /** Hide admin-only pricing (margin / talent floor) so the section matches the business review screen. */
   clientView?: boolean;
+  /**
+   * Drop the whole section when there is nothing to show. This read is scoped to
+   * ONE card, while a grouped brief's bids can sit on a tier sibling — so an
+   * empty "Bidding 0" here would contradict a live bid already visible on a
+   * talent's own row. Those rows carry the same Accept / Counter / Decline, so
+   * nothing is lost by staying quiet.
+   */
+  hideWhenEmpty?: boolean;
 }) {
   const qc = useQueryClient();
   const { data, isLoading } = useQuery({
@@ -170,6 +179,8 @@ export default function AdminAssignmentOffers({
       : bidPricing?.margin_type === 'fixed' && bidPricing.margin_value != null
         ? `₹${bidPricing.margin_value.toLocaleString()} fixed`
         : null;
+
+  if (hideWhenEmpty && !isLoading && offers.length === 0) return null;
 
   return (
     <div className="rounded-2xl border border-[#E7E7EA] bg-surface shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
@@ -380,5 +391,131 @@ export default function AdminAssignmentOffers({
         </ul>
       )}
     </div>
+  );
+}
+
+/**
+ * Accept / Counter / Decline for ONE talent's open bid, sized to sit inside a
+ * talent's row on the Client view — the business review screen puts the bid
+ * actions on the talent rather than making you scroll to a separate list.
+ *
+ * Shares the `admin-assignment-offers` cache with the Bidding section above, so
+ * either surface refreshes the other and neither re-fetches.
+ */
+export function ClientBidActions({
+  cardId,
+  offerId,
+  offerStatus,
+  disabled = false,
+}: {
+  cardId: string;
+  offerId: string | null;
+  offerStatus: string | null;
+  disabled?: boolean;
+}) {
+  const qc = useQueryClient();
+  const [countering, setCountering] = useState(false);
+  const [counterVal, setCounterVal] = useState('');
+
+  const bidPricing = qc.getQueryData<{ bid_pricing?: BidPricing | null }>([
+    'admin-assignment-offers',
+    cardId,
+  ])?.bid_pricing ?? null;
+  const minBusiness = bidPricing?.min_customer_price ?? null;
+
+  const invalidate = () => {
+    qc.invalidateQueries({ queryKey: ['admin-assignment-offers', cardId] });
+    qc.invalidateQueries({ queryKey: ['admin-card-recipients', cardId] });
+    qc.invalidateQueries({ queryKey: ['client-view-card', cardId] });
+    qc.invalidateQueries({ queryKey: ['admin-subscription-cards'] });
+    qc.invalidateQueries({ queryKey: ['admin-card-detail', cardId] });
+  };
+
+  const act = useMutation({
+    mutationFn: (v: { kind: 'accept' | 'decline' } | { kind: 'counter'; amount: OfferAmount }) =>
+      v.kind === 'counter'
+        ? api.post(`/admin/subscription-cards/${cardId}/offers/${offerId}/counter`, { amount: v.amount })
+        : api.post(`/admin/subscription-cards/${cardId}/offers/${offerId}/${v.kind}`, {}),
+    onSuccess: (_d, v) => {
+      invalidate();
+      setCountering(false);
+      setCounterVal('');
+      showToast(
+        v.kind === 'accept' ? 'Bid accepted' : v.kind === 'decline' ? 'Bid declined' : 'Counter-offer sent',
+        'success',
+      );
+    },
+    onError: (e: any) => showToast(e?.response?.data?.error || 'Could not update the bid', 'error'),
+  });
+
+  // Only an offer sitting on the business's side of the table is actionable.
+  if (!offerId || offerStatus !== 'pending_business') return null;
+
+  const submitCounter = () => {
+    const n = Math.round(Number(counterVal));
+    if (!Number.isFinite(n) || n <= 0 || n % OFFER_STEP !== 0) {
+      showToast(`Amount must be a positive multiple of ₹${OFFER_STEP}`, 'error');
+      return;
+    }
+    if (minBusiness != null && n < minBusiness) {
+      showToast(`Bid cannot be below ${fmtMoney(minBusiness)}`, 'error');
+      return;
+    }
+    act.mutate({ kind: 'counter', amount: { amount: n, currency: 'INR', period: 'project' } });
+  };
+
+  const busy = act.isPending || disabled;
+
+  return (
+    <>
+      <button
+        type="button"
+        disabled={busy}
+        onClick={() => act.mutate({ kind: 'decline' })}
+        className="rounded-lg border border-[var(--color-sh-warm-border)] px-2 py-2 text-xs font-semibold text-[var(--color-sh-ink-subtle)] transition-colors hover:text-red-600 disabled:opacity-40 sm:px-3 sm:py-1.5"
+      >
+        Decline bid
+      </button>
+      <button
+        type="button"
+        disabled={busy}
+        onClick={() => {
+          setCountering((c) => !c);
+          setCounterVal('');
+        }}
+        className="rounded-lg border border-[var(--color-sh-warm-border)] px-2 py-2 text-xs font-semibold text-foreground transition-colors hover:bg-[var(--color-sh-cream)] disabled:opacity-40 sm:px-3 sm:py-1.5"
+      >
+        Counter
+      </button>
+      <button
+        type="button"
+        disabled={busy}
+        onClick={() => act.mutate({ kind: 'accept' })}
+        className="rounded-lg bg-amber-600 px-2 py-2 text-xs font-semibold text-white transition-colors hover:bg-amber-700 disabled:opacity-40 sm:px-3 sm:py-1.5"
+      >
+        Accept bid
+      </button>
+      {countering && (
+        <div className="col-span-2 flex items-center gap-2 sm:col-span-1 sm:w-full">
+          <input
+            type="number"
+            min={OFFER_STEP}
+            step={OFFER_STEP}
+            value={counterVal}
+            onChange={(e) => setCounterVal(e.target.value)}
+            placeholder={minBusiness != null ? `₹ (min ${minBusiness.toLocaleString()})` : 'Your figure (₹)'}
+            className="w-40 rounded-lg border border-[#E7E7EA] bg-surface px-3 py-1.5 text-sm text-foreground"
+          />
+          <button
+            type="button"
+            disabled={busy || !(Number(counterVal) > 0)}
+            onClick={submitCounter}
+            className="rounded-lg bg-[#0a0a0a] px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-40"
+          >
+            Send
+          </button>
+        </div>
+      )}
+    </>
   );
 }

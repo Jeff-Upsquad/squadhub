@@ -864,15 +864,6 @@ export default function AdminSubscriptionCards({
             onOpenPanel={() => setShowPanel(true)}
             viewMode={cardViewMode}
             onSetViewMode={setCardViewMode}
-            tierTabs={selectedGroupCards.length > 1 ? (
-              <DetailTierTabs
-                cards={selectedGroupCards}
-                activeId={selectedCard.id}
-                allActive={allTiersMode}
-                onSelect={selectTierCard}
-                onSelectAll={selectAllTiers}
-              />
-            ) : undefined}
           />
         ) : cardViewMode === 'details' ? (
           <AdminCardEditor
