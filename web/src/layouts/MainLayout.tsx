@@ -35,6 +35,7 @@ import GlobalMeetingPanel from '../views/app/meetings/GlobalMeetingPanel';
 import ExternalTabPane from '../components/ExternalTabPane';
 import NotesShell from '../views/app/notes/NotesShell';
 import { useHasMiniApp } from '../hooks/useMiniApps';
+import { useDms } from '../hooks/useDms';
 import TimeManagementPage from '../views/app/time-management/TimeManagementPage';
 import SalesLeadsPage from '../views/app/sales/SalesLeadsPage';
 import LeadsPage from '../views/app/leads/LeadsPage';
@@ -247,7 +248,7 @@ function RailBtn({
 }
 
 export default function MainLayout() {
-  const { currentWorkspace, activeChannelId, activeChannelKind, dmConversations, setWorkspace, setChannels, setActiveChannel } = useWorkspaceStore();
+  const { currentWorkspace, activeChannelId, activeChannelKind, dmConversations, setWorkspace, setChannels, setActiveChannel, setDmConversations } = useWorkspaceStore();
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
   const pmReset = usePMStore((s) => s.reset);
@@ -490,6 +491,16 @@ export default function MainLayout() {
   });
 
   const channels: Channel[] = useMemo(() => channelsRes?.data || [], [channelsRes]);
+
+  // DM conversations for the current workspace. This lives here rather than in
+  // HomeSidebar because the sidebar isn't rendered on mobile — without it the
+  // phone shell's "Direct messages" list is always empty and renderChat can't
+  // resolve a DM's title. HomeSidebar keeps its own copy; same query key, so
+  // React Query dedupes and the store lands on the same array either way.
+  const { data: dmsData } = useDms(currentWorkspace?.id ?? null);
+  useEffect(() => {
+    if (dmsData) setDmConversations(dmsData);
+  }, [dmsData, setDmConversations]);
 
   // Update store when channels change
   useEffect(() => {
@@ -1066,18 +1077,11 @@ export default function MainLayout() {
           setHomeView={setHomeView}
           setActiveChannel={setActiveChannel}
           onOpenSearch={() => setSearchOpen(true)}
-          onCreateTask={() => setShowCreateTaskModal(true)}
           onNewDm={() => setShowNewDm(true)}
           onLogout={logout}
           // ActiveTimer and EmergencyBanner are in-flow strips, not fixed
           // overlays — outside the shell they'd render behind it.
           banner={<><EmergencyBanner /><ActiveTimer /></>}
-          // z-[20], so it has to stack inside the shell's context to be seen.
-          floating={
-            <DraftTasksWidget
-              onResumeDraft={(saved) => { setResumingDraft(saved); setShowCreateTaskModal(true); }}
-            />
-          }
         />
 
         <TimerConflictDialog />
@@ -1086,15 +1090,13 @@ export default function MainLayout() {
         <GroupRunDetailPanel />
         <GlobalMeetingPanel />
         <ToastContainer />
-        <FeatureTipOverlay />
+        {/* No <FeatureTipOverlay /> here on purpose: the admin-authored tips are
+            anchored to desktop chrome (rail, sidebar, tab strip) that doesn't
+            exist on a phone, so they'd spotlight nothing. The shell runs its own
+            MobileTour instead. Nor <GlobalCreateTaskModal /> / <DraftTasksWidget />
+            — creation on mobile goes through MobileCreateSheet, which doesn't
+            produce drafts. */}
 
-        {showCreateTaskModal && (
-          <GlobalCreateTaskModal
-            onClose={() => { setShowCreateTaskModal(false); setResumingDraft(null); }}
-            resumeDraft={resumingDraft}
-            inListContext={activeSection === 'home' && homeView === 'tasks'}
-          />
-        )}
         {showNewDm && currentWorkspace && (
           <NewDmModal workspaceId={currentWorkspace.id} onClose={() => setShowNewDm(false)} />
         )}

@@ -79,6 +79,22 @@ export const MIcon = {
       <path d="M12 5v14M5 12h14" />
     </svg>
   ),
+  close: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round">
+      <path d="M6 6l12 12M18 6L6 18" />
+    </svg>
+  ),
+  tick: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
+      <path d="m5 12.5 4.5 4.5L19 7" />
+    </svg>
+  ),
+  flag: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4.6 15s1-1 4-1 5 2 8 2 3.8-1 3.8-1V3.4s-1 1-3.8 1-5-2-8-2-4 1-4 1z" />
+      <path d="M4.6 21.4V15" />
+    </svg>
+  ),
   folder: (
     <svg viewBox="0 0 24 24" fill="currentColor">
       <path d="M3.6 7.2A2.2 2.2 0 0 1 5.8 5h3.3l1.7 2h7.4a2.2 2.2 0 0 1 2.2 2.2v7.6a2.2 2.2 0 0 1-2.2 2.2H5.8a2.2 2.2 0 0 1-2.2-2.2z" />
