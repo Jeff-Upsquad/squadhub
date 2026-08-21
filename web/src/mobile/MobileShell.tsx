@@ -25,8 +25,10 @@ import type { Channel, DmConversation, User } from '@squadhub/shared';
 import type { ActiveSection, HomeView } from '../layouts/MainLayout';
 import { launchApp, type AppDef } from '../config/apps';
 import { useThemeStore } from '../stores/themeStore';
+import { useIsClient } from '../hooks/useUserType';
 import { usePMStore } from '../stores/pmStore';
 import MobileHome, { applyOpenTarget } from './MobileHome';
+import MobilePartnerHome, { type PartnerAction } from './MobilePartnerHome';
 import MobileChat from './MobileChat';
 import MobileMore, { type MoreTarget } from './MobileMore';
 import MobileCreateSheet from './MobileCreateSheet';
@@ -87,6 +89,12 @@ export default function MobileShell({
   banner,
   floating,
 }: MobileShellProps) {
+  // Clients and client staff get the Business app's spaces-first Home; every
+  // other user type (internal, partner, partner_employee) gets the Partner
+  // app's briefing Home. The rest of the shell is shared — both Android apps
+  // use the same four tabs and the same SlackKit chrome.
+  const isClient = useIsClient();
+
   const [tab, setTab] = useState<MTab>('home');
   // Non-null while drilled into a screen. `target` is the space/list it opened
   // (null for screens with no PM scope, e.g. a conversation or Calendar), and
@@ -208,6 +216,16 @@ export default function MobileShell({
   // Inline "+" on a Home card — the sheet opens already pointed at that space.
   const createIn = (t: OpenTarget) => setCreating({ preset: t });
 
+  // Partner Home's briefing tiles and action chips. Each opens the web surface
+  // that answers the same question the Android screen does.
+  const openPartnerAction = (a: PartnerAction) => {
+    const view: HomeView = a === 'my-home' ? 'hub' : a === 'meetings' ? 'meetings' : a === 'checkin' ? 'checkin' : 'my-tasks';
+    const title = a === 'my-home' ? 'My Home' : a === 'meetings' ? 'Meetings' : a === 'checkin' ? 'Daily Check-In' : 'My Tasks';
+    setActiveSection('home');
+    setHomeView(view);
+    openSection(title);
+  };
+
   // ---- Chrome decisions ------------------------------------------------
   const onSection = section !== null;
   const carbonHeader = !onSection && CARBON_TABS.has(tab);
@@ -280,7 +298,16 @@ export default function MobileShell({
         ) : (
           <div className="msh-scroll">
             {tab === 'home' ? (
-              <MobileHome workspaceId={workspaceId} onOpen={openTarget} onCreateIn={createIn} />
+              isClient ? (
+                <MobileHome workspaceId={workspaceId} onOpen={openTarget} onCreateIn={createIn} />
+              ) : (
+                <MobilePartnerHome
+                  workspaceId={workspaceId}
+                  onOpen={openTarget}
+                  onCreateIn={createIn}
+                  onAction={openPartnerAction}
+                />
+              )
             ) : tab === 'chat' ? (
               <MobileChat
                 channels={channels}
@@ -358,7 +385,11 @@ export default function MobileShell({
       {/* Only on the Home tab, where all four anchors are on screen, and never
           over the create sheet. */}
       {tourOpen && !onSection && tab === 'home' && !creating && (
-        <MobileTour userId={user?.id} onDone={() => setTourOpen(false)} />
+        <MobileTour
+          userId={user?.id}
+          audience={isClient ? 'client' : 'partner'}
+          onDone={() => setTourOpen(false)}
+        />
       )}
 
       {drawerOpen && (

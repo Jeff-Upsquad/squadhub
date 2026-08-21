@@ -6,8 +6,8 @@
  * The web's admin-driven Feature Tips are written against desktop anchors (the
  * icon rail, the module sidebar, the tab strip) — none of which exist here, so
  * they're suppressed on mobile and this runs instead. It's a fixed, local tour:
- * four coachmarks that introduce the bottom bar, explain what a client space
- * is, and walk through creating a task and messaging the talent on your space.
+ * four coachmarks introducing the bottom bar, the Home the user actually got
+ * (spaces for clients, the briefing for partners), creating a task, and chat.
  *
  * It shows once per user per device (localStorage) and only on the Home tab,
  * where all four anchors are on screen.
@@ -27,37 +27,77 @@ type Step = {
   bullets?: [string, string][];
 };
 
-const STEPS: Step[] = [
-  {
-    anchor: 'tabbar',
-    title: 'Start with the four tabs',
-    body: 'Everything on your phone lives behind one of these:',
-    bullets: [
-      ['Home', 'your spaces — where the work is'],
-      ['Chat', 'conversations with your team and talent'],
-      ['Inbox', 'what needs your attention; the red dot is unread'],
-      ['More', 'tasks, calendar, resources and your account'],
-    ],
-  },
-  {
-    anchor: 'spaces',
-    title: 'These are your spaces',
-    body:
-      'A space is one stream of work your team shares with SquadHub — a Design Space, a Video Space, and so on. Everything for that service lives inside it: the task list, the files, the people working on it.\n\nTap a space to see its tasks. Tap the arrow on a task to open it.',
-  },
-  {
-    anchor: 'fab',
-    title: 'Ask for something new',
-    body:
-      'This button creates a task — that\'s how you brief the team.\n\nGive it a name, pick which space it belongs to, and add a due date if it matters. Tap Create and the talent on that space sees it straight away.\n\nThe small + on a space card does the same thing, already pointed at that space.',
-  },
-  {
-    anchor: 'chat-tab',
-    title: 'Talk to your talent',
-    body:
-      'The talent working on your space is a real person you can message any time.\n\nOpen Chat and look under Direct messages for their name — that\'s a private thread with just them. Channels are shared with the wider team, and Support reaches SquadHub itself.\n\nNo one to message yet? Tap New message and search for them.',
-  },
-];
+type Audience = 'client' | 'partner';
+
+/**
+ * Two scripts, because the two Homes answer different questions. Clients are
+ * introduced to their spaces; partners and internal staff to their briefing.
+ * Steps 1 and 4 differ only in wording — same anchors, same shape.
+ */
+const STEPS: Record<Audience, Step[]> = {
+  client: [
+    {
+      anchor: 'tabbar',
+      title: 'Start with the four tabs',
+      body: 'Everything on your phone lives behind one of these:',
+      bullets: [
+        ['Home', 'your spaces — where the work is'],
+        ['Chat', 'conversations with your team and talent'],
+        ['Inbox', 'what needs your attention; the red dot is unread'],
+        ['More', 'tasks, calendar, resources and your account'],
+      ],
+    },
+    {
+      anchor: 'spaces',
+      title: 'These are your spaces',
+      body:
+        'A space is one stream of work your team shares with SquadHub — a Design Space, a Video Space, and so on. Everything for that service lives inside it: the task list, the files, the people working on it.\n\nTap a space to see its tasks. Tap the arrow on a task to open it.',
+    },
+    {
+      anchor: 'fab',
+      title: 'Ask for something new',
+      body:
+        "This button creates a task — that's how you brief the team.\n\nGive it a name, pick which space it belongs to, and add a due date if it matters. Tap Create and the talent on that space sees it straight away.\n\nThe small + on a space card does the same thing, already pointed at that space.",
+    },
+    {
+      anchor: 'chat-tab',
+      title: 'Talk to your talent',
+      body:
+        "The talent working on your space is a real person you can message any time.\n\nOpen Chat and look under Direct messages for their name — that's a private thread with just them. Channels are shared with the wider team, and Support reaches SquadHub itself.\n\nNo one to message yet? Tap New message and search for them.",
+    },
+  ],
+  partner: [
+    {
+      anchor: 'tabbar',
+      title: 'Start with the four tabs',
+      body: 'Everything on your phone lives behind one of these:',
+      bullets: [
+        ['Home', "today's briefing and your workspace"],
+        ['Chat', 'channels and direct messages'],
+        ['Inbox', 'what needs your attention; the red dot is unread'],
+        ['More', 'my tasks, day planner, calendar, apps and your account'],
+      ],
+    },
+    {
+      anchor: 'briefing',
+      title: "Your day, up top",
+      body:
+        "The big tile is what's scheduled for today, with Overdue and New beside it — New is work assigned to you that you haven't looked at yet.\n\nTap any tile to open My Tasks. Below them, My Home, Meetings and Check-in are one tap away.",
+    },
+    {
+      anchor: 'fab',
+      title: 'Create a task',
+      body:
+        "Give it a name, choose the list it belongs in, then set assignee, priority and dates from the chips.\n\nOpen a space or list first and the + is already pointed at it, so you can skip the picker.",
+    },
+    {
+      anchor: 'chat-tab',
+      title: 'Channels and DMs',
+      body:
+        'Chat holds the channels you belong to and your direct messages.\n\nChannels linked to a space or list are shared with everyone on that work; a DM is a private thread. Tap New message to start one, and Support reaches the SquadHub team.',
+    },
+  ],
+};
 
 const STORAGE_PREFIX = 'squadhub.mobile-tour.v1';
 
@@ -76,17 +116,20 @@ export function hasSeenMobileTour(userId: string | undefined): boolean {
 
 export default function MobileTour({
   userId,
+  audience,
   onDone,
 }: {
   userId: string | undefined;
+  audience: Audience;
   onDone: () => void;
 }) {
+  const steps = STEPS[audience];
   const [i, setI] = useState(0);
   const [rect, setRect] = useState<DOMRect | null>(null);
   // Borrowed from the anchor so the ring hugs a circular FAB as tightly as it
   // hugs a rectangular bar.
   const [radius, setRadius] = useState('14px');
-  const step = STEPS[i];
+  const step = steps[i];
 
   // Track the anchor's box: it moves as the tour advances, and again if the
   // sheet scrolls or the viewport resizes (address bar collapsing, rotation).
@@ -129,7 +172,7 @@ export default function MobileTour({
     return () => window.removeEventListener('keydown', onKey);
   });
 
-  const last = i === STEPS.length - 1;
+  const last = i === steps.length - 1;
   const hole = rect
     ? {
         top: rect.top - pad,
@@ -157,7 +200,7 @@ export default function MobileTour({
           : { top: '50%', transform: 'translateY(-50%)' }
       }
     >
-      <span className="mtour-badge">Quick tour · {i + 1} of {STEPS.length}</span>
+      <span className="mtour-badge">Quick tour · {i + 1} of {steps.length}</span>
       <h2 id="mtour-title">{step.title}</h2>
       <p>{step.body}</p>
       {step.bullets && (
