@@ -489,6 +489,39 @@ export default function AdminCardEditor({
     [],
   );
 
+  // The client's stated budget for a level ("Client proposed price"). Editable
+  // so a figure captured wrong on the brief — or renegotiated on a call — can
+  // be corrected here instead of in the DB. Lives on
+  // tier_pricing.<tier>.client_budget; the scalar card column is kept in step
+  // so clearing every row actually sticks across a reload (the loader falls
+  // back to the scalar when the per-tier map is empty).
+  const updateClientBudget = useCallback(
+    (tier: string, value: number | null) => {
+      const amount = value != null && value > 0 ? value : null;
+      const previous = clientBudgetsByTier[tier] ?? null;
+      const next = { ...clientBudgetsByTier };
+      if (amount != null) next[tier] = amount;
+      else delete next[tier];
+      setClientBudgetsByTier(next);
+      const vals = Object.values(next);
+      setClientBudget(vals.length > 0 && vals.every((v) => v === vals[0]) ? vals[0] : null);
+      // proposed_price mirrors the client's figure on intake, and the loader
+      // reads it back as the budget when no explicit client_budget is stored.
+      // Keep the two in step ONLY while proposed is still that mirror (blank,
+      // or equal to the amount we're replacing) and no Final has been set —
+      // never overwrite a distinct price an admin typed.
+      setTierPricing((prev) => {
+        const entry = prev[tier];
+        if (!entry) return prev;
+        if (entry.subscriptionPrice != null && entry.subscriptionPrice > 0) return prev;
+        const mirrors = !(entry.proposedPrice > 0) || entry.proposedPrice === previous;
+        if (!mirrors) return prev;
+        return { ...prev, [tier]: { ...entry, proposedPrice: amount ?? 0 } };
+      });
+    },
+    [clientBudgetsByTier],
+  );
+
   // Countries list (for Location + country-aware catalog pricing).
   const countriesQuery = useQuery({
     queryKey: ['admin-countries'],
@@ -804,6 +837,10 @@ export default function AdminCardEditor({
         proposed_price: legacyProposedPrice,
         subscription_price: legacySubscriptionPrice,
         markup: legacyMarkup,
+        // Scalar mirror of the per-tier client budgets (single amount when the
+        // levels agree, else null). Sent so an edited/cleared "Client proposed"
+        // isn't undone by the loader falling back to a stale card column.
+        client_budget: clientBudget,
         tier_pricing: tierPricingPayload,
         publish_targets: publishTargets,
         distribution,
@@ -1861,8 +1898,22 @@ export default function AdminCardEditor({
                                 : '—'}
                           </td>
 
-                          <td className="px-2 py-1.5">
-                            {clientProposed != null ? (
+                          <td
+                            className="px-2 py-1.5"
+                            onClick={(e) => { if (isEditable) e.stopPropagation(); }}
+                          >
+                            {isEditable ? (
+                              <PriceInput
+                                value={clientProposed ?? ''}
+                                placeholder="—"
+                                onChange={(e) => {
+                                  const v = parseInt(e.target.value);
+                                  updateClientBudget(tier, Number.isFinite(v) && v > 0 ? v : null);
+                                }}
+                                ariaLabel={`${tier} client proposed price`}
+                                currency={catalogCurrency}
+                              />
+                            ) : clientProposed != null ? (
                               <div className="text-xs font-semibold tabular-nums text-[var(--color-sh-ink)]">
                                 {catalogCurrency}{clientProposed.toLocaleString()}
                               </div>
@@ -1954,7 +2005,7 @@ export default function AdminCardEditor({
                 </p>
               ) : (
                 <p className="px-0.5 text-[10px] leading-snug text-[var(--color-sh-ink-faint)]">
-                  Click a row to mark client-selected (custom Final) · <strong className="font-medium text-[var(--color-sh-ink-muted)]">Subscription</strong> = catalog list price · <strong className="font-medium text-[var(--color-sh-ink-muted)]">Client proposed</strong> = budget from brief · <strong className="font-medium text-[var(--color-sh-ink-muted)]">Final</strong> = what the client pays · Unselected levels still broadcast at catalog Final
+                  Click a row to mark client-selected (custom Final) · <strong className="font-medium text-[var(--color-sh-ink-muted)]">Subscription</strong> = catalog list price · <strong className="font-medium text-[var(--color-sh-ink-muted)]">Client proposed</strong> = budget from the brief, editable here · <strong className="font-medium text-[var(--color-sh-ink-muted)]">Final</strong> = what the client pays · Unselected levels still broadcast at catalog Final
                 </p>
               )}
             </div>
