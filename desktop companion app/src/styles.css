@@ -249,6 +249,30 @@ body.qa-window {
   border-color: var(--primary);
 }
 
+/* Quick-add: close button (top-right; Esc does the same) */
+.qa-close {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  color: var(--text-muted);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+
+.qa-close:hover {
+  background: var(--bg-input);
+  color: var(--text);
+}
+
 .qa-drop-overlay {
   position: absolute;
   inset: 0;
@@ -735,4 +759,31 @@ body.qa-window {
 .qa-add-btn:disabled {
   opacity: 0.5;
   cursor: default;
+}
+
+/* Quick-add: background attachment-upload status */
+.qa-bgjobs {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.qa-bgjob {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.qa-bg-note {
+  color: var(--text-muted);
+}
+
+.qa-bgjob .qa-chip {
+  padding: 2px 10px;
+  font-size: 11px;
+}
+
+.qa-bgjob .qa-att-remove {
+  margin-left: auto;
 }

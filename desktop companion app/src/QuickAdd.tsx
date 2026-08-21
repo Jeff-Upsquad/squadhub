@@ -20,7 +20,7 @@ import { getRecentLists, pushRecentList, type RecentList } from './services/rece
 // the personal list / list tree once per app run.
 let cachedPersonal: { id: string; name: string } | null = null;
 
-type Phase = 'idle' | 'saving' | 'uploading' | 'done' | 'error';
+type Phase = 'idle' | 'saving' | 'done' | 'error';
 type MenuKey = 'list' | 'assignee' | 'priority' | 'date' | null;
 type SelectedList = { id: string; name: string };
 
@@ -29,6 +29,17 @@ type SelectedList = { id: string; name: string };
 // removal/reset) and null for everything else.
 type PendingAttachment = { id: string; file: File; previewUrl: string | null };
 let attachmentSeq = 0;
+
+// A batch of files handed to the background uploader once its task exists.
+// Jobs live on the persistent quickadd webview, so uploads keep running after
+// the panel hides; any that fail stay here (with a Retry) until dismissed.
+type BgUploadJob = {
+  key: number;
+  taskId: string;
+  taskTitle: string;
+  files: PendingAttachment[];
+  active: boolean;
+};
 
 const PRIORITIES: { value: TaskPriority; label: string; color: string }[] = [
   { value: 'emergency', label: 'Emergency', color: '#dc2626' },
@@ -136,6 +147,11 @@ export default function QuickAdd() {
   // blur behaviour, since dragging a file in from another app blurs us first.
   const draggingRef = useRef(false);
   const hideTimerRef = useRef<number | null>(null);
+  // Attachment uploads continue behind the scenes after the panel closes;
+  // these keep their status visible/retryable whenever the panel resurfaces.
+  const bgJobsRef = useRef<BgUploadJob[]>([]);
+  const bgSeqRef = useRef(0);
+  const [bgJobs, setBgJobs] = useState<BgUploadJob[]>([]);
 
   const cancelPendingHide = () => {
     if (hideTimerRef.current != null) {
@@ -260,7 +276,7 @@ export default function QuickAdd() {
 
   const submit = async () => {
     const trimmed = title.trim();
-    if (!trimmed || phase === 'saving' || phase === 'uploading') return;
+    if (!trimmed || phase === 'saving') return;
 
     if (!useAuthStore.getState().accessToken) {
       setPhase('error');
@@ -311,27 +327,19 @@ export default function QuickAdd() {
         }
       }
 
-      // Upload any dropped files; keep the ones that fail queued so the next
-      // Enter / Add retries only those (the task already exists).
+      // Hand dropped files to the background uploader and close right away —
+      // the task exists, so slow or flaky uploads shouldn't hold the panel
+      // open. Failures surface (with a retry) the next time it's summoned.
       if (attachments.length) {
-        setPhase('uploading');
-        const failed: PendingAttachment[] = [];
-        for (const a of attachments) {
-          try {
-            await uploadTaskAttachment(task.id, a.file);
-            if (a.previewUrl) URL.revokeObjectURL(a.previewUrl);
-          } catch {
-            failed.push(a);
-          }
-        }
-        if (failed.length) {
-          setAttachments(failed);
-          setPhase('error');
-          setError(
-            `Task added, but ${failed.length} ${failed.length === 1 ? 'file' : 'files'} failed to upload — press Enter to retry.`,
-          );
-          return;
-        }
+        const job: BgUploadJob = {
+          key: ++bgSeqRef.current,
+          taskId: task.id,
+          taskTitle: trimmed,
+          files: attachments,
+          active: false,
+        };
+        bgJobsRef.current.push(job);
+        runBgUploads(job);
         setAttachments([]);
       }
 
@@ -396,6 +404,41 @@ export default function QuickAdd() {
       if (hit?.previewUrl) URL.revokeObjectURL(hit.previewUrl);
       return cur.filter((a) => a.id !== id);
     });
+
+  // ── background attachment uploads (started on submit, survive dismissal) ───
+  const syncBgJobs = () => setBgJobs([...bgJobsRef.current]);
+
+  const runBgUploads = (job: BgUploadJob) => {
+    job.active = true;
+    syncBgJobs();
+    void (async () => {
+      const failed: PendingAttachment[] = [];
+      for (const a of job.files) {
+        try {
+          await uploadTaskAttachment(job.taskId, a.file);
+          if (a.previewUrl) URL.revokeObjectURL(a.previewUrl);
+        } catch {
+          failed.push(a);
+        }
+      }
+      job.files = failed;
+      job.active = false;
+      syncBgJobs();
+    })();
+  };
+
+  const retryBgJob = (key: number) => {
+    const job = bgJobsRef.current.find((j) => j.key === key);
+    if (!job || job.active) return;
+    runBgUploads(job);
+  };
+
+  const dismissBgJob = (key: number) => {
+    const job = bgJobsRef.current.find((j) => j.key === key);
+    if (job) for (const a of job.files) if (a.previewUrl) URL.revokeObjectURL(a.previewUrl);
+    bgJobsRef.current = bgJobsRef.current.filter((j) => j.key !== key);
+    syncBgJobs();
+  };
 
   const onDragEnter = (e: React.DragEvent) => {
     if (!Array.from(e.dataTransfer.types).includes('Files')) return;
@@ -462,6 +505,15 @@ export default function QuickAdd() {
     >
       <div className={`qa${dragOver ? ' qa-drop-active' : ''}`}>
         {dragOver && <div className="qa-drop-overlay">Drop image to attach</div>}
+        <button
+          type="button"
+          className="qa-close"
+          onClick={() => void win.hide()}
+          title="Close (Esc)"
+          aria-label="Close"
+        >
+          ×
+        </button>
       <div className="qa-row">
         <span className="qa-icon">+</span>
         <input
@@ -659,10 +711,41 @@ export default function QuickAdd() {
         </div>
       )}
 
+      {bgJobs.length > 0 && (
+        <div className="qa-bgjobs">
+          {bgJobs.map((j) => (
+            <div key={j.key} className="qa-bgjob">
+              {j.active ? (
+                <span className="qa-bg-note">
+                  Uploading {j.files.length} {j.files.length === 1 ? 'attachment' : 'attachments'} · “{j.taskTitle}”
+                </span>
+              ) : (
+                <>
+                  <span className="qa-err">
+                    “{j.taskTitle}” — {j.files.length} {j.files.length === 1 ? 'file' : 'files'} failed to upload
+                  </span>
+                  <button type="button" className="qa-chip" onClick={() => retryBgJob(j.key)}>
+                    Retry
+                  </button>
+                  <button
+                    type="button"
+                    className="qa-att-remove"
+                    onClick={() => dismissBgJob(j.key)}
+                    title="Dismiss"
+                    aria-label="Dismiss failed uploads"
+                  >
+                    ×
+                  </button>
+                </>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
       <div className="qa-footer">
         <div className="qa-hint">
           {phase === 'saving' && <span>Adding…</span>}
-          {phase === 'uploading' && <span>Uploading attachment…</span>}
           {phase === 'done' && <span className="qa-ok">Added ✓</span>}
           {phase === 'error' && <span className="qa-err">{error}</span>}
           {phase === 'idle' && (
@@ -675,7 +758,7 @@ export default function QuickAdd() {
           type="button"
           className="qa-add-btn"
           onClick={() => void submit()}
-          disabled={!title.trim() || phase === 'saving' || phase === 'uploading'}
+          disabled={!title.trim() || phase === 'saving'}
         >
           Add a Task
         </button>
