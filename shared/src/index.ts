@@ -1741,6 +1741,40 @@ export interface SubscriptionPlanPricing {
   country?: Country;
 }
 
+// ---- Assignment catalog ----
+// Assignments have no list price — only OUR CUT, per service and level.
+// The margin row is shape-compatible with SubscriptionPlanPricing's margin
+// fields (PlanMarginFields), so the same helpers apply it in both
+// directions: partnerPriceFromCustomer for a business-committed price,
+// customerPriceFromPartner for a talent-quoted one.
+
+export interface AssignmentService {
+  id: string;
+  slug: string;
+  name: string;
+  description: string | null;
+  is_active: boolean;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+  // Joined
+  margins?: AssignmentServiceMargin[];
+}
+
+export interface AssignmentServiceMargin {
+  id: string;
+  service_id: string;
+  tier: SubscriptionTier;
+  country_id: string;
+  /** Flat amount, or a percentage when margin_type is 'percent'. */
+  margin_value: number;
+  margin_type: 'fixed' | 'percent';
+  created_at: string;
+  updated_at: string;
+  // Joined
+  country?: Country;
+}
+
 /** Per-tier pricing stored in subscription_cards.tier_pricing JSONB for
  *  multi-tier draft cards: `{ [tier]: { proposed_price, markup, ... } }`.
  *  Client-stated budgets may live per tier as `client_budget` (when the
