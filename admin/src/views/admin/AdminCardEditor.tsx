@@ -72,6 +72,27 @@ function currencySymbol(code: string | undefined | null): string {
   return code === 'USD' ? '$' : '₹';
 }
 
+/** "2026-10-10" → "10 Oct 2026". Returns null for empty/unparseable input. */
+function formatBriefDate(iso: string | null | undefined): string | null {
+  if (!iso) return null;
+  const d = new Date(`${iso}T00:00:00`);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+/**
+ * Whole days from today to an ISO date — negative once it's past.
+ * Drives the "in 12 days" / "3 days overdue" note next to a deadline.
+ */
+function daysFromToday(iso: string | null | undefined): number | null {
+  if (!iso) return null;
+  const d = new Date(`${iso}T00:00:00`);
+  if (Number.isNaN(d.getTime())) return null;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return Math.round((d.getTime() - today.getTime()) / 86400000);
+}
+
 function workingDaysThisMonth(workingDays: string[]): number {
   if (workingDays.length === 0) return 0;
   const now = new Date();
@@ -182,7 +203,14 @@ interface CardData {
   plan_name: string | null;
   /** 'assignment' cards have no plan or list price — only a catalog margin. */
   card_type?: 'subscription' | 'assignment' | 'hiring' | null;
-  assignment_details?: { pricing_mode?: 'priced' | 'unpriced' | null; [key: string]: unknown } | null;
+  assignment_details?: {
+    pricing_mode?: 'priced' | 'unpriced' | null;
+    duration?: string | null;
+    start_date?: string | null;
+    deadline?: string | null;
+    scope_type?: string | null;
+    [key: string]: unknown;
+  } | null;
   subscription_request_id: number | null;
   squadhire_category_ids: string[] | null;
   target_country_ids: string[];
@@ -264,7 +292,6 @@ export default function AdminCardEditor({
   // margin only — subtracted from a business-committed price, added to a
   // talent-quoted one (assignment_details.pricing_mode says which way).
   const isAssignment = card?.card_type === 'assignment';
-  const assignmentUnpriced = card?.assignment_details?.pricing_mode === 'unpriced';
 
   // Local form state
   const [serviceType, setServiceType] = useState('');
@@ -319,6 +346,16 @@ export default function AdminCardEditor({
   const [targetRegions, setTargetRegions] = useState<{ country_id: string; region: string }[]>([]);
   const [targetLanguages, setTargetLanguages] = useState<string[]>([]);
   const [squadhireCategoryIds, setSquadhireCategoryIds] = useState<string[]>([]);
+  // Assignment-only project fields (subscription_cards.assignment_details).
+  // Editable here — a one-off project's shape is scope + timeline, not a plan.
+  const [assignmentDuration, setAssignmentDuration] = useState('');
+  const [assignmentStartDate, setAssignmentStartDate] = useState('');
+  const [assignmentDeadline, setAssignmentDeadline] = useState('');
+  const [assignmentScopeType, setAssignmentScopeType] = useState('');
+  const [assignmentPricingMode, setAssignmentPricingMode] = useState<'priced' | 'unpriced'>('priced');
+  // Read live from form state (not the loaded card) so flipping the mode
+  // re-labels the Pricing table immediately, before a save round-trip.
+  const assignmentUnpriced = assignmentPricingMode === 'unpriced';
 
   // Populate form from loaded card
   useEffect(() => {
@@ -410,6 +447,12 @@ export default function AdminCardEditor({
     setTargetRegions(card.target_regions || []);
     setTargetLanguages(card.target_languages || []);
     setSquadhireCategoryIds(card.squadhire_category_ids || []);
+    const ad = card.assignment_details || null;
+    setAssignmentDuration(ad?.duration || '');
+    setAssignmentStartDate(ad?.start_date || '');
+    setAssignmentDeadline(ad?.deadline || '');
+    setAssignmentScopeType(ad?.scope_type || '');
+    setAssignmentPricingMode(ad?.pricing_mode === 'unpriced' ? 'unpriced' : 'priced');
   }, [card]);
 
   // Toggle a tier on/off, syncing tierPricing in lockstep so every
@@ -682,6 +725,21 @@ export default function AdminCardEditor({
   const anyCatalogLoaded = tiers.some((t) => catalogByTier[t] != null)
     || pricingTableTiers.some((t) => catalogByTier[t] != null);
 
+  // Per-level money for an assignment, in the order the overview shows them.
+  // A level's headline figure is the finalized price if set, else whatever the
+  // client committed / quoted as their budget for it.
+  const assignmentBudgetRows = useMemo(() => {
+    if (!isAssignment) return [];
+    return displayTiers.map((tier) => {
+      const entry = tierPricing[tier];
+      const finalPrice = entry?.subscriptionPrice ?? null;
+      const proposed = entry?.proposedPrice || null;
+      const clientAmt = clientBudgetsByTier[tier] ?? null;
+      const amount = finalPrice || proposed || clientAmt || null;
+      return { tier, amount: amount && amount > 0 ? amount : null, fromClient: !finalPrice && !!clientAmt };
+    });
+  }, [isAssignment, displayTiers, tierPricing, clientBudgetsByTier]);
+
   // Build the API tier_pricing map (snake_case shape) from the form state.
   // Selected tiers carry admin Final/margin. Client budgets are kept for
   // preferred levels. Unselected catalog prices are filled at publish time
@@ -755,6 +813,18 @@ export default function AdminCardEditor({
         requirement_note: requirementNote || null,
         hours_note: hoursNote || null,
         custom_deliverables: deliverables,
+        // Only assignments carry these; the server ignores them elsewhere.
+        ...(isAssignment
+          ? {
+              assignment_details: {
+                duration: assignmentDuration || null,
+                start_date: assignmentStartDate || null,
+                deadline: assignmentDeadline || null,
+                scope_type: assignmentScopeType || null,
+                pricing_mode: assignmentPricingMode,
+              },
+            }
+          : {}),
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-card-editor', cardId] });
@@ -923,13 +993,23 @@ export default function AdminCardEditor({
             <>
               <div className="flex flex-wrap items-center gap-3">
                 <h1 className="sh-display text-2xl sm:text-3xl">
-                  {card.source === 'request' ? 'Card from Request' : card.source === 'internal_brief' ? 'Client Brief' : 'Custom Card'}
+                  {isAssignment
+                    ? 'Assignment Brief'
+                    : card.source === 'request' ? 'Card from Request' : card.source === 'internal_brief' ? 'Client Brief' : 'Custom Card'}
                   {card.subscription_request_id && (
                     <span className="ml-2 text-base font-normal text-[var(--color-sh-ink-muted)]">
                       (Request #{card.subscription_request_id})
                     </span>
                   )}
                 </h1>
+                {isAssignment && (
+                  <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--color-sh-ink)] bg-[var(--color-sh-lime-soft)] px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-[var(--color-sh-ink)]">
+                    <svg className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    One-off project
+                  </span>
+                )}
                 <CardAssigneePicker
                   cardId={cardId}
                   kind="subscription"
@@ -1005,11 +1085,15 @@ export default function AdminCardEditor({
                   title={
                     !canPublish
                       ? tiers.length === 0
-                        ? 'Set service + plan (catalog fills all levels) or select a tier with a Final price'
+                        ? isAssignment
+                          ? 'Pick at least one experience level with a project budget — assignments have no catalog price to fall back on'
+                          : 'Set service + plan (catalog fills all levels) or select a tier with a Final price'
                         : 'Every selected tier needs a proposed or final price'
                       : distribution === 'manual'
                         ? 'Soft publish — build the list, then hand-pick recipients before broadcasting'
-                        : 'Publish — all levels broadcast (selected at set price, others at catalog)'
+                        : isAssignment
+                          ? 'Publish — broadcasts to talent at the selected levels only'
+                          : 'Publish — all levels broadcast (selected at set price, others at catalog)'
                   }
                   className="sh-btn-primary sh-btn-primary-sm"
                 >
@@ -1058,6 +1142,203 @@ export default function AdminCardEditor({
       {/* Form */}
       <div className="px-6 pb-10">
         <div className="mx-auto max-w-3xl space-y-6">
+          {/* Assignment overview — the brief at a glance. Everything here is
+              read-only: it mirrors what the client filled in, so an admin can
+              size up a project without scrolling the whole form. */}
+          {isAssignment && (
+            <div className="sh-card overflow-hidden !p-0">
+              <div className="flex flex-wrap items-start justify-between gap-3 border-b border-[var(--color-sh-warm-border)] bg-[var(--color-sh-cream)] px-5 py-4">
+                <div className="min-w-0">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-[var(--color-sh-ink-faint)]">
+                    Assignment overview
+                  </p>
+                  <h2 className="mt-1 truncate text-lg font-bold text-[var(--color-sh-ink)]">
+                    {brandName || customerName || 'Untitled assignment'}
+                  </h2>
+                  <p className="mt-0.5 truncate text-xs text-[var(--color-sh-ink-muted)]">
+                    {serviceType || 'Service not set'}
+                    {businessNature ? ` · ${businessNature}` : ''}
+                  </p>
+                </div>
+                <span
+                  className={`inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1.5 text-[11px] font-bold ${
+                    assignmentUnpriced
+                      ? 'border-[#c2410c] bg-[#fff7ed] text-[#9a3412]'
+                      : 'border-[var(--color-sh-ink)] bg-[var(--color-sh-lime-soft)] text-[var(--color-sh-ink)]'
+                  }`}
+                  title={
+                    assignmentUnpriced
+                      ? 'Talents submit their own offer; the business reviews, counters or accepts.'
+                      : 'Talents see the committed price and can accept, decline or counter.'
+                  }
+                >
+                  {assignmentUnpriced ? 'Invite offers' : 'Priced brief'}
+                </span>
+              </div>
+
+              <dl className="grid grid-cols-2 gap-px bg-[var(--color-sh-warm-border)] sm:grid-cols-4">
+                <OverviewStat label="Experience levels">
+                  {displayTiers.length === 0 ? (
+                    <span className="text-[var(--color-sh-ink-faint)]">Not set</span>
+                  ) : (
+                    <span className="flex flex-wrap gap-1">
+                      {displayTiers.map((t) => (
+                        <span
+                          key={t}
+                          className="rounded-full bg-[var(--color-sh-lime-soft)] px-2 py-0.5 text-[11px] font-semibold text-[var(--color-sh-ink)]"
+                        >
+                          {t}
+                        </span>
+                      ))}
+                    </span>
+                  )}
+                </OverviewStat>
+
+                <OverviewStat label={assignmentUnpriced ? 'Budget ceiling' : 'Project budget'}>
+                  {(() => {
+                    const amounts = assignmentBudgetRows
+                      .map((r) => r.amount)
+                      .filter((a): a is number => typeof a === 'number');
+                    if (amounts.length === 0) {
+                      return (
+                        <span className="text-[var(--color-sh-ink-faint)]">
+                          {assignmentUnpriced ? 'Talent to quote' : 'Not set'}
+                        </span>
+                      );
+                    }
+                    const min = Math.min(...amounts);
+                    const max = Math.max(...amounts);
+                    return (
+                      <span className="tabular-nums">
+                        ₹{min.toLocaleString()}
+                        {max !== min && <> – ₹{max.toLocaleString()}</>}
+                      </span>
+                    );
+                  })()}
+                </OverviewStat>
+
+                <OverviewStat label="Duration">
+                  {assignmentDuration || <span className="text-[var(--color-sh-ink-faint)]">Not stated</span>}
+                </OverviewStat>
+
+                <OverviewStat label="Start date">
+                  {formatBriefDate(assignmentStartDate) || (
+                    <span className="text-[var(--color-sh-ink-faint)]">Flexible</span>
+                  )}
+                </OverviewStat>
+
+                <OverviewStat label="Deadline">
+                  {(() => {
+                    const label = formatBriefDate(assignmentDeadline);
+                    if (!label) return <span className="text-[var(--color-sh-ink-faint)]">Open-ended</span>;
+                    const days = daysFromToday(assignmentDeadline);
+                    return (
+                      <span className="flex flex-col">
+                        <span>{label}</span>
+                        {days != null && (
+                          <span
+                            className={`text-[11px] font-medium ${
+                              days < 0 ? 'text-red-600' : days <= 7 ? 'text-amber-600' : 'text-[var(--color-sh-ink-faint)]'
+                            }`}
+                          >
+                            {days < 0
+                              ? `${Math.abs(days)}d overdue`
+                              : days === 0
+                                ? 'due today'
+                                : `in ${days}d`}
+                          </span>
+                        )}
+                      </span>
+                    );
+                  })()}
+                </OverviewStat>
+
+                <OverviewStat label="Talent location">
+                  {(() => {
+                    const c = targetCountryIds[0] ? countryById[targetCountryIds[0]] : null;
+                    if (!c) return <span className="text-[var(--color-sh-ink-faint)]">Anywhere</span>;
+                    const regions = targetRegions.map((r) => r.region).filter(Boolean);
+                    return (
+                      <span className="flex flex-col">
+                        <span>{c.name}</span>
+                        {regions.length > 0 && (
+                          <span className="truncate text-[11px] text-[var(--color-sh-ink-faint)]" title={regions.join(', ')}>
+                            {regions.join(', ')}
+                          </span>
+                        )}
+                      </span>
+                    );
+                  })()}
+                </OverviewStat>
+
+                <OverviewStat label="Languages">
+                  {targetLanguages.length === 0 ? (
+                    <span className="text-[var(--color-sh-ink-faint)]">Any</span>
+                  ) : (
+                    <span className="truncate" title={targetLanguages.join(', ')}>
+                      {targetLanguages.join(', ')}
+                    </span>
+                  )}
+                </OverviewStat>
+
+                <OverviewStat label="Client brief">
+                  <span className="flex flex-wrap items-center gap-1.5 text-[11px] font-semibold">
+                    <span
+                      className={
+                        requirementNote
+                          ? 'rounded-full bg-[var(--color-sh-lime-soft)] px-2 py-0.5 text-[var(--color-sh-ink)]'
+                          : 'rounded-full bg-[var(--color-sh-cream)] px-2 py-0.5 text-[var(--color-sh-ink-faint)]'
+                      }
+                    >
+                      {requirementNote ? 'Scope note' : 'No note'}
+                    </span>
+                    {requirementVoiceUrl && (
+                      <span className="rounded-full bg-[var(--color-sh-lime-soft)] px-2 py-0.5 text-[var(--color-sh-ink)]">
+                        Voice note
+                      </span>
+                    )}
+                  </span>
+                </OverviewStat>
+              </dl>
+
+              {/* Per-level money, when the levels don't all share one figure. */}
+              {assignmentBudgetRows.some((r) => r.amount != null) && assignmentBudgetRows.length > 1 && (
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 border-t border-[var(--color-sh-warm-border)] bg-[var(--color-sh-cream)] px-5 py-2.5">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--color-sh-ink-faint)]">
+                    Per level
+                  </span>
+                  {assignmentBudgetRows.map((r) => (
+                    <span key={r.tier} className="text-xs text-[var(--color-sh-ink-muted)]">
+                      <span className="font-semibold text-[var(--color-sh-ink)]">{r.tier}</span>{' '}
+                      <span className="tabular-nums">
+                        {r.amount != null ? `₹${r.amount.toLocaleString()}` : '—'}
+                      </span>
+                      {r.fromClient && <span className="ml-1 text-[10px] text-[var(--color-sh-ink-faint)]">(client)</span>}
+                    </span>
+                  ))}
+                </div>
+              )}
+
+              {/* The scope note in full — the single most-read field on a brief. */}
+              {(requirementNote || requirementVoiceUrl) && (
+                <div className="space-y-2.5 border-t border-[var(--color-sh-warm-border)] px-5 py-4">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-[var(--color-sh-ink-faint)]">
+                    Scope of work
+                  </p>
+                  {requirementNote && (
+                    <p className="whitespace-pre-wrap text-sm leading-relaxed text-[var(--color-sh-ink)]">
+                      {requirementNote}
+                    </p>
+                  )}
+                  {requirementVoiceUrl && (
+                    /* eslint-disable-next-line jsx-a11y/media-has-caption */
+                    <audio controls src={requirementVoiceUrl} className="h-9 w-full max-w-md" />
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Publish Settings */}
           <Section title="Publish Settings">
             <Field label="Publish To">
@@ -1098,9 +1379,10 @@ export default function AdminCardEditor({
             </Field>
           </Section>
 
-          {/* Plan Basics */}
-          <Section title="Plan Basics">
-            <div className="grid grid-cols-2 gap-4">
+          {/* Plan Basics — assignments have no weekly plan and no working
+              days; their shape is service + levels, then scope & timeline. */}
+          <Section title={isAssignment ? 'Assignment Basics' : 'Plan Basics'}>
+            <div className={isAssignment ? '' : 'grid grid-cols-2 gap-4'}>
               <Field label="Service Type">
                 <select
                   value={serviceType}
@@ -1112,22 +1394,24 @@ export default function AdminCardEditor({
                   {SERVICE_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
                 </select>
               </Field>
-              <Field label="Plan">
-                <select
-                  value={planName}
-                  onChange={(e) => setPlanName(e.target.value)}
-                  disabled={!isEditable}
-                  className="sh-input"
-                >
-                  <option value="">Select…</option>
-                  {VALID_PLANS.map((p) => {
-                    const label = PLAN_TO_CANONICAL[p] || p;
-                    return <option key={p} value={label}>{label}</option>;
-                  })}
-                </select>
-              </Field>
+              {!isAssignment && (
+                <Field label="Plan">
+                  <select
+                    value={planName}
+                    onChange={(e) => setPlanName(e.target.value)}
+                    disabled={!isEditable}
+                    className="sh-input"
+                  >
+                    <option value="">Select…</option>
+                    {VALID_PLANS.map((p) => {
+                      const label = PLAN_TO_CANONICAL[p] || p;
+                      return <option key={p} value={label}>{label}</option>;
+                    })}
+                  </select>
+                </Field>
+              )}
             </div>
-            <Field label="Tiers">
+            <Field label={isAssignment ? 'Experience levels' : 'Tiers'}>
               <div className="flex flex-wrap gap-2">
                 {VALID_TIERS.map((tier) => {
                   const active = tiers.includes(tier);
@@ -1143,36 +1427,158 @@ export default function AdminCardEditor({
                 })}
               </div>
               <p className="mt-2 text-[11px] text-[var(--color-sh-ink-faint)]">
-                On publish, all three levels (Junior / Pro / Top Talents) broadcast.
-                Levels you mark here use your Final price; unmarked levels use catalog pricing.
+                {isAssignment
+                  ? 'Only the levels you pick here go out — an assignment has no catalog price to fall back on, so unpicked levels never broadcast.'
+                  : 'On publish, all three levels (Junior / Pro / Top Talents) broadcast. Levels you mark here use your Final price; unmarked levels use catalog pricing.'}
               </p>
             </Field>
-            <Field label="Working Days">
-              <div className="flex flex-wrap gap-2">
-                {VALID_DAYS.map((day) => {
-                  const active = workingDays.includes(day);
-                  return (
-                    <PillCheckbox
-                      key={day}
-                      active={active}
-                      disabled={!isEditable}
-                      onClick={() =>
-                        setWorkingDays(active ? workingDays.filter((d) => d !== day) : [...workingDays, day])
-                      }
-                      label={day}
-                    />
-                  );
-                })}
-              </div>
-            </Field>
+            {!isAssignment && (
+              <Field label="Working Days">
+                <div className="flex flex-wrap gap-2">
+                  {VALID_DAYS.map((day) => {
+                    const active = workingDays.includes(day);
+                    return (
+                      <PillCheckbox
+                        key={day}
+                        active={active}
+                        disabled={!isEditable}
+                        onClick={() =>
+                          setWorkingDays(active ? workingDays.filter((d) => d !== day) : [...workingDays, day])
+                        }
+                        label={day}
+                      />
+                    );
+                  })}
+                </div>
+              </Field>
+            )}
           </Section>
+
+          {/* Scope & Timeline — the assignment_details JSONB, editable. These
+              are the fields the assignment brief form collects in place of a
+              plan: how the deal is priced, how long it runs, and when. */}
+          {isAssignment && (
+            <Section title="Scope & Timeline">
+              <Field label="How this is priced">
+                <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+                  {([
+                    {
+                      value: 'priced' as const,
+                      title: 'Send with a price',
+                      desc: 'Talents see the committed budget and can accept, decline or counter.',
+                    },
+                    {
+                      value: 'unpriced' as const,
+                      title: 'Invite offers',
+                      desc: 'No price shown — talents quote, and the business reviews or counters.',
+                    },
+                  ]).map((o) => {
+                    const on = assignmentPricingMode === o.value;
+                    return (
+                      <button
+                        key={o.value}
+                        type="button"
+                        aria-pressed={on}
+                        disabled={!isEditable}
+                        onClick={() => { if (isEditable) setAssignmentPricingMode(o.value); }}
+                        className={`flex items-start gap-2.5 rounded-xl border p-3 text-left transition disabled:cursor-not-allowed ${
+                          on
+                            ? 'border-[var(--color-sh-ink)] bg-[var(--color-sh-lime-soft)]'
+                            : 'border-[var(--color-sh-warm-border)] bg-[var(--color-surface)]'
+                        } ${isEditable ? '' : 'opacity-70'}`}
+                      >
+                        <span
+                          className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border ${
+                            on ? 'border-[var(--color-sh-ink)] bg-[var(--color-sh-ink)]' : 'border-[var(--color-sh-warm-border)]'
+                          }`}
+                        >
+                          {on && <span className="h-1.5 w-1.5 rounded-full bg-white" />}
+                        </span>
+                        <span className="min-w-0">
+                          <span className="block text-sm font-semibold text-[var(--color-sh-ink)]">{o.title}</span>
+                          <span className="mt-0.5 block text-[11px] leading-relaxed text-[var(--color-sh-ink-muted)]">
+                            {o.desc}
+                          </span>
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </Field>
+
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                <Field label="Duration" optional>
+                  <input
+                    value={assignmentDuration}
+                    onChange={(e) => setAssignmentDuration(e.target.value)}
+                    disabled={!isEditable}
+                    placeholder="e.g. 4 weeks, 2 months"
+                    className="sh-input"
+                  />
+                </Field>
+                <Field label="Start date" optional>
+                  <input
+                    type="date"
+                    value={assignmentStartDate}
+                    onChange={(e) => setAssignmentStartDate(e.target.value)}
+                    disabled={!isEditable}
+                    className="sh-input"
+                  />
+                </Field>
+                <Field label="Deadline" optional>
+                  <input
+                    type="date"
+                    value={assignmentDeadline}
+                    onChange={(e) => setAssignmentDeadline(e.target.value)}
+                    disabled={!isEditable}
+                    className="sh-input"
+                  />
+                </Field>
+              </div>
+
+              <Field label="Engagement shape" optional>
+                <select
+                  value={assignmentScopeType}
+                  onChange={(e) => setAssignmentScopeType(e.target.value)}
+                  disabled={!isEditable}
+                  className="sh-input"
+                >
+                  <option value="">Not specified</option>
+                  <option value="one-off">One-off project</option>
+                  <option value="ongoing">Ongoing / retainer</option>
+                  <option value="milestone">Milestone-based</option>
+                </select>
+              </Field>
+
+              {assignmentStartDate && assignmentDeadline && (() => {
+                const span = daysFromToday(assignmentDeadline);
+                const startSpan = daysFromToday(assignmentStartDate);
+                if (span == null || startSpan == null) return null;
+                const window = span - startSpan;
+                if (window < 0) {
+                  return (
+                    <p className="rounded-md bg-red-50 px-2.5 py-1.5 text-[11px] font-medium text-red-700">
+                      The deadline falls before the start date — check the brief.
+                    </p>
+                  );
+                }
+                return (
+                  <p className="rounded-md bg-[var(--color-sh-cream)] px-2.5 py-1.5 text-[11px] text-[var(--color-sh-ink-muted)]">
+                    Delivery window: <strong className="font-semibold text-[var(--color-sh-ink)]">{window} day{window === 1 ? '' : 's'}</strong> from start to deadline.
+                  </p>
+                );
+              })()}
+            </Section>
+          )}
 
           {/* Deliverables — combined: catalog hours per selected tier (top)
               + shared custom deliverables list (bottom). Custom items are
               applied to every tier tab of the published card. */}
-          <Section title="Deliverables">
+          <Section title={isAssignment ? 'Project Deliverables' : 'Deliverables'}>
             <div className="space-y-5">
-              {/* Plan deliverables — one column per selected tier */}
+              {/* Plan deliverables — one column per selected tier. Assignments
+                  have no plan, so there are no catalog hours to show. */}
+              {!isAssignment && (
               <div>
                 <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--color-sh-ink-muted)]">
                   Plan hours (from catalog)
@@ -1243,17 +1649,24 @@ export default function AdminCardEditor({
                   </div>
                 )}
               </div>
+              )}
 
               {/* Custom deliverables — shared across all tier cards */}
               <div>
                 <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--color-sh-ink-muted)]">
-                  Custom deliverables
+                  {isAssignment ? 'What gets delivered' : 'Custom deliverables'}
                   {tiers.length > 1 && (
                     <span className="ml-2 font-normal normal-case text-[var(--color-sh-ink-faint)]">
                       (shared across all selected tiers)
                     </span>
                   )}
                 </h3>
+                {isAssignment && (
+                  <p className="mb-2.5 text-[11px] text-[var(--color-sh-ink-faint)]">
+                    List the concrete outputs this project is being paid for — quantity is the
+                    total for the whole assignment, not a monthly rate.
+                  </p>
+                )}
                 <div className="space-y-3">
                   {deliverables.map((d) => (
                     <div key={d.id} className="flex items-start gap-2 rounded-xl border border-[var(--color-sh-warm-border)] bg-[var(--color-sh-cream)] p-3">
@@ -1278,7 +1691,8 @@ export default function AdminCardEditor({
                           type="number"
                           value={d.per_month || ''}
                           onChange={(e) => updateDeliverable(d.id, 'per_month', parseInt(e.target.value) || 0)}
-                          placeholder="/mo"
+                          placeholder={isAssignment ? 'Qty' : '/mo'}
+                          aria-label={isAssignment ? 'Total quantity' : 'Per month'}
                           disabled={!isEditable}
                           className="sh-input"
                         />
@@ -1294,6 +1708,11 @@ export default function AdminCardEditor({
                       )}
                     </div>
                   ))}
+                  {deliverables.length === 0 && !isEditable && (
+                    <p className="text-sm text-[var(--color-sh-ink-faint)]">
+                      No deliverables were itemised on this brief.
+                    </p>
+                  )}
                   {isEditable && (
                     <button
                       onClick={addDeliverable}
@@ -1311,7 +1730,7 @@ export default function AdminCardEditor({
               Selected (client/admin) levels: editable Final at set price.
               Unselected levels: catalog Final — they STILL broadcast at that
               catalog price when the card is published. */}
-          <Section title="Pricing">
+          <Section title={isAssignment ? 'Pricing & Margin' : 'Pricing'}>
             <div className="space-y-2">
               <p className="rounded-md bg-[var(--color-sh-cream)] px-2.5 py-1.5 text-[10px] leading-snug text-[var(--color-sh-ink-muted)]">
                 {isAssignment ? (
@@ -1719,13 +2138,17 @@ export default function AdminCardEditor({
                   className="sh-input resize-none"
                 />
               </Field>
-              <Field label="Short Note About the Requirement" optional>
+              <Field label={isAssignment ? 'Scope of Work' : 'Short Note About the Requirement'} optional>
                 <textarea
                   value={requirementNote}
                   onChange={(e) => setRequirementNote(e.target.value)}
                   disabled={!isEditable}
                   rows={3}
-                  placeholder="What you'd like the talent to work on first — deliverables, references, brand guidelines."
+                  placeholder={
+                    isAssignment
+                      ? 'What the project covers — deliverables, references, brand guidelines, how success is judged.'
+                      : "What you'd like the talent to work on first — deliverables, references, brand guidelines."
+                  }
                   className="sh-input resize-none"
                 />
               </Field>
@@ -1776,16 +2199,19 @@ export default function AdminCardEditor({
                   );
                 })()}
               </Field>
-              <Field label="Hours" optional>
-                <input
-                  type="text"
-                  value={hoursNote}
-                  onChange={(e) => setHoursNote(e.target.value)}
-                  disabled={!isEditable}
-                  placeholder="e.g. 4 hrs daily or 20 hrs/week"
-                  className="sh-input"
-                />
-              </Field>
+              {/* Weekly-hours expectation only means something on a plan. */}
+              {!isAssignment && (
+                <Field label="Hours" optional>
+                  <input
+                    type="text"
+                    value={hoursNote}
+                    onChange={(e) => setHoursNote(e.target.value)}
+                    disabled={!isEditable}
+                    placeholder="e.g. 4 hrs daily or 20 hrs/week"
+                    className="sh-input"
+                  />
+                </Field>
+              )}
             </div>
           </Section>
 
@@ -1920,6 +2346,18 @@ function CardActivityFeed({ cardId }: { cardId: string }) {
         );
       })}
     </ol>
+  );
+}
+
+/** One cell of the assignment overview grid — label above, value below. */
+function OverviewStat({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="bg-[var(--color-surface)] px-4 py-3">
+      <dt className="mb-1 text-[10px] font-bold uppercase tracking-wider text-[var(--color-sh-ink-faint)]">
+        {label}
+      </dt>
+      <dd className="text-sm font-semibold text-[var(--color-sh-ink)]">{children}</dd>
+    </div>
   );
 }
 

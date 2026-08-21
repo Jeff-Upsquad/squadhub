@@ -1098,12 +1098,23 @@ function priceLabelForCard(card: AdminSubscriptionCard): string {
 function SubscriptionCardRow({ card, onOpen, showCancelledTag, showArchivedTag, onReinstate, reinstating, onPause, onCancel, pausing, cancelling }: { card: AdminSubscriptionCard; onOpen: () => void; showCancelledTag: boolean; showArchivedTag?: boolean; onReinstate?: () => void; reinstating?: boolean; onPause?: () => void; onCancel?: () => void; pausing?: boolean; cancelling?: boolean }) {
   const business = card.submission?.business_name || card.brand_name || 'Unknown';
   const serviceType = card.service_type || '';
+  // Assignments have no plan — some legacy rows carry a stray plan_name from
+  // the subscription form. Show the project's timeline in that slot instead.
   const planName =
-    card.submission_subscription?.subscription?.name
-    || card.plan_name
-    || (card.submission_subscription?.plan
-        ? `${card.submission_subscription.plan.plan} · ${card.submission_subscription.plan.tier}`
-        : '');
+    card.card_type === 'assignment'
+      ? [
+          card.assignment_details?.duration,
+          card.assignment_details?.deadline
+            ? `due ${new Date(`${card.assignment_details.deadline}T00:00:00`).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}`
+            : '',
+        ]
+          .filter(Boolean)
+          .join(' · ')
+      : card.submission_subscription?.subscription?.name
+        || card.plan_name
+        || (card.submission_subscription?.plan
+            ? `${card.submission_subscription.plan.plan} · ${card.submission_subscription.plan.tier}`
+            : '');
   const priceLabel = priceLabelForCard(card);
   const publisher = card.published_by_user;
   const publisherLabel = publisher
