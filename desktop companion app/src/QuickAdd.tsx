@@ -67,9 +67,11 @@ function initials(name: string | null | undefined, email?: string): string {
   return src.slice(0, 2).toUpperCase();
 }
 
-// ── pickable-list tree (lazy, cached for the app run) ─────────────────────────
+// ── pickable-list tree (cached briefly so new lists show up) ──────────────────
 type PickableList = { id: string; name: string; spaceName: string; folderName: string | null };
 let pickCache: PickableList[] | null = null;
+let pickCacheAt = 0;
+const PICK_CACHE_TTL_MS = 30_000;
 
 const ACCESS_RANK = { viewer: 0, commenter: 1, member: 2, manager: 3 } as const;
 function canPick(l: ListLite): boolean {
@@ -78,8 +80,7 @@ function canPick(l: ListLite): boolean {
   return ACCESS_RANK[l.my_access_level] >= ACCESS_RANK.member;
 }
 
-async function loadPickableLists(): Promise<PickableList[]> {
-  if (pickCache) return pickCache;
+async function fetchPickableLists(): Promise<PickableList[]> {
   const workspaces = await fetchWorkspaces();
   const wid = workspaces[0]?.id;
   if (!wid) return [];
@@ -94,8 +95,14 @@ async function loadPickableLists(): Promise<PickableList[]> {
     for (const l of full.lists || []) add(l, null);
     for (const f of full.folders || []) for (const l of f.lists || []) add(l, f.name);
   }
-  pickCache = out;
   return out;
+}
+
+async function loadPickableLists(): Promise<PickableList[]> {
+  if (pickCache && Date.now() - pickCacheAt < PICK_CACHE_TTL_MS) return pickCache;
+  pickCache = await fetchPickableLists();
+  pickCacheAt = Date.now();
+  return pickCache;
 }
 
 export default function QuickAdd() {
@@ -336,6 +343,7 @@ export default function QuickAdd() {
       // A stale cached id (e.g. list deleted) — clear so the next try re-resolves.
       if (!selectedList) cachedPersonal = null;
       pickCache = null;
+      pickCacheAt = 0;
       setPhase('error');
       setError(e instanceof Error ? e.message : 'Could not add task');
     }
@@ -684,11 +692,14 @@ function ListPicker({ onPick }: { onPick: (l: SelectedList) => void }) {
   const [err, setErr] = useState('');
 
   useEffect(() => {
-    if (lists) return;
+    // Show cached lists instantly but always re-validate in the background —
+    // otherwise lists created since this window last opened never appear.
     let alive = true;
     loadPickableLists()
       .then((r) => alive && setLists(r))
-      .catch((e) => alive && setErr(e instanceof Error ? e.message : 'Failed to load lists'));
+      .catch((e) => {
+        if (alive && !pickCache) setErr(e instanceof Error ? e.message : 'Failed to load lists');
+      });
     return () => {
       alive = false;
     };
