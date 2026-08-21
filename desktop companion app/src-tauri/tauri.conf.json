@@ -1,7 +1,7 @@
 {
   "$schema": "https://raw.githubusercontent.com/nicedoc/tauri-docs/main/references/config.schema.json",
   "productName": "SquadHub Companion",
-  "version": "0.1.13",
+  "version": "0.1.14",
   "identifier": "in.squadhub.desktop",
   "build": {
     "frontendDist": "../dist",

@@ -1,10 +1,10 @@
 {
-  "version": "0.1.13",
-  "notes": "Quick-add (\u2318\u21e7T) now opens a fresh blank task every time \u2014 a previously added task no longer lingers in the fields when you reopen the panel.",
-  "pub_date": "2026-07-01T11:41:12Z",
+  "version": "0.1.14",
+  "notes": "Quick-add now adds the task instantly \u2014 dropped attachments upload in the background after Enter / Add-a-Task, with a retry prompt on the next summon if any fail. Adds an explicit close button to the panel.",
+  "pub_date": "2026-08-21T20:46:14Z",
   "platforms": {
     "darwin-aarch64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUQ003TTR4K1pKdzA3OS9CTVhoREpiYnBBa2tLUU9VN0dZQlU3bkFKTWxuWmtKaCs5ZXlWRGE1WHhWcHhuMEJLSHQ2Y25Vb21UTTd5K0pONWt6YXcwM1FwM1U2OG9OSXdzPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzgyOTA2MDI2CWZpbGU6U3F1YWRIdWIgQ29tcGFuaW9uLmFwcC50YXIuZ3oKT1NxNGpMVWhXaWJuYXNkZDhBTCtYOWZxZDdtQWoxc3BSNGZHSnhkczZtdWV5RHlNbFo1L0NMemJYWnRseUp3d1Y4bFJtVmZPNXZadll2TTNNaGYxRFE9PQo=",
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUQ003TTR4K1pKdzBxdktTWStzTkNqVnVUR3FsUDFTKzViS1JwcGFEQWVvVUZYVkZUT0lybkNHV3N3L3ZuRjhnUXJ0TU1semhyZHJCdFgzMHhXZmZBeTc3WVovSmJkdHdFPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg3MzQ1MTYyCWZpbGU6U3F1YWRIdWIgQ29tcGFuaW9uLmFwcC50YXIuZ3oKNmJMSEkvclhXUmx4eDY0K3IwWjlKb21jWHloMVpTOE5NdVIrWEdvUXJ4UG1hblI4ZmdJT1YyV3pXZ1lkN2tqYXZtQTMzM21PMHJ6RGNsNHpNY0FlREE9PQo=",
       "url": "https://squadhub.in/downloads/SquadHub.app.tar.gz"
     }
   }
