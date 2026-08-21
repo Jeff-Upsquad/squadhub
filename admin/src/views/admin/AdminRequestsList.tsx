@@ -330,6 +330,7 @@ export default function AdminRequestsList({
                 }}
                 isPending={createCardMutation.isPending}
                 isVerifying={verifyMutation.isPending}
+                isAssignment={isAssignment}
               />
             ))}
           </div>
@@ -346,6 +347,7 @@ function RequestRow({
   onVerify,
   isPending,
   isVerifying,
+  isAssignment,
 }: {
   request: SubscriptionRequest;
   onAction: () => void;
@@ -353,6 +355,8 @@ function RequestRow({
   onVerify: () => void;
   isPending: boolean;
   isVerifying: boolean;
+  /** Assignments are a one-off project fee, not a monthly subscription rate. */
+  isAssignment: boolean;
 }) {
   const hasCard = !!request.card_id;
   // Form submissions (shared_form / landing_page_form) come in with a draft
@@ -387,7 +391,7 @@ function RequestRow({
   const serviceType = request.service_type || '';
   const planName = request.plan || '';
   const priceLabel = request.proposed_price
-    ? `₹${request.proposed_price.toLocaleString()}/mo`
+    ? `₹${request.proposed_price.toLocaleString()}${isAssignment ? '' : '/mo'}`
     : '';
   const createdAt = new Date(request.created_at);
   const dateLabel = `${createdAt.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} at ${createdAt.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`;

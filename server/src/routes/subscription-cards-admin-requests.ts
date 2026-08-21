@@ -793,6 +793,18 @@ const editCardSchema = z.object({
   customer_location: z.string().nullable().optional(),
   service_type: z.string().nullable().optional(),
   plan_name: z.string().nullable().optional(),
+  // Assignment-only project fields (card_type='assignment'). Stored in the
+  // assignment_details JSONB and MERGED onto what's there, so saving from an
+  // editor that renders only some keys never drops the rest.
+  assignment_details: z
+    .object({
+      duration: z.string().nullable().optional(),
+      start_date: z.string().nullable().optional(),
+      deadline: z.string().nullable().optional(),
+      scope_type: z.string().nullable().optional(),
+      pricing_mode: z.enum(['priced', 'unpriced']).nullable().optional(),
+    })
+    .optional(),
 });
 
 router.patch('/subscription-cards/:id/edit', async (req: Request, res: Response) => {
@@ -806,7 +818,7 @@ router.patch('/subscription-cards/:id/edit', async (req: Request, res: Response)
 
     const { data: card } = await supabaseAdmin
       .from('subscription_cards')
-      .select('id, state, source')
+      .select('id, state, source, card_type, assignment_details')
       .eq('id', cardId)
       .maybeSingle();
     if (!card) {
@@ -854,6 +866,16 @@ router.patch('/subscription-cards/:id/edit', async (req: Request, res: Response)
     if (body.customer_location !== undefined) updates.customer_location = body.customer_location;
     if (body.service_type !== undefined) updates.service_type = body.service_type;
     if (body.plan_name !== undefined) updates.plan_name = body.plan_name;
+    // Assignment project fields ride in a JSONB column — merge rather than
+    // replace so keys this editor doesn't render survive the save. Ignored
+    // outright on non-assignment cards.
+    if (body.assignment_details !== undefined && card.card_type === 'assignment') {
+      const existing =
+        card.assignment_details && typeof card.assignment_details === 'object'
+          ? (card.assignment_details as Record<string, unknown>)
+          : {};
+      updates.assignment_details = { ...existing, ...body.assignment_details };
+    }
 
     // "Save Draft" on a New Deal promotes it: new → draft. This is the gate
     // that unlocks the shareable client link (link generation is draft-only).
