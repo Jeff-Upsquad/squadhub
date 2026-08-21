@@ -12,7 +12,7 @@
 
 import { usePMStore } from '../stores/pmStore';
 import { MCard, MEmpty, MGroupHead, MIcon, MLoading } from './MobileKit';
-import { useMobileSpaces, type OpenTarget, type SpaceCard } from './useMobileSpaces';
+import { useMobileSpaces, type OpenTarget, type SpaceCard, type SpaceGroup } from './useMobileSpaces';
 
 export type { OpenTarget } from './useMobileSpaces';
 
@@ -48,6 +48,26 @@ export default function MobileHome({
 
   return (
     <div style={{ padding: '8px 0 96px' }}>
+      <MobileSpaceGroups groups={groups} onOpen={onOpen} onCreateIn={onCreateIn} />
+    </div>
+  );
+}
+
+/**
+ * The grouped space cards. Client Home is nothing but this; the partner Home
+ * puts it under its briefing, so it lives here rather than inline.
+ */
+export function MobileSpaceGroups({
+  groups,
+  onOpen,
+  onCreateIn,
+}: {
+  groups: SpaceGroup[];
+  onOpen: (t: OpenTarget) => void;
+  onCreateIn: (t: OpenTarget) => void;
+}) {
+  return (
+    <>
       {groups.map((g) => {
         if (!g.cards.length && !g.emptyHint) return null;
         return (
@@ -72,7 +92,7 @@ export default function MobileHome({
           </div>
         );
       })}
-    </div>
+    </>
   );
 }
 
