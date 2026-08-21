@@ -115,16 +115,94 @@ router.post('/register', async (req: Request, res: Response) => {
   }
 });
 
+// The server reaches Supabase over the public internet, and that path has been
+// dropping out for minutes at a time — every call stalls until undici's 10s
+// connect timeout fires. Sign-in is the worst place for that: supabase-js has
+// no timeout of its own, so the request just hangs, and the native apps give up
+// at 30s showing a raw "Request timeout has expired" instead of anything
+// actionable. Bound each attempt well under that, try twice (most dropouts are
+// partial, so the retry usually lands), then fail fast and honestly.
+const SIGN_IN_TIMEOUT_MS = 7_000;
+const SIGN_IN_ATTEMPTS = 2;
+
+/** Marker for "we gave up waiting", so it reads differently from a real auth error. */
+const SIGN_IN_TIMED_OUT = Symbol('sign-in-timed-out');
+
+/**
+ * A network failure and a wrong password both surface as an `error` here, but
+ * they mean opposite things: one is retryable and must never be reported as bad
+ * credentials, the other must never be retried. supabase-js flags the retryable
+ * ones as AuthRetryableFetchError (status 0 for a transport failure).
+ */
+function isTransportFailure(error: any): boolean {
+  if (!error) return false;
+  if (error === SIGN_IN_TIMED_OUT) return true;
+  if (error.name === 'AuthRetryableFetchError') return true;
+  if (typeof error.status === 'number' && error.status === 0) return true;
+  return /fetch failed|timeout|ECONNRESET|ETIMEDOUT|ENOTFOUND|EAI_AGAIN|socket hang up/i.test(
+    error.message || '',
+  );
+}
+
+/**
+ * Sign in, bounded. Returns the supabase result, or `SIGN_IN_TIMED_OUT` as the
+ * error when the call outlived its budget. The abandoned request is left to
+ * settle on its own — supabase-js exposes no way to cancel it — but nothing
+ * waits on it any more.
+ */
+async function signInWithTimeout(email: string, password: string) {
+  let lastError: any = null;
+
+  for (let attempt = 1; attempt <= SIGN_IN_ATTEMPTS; attempt++) {
+    let timer: NodeJS.Timeout | undefined;
+    try {
+      const result = await Promise.race([
+        supabase.auth.signInWithPassword({ email, password }),
+        new Promise<never>((_, reject) => {
+          timer = setTimeout(() => reject(SIGN_IN_TIMED_OUT), SIGN_IN_TIMEOUT_MS);
+        }),
+      ]);
+
+      // A wrong password is a final answer — return it without retrying.
+      if (!result.error || !isTransportFailure(result.error)) return result;
+      lastError = result.error;
+    } catch (raced) {
+      // Only the timeout rejects here; anything else is a transport throw.
+      lastError = raced;
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
+
+    if (attempt < SIGN_IN_ATTEMPTS) {
+      console.warn(`[login] sign-in attempt ${attempt} failed to reach Supabase; retrying`);
+    }
+  }
+
+  return {
+    data: { user: null, session: null },
+    error: lastError,
+  } as Awaited<ReturnType<typeof supabase.auth.signInWithPassword>>;
+}
+
 // POST /auth/login
 router.post('/login', async (req: Request, res: Response) => {
   try {
     const body = loginSchema.parse(req.body);
 
     // Use the PUBLIC client for signInWithPassword (not admin) to avoid contaminating admin client
-    let { data, error } = await supabase.auth.signInWithPassword({
-      email: body.email,
-      password: body.password,
-    });
+    let { data, error } = await signInWithTimeout(body.email, body.password);
+
+    // Supabase never answered. Say so — the seeding path below would stall on
+    // the same dead network, and "Invalid email or password" would be a lie
+    // that sends the user hunting for a password problem they don't have.
+    if (isTransportFailure(error)) {
+      console.error('[login] Supabase unreachable — returning 503');
+      res.status(503).json({
+        success: false,
+        error: "Couldn't reach the SquadHub servers. Please try again in a moment.",
+      });
+      return;
+    }
 
     // A SquadHire business user signing in here for the first time has no
     // SquadHub account yet — only a pending client invitation. If the password
@@ -137,10 +215,17 @@ router.post('/login', async (req: Request, res: Response) => {
         password: body.password,
       });
       if (seeded) {
-        ({ data, error } = await supabase.auth.signInWithPassword({
-          email: body.email,
-          password: body.password,
-        }));
+        ({ data, error } = await signInWithTimeout(body.email, body.password));
+        // The retry is what actually authenticates, so it gets the same
+        // treatment: a dead network here isn't a bad password either.
+        if (isTransportFailure(error)) {
+          console.error('[login] Supabase unreachable on post-seed retry — returning 503');
+          res.status(503).json({
+            success: false,
+            error: "Couldn't reach the SquadHub servers. Please try again in a moment.",
+          });
+          return;
+        }
       }
     }
 

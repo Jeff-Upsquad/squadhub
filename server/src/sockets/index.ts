@@ -247,8 +247,33 @@ export function setupSocketIO(httpServer: HttpServer) {
   };
 
   const POLL_INTERVAL_MS = 2_000;
+  const MAX_BACKOFF_MS = 30_000;
   let lastPollTime = new Date().toISOString();
   let pollCount = 0;
+  // When Supabase goes unreachable a poll doesn't fail — it stalls for the full
+  // 10s connect timeout. At a 2s tick that means five more polls launch behind
+  // the stuck one and keep launching, so a brief network dropout turns into a
+  // self-sustaining pile of hung requests competing with real traffic (sign-in
+  // among it). Skip a tick while one is still in flight, and back off while the
+  // failures persist. lastPollTime is untouched by a failure, so a backed-off
+  // poll still picks up everything it missed once the network returns.
+  let polling = false;
+  let consecutiveFailures = 0;
+  let nextAttemptAt = 0;
+
+  const onPollFailure = (detail: unknown) => {
+    consecutiveFailures++;
+    nextAttemptAt =
+      Date.now() + Math.min(MAX_BACKOFF_MS, POLL_INTERVAL_MS * 2 ** consecutiveFailures);
+    // One line per outage, not one per tick — this used to emit ~30/min for the
+    // whole dropout and bury everything else in the log.
+    if (consecutiveFailures === 1 || consecutiveFailures % 20 === 0) {
+      console.error(
+        `[socket] notification poll error (${consecutiveFailures}x):`,
+        detail instanceof Error ? detail.message : detail,
+      );
+    }
+  };
 
   // One-time startup test: check if we can query notifications at all
   (async () => {
@@ -262,6 +287,8 @@ export function setupSocketIO(httpServer: HttpServer) {
   })();
 
   setInterval(async () => {
+    if (polling || Date.now() < nextAttemptAt) return;
+    polling = true;
     pollCount++;
     try {
       const { data: newNotifications, error } = await supabaseAdmin
@@ -272,8 +299,14 @@ export function setupSocketIO(httpServer: HttpServer) {
         .limit(50);
 
       if (error) {
-        console.error('[socket] notification poll error:', error.message);
+        onPollFailure(error.message);
         return;
+      }
+
+      if (consecutiveFailures > 0) {
+        console.log(`[socket] notification poll recovered after ${consecutiveFailures} failure(s)`);
+        consecutiveFailures = 0;
+        nextAttemptAt = 0;
       }
 
       // Heartbeat roughly once a minute (every 30th poll at 2s) to confirm it's alive.
@@ -286,7 +319,9 @@ export function setupSocketIO(httpServer: HttpServer) {
         for (const notification of newNotifications) deliver(notification);
       }
     } catch (e) {
-      console.error('[socket] notification poll error:', e);
+      onPollFailure(e);
+    } finally {
+      polling = false;
     }
   }, POLL_INTERVAL_MS);
 
