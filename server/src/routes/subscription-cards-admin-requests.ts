@@ -766,6 +766,11 @@ const editCardSchema = z.object({
   subscription_price: z.number().int().positive().nullable().optional(),
   // Adjusted margin. null = inherit the plan catalog margin.
   markup: z.number().int().min(0).nullable().optional(),
+  // The client's stated budget, scalar mirror of the per-tier client_budget
+  // values (single amount when every level agrees, else null). The editor
+  // sends it alongside tier_pricing so an edited or cleared "Client proposed"
+  // price isn't resurrected from a stale card column on the next load.
+  client_budget: z.number().int().min(0).nullable().optional(),
   // Per-tier draft pricing. Used when the admin picks 2+ tiers — the
   // publish handler validates every selected tier has an entry here, then
   // fans the draft out to one published card per tier (each card carries
@@ -852,6 +857,9 @@ router.patch('/subscription-cards/:id/edit', async (req: Request, res: Response)
     if (body.proposed_price !== undefined) updates.proposed_price = body.proposed_price;
     if (body.subscription_price !== undefined) updates.subscription_price = body.subscription_price;
     if (body.markup !== undefined) updates.markup = body.markup;
+    if (body.client_budget !== undefined) {
+      updates.client_budget = body.client_budget && body.client_budget > 0 ? body.client_budget : null;
+    }
     // Persist tier_pricing as sent. The editor only includes selected tiers;
     // replacing the whole map (rather than merging) drops orphan unselected
     // levels so they can never fan out on a later publish.
