@@ -26,10 +26,13 @@ import type { ActiveSection, HomeView } from '../layouts/MainLayout';
 import { launchApp, type AppDef } from '../config/apps';
 import { useThemeStore } from '../stores/themeStore';
 import { usePMStore } from '../stores/pmStore';
-import MobileHome, { applyOpenTarget, type OpenTarget } from './MobileHome';
+import MobileHome, { applyOpenTarget } from './MobileHome';
 import MobileChat from './MobileChat';
 import MobileMore, { type MoreTarget } from './MobileMore';
+import MobileCreateSheet from './MobileCreateSheet';
+import MobileTour, { hasSeenMobileTour } from './MobileTour';
 import { MAvatar, MIcon, MRow } from './MobileKit';
+import type { OpenTarget } from './useMobileSpaces';
 
 type MTab = 'home' | 'chat' | 'inbox' | 'more';
 
@@ -57,7 +60,6 @@ export interface MobileShellProps {
   setHomeView: (v: HomeView) => void;
   setActiveChannel: (id: string, kind: 'channel' | 'dm') => void;
   onOpenSearch: () => void;
-  onCreateTask: () => void;
   onNewDm: () => void;
   onLogout: () => void;
   /** In-flow banners (emergency tasks, running timers) — they're not fixed, so
@@ -80,20 +82,25 @@ export default function MobileShell({
   setHomeView,
   setActiveChannel,
   onOpenSearch,
-  onCreateTask,
   onNewDm,
   onLogout,
   banner,
   floating,
 }: MobileShellProps) {
   const [tab, setTab] = useState<MTab>('home');
-  // Non-null while drilled into a screen; the string is its app-bar title.
-  const [section, setSection] = useState<string | null>(null);
+  // Non-null while drilled into a screen. `target` is the space/list it opened
+  // (null for screens with no PM scope, e.g. a conversation or Calendar), and
+  // is what the create sheet pre-selects when you tap + inside that screen.
+  const [section, setSection] = useState<{ title: string; target: OpenTarget | null } | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  // null = closed; otherwise the space the sheet should pre-target (undefined
+  // for the FAB, which starts with no space chosen).
+  const [creating, setCreating] = useState<{ preset: OpenTarget | null } | null>(null);
+  const [tourOpen, setTourOpen] = useState(() => !hasSeenMobileTour(user?.id));
 
   // Live mirrors of the two pieces of state the popstate listener needs; it's
   // registered once, so it can't close over their current values.
-  const sectionRef = useRef<string | null>(null);
+  const sectionRef = useRef<typeof section>(null);
   sectionRef.current = section;
   const tabRef = useRef<MTab>(tab);
   tabRef.current = tab;
@@ -120,8 +127,8 @@ export default function MobileShell({
   // ---- Drilling in / out ----------------------------------------------
   // Entering a screen pushes a history entry so the browser's Back button (and
   // Android's system back) pops it, exactly like the native app's back stack.
-  const openSection = useCallback((title: string) => {
-    setSection(title);
+  const openSection = useCallback((title: string, target: OpenTarget | null = null) => {
+    setSection({ title, target });
     window.history.pushState({ mshSection: true }, '');
   }, []);
 
@@ -163,7 +170,7 @@ export default function MobileShell({
     applyOpenTarget(t);
     setActiveSection('home');
     setHomeView('tasks');
-    openSection(t.title);
+    openSection(t.title, t);
   };
 
   const openConversation = (id: string, kind: 'channel' | 'dm', title: string) => {
@@ -198,16 +205,16 @@ export default function MobileShell({
     });
   };
 
-  // Inline "+" on a Home card — scope the create modal to that space first.
-  const createIn = (t: OpenTarget) => {
-    applyOpenTarget(t);
-    onCreateTask();
-  };
+  // Inline "+" on a Home card — the sheet opens already pointed at that space.
+  const createIn = (t: OpenTarget) => setCreating({ preset: t });
 
   // ---- Chrome decisions ------------------------------------------------
   const onSection = section !== null;
   const carbonHeader = !onSection && CARBON_TABS.has(tab);
-  const title = section ?? (tab === 'inbox' ? 'Inbox' : 'More');
+  const title = section?.title ?? (tab === 'inbox' ? 'Inbox' : 'More');
+  // Home always offers create; inside a space/list the + files straight into it.
+  const fabTarget = onSection ? section.target : null;
+  const showFab = onSection ? !!fabTarget : tab === 'home';
 
   return (
     <div className="msh" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
@@ -291,16 +298,22 @@ export default function MobileShell({
           </div>
         )}
 
-        {/* Create a task — Home only, as on Android. */}
-        {!onSection && tab === 'home' && (
-          <button type="button" className="msh-fab" aria-label="New task" onClick={onCreateTask}>
+        {/* Create a task — on Home, and inside any space or list. */}
+        {showFab && (
+          <button
+            type="button"
+            className="msh-fab"
+            aria-label="New task"
+            data-tour={onSection ? undefined : 'fab'}
+            onClick={() => setCreating({ preset: fabTarget })}
+          >
             {MIcon.plus}
           </button>
         )}
       </div>
 
       {!onSection && (
-        <nav className="msh-tabbar">
+        <nav className="msh-tabbar" data-tour="tabbar">
           <div className="msh-tabbar-row">
             {TABS.map((t) => {
               const on = tab === t.key;
@@ -313,6 +326,7 @@ export default function MobileShell({
                   data-on={on ? 'true' : undefined}
                   aria-current={on ? 'page' : undefined}
                   aria-label={badge > 0 ? `${t.label}, ${badge} unread` : t.label}
+                  data-tour={t.key === 'chat' ? 'chat-tab' : undefined}
                   onClick={() => selectTab(t.key)}
                 >
                   <span className="msh-tab-ic">
@@ -332,6 +346,20 @@ export default function MobileShell({
       )}
 
       {floating && <div className="msh-floating">{floating}</div>}
+
+      {creating && (
+        <MobileCreateSheet
+          workspaceId={workspaceId}
+          preset={creating.preset}
+          onClose={() => setCreating(null)}
+        />
+      )}
+
+      {/* Only on the Home tab, where all four anchors are on screen, and never
+          over the create sheet. */}
+      {tourOpen && !onSection && tab === 'home' && !creating && (
+        <MobileTour userId={user?.id} onDone={() => setTourOpen(false)} />
+      )}
 
       {drawerOpen && (
         <AccountDrawer

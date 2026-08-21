@@ -38,16 +38,11 @@ export default function MobileChat({
   const onlineUserIds = usePresenceStore((s) => s.onlineUserIds);
   const needle = q.trim().toLowerCase();
 
-  // The support channel is surfaced as its own row, and CRM-linked channels
-  // belong to the CRM surface — neither belongs in the plain channel list.
+  // The support channel gets its own row above, so drop it from the list.
+  // CRM-linked channels need no filtering here — GET /channels already strips
+  // them server-side, and filtering again only risks hiding real channels.
   const visibleChannels = useMemo(
-    () =>
-      channels.filter(
-        (c) =>
-          c.id !== supportChannelId &&
-          c.channel_kind !== 'support' &&
-          !String(c.linked_resource_type ?? '').startsWith('crm_'),
-      ),
+    () => channels.filter((c) => c.id !== supportChannelId && c.channel_kind !== 'support'),
     [channels, supportChannelId],
   );
 
@@ -116,7 +111,13 @@ export default function MobileChat({
 
       <MGroupHead title="Channels" count={filteredChannels.length || undefined} />
       {filteredChannels.length === 0 ? (
-        <p className="msh-hint">No channels match.</p>
+        // "No match" is only true when something was typed. With an empty
+        // filter the honest message is that they're in no channels yet.
+        <p className="msh-hint">
+          {needle
+            ? 'No channels match.'
+            : "You're not in any channels yet. Someone with access can add you to one."}
+        </p>
       ) : (
         filteredChannels.map((c) => (
           <MRow
@@ -130,6 +131,11 @@ export default function MobileChat({
       )}
 
       <MGroupHead title="Direct messages" count={filteredDms.length || undefined} />
+      {filteredDms.length === 0 && (
+        <p className="msh-hint">
+          {needle ? 'No conversations match.' : 'No direct messages yet.'}
+        </p>
+      )}
       {filteredDms.map((d) => {
         const others = (d.participants ?? []).filter((p) => p.id !== meId);
         const first = others[0] ?? d.participants?.[0];

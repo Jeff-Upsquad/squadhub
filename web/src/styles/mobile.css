@@ -852,3 +852,515 @@
 .msh-floating > * {
   bottom: calc(var(--m-tabbar-h) + var(--m-safe-bottom) + 20px) !important;
 }
+
+/* ════════════════════════════════════════════════════════════════════════
+   MOBILE CREATE SHEET (.mcs) — the phone's task-creation UI, ported from the
+   Business app's QuickTaskSheet: a bottom sheet with the essentials in view
+   and each attribute behind its own chip + dialog.
+
+   It's portalled to <body>, so it can't inherit the `.msh` token scope — the
+   palette is redeclared here on the same names.
+   ════════════════════════════════════════════════════════════════════ */
+.mcs,
+.mcs-dlg {
+  --m-ink: #16171B;
+  --m-ink-2: #3C3E45;
+  --m-ink-3: #6B6D77;
+  --m-ink-4: #A0A2AD;
+  --m-hair: #E7E8EC;
+  --m-hair-2: #D6D8DE;
+  --m-hair-3: #F1F2F5;
+  --m-surface: #FFFFFF;
+  --m-surface-alt: #F4F5F8;
+  --m-accent: #5B5BF2;
+  --m-accent-soft: #ECECFE;
+  --m-overdue-fg: #B42318;
+  --m-overdue-bg: #FDECEA;
+  --m-r-sm: 12px;
+  --m-r-md: 16px;
+  --m-r-pill: 999px;
+  --m-safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+.dark .mcs,
+.dark .mcs-dlg {
+  --m-ink: #F3F3F6;
+  --m-ink-2: #CACBD3;
+  --m-ink-3: #9698A3;
+  --m-ink-4: #6C6E79;
+  --m-hair: #2F3037;
+  --m-hair-2: #3E404A;
+  --m-hair-3: #212227;
+  --m-surface: #121316;
+  --m-surface-alt: #1B1C21;
+  --m-accent: #8B8BFF;
+  --m-accent-soft: #25264A;
+  --m-overdue-fg: #F7A6A0;
+  --m-overdue-bg: #3A1E1E;
+}
+
+.mcs-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 95;
+  background: rgba(16, 16, 20, 0.44);
+  animation: mcs-fade 0.2s ease both;
+}
+.dark .mcs-scrim { background: rgba(0, 0, 0, 0.62); }
+@keyframes mcs-fade { from { opacity: 0; } to { opacity: 1; } }
+
+.mcs {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 96;
+  display: flex;
+  flex-direction: column;
+  /* Never taller than the viewport, and never so short the chips are cramped. */
+  max-height: 88dvh;
+  background: var(--m-surface);
+  border-radius: 24px 24px 0 0;
+  box-shadow: 0 -12px 40px rgba(0, 0, 0, 0.24);
+  color: var(--m-ink);
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  animation: mcs-up 0.28s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@keyframes mcs-up { from { transform: translateY(100%); } to { transform: none; } }
+
+.mcs-grip {
+  flex: none;
+  width: 36px;
+  height: 4px;
+  margin: 10px auto 2px;
+  border-radius: var(--m-r-pill);
+  background: var(--m-hair-2);
+}
+
+.mcs-head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 18px 2px;
+}
+.mcs-head h2 {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -0.3px;
+  color: var(--m-ink);
+}
+.mcs-create {
+  flex: none;
+  display: grid;
+  place-items: center;
+  min-width: 84px;
+  height: 36px;
+  padding: 0 18px;
+  border: 0;
+  border-radius: var(--m-r-pill);
+  background: var(--m-ink);
+  color: var(--m-surface);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.14s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.14s ease;
+}
+.mcs-create:active:not(:disabled) { transform: scale(0.94); }
+.mcs-create:disabled {
+  background: var(--m-hair);
+  color: var(--m-ink-4);
+  cursor: default;
+}
+.mcs-spin {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 2px solid color-mix(in srgb, currentColor 35%, transparent);
+  border-top-color: currentColor;
+  animation: mcs-spin 0.7s linear infinite;
+}
+@keyframes mcs-spin { to { transform: rotate(1turn); } }
+
+.mcs-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0 18px calc(var(--m-safe-bottom) + 18px);
+}
+
+/* Borderless, prominent title — the sheet's focal point, as on Android. */
+.mcs-title,
+.mcs-desc {
+  display: block;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  outline: none;
+  resize: none;
+  font-family: inherit;
+  color: var(--m-ink);
+}
+.mcs-title {
+  padding: 8px 0 4px;
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: -0.3px;
+  line-height: 1.3;
+}
+.mcs-title::placeholder { color: var(--m-ink-4); font-weight: 600; }
+.mcs-desc {
+  padding: 2px 0 8px;
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--m-ink-2);
+}
+.mcs-desc::placeholder { color: var(--m-ink-4); }
+
+/* Attribute chips — one horizontally scrolling row, never wrapping. */
+.mcs-chips {
+  display: flex;
+  gap: 8px;
+  margin-top: 6px;
+  padding-bottom: 4px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.mcs-chips::-webkit-scrollbar { display: none; }
+.mcs-chip {
+  position: relative;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 12px;
+  border: 1px solid var(--m-hair);
+  border-radius: var(--m-r-pill);
+  background: var(--m-surface);
+  color: var(--m-ink-3);
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.14s ease, border-color 0.14s ease, color 0.14s ease;
+}
+.mcs-chip[data-on='true'] {
+  background: var(--m-accent-soft);
+  border-color: transparent;
+  color: var(--m-accent);
+}
+.mcs-chip:disabled { opacity: 0.5; cursor: default; }
+.mcs-chip-ic { display: grid; place-items: center; flex: none; }
+.mcs-chip-ic svg { width: 15px; height: 15px; }
+.mcs-chip-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+.mcs-chip-x {
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  margin-right: -3px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  padding: 0;
+}
+.mcs-chip-x svg { width: 12px; height: 12px; }
+/* The real input is invisible but still focusable, so the OS date picker has
+   something to anchor to when showPicker() isn't available (Safari). */
+.mcs-chip-date {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  opacity: 0;
+  border: 0;
+  pointer-events: none;
+}
+
+.mcs-more {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  padding: 12px 0;
+  border: 0;
+  background: transparent;
+  color: var(--m-ink-3);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.mcs-more span:first-child { flex: 1 1 auto; text-align: left; }
+.mcs-more-chev {
+  display: grid;
+  place-items: center;
+  transform: rotate(90deg);
+  transition: transform 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.mcs-more-chev.is-open { transform: rotate(-90deg); }
+.mcs-more-chev svg { width: 18px; height: 18px; }
+.mcs-more-body { display: flex; gap: 8px; padding-bottom: 8px; }
+
+.mcs-error {
+  margin: 8px 0 0;
+  padding: 10px 12px;
+  border-radius: var(--m-r-sm);
+  background: var(--m-overdue-bg);
+  color: var(--m-overdue-fg);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+/* ── Sub-pickers — dialogs, not nested sheets, so they layer predictably ── */
+.mcs-dlg-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 97;
+  background: rgba(16, 16, 20, 0.44);
+  animation: mcs-fade 0.16s ease both;
+}
+.dark .mcs-dlg-scrim { background: rgba(0, 0, 0, 0.62); }
+.mcs-dlg {
+  position: fixed;
+  z-index: 98;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  width: min(92vw, 400px);
+  max-height: 70dvh;
+  background: var(--m-surface);
+  border-radius: 20px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  color: var(--m-ink);
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  overflow: hidden;
+  animation: mcs-pop 0.2s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@keyframes mcs-pop {
+  from { opacity: 0; transform: translate(-50%, -50%) scale(0.96); }
+  to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}
+.mcs-dlg-head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 16px 18px 12px;
+  border-bottom: 1px solid var(--m-hair-3);
+}
+.mcs-dlg-head b { flex: 1 1 auto; font-size: 16px; font-weight: 700; letter-spacing: -0.2px; }
+.mcs-dlg-x {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--m-surface-alt);
+  color: var(--m-ink-3);
+  cursor: pointer;
+}
+.mcs-dlg-x svg { width: 16px; height: 16px; }
+.mcs-dlg-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 6px 0 10px; }
+.mcs-dlg-hint { padding: 16px 18px; font-size: 13px; color: var(--m-ink-4); }
+
+.mcs-opt {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 11px 18px;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  color: var(--m-ink);
+}
+.mcs-opt:active { background: var(--m-hair-3); }
+.mcs-opt[data-on='true'] { background: var(--m-accent-soft); }
+.mcs-opt-ic {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  background: var(--m-surface-alt);
+  color: var(--m-ink-3);
+}
+.mcs-opt-ic svg { width: 17px; height: 17px; }
+.mcs-opt-dot { flex: none; width: 10px; height: 10px; margin: 0 11px; border-radius: 50%; }
+.mcs-opt-body { flex: 1 1 auto; min-width: 0; }
+.mcs-opt-body b {
+  display: block;
+  font-size: 14.5px;
+  font-weight: 550;
+  color: var(--m-ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.mcs-opt-body span {
+  display: block;
+  margin-top: 1px;
+  font-size: 12px;
+  color: var(--m-ink-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.mcs-opt-tick { flex: none; display: grid; place-items: center; color: var(--m-accent); }
+.mcs-opt-tick svg { width: 18px; height: 18px; }
+
+/* ════════════════════════════════════════════════════════════════════════
+   MOBILE FIRST-RUN TOUR (.mtour) — spotlight + card. Portalled to <body>,
+   so like the create sheet it declares its own palette.
+   ════════════════════════════════════════════════════════════════════ */
+.mtour {
+  position: fixed;
+  inset: 0;
+  z-index: 130;
+  pointer-events: none;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  --m-ink: #16171B;
+  --m-ink-2: #3C3E45;
+  --m-ink-3: #6B6D77;
+  --m-hair: #E7E8EC;
+  --m-hair-3: #F1F2F5;
+  --m-surface: #FFFFFF;
+  --m-surface-alt: #F4F5F8;
+  --m-accent: #5B5BF2;
+  --m-accent-soft: #ECECFE;
+}
+.dark .mtour {
+  --m-ink: #F3F3F6;
+  --m-ink-2: #CACBD3;
+  --m-ink-3: #9698A3;
+  --m-hair: #2F3037;
+  --m-hair-3: #212227;
+  --m-surface: #1B1C21;
+  --m-surface-alt: #24252C;
+  --m-accent: #8B8BFF;
+  --m-accent-soft: #25264A;
+}
+
+/* Swallows taps on the app behind the tour. */
+.mtour-block {
+  position: fixed;
+  inset: 0;
+  pointer-events: auto;
+}
+/* The spotlight: an accent ring whose huge spread shadow dims everything
+   outside it. Because the shadow follows the element's own border-radius, the
+   cut-out matches the anchor's shape — circular on the FAB, rounded on bars. */
+.mtour-spot {
+  position: fixed;
+  pointer-events: none;
+  border: 2px solid var(--m-accent);
+  box-shadow: 0 0 0 100vmax rgba(10, 10, 14, 0.62);
+  animation: mtour-pop 0.24s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.mtour-spot--full {
+  inset: 0;
+  border: 0;
+  background: rgba(10, 10, 14, 0.62);
+  box-shadow: none;
+}
+@keyframes mtour-pop {
+  from { opacity: 0.6; }
+  to { opacity: 1; }
+}
+
+.mtour-card {
+  position: fixed;
+  left: 16px;
+  right: 16px;
+  pointer-events: auto;
+  padding: 18px;
+  border-radius: 20px;
+  background: var(--m-surface);
+  color: var(--m-ink);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.34);
+  animation: mtour-in 0.24s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@keyframes mtour-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: none; }
+}
+.mtour-badge {
+  display: inline-block;
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: var(--m-accent-soft);
+  color: var(--m-accent);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.mtour-card h2 {
+  margin: 12px 0 0;
+  font-size: 19px;
+  font-weight: 700;
+  letter-spacing: -0.3px;
+  line-height: 1.25;
+}
+.mtour-card p {
+  margin: 8px 0 0;
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--m-ink-2);
+  white-space: pre-line;
+}
+
+.mtour-list { margin: 12px 0 0; padding: 0; list-style: none; }
+.mtour-list li {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 6px 0;
+  border-top: 1px solid var(--m-hair-3);
+  font-size: 13.5px;
+  line-height: 1.45;
+}
+.mtour-list li:first-child { border-top: 0; }
+.mtour-list li b { flex: none; min-width: 52px; font-weight: 650; color: var(--m-ink); }
+.mtour-list li span { color: var(--m-ink-3); }
+
+.mtour-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 16px;
+}
+.mtour-actions button {
+  border: 0;
+  border-radius: 999px;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.mtour-skip {
+  margin-right: auto;
+  padding: 9px 4px;
+  background: transparent;
+  color: var(--m-ink-3);
+}
+.mtour-back {
+  margin-left: auto;
+  padding: 9px 16px;
+  background: var(--m-surface-alt);
+  color: var(--m-ink-2);
+}
+.mtour-next {
+  padding: 9px 20px;
+  background: var(--m-ink);
+  color: var(--m-surface);
+}
+.mtour-next:active, .mtour-back:active { transform: scale(0.96); }
