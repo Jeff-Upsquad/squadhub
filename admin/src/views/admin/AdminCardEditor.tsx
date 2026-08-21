@@ -180,6 +180,9 @@ interface CardData {
   customer_location: string | null;
   service_type: string | null;
   plan_name: string | null;
+  /** 'assignment' cards have no plan or list price — only a catalog margin. */
+  card_type?: 'subscription' | 'assignment' | 'hiring' | null;
+  assignment_details?: { pricing_mode?: 'priced' | 'unpriced' | null; [key: string]: unknown } | null;
   subscription_request_id: number | null;
   squadhire_category_ids: string[] | null;
   target_country_ids: string[];
@@ -257,6 +260,11 @@ export default function AdminCardEditor({
   });
 
   const card: CardData | null = cardRes || null;
+  // Assignments are one-off: no plan, no list price. The catalog gives them a
+  // margin only — subtracted from a business-committed price, added to a
+  // talent-quoted one (assignment_details.pricing_mode says which way).
+  const isAssignment = card?.card_type === 'assignment';
+  const assignmentUnpriced = card?.assignment_details?.pricing_mode === 'unpriced';
 
   // Local form state
   const [serviceType, setServiceType] = useState('');
@@ -483,6 +491,35 @@ export default function AdminCardEditor({
     })),
   });
 
+  // Assignment margin catalog: one lookup per pricing-table level. Keyed on
+  // the service label — the server resolves admin-added services by name too.
+  const assignmentMarginQueries = useQueries({
+    queries: catalogLookupTiers.map((tier) => ({
+      queryKey: ['admin-card-assignment-margin', serviceType, tier, targetCountryIds[0] || ''],
+      enabled: isAssignment && !!serviceType && !!tier,
+      queryFn: () =>
+        api
+          .get('/admin/assignment-catalog/lookup', {
+            params: {
+              service: serviceType,
+              tier,
+              ...(targetCountryIds[0] ? { country_id: targetCountryIds[0] } : {}),
+            },
+          })
+          .then((r) => (r.data?.data as { margin_value: number; margin_type: 'fixed' | 'percent' } | null) || null)
+          .catch(() => null),
+    })),
+  });
+  const assignmentMarginData = assignmentMarginQueries.map((q) => q.data);
+  const assignmentMarginByTier = useMemo(() => {
+    const map: Record<string, { margin_value: number; margin_type: 'fixed' | 'percent' } | null> = {};
+    catalogLookupTiers.forEach((tier, i) => {
+      map[tier] = (assignmentMarginData[i] as any) ?? null;
+    });
+    return map;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [catalogLookupTiers, JSON.stringify(assignmentMarginData)]);
+
   // Index catalog rows by tier for O(1) access in the deliverables / pricing
   // tables. Keeps render code readable when iterating selected tiers.
   const catalogByTier = useMemo(() => {
@@ -498,14 +535,30 @@ export default function AdminCardEditor({
   const catalogPreferredCountryId = targetCountryIds[0] || null;
 
   // Resolve the correct per-country catalog price for a tier.
+  // Assignment cards have no catalog price, so their row carries price 0 and
+  // just the margin rule — enough for the margin/partner columns to work,
+  // while the "has a catalog price" branches (unselected-level broadcast,
+  // publish expansion) correctly find nothing.
   const catalogPricingForTier = useCallback(
-    (tier: string): PlanLookupPricingRow | null =>
-      pickCatalogPricing(
+    (tier: string): PlanLookupPricingRow | null => {
+      if (isAssignment) {
+        const m = assignmentMarginByTier[tier];
+        if (!m) return null;
+        return {
+          plan_id: '',
+          country_id: catalogPreferredCountryId || indiaCountryId || '',
+          price: 0,
+          margin_value: m.margin_value,
+          margin_type: m.margin_type,
+        };
+      }
+      return pickCatalogPricing(
         catalogByTier[tier]?.pricing,
         catalogPreferredCountryId,
         indiaCountryId,
-      ),
-    [catalogByTier, catalogPreferredCountryId, indiaCountryId],
+      );
+    },
+    [isAssignment, assignmentMarginByTier, catalogByTier, catalogPreferredCountryId, indiaCountryId],
   );
 
   // Once per card+plan+tiers+country: fill blank Margin and blank Final from the
@@ -1261,8 +1314,24 @@ export default function AdminCardEditor({
           <Section title="Pricing">
             <div className="space-y-2">
               <p className="rounded-md bg-[var(--color-sh-cream)] px-2.5 py-1.5 text-[10px] leading-snug text-[var(--color-sh-ink-muted)]">
-                All three levels broadcast. Highlighted = client/admin selected (uses the Final you set).
-                Unselected levels still go out to talent at the <strong>catalog</strong> price.
+                {isAssignment ? (
+                  assignmentUnpriced ? (
+                    <>
+                      Only the levels you select broadcast. This brief invites talents to quote — each level's{' '}
+                      <strong>catalog margin</strong> is added on top of their figure before the business sees it.
+                    </>
+                  ) : (
+                    <>
+                      Only the levels you select broadcast. Set the <strong>Final</strong> the business commits to; the
+                      talent is shown that amount minus the margin.
+                    </>
+                  )
+                ) : (
+                  <>
+                    All three levels broadcast. Highlighted = client/admin selected (uses the Final you set).
+                    Unselected levels still go out to talent at the <strong>catalog</strong> price.
+                  </>
+                )}
               </p>
 
               <div className="overflow-x-auto rounded-lg border border-[var(--color-sh-warm-border)]">
@@ -1273,7 +1342,7 @@ export default function AdminCardEditor({
                         Level
                       </th>
                       <th className="bg-[var(--color-sh-cream)] px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--color-sh-ink-muted)]">
-                        Subscription
+                        {isAssignment ? 'Catalog margin' : 'Subscription'}
                       </th>
                       <th className="bg-[var(--color-sh-cream)] px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--color-sh-ink-muted)]">
                         Client proposed price
@@ -1356,13 +1425,21 @@ export default function AdminCardEditor({
                               </span>
                             ) : (
                               <span className="mt-0.5 block text-[9px] font-medium text-[var(--color-sh-ink-faint)]">
-                                Catalog price · still broadcasts
+                                {isAssignment ? 'Not selected' : 'Catalog price · still broadcasts'}
                               </span>
                             )}
                           </td>
 
                           <td className="px-2 py-1.5 tabular-nums text-[var(--color-sh-ink-muted)]">
-                            {catalogPricingRow ? `${catalogCurrency}${catalogPricingRow.price.toLocaleString()}` : '—'}
+                            {isAssignment
+                              ? catalogPricingRow
+                                ? catalogPricingRow.margin_type === 'percent'
+                                  ? `${catalogPricingRow.margin_value}%`
+                                  : `${catalogCurrency}${catalogPricingRow.margin_value.toLocaleString()}`
+                                : '—'
+                              : catalogPricingRow
+                                ? `${catalogCurrency}${catalogPricingRow.price.toLocaleString()}`
+                                : '—'}
                           </td>
 
                           <td className="px-2 py-1.5">
@@ -1448,9 +1525,19 @@ export default function AdminCardEditor({
                 </table>
               </div>
 
-              <p className="px-0.5 text-[10px] leading-snug text-[var(--color-sh-ink-faint)]">
-                Click a row to mark client-selected (custom Final) · <strong className="font-medium text-[var(--color-sh-ink-muted)]">Subscription</strong> = catalog list price · <strong className="font-medium text-[var(--color-sh-ink-muted)]">Client proposed</strong> = budget from brief · <strong className="font-medium text-[var(--color-sh-ink-muted)]">Final</strong> = what the client pays · Unselected levels still broadcast at catalog Final
-              </p>
+              {isAssignment ? (
+                <p className="px-0.5 text-[10px] leading-snug text-[var(--color-sh-ink-faint)]">
+                  Assignments have no list price — the <strong className="font-medium text-[var(--color-sh-ink-muted)]">Catalog margin</strong> is our cut for this service and level, and fills Margin when you leave it blank.{' '}
+                  {assignmentUnpriced
+                    ? 'This brief invites talents to quote: their figure PLUS the margin is what the business is shown.'
+                    : 'This brief carries a committed price: that figure MINUS the margin is what the talent is shown (Partner).'}{' '}
+                  Set margins in Subscriptions → Assignments.
+                </p>
+              ) : (
+                <p className="px-0.5 text-[10px] leading-snug text-[var(--color-sh-ink-faint)]">
+                  Click a row to mark client-selected (custom Final) · <strong className="font-medium text-[var(--color-sh-ink-muted)]">Subscription</strong> = catalog list price · <strong className="font-medium text-[var(--color-sh-ink-muted)]">Client proposed</strong> = budget from brief · <strong className="font-medium text-[var(--color-sh-ink-muted)]">Final</strong> = what the client pays · Unselected levels still broadcast at catalog Final
+                </p>
+              )}
             </div>
           </Section>
 

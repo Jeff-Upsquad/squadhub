@@ -20,6 +20,7 @@ import {
   type PlanMarginFields,
 } from '@squadhub/shared';
 import { supabaseAdmin } from '../supabase';
+import { loadAssignmentMargin } from './assignmentCatalog';
 
 export interface CardBidPricing {
   card: {
@@ -49,6 +50,15 @@ async function resolveCountryIdForCard(card: {
   if (pricingRows.length === 1 && pricingRows[0]?.country_id) {
     return pricingRows[0].country_id as string;
   }
+
+  // Card targeting (subscription_card_target_countries) is the card's own
+  // country preference — closer to the truth than the client's submission.
+  const { data: targeted } = await supabaseAdmin
+    .from('subscription_card_target_countries')
+    .select('country_id')
+    .eq('card_id', card.id)
+    .limit(1);
+  if (targeted?.[0]?.country_id) return targeted[0].country_id as string;
 
   if (card.submission_subscription_id) {
     const { data: subSub } = await supabaseAdmin
@@ -82,7 +92,7 @@ export async function loadCardBidPricing(cardId: string): Promise<CardBidPricing
   const { data: card, error } = await supabaseAdmin
     .from('subscription_cards')
     .select(
-      'id, markup, partner_price_override, subscription_price, proposed_price, submission_subscription_id, plan_snapshot, target_country_ids',
+      'id, markup, partner_price_override, subscription_price, proposed_price, submission_subscription_id, plan_snapshot, card_type, service_type, target_tiers',
     )
     .eq('id', cardId)
     .maybeSingle();
@@ -112,6 +122,22 @@ export async function loadCardBidPricing(cardId: string): Promise<CardBidPricing
         margin_type: (match.margin_type as 'fixed' | 'percent') ?? 'fixed',
       };
     }
+  }
+
+  // Assignment cards have no plan: their cut comes from the assignment
+  // margin catalog, keyed on service + level. No `price`, so no bid floors —
+  // the two sides negotiate freely and the margin just rides along.
+  if (!marginRow && (card as any).card_type === 'assignment') {
+    const tiers = Array.isArray((card as any).target_tiers)
+      ? ((card as any).target_tiers as string[]).filter(Boolean)
+      : [];
+    marginRow = await loadAssignmentMargin({
+      serviceType: (card as any).service_type as string | null,
+      // Published cards are single-tier after fan-out; a multi-tier draft
+      // takes its first level.
+      tier: tiers[0] ?? null,
+      countryId,
+    });
   }
 
   // Live catalog fallback when no snapshot (draft / non-staged).

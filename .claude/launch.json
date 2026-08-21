@@ -162,6 +162,25 @@
       ],
       "port": 3200,
       "autoPort": true
+    },
+    {
+      "name": "Assignment Catalog Server",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": [
+        "-lc",
+        "cd '/Users/jeffzeena/squadhub web/server' && PORT=4010 DISABLE_CRONS=true exec npx tsx watch src/index.ts"
+      ],
+      "port": 4010
+    },
+    {
+      "name": "Assignment Catalog Admin",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": [
+        "-lc",
+        "cd '/Users/jeffzeena/squadhub web/admin' && INTERNAL_API_URL=http://localhost:4010 exec npx next dev -p 3011"
+      ],
+      "port": 3011,
+      "autoPort": true
     }
   ]
 }
