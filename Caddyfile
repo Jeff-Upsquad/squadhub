@@ -13,8 +13,13 @@ squadhub.in {
 	# Partner Portal — static mini app (partner-portal/ in the repo) served at
 	# /partners from the host dir mounted into caddy as /srv/partner-portal.
 	# No-cache so file updates land immediately; hash-routed SPA, hence the
-	# try_files fallback to index.html.
-	@partners path /partners /partners/*
+	# try_files fallback to index.html. The bare path redirects to /partners/
+	# so relative asset URLs resolve under /partners/ instead of the domain root.
+	@partners_root path /partners
+	handle @partners_root {
+		redir /partners/ 308
+	}
+	@partners path /partners/*
 	handle @partners {
 		encode zstd gzip
 		root * /srv/partner-portal
