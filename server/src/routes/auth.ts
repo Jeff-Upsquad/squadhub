@@ -8,10 +8,10 @@ import {
 } from '../utils/applyInvitation';
 import { seedSquadhireClientLogin } from '../utils/seedSquadhireClientLogin';
 import { redeemSquadhireBusinessSsoCode } from '../utils/squadhireBusinessSso';
-import {
-  SquadhireSsoError,
-  startSquadhireBusinessSession,
-} from '../utils/squadhireBusinessSession';
+import { SquadhireSsoError } from '../utils/squadhireSsoShared';
+import { startSquadhireBusinessSession } from '../utils/squadhireBusinessSession';
+import { redeemSquadhireTalentSsoCode } from '../utils/squadhireTalentSso';
+import { startSquadhireTalentSession } from '../utils/squadhireTalentSession';
 import { requireAuth } from '../middleware/auth';
 import { rateLimit } from '../utils/rateLimit';
 import * as passwordReset from '../services/passwordReset';
@@ -319,6 +319,45 @@ router.post(
         return;
       }
       console.error('SquadHire SSO error:', err);
+      res.status(500).json({ success: false, error: 'Internal server error' });
+    }
+  },
+);
+
+// POST /auth/sso/squadhire/talent — auto-login for a SquadHire talent.
+//
+// Same hand-off as the business route above, but the talent lands as a partner
+// and the card's category picks their role. They have no invitation on our
+// side — SquadHire's assigned-card gate is what entitles them, and the signed
+// exchange is what proves it.
+router.post(
+  '/sso/squadhire/talent',
+  rateLimit({ windowMs: 15 * 60 * 1000, max: 30 }),
+  async (req: Request, res: Response) => {
+    try {
+      const body = ssoCodeSchema.parse(req.body);
+
+      const identity = await redeemSquadhireTalentSsoCode(body.code);
+      if (!identity) {
+        res.status(401).json({
+          success: false,
+          error: 'This sign-in link has expired. Please open SquadHub from SquadHire again.',
+        });
+        return;
+      }
+
+      const session = await startSquadhireTalentSession(identity);
+      res.json({ success: true, data: session });
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        res.status(400).json({ success: false, error: err.errors[0].message });
+        return;
+      }
+      if (err instanceof SquadhireSsoError) {
+        res.status(err.status).json({ success: false, error: err.message });
+        return;
+      }
+      console.error('SquadHire talent SSO error:', err);
       res.status(500).json({ success: false, error: 'Internal server error' });
     }
   },

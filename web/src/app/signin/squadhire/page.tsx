@@ -8,11 +8,15 @@ import { useAuthStore } from '@/stores/authStore';
 /**
  * Auto-login landing for SquadHire business users.
  *
- * They tapped "Log in via website" on the SquadHub tab inside SquadHire's
- * business portal; SquadHire minted a one-time code and sent them here with it.
- * We hand the code to our own server, which redeems it with SquadHire and
- * returns a real session — the account was created for them when their first
- * card was assigned, so there is nothing to register and no password to type.
+ * They tapped the web option on the SquadHub tab inside SquadHire; SquadHire
+ * minted a one-time code and sent them here with it. We hand the code to our
+ * own server, which redeems it with SquadHire and returns a real session — so
+ * there is nothing to register and no password to type.
+ *
+ * ?as=talent routes to the talent endpoint, where they land as a partner with
+ * the role their subscription card implies. Without it they're a business, who
+ * lands as a client. The two are separate endpoints on purpose: a code minted
+ * for one audience is meaningless to the other.
  *
  * The mirror of /launch/squadhire, which does this in the other direction for
  * SquadHire's staff portal.
@@ -28,14 +32,17 @@ export default function SignInFromSquadHire() {
     ran.current = true;
 
     (async () => {
-      const code = new URLSearchParams(window.location.search).get('code');
+      const params = new URLSearchParams(window.location.search);
+      const code = params.get('code');
+      const endpoint =
+        params.get('as') === 'talent' ? '/auth/sso/squadhire/talent' : '/auth/sso/squadhire';
       if (!code) {
         setError('This sign-in link is incomplete. Please open SquadHub from SquadHire again.');
         return;
       }
 
       try {
-        const { data: res } = await api.post('/auth/sso/squadhire', { code });
+        const { data: res } = await api.post(endpoint, { code });
         if (!res?.success) {
           setError('Could not sign you in. Please try again.');
           return;

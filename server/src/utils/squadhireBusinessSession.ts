@@ -28,7 +28,13 @@
  */
 
 import { randomBytes } from 'crypto';
-import { supabase, supabaseAdmin } from '../supabase';
+import { supabaseAdmin } from '../supabase';
+import {
+  assertSignInAllowed,
+  mintSession,
+  SquadhireSsoError,
+  type SquadhireSsoSession,
+} from './squadhireSsoShared';
 import {
   applyAcceptedInvitation,
   INVITATION_COLUMNS,
@@ -37,64 +43,11 @@ import {
 import type { SquadhireBusinessSsoIdentity } from './squadhireBusinessSso';
 import type { UserType } from '@squadhub/shared';
 
+export { SquadhireSsoError };
+export type { SquadhireSsoSession };
+
 /** The only account types a SquadHire business user may sign in as. */
 const CLIENT_USER_TYPES = new Set(['client', 'client_staff']);
-
-/** Account states that block sign-in — mirrors POST /auth/login. */
-const BLOCKED_STATUSES: Record<string, string> = {
-  pending: 'Your account is pending admin approval.',
-  rejected: 'Your account has been rejected.',
-  banned: 'Your account has been banned.',
-  suspended: 'Your account has been suspended.',
-};
-
-export class SquadhireSsoError extends Error {
-  constructor(
-    public status: number,
-    message: string,
-  ) {
-    super(message);
-  }
-}
-
-export interface SquadhireSsoSession {
-  user: Record<string, unknown>;
-  access_token: string;
-  refresh_token: string;
-}
-
-/**
- * Mint a real Supabase session for an existing user without their password.
- *
- * generateLink hands back the magic-link token without sending any email; we
- * redeem it immediately ourselves. The result is an ordinary session — same
- * tokens, same expiry, same refresh path as a password sign-in.
- */
-async function mintSession(email: string): Promise<{ access_token: string; refresh_token: string }> {
-  const { data: link, error: linkError } = await supabaseAdmin.auth.admin.generateLink({
-    type: 'magiclink',
-    email,
-  });
-  const tokenHash = link?.properties?.hashed_token;
-  if (linkError || !tokenHash) {
-    console.error('[squadhire-sso] generateLink failed:', linkError?.message);
-    throw new SquadhireSsoError(500, 'Could not start your SquadHub session. Please try again.');
-  }
-
-  const { data, error } = await supabase.auth.verifyOtp({
-    token_hash: tokenHash,
-    type: 'magiclink',
-  });
-  if (error || !data.session) {
-    console.error('[squadhire-sso] verifyOtp failed:', error?.message);
-    throw new SquadhireSsoError(500, 'Could not start your SquadHub session. Please try again.');
-  }
-
-  return {
-    access_token: data.session.access_token,
-    refresh_token: data.session.refresh_token,
-  };
-}
 
 /** Create the SquadHub account an assigned card entitles this business to. */
 async function provisionFromInvitation(
@@ -152,8 +105,7 @@ export async function startSquadhireBusinessSession(
         'This email is already used by a SquadHub team account. Please sign in with your password.',
       );
     }
-    const blocked = BLOCKED_STATUSES[existing.status as string];
-    if (blocked) throw new SquadhireSsoError(403, blocked);
+    assertSignInAllowed(existing.status);
 
     const tokens = await mintSession(identity.email);
     return { user: existing, ...tokens };
