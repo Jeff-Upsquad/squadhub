@@ -19,6 +19,7 @@ services:
       - /var/www/kia:/srv/kia:ro
       - /var/www/cashbook-web:/srv/cashbook-web:ro
       - /var/www/rioconnect:/srv/rioconnect:ro
+      - /var/www/partner-portal:/srv/partner-portal:ro
     dns:
       - 1.1.1.1
       - 8.8.8.8
