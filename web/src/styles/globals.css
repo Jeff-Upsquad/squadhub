@@ -397,6 +397,21 @@ body {
 .sh-view .pill[data-active="true"] { background: var(--sh-ink); color: var(--surface); }
 .sh-view.dl-groupby { display: flex; align-items: center; gap: 6px; padding: 8px 18px; border-bottom: 1px solid var(--sh-hair-3); font-size: 11.5px; flex-wrap: wrap; }
 .sh-view.dl-groupby .dl-groupby-lbl { color: var(--sh-ink-3); margin-right: 2px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; }
+/* Compact list chips (ListChipsFilter) — name + live task count */
+.lc-chip { display: inline-flex; align-items: center; gap: 5px; max-width: 240px; padding: 3px 9px; border-radius: 999px; border: 1px solid var(--sh-hair); background: transparent; color: var(--sh-ink-3); font-size: 11.5px; line-height: 1.4; cursor: pointer; user-select: none; -webkit-user-select: none; transition: background 120ms ease, color 120ms ease, border-color 120ms ease; }
+.lc-chip[data-grab="true"] { cursor: grab; }
+.lc-chip[data-grab="true"]:active { cursor: grabbing; }
+/* Kill native text/icon ghost-drags inside chips & sidebar list rows — only
+   explicit HTML5 DnD (gated per list) may pick anything up. */
+.lc-chip svg, .sh-tree-row svg, .lc-chip img, .sh-tree-row img { -webkit-user-drag: none; }
+.sh-tree-row { user-select: none; -webkit-user-select: none; }
+.lc-chip:hover { background: var(--sh-hair-3); color: var(--sh-ink); }
+.lc-chip[data-active="true"] { background: var(--sh-ink); border-color: var(--sh-ink); color: var(--surface); }
+.lc-chip .lc-count { display: inline-flex; align-items: center; justify-content: center; min-width: 16px; border-radius: 999px; padding: 0 4.5px; background: var(--sh-hair-3); color: var(--sh-ink-4); font-size: 10px; font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1.5; }
+.lc-chip .lc-count[data-active="true"] { background: rgba(255, 255, 255, 0.24); color: var(--surface); }
+.lc-chip-empty { border-style: dashed; color: var(--sh-ink-4); }
+.lc-chip-empty:hover { color: var(--sh-ink-2); }
+.lc-chip-empty[data-active="true"] { border-style: solid; }
 .lv-mytasks-toggle { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; font-size: 11.5px; font-weight: 500; color: var(--sh-ink-3); background: transparent; border: 1px solid var(--sh-hair); cursor: pointer; transition: background 120ms ease, color 120ms ease, border-color 120ms ease; }
 .lv-mytasks-toggle:hover { background: var(--sh-hair-3); color: var(--sh-ink); }
 .lv-mytasks-toggle[data-active="true"] { background: #16a34a; color: #fff; border-color: #16a34a; }

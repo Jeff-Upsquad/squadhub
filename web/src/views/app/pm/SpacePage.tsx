@@ -10,6 +10,7 @@ import FilterBar from '../../../components/pm/FilterBar';
 import GroupByDropdown from '../../../components/pm/GroupByDropdown';
 import ViewSearchInput from '../../../components/pm/ViewSearchInput';
 import ContainerChatButton from '../../../components/pm/ContainerChatButton';
+import ListChipsFilter from '../../../components/pm/ListChipsFilter';
 import {
   EMPTY_FILTER,
   countActiveFilters,
@@ -95,6 +96,17 @@ export default function SpacePage({ spacePageId: propSpacePageId }: { spacePageI
   });
 
   const isLoading = taskQueries.some((q) => q.isLoading || q.isFetching);
+
+  // Live per-list task counts for the list chips. Falls back to the
+  // server-joined `task_count` inside ListChipsFilter until each query lands.
+  const listCounts = useMemo(() => {
+    const m: Record<string, number> = {};
+    for (const q of taskQueries) {
+      if (q.data) m[q.data.listId] = q.data.tasks.length;
+    }
+    return m;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [taskQueries.map((q) => q.dataUpdatedAt).join('|')]);
 
   const allTasks = useMemo<Task[]>(() => {
     const out: Task[] = [];
@@ -255,43 +267,16 @@ export default function SpacePage({ spacePageId: propSpacePageId }: { spacePageI
         )}
       </div>
 
-      {/* Lists filter pills */}
-      <div className="sh-view dl-groupby shrink-0">
-        <span className="dl-groupby-lbl">Lists</span>
-        <div
-          className="pill"
-          data-active={listFilter === 'all'}
-          onClick={() => setListFilter('all')}
-          role="button"
-          tabIndex={0}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' || e.key === ' ') {
-              e.preventDefault();
-              setListFilter('all');
-            }
-          }}
-        >
-          All
-        </div>
-        {visibleLists.map((l) => (
-          <div
-            key={l.id}
-            className="pill"
-            data-active={listFilter === l.id}
-            onClick={() => setListFilter(l.id)}
-            role="button"
-            tabIndex={0}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' || e.key === ' ') {
-                e.preventDefault();
-                setListFilter(l.id);
-              }
-            }}
-          >
-            {l.name}
-          </div>
-        ))}
-      </div>
+      {/* List chips (with task counts; empty lists collapse into a dropdown).
+          Honors the folder filter above via `visibleLists`. */}
+      <ListChipsFilter
+        label="Lists"
+        lists={visibleLists}
+        counts={listCounts}
+        value={listFilter}
+        onChange={setListFilter}
+        myAccess={space?.my_access_level}
+      />
 
       {/* Group by dropdown + Filter */}
       <div className="lv-subtoolbar shrink-0">

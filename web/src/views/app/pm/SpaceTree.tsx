@@ -13,8 +13,84 @@ import CreateAreaSpaceModal from './CreateAreaSpaceModal';
 import ManageMembersModal from './ManageMembersModal';
 import SettingsSlider from '../../../components/SettingsSlider';
 import { canAtLeast } from '../../../lib/access';
+import { useReorderLists } from '../../../hooks/useSpaces';
 import { isDesignReservedListName } from '../../../lib/designSpaceLists';
 import type { Folder, List, AccessLevel, Space } from '@squadhub/shared';
+
+// ---- Sibling list drag-reorder (HTML5 DnD, no library) ----
+// One instance per sibling group (a folder's lists, or a space's root lists).
+// Drop targets are siblings only, so a list can never be dragged into another
+// container here — cross-folder moves stay with "Move list..." in settings.
+interface ListDndProps {
+  draggable: boolean;
+  isDragging: boolean;
+  isOverBefore: boolean;
+  isOverAfter: boolean;
+  onDragStart: () => void;
+  onDragOver: (e: React.DragEvent) => void;
+  onDrop: (e: React.DragEvent) => void;
+  onDragEnd: () => void;
+}
+
+function useSiblingListDnD(
+  siblingIds: string[],
+  enabled: boolean,
+  commit: (orderedIds: string[]) => void,
+): { propsFor: (list: List) => ListDndProps } {
+  const [dragId, setDragId] = useState<string | null>(null);
+  const [over, setOver] = useState<{ id: string; pos: 'before' | 'after' } | null>(null);
+
+  const clear = () => {
+    setDragId(null);
+    setOver(null);
+  };
+
+  const reorder = (targetId: string, pos: 'before' | 'after') => {
+    if (!dragId || dragId === targetId) {
+      clear();
+      return;
+    }
+    const ids = [...siblingIds];
+    const from = ids.indexOf(dragId);
+    let to = ids.indexOf(targetId) + (pos === 'before' ? 0 : 1);
+    if (from < to) to -= 1; // account for the removal shift
+    if (from !== -1 && to !== -1 && from !== to) {
+      ids.splice(from, 1);
+      ids.splice(to, 0, dragId);
+      if (ids.some((id, i) => id !== siblingIds[i])) commit(ids);
+    }
+    clear();
+  };
+
+  const propsFor = (list: List): ListDndProps => ({
+    // Only admin-locked lists are frozen; private ones reorder fine for
+    // people who already manage this container (server enforces manager).
+    draggable: enabled && !list.is_locked,
+    isDragging: dragId === list.id,
+    isOverBefore: over?.id === list.id && over.pos === 'before',
+    isOverAfter: over?.id === list.id && over.pos === 'after',
+    onDragStart: () => {
+      if (enabled && !list.is_locked) setDragId(list.id);
+    },
+    onDragOver: (e) => {
+      if (!dragId || !enabled) return;
+      e.preventDefault();
+      e.stopPropagation();
+      e.dataTransfer.dropEffect = 'move';
+      const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+      const pos: 'before' | 'after' = e.clientY < rect.top + rect.height / 2 ? 'before' : 'after';
+      setOver((prev) => (prev && prev.id === list.id && prev.pos === pos ? prev : { id: list.id, pos }));
+    },
+    onDrop: (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      reorder(list.id, over?.id === list.id ? over.pos : 'after');
+    },
+    onDragEnd: clear,
+  });
+
+  return { propsFor };
+}
 
 // ---- Lock icon for private items ----
 function LockIcon() {
@@ -193,7 +269,7 @@ const DropdownClientIcon = (
 );
 
 // ---- List item ----
-function ListItem({ list, isManager = false, myAccess }: { list: List; isManager?: boolean; myAccess?: AccessLevel | null }) {
+function ListItem({ list, isManager = false, myAccess, dnd }: { list: List; isManager?: boolean; myAccess?: AccessLevel | null; dnd?: ListDndProps }) {
   const { activeListId, setActiveList, setActiveSpace } = usePMStore();
   const [showSettings, setShowSettings] = useState(false);
   const isActive = activeListId === list.id;
@@ -207,6 +283,12 @@ function ListItem({ list, isManager = false, myAccess }: { list: List; isManager
     setActiveList(list.id);
   };
 
+  const rowStyle: React.CSSProperties = {};
+  if (isActive) rowStyle.boxShadow = 'var(--sh-shadow-sm)';
+  if (dnd?.isDragging) rowStyle.opacity = 0.4;
+  if (dnd?.isOverBefore) rowStyle.boxShadow = 'inset 0 2px 0 var(--sh-ink)';
+  else if (dnd?.isOverAfter) rowStyle.boxShadow = 'inset 0 -2px 0 var(--sh-ink)';
+
   return (
     <>
       {/* role=button div (not <button>) so the nested settings button is valid HTML */}
@@ -216,12 +298,19 @@ function ListItem({ list, isManager = false, myAccess }: { list: List; isManager
         onClick={openList}
         onAuxClick={(e) => { if (e.button === 1) openList(e); }}
         onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openList(); } }}
-        className={`flex w-full items-center gap-2 rounded-[6px] px-2 py-[5px] text-left text-[13px] transition ${
+        draggable={dnd?.draggable}
+        onDragStart={dnd ? () => dnd.onDragStart() : undefined}
+        onDragOver={dnd?.onDragOver}
+        onDrop={dnd?.onDrop}
+        onDragEnd={dnd?.onDragEnd}
+        className={`sh-tree-row flex w-full items-center gap-2 rounded-[6px] px-2 py-[5px] text-left text-[13px] transition ${
+          dnd?.draggable ? 'cursor-grab active:cursor-grabbing' : ''
+        } ${
           isActive
             ? 'bg-[var(--surface)] text-[var(--sh-ink)] font-medium border border-[var(--sh-hair)]'
             : 'text-[var(--sh-ink-2)] hover:bg-[var(--sh-hair-3)] hover:text-[var(--sh-ink)]'
         }`}
-        style={isActive ? { boxShadow: 'var(--sh-shadow-sm)' } : undefined}
+        style={rowStyle}
       >
         <span className={`shrink-0 ${isActive ? 'text-[var(--sh-ink)]' : 'text-[var(--sh-ink-3)]'}`}>
           <ListIconSmall />
@@ -302,8 +391,17 @@ function FolderItem({ folder, spaceId, canAdd, canDelete, isManager, myAccess }:
   const [adding, setAdding] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const createList = useCreateList(spaceId);
+  const reorderLists = useReorderLists();
   const isTemplateSpace = !!folder.client_space_template_id;
   const isActive = isTemplateSpace ? activeDesignFolderId === folder.id : activeFolderId === folder.id;
+  // Drag-reorder among this folder's sibling lists. Disabled for template
+  // spaces: their reserved status lists are hidden from the tree but still live
+  // in the container, so a visible-subset order couldn't be persisted safely.
+  const listDnd = useSiblingListDnD(
+    (folder.lists ?? []).map((l) => l.id),
+    isManager && !folder.is_locked && !isTemplateSpace,
+    (orderedIds) => reorderLists.mutate({ space_id: spaceId, folder_id: folder.id, ordered_ids: orderedIds }),
+  );
   const openFolder = (e?: React.MouseEvent) => {
     if (e && wantsNewTab(e)) {
       e.preventDefault();
@@ -360,7 +458,7 @@ function FolderItem({ folder, spaceId, canAdd, canDelete, isManager, myAccess }:
             ? folder.lists?.filter((list) => !isDesignReservedListName(list.name))
             : folder.lists
           )?.map((list) => (
-            <ListItem key={list.id} list={list} isManager={isManager} myAccess={myAccess} />
+            <ListItem key={list.id} list={list} isManager={isManager} myAccess={myAccess} dnd={listDnd.propsFor(list)} />
           ))}
           {adding && (
             <InlineInput
@@ -486,6 +584,7 @@ function SpaceItem({ spaceId, initial }: { spaceId: string; initial?: Space }) {
   const canCreateFolders = useHasPermission('can_create_folders');
   const canCreateLists = useHasPermission('can_create_lists');
   const canCreateSpaces = useHasPermission('can_create_spaces');
+  const reorderLists = useReorderLists();
 
   const { data: fullSpace } = useSpace(isActive || open ? spaceId : null);
   const space = fullSpace || initial;
@@ -493,6 +592,13 @@ function SpaceItem({ spaceId, initial }: { spaceId: string; initial?: Space }) {
   const myAccess = space?.my_access_level;
   const canAddItems = canAtLeast(myAccess, 'member');
   const isManager = canAtLeast(myAccess, 'manager');
+
+  // Drag-reorder among the space's root-level (folderless) lists.
+  const rootListDnd = useSiblingListDnD(
+    (space?.lists ?? []).map((l) => l.id),
+    isManager && !space?.is_locked,
+    (orderedIds) => reorderLists.mutate({ space_id: spaceId, folder_id: null, ordered_ids: orderedIds }),
+  );
 
   const handleRowClick = (e?: React.MouseEvent) => {
     if (e && wantsNewTab(e)) {
@@ -619,7 +725,7 @@ function SpaceItem({ spaceId, initial }: { spaceId: string; initial?: Space }) {
                   <FolderItem key={folder.id} folder={folder} spaceId={spaceId} canAdd={canAddItems && canCreateLists} canDelete={isManager} isManager={isManager} myAccess={myAccess} />
                 ))}
                 {space.lists?.map((list) => (
-                  <ListItem key={list.id} list={list} isManager={isManager} myAccess={myAccess} />
+                  <ListItem key={list.id} list={list} isManager={isManager} myAccess={myAccess} dnd={rootListDnd.propsFor(list)} />
                 ))}
               </>
             );
@@ -676,8 +782,18 @@ function WorkspaceRoot({ workspaceId }: { workspaceId: string }) {
   const { data: fullSpace } = useSpace(workspaceId);
   const canCreateLists = useHasPermission('can_create_lists');
   const canCreateSpaces = useHasPermission('can_create_spaces');
+  const reorderLists = useReorderLists();
 
   const space = fullSpace;
+
+  // Drag-reorder among the workspace's root-level (folderless) lists.
+  // Kept above the loading guard — hooks can't sit behind an early return.
+  const rootListDnd = useSiblingListDnD(
+    (space?.lists ?? []).map((l) => l.id),
+    !!space && canAtLeast(space.my_access_level, 'manager') && !space.is_locked,
+    (orderedIds) => reorderLists.mutate({ space_id: workspaceId, folder_id: null, ordered_ids: orderedIds }),
+  );
+
   if (!space) return null;
 
   const myAccess = space.my_access_level;
@@ -738,7 +854,7 @@ function WorkspaceRoot({ workspaceId }: { workspaceId: string }) {
         />
       ))}
       {space.lists?.map((list) => (
-        <ListItem key={list.id} list={list} isManager={isManager} myAccess={myAccess} />
+        <ListItem key={list.id} list={list} isManager={isManager} myAccess={myAccess} dnd={rootListDnd.propsFor(list)} />
       ))}
     </div>
   );

@@ -67,9 +67,80 @@ router.get('/lists', async (req: Request, res: Response) => {
   }
 });
 
-// GET /pm/lists/:id
-router.get('/lists/:id', async (req: Request, res: Response) => {
+// POST /pm/lists/reorder — persist sibling order within one container (a
+// folder, or the space's root when folder_id is null). ordered_ids must cover
+// every non-deleted list in that container; positions are rewritten 0..n-1.
+router.post('/lists/reorder', async (req: Request, res: Response) => {
   try {
+    const body = z.object({
+      space_id: z.string().uuid(),
+      folder_id: z.string().uuid().nullable().optional(),
+      ordered_ids: z.array(z.string().uuid()).min(1),
+    }).parse(req.body);
+
+    const folderId = body.folder_id ?? null;
+    const containerType = folderId ? 'folder' : 'space';
+    const containerId = folderId ?? body.space_id;
+
+    // Manager access on the container governs reordering its lists.
+    const userLevel = await checkResourceAccess(req.userId!, containerType, containerId);
+    if (!userLevel || !meetsAccessLevel(userLevel, 'manager')) {
+      res.status(403).json({ success: false, error: 'Manager access required to reorder lists' });
+      return;
+    }
+
+    const adminUser = await isWorkspaceAdmin(req.userId!);
+    if (!adminUser && await isResourceLocked(containerType, containerId)) {
+      res.status(403).json({ success: false, error: `This ${containerType} is locked` });
+      return;
+    }
+
+    // Fetch the container's full membership and require exact coverage so
+    // positions stay unique and no list is silently dropped.
+    let query = supabaseAdmin.from('lists').select('id').eq('space_id', body.space_id).is('deleted_at', null);
+    if (folderId) query = query.eq('folder_id', folderId);
+    else query = query.is('folder_id', null);
+    const { data: containerLists, error: fetchError } = await query;
+    if (fetchError) {
+      res.status(500).json({ success: false, error: fetchError.message });
+      return;
+    }
+
+    const containerIds = new Set((containerLists || []).map((l) => l.id));
+    const providedIds = new Set(body.ordered_ids);
+    if (containerIds.size !== providedIds.size || [...containerIds].some((id) => !providedIds.has(id))) {
+      res.status(400).json({ success: false, error: 'ordered_ids must include every list in this container exactly once' });
+      return;
+    }
+
+    // Sequential writes (Supabase JS has no client-side transaction). A mid-way
+    // failure can leave a transient gap in positions; reads order by position
+    // so the next successful reorder self-heals any ties.
+    for (let i = 0; i < body.ordered_ids.length; i++) {
+      const { error } = await supabaseAdmin
+        .from('lists')
+        .update({ position: i })
+        .eq('id', body.ordered_ids[i]);
+      if (error) {
+        console.error('Reorder lists error:', error.message);
+        res.status(500).json({ success: false, error: error.message });
+        return;
+      }
+    }
+
+    res.json({ success: true });
+  } catch (err) {
+    if (err instanceof z.ZodError) {
+      res.status(400).json({ success: false, error: err.errors[0].message });
+      return;
+    }
+    console.error('Reorder lists error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// GET /pm/lists/:id
+router.get('/lists/:id', async (req: Request, res: Response) => {  try {
     const id = req.params.id as string;
 
     // Check access on the list (inherits from space/folder)

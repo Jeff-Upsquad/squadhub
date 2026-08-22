@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../services/api';
 import type { Space } from '@squadhub/shared';
 import { useWorkspaceStore } from '../stores/workspaceStore';
+import { showToast } from '../components/Toast';
 
 export function useSpaces(workspaceId: string | undefined) {
   return useQuery<Space[]>({
@@ -147,6 +148,30 @@ export function useMoveFolder(currentSpaceId: string) {
         qc.invalidateQueries({ queryKey: ['space', vars.space_id] });
       }
       qc.invalidateQueries({ queryKey: ['spaces', workspaceId] });
+    },
+  });
+}
+
+// Persist a new sibling order for lists inside one container (a folder, or the
+// space's root). ordered_ids must cover every list in that container.
+export function useReorderLists() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (vars: { space_id: string; folder_id?: string | null; ordered_ids: string[] }) => {
+      await api.post('/pm/lists/reorder', vars);
+    },
+    onSuccess: () => {
+      // Prefix matches: every open space payload, the sidebar trees, and any
+      // open folder pages all render list order from these caches.
+      qc.invalidateQueries({ queryKey: ['spaces'] });
+      qc.invalidateQueries({ queryKey: ['space'] });
+      qc.invalidateQueries({ queryKey: ['folder'] });
+    },
+    onError: (err: any) => {
+      // Reordering silently failing looks like "drag does nothing" — always
+      // surface it so the failure is debuggable from the UI.
+      console.error('Reorder lists failed:', err?.response?.data?.error || err);
+      showToast(err?.response?.data?.error || 'Could not save the new order', 'error');
     },
   });
 }
