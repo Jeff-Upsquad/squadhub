@@ -525,18 +525,22 @@ export default function MainLayout() {
 
   // Update store when channels change. Auto-selects the first channel only
   // when nothing is active — including when a restored selection points at a
-  // channel that no longer exists (deleted / access revoked since last session).
+  // conversation that no longer exists (deleted / access revoked since last
+  // session). DMs are validated once the DM list has loaded.
   useEffect(() => {
     if (channels.length > 0) {
       setChannels(channels);
-      if (
+      const stale =
         !activeChannelId ||
-        (activeChannelKind === 'channel' && !channels.some((c) => c.id === activeChannelId))
-      ) {
+        (activeChannelKind === 'channel' && !channels.some((c) => c.id === activeChannelId)) ||
+        (activeChannelKind === 'dm' &&
+          !!dmsData &&
+          !dmsData.some((d) => d.id === activeChannelId));
+      if (stale) {
         setActiveChannel(channels[0].id);
       }
     }
-  }, [channels, activeChannelId, activeChannelKind, setChannels, setActiveChannel]);
+  }, [channels, activeChannelId, activeChannelKind, dmsData, setChannels, setActiveChannel]);
 
   // Connect socket when workspace loads
   useEffect(() => {

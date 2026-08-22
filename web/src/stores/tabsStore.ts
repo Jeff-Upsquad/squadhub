@@ -78,10 +78,15 @@ export const useTabsStore = create<TabsState>()(
             return { tabs: [{ id, snapshot }], activeTabId: id };
           }
 
-          // During a restore (tab switch / nav-history) just refresh the active
-          // tab's snapshot — never create or focus, exactly like useNavHistory.
+          // During a restore (tab switch / nav-history) never create or focus,
+          // exactly like useNavHistory. Also don't write the incoming snapshot
+          // back: a restore re-applies the very snapshot that came FROM this
+          // tab/history entry, so mirroring is redundant — except on the first
+          // mount after a reload, where the not-yet-restored live view (e.g.
+          // channelId: null) would clobber the persisted snapshot before
+          // MainLayout can read it back into the workspace store.
           if (isRestoring) {
-            return { tabs: tabs.map((t) => (t.id === activeTabId ? { ...t, snapshot } : t)) };
+            return {};
           }
 
           // Same destination, only background fields changed → refresh.
