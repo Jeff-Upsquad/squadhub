@@ -1,15 +1,16 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useQueries, useQuery } from '@tanstack/react-query';
+import { useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { Folder, List, SpaceStatus, Task } from '@squadhub/shared';
 import api from '../../../services/api';
 import { usePMStore } from '../../../stores/pmStore';
-import { useSpace } from '../../../hooks/useSpaces';
+import { useSpace, useReorderLists } from '../../../hooks/useSpaces';
 import TaskGroupCard from './TaskGroupCard';
 import { GROUP_BY_OPTIONS, groupTasks, partitionByCompletion, buildFocusTodayGroup, type GroupBy } from '../../../lib/taskGrouping';
 import FilterBar from '../../../components/pm/FilterBar';
 import GroupByDropdown from '../../../components/pm/GroupByDropdown';
 import ViewSearchInput from '../../../components/pm/ViewSearchInput';
 import ContainerChatButton from '../../../components/pm/ContainerChatButton';
+import ListChipsFilter from '../../../components/pm/ListChipsFilter';
 import ClientFolderReport from './client-design/ClientFolderReport';
 import {
   EMPTY_FILTER,
@@ -22,6 +23,8 @@ import {
 type FolderWithLists = Folder & { lists?: List[] };
 
 export default function FolderPage({ folderId: propFolderId }: { folderId?: string } = {}) {
+  const qc = useQueryClient();
+  const reorderLists = useReorderLists();
   // When a folderId is passed (the tab strip renders each open tab from its own
   // snapshot), it overrides the global store so sibling tabs can show different
   // folders at once. Falls back to the store for normal single-view navigation.
@@ -75,6 +78,17 @@ export default function FolderPage({ folderId: propFolderId }: { folderId?: stri
   });
 
   const isLoading = taskQueries.some((q) => q.isLoading || q.isFetching);
+
+  // Live per-list task counts for the list chips. Falls back to the
+  // server-joined `task_count` inside ListChipsFilter until each query lands.
+  const listCounts = useMemo(() => {
+    const m: Record<string, number> = {};
+    for (const q of taskQueries) {
+      if (q.data) m[q.data.listId] = q.data.tasks.length;
+    }
+    return m;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [taskQueries.map((q) => q.dataUpdatedAt).join('|')]);
 
   const allTasks = useMemo<Task[]>(() => {
     const out: Task[] = [];
@@ -171,43 +185,21 @@ export default function FolderPage({ folderId: propFolderId }: { folderId?: stri
         </div>
       </div>
 
-      {/* List filter pills + Filter */}
-      <div className="sh-view dl-groupby shrink-0">
-        <span className="dl-groupby-lbl">List</span>
-        <div
-          className="pill"
-          data-active={listFilter === 'all'}
-          onClick={() => setListFilter('all')}
-          role="button"
-          tabIndex={0}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' || e.key === ' ') {
-              e.preventDefault();
-              setListFilter('all');
-            }
-          }}
-        >
-          All
-        </div>
-        {lists.map((l) => (
-          <div
-            key={l.id}
-            className="pill"
-            data-active={listFilter === l.id}
-            onClick={() => setListFilter(l.id)}
-            role="button"
-            tabIndex={0}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' || e.key === ' ') {
-                e.preventDefault();
-                setListFilter(l.id);
-              }
-            }}
-          >
-            {l.name}
-          </div>
-        ))}
-      </div>
+      {/* List chips (with task counts; empty lists collapse into a dropdown).
+          Drag chips to reorder — persists via POST /pm/lists/reorder. */}
+      <ListChipsFilter
+        label="List"
+        lists={lists}
+        counts={listCounts}
+        value={listFilter}
+        onChange={setListFilter}
+        myAccess={folder?.my_access_level}
+        onReorder={(orderedIds) => {
+          if (!folder) return;
+          reorderLists.mutate({ space_id: folder.space_id, folder_id: activeFolderId, ordered_ids: orderedIds });
+        }}
+        onSettingsClosed={() => qc.invalidateQueries({ queryKey: ['folder', activeFolderId] })}
+      />
 
       {/* Group by dropdown + Filter */}
       <div className="lv-subtoolbar shrink-0">
