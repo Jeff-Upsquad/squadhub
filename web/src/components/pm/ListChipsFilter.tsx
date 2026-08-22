@@ -48,13 +48,14 @@ export default function ListChipsFilter({
   const canManageList = (l: List) => canAtLeast(myAccess ?? undefined, 'manager') && !l.is_locked;
   const canDragChips = !!onReorder && canAtLeast(myAccess ?? undefined, 'manager');
 
-  // Resolve each list's count: live query first, then the server-joined
-  // task_count, else unknown (undefined → chip stays up top without a badge).
+  // Resolve each list's count: live query only. The server-joined
+  // `task_count` deliberately ISN'T used as a fallback — it includes
+  // completed/closed tasks, which would flash wrong numbers while loading.
   const enriched = useMemo(
     () =>
-      lists.map((l) => ({
-        list: l,
-        count: counts[l.id] ?? l.task_count,
+      lists.map((list) => ({
+        list,
+        count: counts[list.id],
       })),
     [lists, counts],
   );
@@ -226,7 +227,7 @@ export default function ListChipsFilter({
                 ...(isOverAfter ? { boxShadow: 'inset -2px 0 0 var(--sh-ink)' } : null),
               }}
               data-active={value === list.id}
-              title={`${list.name} · ${count ?? 0} task${count === 1 ? '' : 's'}`}
+              title={count === undefined ? list.name : `${list.name} · ${count} open task${count === 1 ? '' : 's'}`}
               onClick={() => onChange(value === list.id ? 'all' : list.id)}
               role="button"
               tabIndex={0}
@@ -268,7 +269,7 @@ export default function ListChipsFilter({
         );
       })}
 
-      {/* Empty lists collapse into a dropdown */}
+      {/* Lists with no open tasks (completed-only included) collapse into a dropdown */}
       {(emptyLists.length > 0 || activeIsEmpty) && (
         <div ref={emptyRef} className="relative">
           <div
@@ -279,7 +280,7 @@ export default function ListChipsFilter({
             tabIndex={0}
             aria-expanded={emptyOpen}
             aria-haspopup="menu"
-            title="Lists with no tasks"
+            title="Lists with no open tasks"
             onKeyDown={(e) => {
               if (e.key === 'Enter' || e.key === ' ') {
                 e.preventDefault();
@@ -296,7 +297,7 @@ export default function ListChipsFilter({
               </>
             ) : (
               <>
-                <span>Empty lists</span>
+                <span>No open tasks</span>
                 <span className="lc-count">{emptyLists.length}</span>
                 <svg
                   className={`h-3 w-3 shrink-0 opacity-60 transition-transform ${emptyOpen ? 'rotate-180' : ''}`}
@@ -312,7 +313,7 @@ export default function ListChipsFilter({
           {emptyOpen && (
             <div
               role="menu"
-              aria-label="Empty lists"
+              aria-label="Lists with no open tasks"
               style={{
                 position: 'absolute',
                 top: 'calc(100% + 6px)',

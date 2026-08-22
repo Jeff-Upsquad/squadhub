@@ -5,7 +5,7 @@ import api from '../../../services/api';
 import { usePMStore } from '../../../stores/pmStore';
 import { useSpace } from '../../../hooks/useSpaces';
 import TaskGroupCard from './TaskGroupCard';
-import { GROUP_BY_OPTIONS, groupTasks, partitionByCompletion, buildFocusTodayGroup, type GroupBy } from '../../../lib/taskGrouping';
+import { GROUP_BY_OPTIONS, groupTasks, partitionByCompletion, buildFocusTodayGroup, isTaskCompleted, type GroupBy } from '../../../lib/taskGrouping';
 import FilterBar from '../../../components/pm/FilterBar';
 import GroupByDropdown from '../../../components/pm/GroupByDropdown';
 import ViewSearchInput from '../../../components/pm/ViewSearchInput';
@@ -97,12 +97,12 @@ export default function SpacePage({ spacePageId: propSpacePageId }: { spacePageI
 
   const isLoading = taskQueries.some((q) => q.isLoading || q.isFetching);
 
-  // Live per-list task counts for the list chips. Falls back to the
-  // server-joined `task_count` inside ListChipsFilter until each query lands.
+  // Live per-list OPEN task counts for the list chips (completed/closed
+  // excluded, matching how the view itself partitions tasks).
   const listCounts = useMemo(() => {
     const m: Record<string, number> = {};
     for (const q of taskQueries) {
-      if (q.data) m[q.data.listId] = q.data.tasks.length;
+      if (q.data) m[q.data.listId] = q.data.tasks.filter((t) => !isTaskCompleted(t)).length;
     }
     return m;
     // eslint-disable-next-line react-hooks/exhaustive-deps
