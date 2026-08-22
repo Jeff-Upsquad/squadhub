@@ -137,6 +137,19 @@ export const APPS: AppDef[] = [
     ],
   },
   {
+    slug: 'partner-payments',
+    name: 'Partner Payments',
+    category: 'Finance',
+    description: 'Assigned clients, monthly payouts & commission status.',
+    view: 'partner-payments',
+    paths: [
+      'M2 9a2 2 0 012-2h16a2 2 0 012 2v7a2 2 0 01-2 2H4a2 2 0 01-2-2V9z',
+      'M16 5.5h2a2 2 0 012 2v1.5m0 7V17a2 2 0 01-2 2h-2M8 19H6a2 2 0 01-2-2v-1.5M4 8.5V7a2 2 0 012-2h2',
+      'M12 14.5a2.5 2.5 0 100-5 2.5 2.5 0 000 5z',
+      'M6.5 12h.01M17.5 12h.01',
+    ],
+  },
+  {
     slug: 'squadbooks',
     name: 'SquadBooks',
     category: 'Finance',

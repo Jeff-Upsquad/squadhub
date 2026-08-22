@@ -30,6 +30,7 @@ import SettingsSlider from '../components/SettingsSlider';
 import CheckInWidget from '../views/app/checkin/CheckInWidget';
 import CheckInsPage from '../views/app/check-ins/CheckInsPage';
 import CandidatesPage from '../views/app/candidates/CandidatesPage';
+import PartnerPaymentsPage from '../views/app/partner-payments/PartnerPaymentsPage';
 import MeetingsView from '../views/app/meetings/MeetingsView';
 import GlobalMeetingPanel from '../views/app/meetings/GlobalMeetingPanel';
 import ExternalTabPane from '../components/ExternalTabPane';
@@ -87,7 +88,7 @@ import { canonicalKey, buildHomeSnapshot, type TabSnapshot } from '../lib/tabSna
 
 // ---- Types ----
 export type ActiveSection = 'home' | 'cal' | 'docs' | 'teams' | 'apps' | 'learning' | 'more';
-export type HomeView = 'hub' | 'chat' | 'tasks' | 'inbox' | 'my-tasks' | 'checkin' | 'checkin-partners' | 'check-ins' | 'candidates' | 'time-management' | 'sales-leads' | 'leads' | 'support-admin' | 'cashbook' | 'opportunities' | 'subscription-cards' | 'job-cards' | 'day-planner' | 'routines' | 'clips' | 'meetings';
+export type HomeView = 'hub' | 'chat' | 'tasks' | 'inbox' | 'my-tasks' | 'checkin' | 'checkin-partners' | 'check-ins' | 'candidates' | 'time-management' | 'sales-leads' | 'leads' | 'support-admin' | 'cashbook' | 'opportunities' | 'subscription-cards' | 'job-cards' | 'day-planner' | 'routines' | 'clips' | 'meetings' | 'partner-payments';
 
 // One entry in the in-app navigation history: everything needed to bring the
 // user back to a view. Views switch via local state rather than URLs, so the
@@ -831,7 +832,7 @@ export default function MainLayout() {
   //   • embedded standalone apps (Squad Clips, Daily Check-In, Time Management,
   //     Sales Leads) — each renders its own header/actions; the global "+" was
   //     overlapping e.g. Squad Clips' "New recording ▾" dropdown chevron.
-  const EMBEDDED_APP_VIEWS: HomeView[] = ['clips', 'checkin', 'checkin-partners', 'check-ins', 'candidates', 'time-management', 'sales-leads', 'support-admin'];
+  const EMBEDDED_APP_VIEWS: HomeView[] = ['clips', 'checkin', 'checkin-partners', 'check-ins', 'candidates', 'time-management', 'sales-leads', 'support-admin', 'partner-payments'];
   // Day Planner gets the create button as a bottom-right floating FAB instead of
   // the top-right "+", which otherwise collides with the calendar's header.
   const onDayPlanner = activeSection === 'home' && homeView === 'day-planner';
@@ -992,6 +993,7 @@ export default function MainLayout() {
       if (hv === 'checkin-partners') return <CheckInWidget title="Daily Check-In Partners" context="partners" />;
       if (hv === 'check-ins') return <CheckInsPage />;
       if (hv === 'candidates') return <CandidatesPage />;
+      if (hv === 'partner-payments') return <PartnerPaymentsPage />;
       if (hv === 'time-management') return <TimeManagementPage />;
       if (hv === 'sales-leads') return <SalesLeadsPage />;
       if (hv === 'leads') return <LeadsPage />;
@@ -1039,6 +1041,7 @@ export default function MainLayout() {
     if (hv === 'checkin-partners') return <CheckInWidget title="Daily Check-In Partners" context="partners" />;
     if (hv === 'check-ins') return <CheckInsPage />;
     if (hv === 'candidates') return <CandidatesPage />;
+    if (hv === 'partner-payments') return <PartnerPaymentsPage />;
     if (hv === 'time-management') return <TimeManagementPage />;
     if (hv === 'sales-leads') return <SalesLeadsPage />;
     if (hv === 'leads') return <LeadsPage />;

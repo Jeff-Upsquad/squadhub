@@ -41,6 +41,7 @@ const APP_VIEWS = new Set<string>([
   'sales-leads',
   'candidates',
   'cashbook',
+  'partner-payments',
 ]);
 
 /**
