@@ -319,6 +319,26 @@ export default function MainLayout() {
     const st = useTabsStore.getState();
     return st.tabs.find((t) => t.id === st.activeTabId)?.snapshot.externalTitle ?? null;
   });
+  // Restore the last-open conversation from the persisted active tab. The
+  // workspace store keeps the channel selection in memory only, so without
+  // this a full-page refresh inside a chat falls through to the channels[0]
+  // default once the list loads (mirrors the externalUrl/externalTitle seeding
+  // above). Scoped to the tab strip's own workspace — a strip belonging to a
+  // different workspace is ignored here and reset by the seed effect below.
+  // Runs before the channels query resolves, so the auto-select fallback never
+  // fires; a ?open_channel= deep link still wins because that handler runs on
+  // mount regardless of this guard.
+  useEffect(() => {
+    const wsId = currentWorkspace?.id;
+    if (!wsId || useWorkspaceStore.getState().activeChannelId) return;
+    const st = useTabsStore.getState();
+    if (st.workspaceId != null && st.workspaceId !== wsId) return;
+    const snap = st.tabs.find((t) => t.id === st.activeTabId)?.snapshot;
+    if (!snap || snap.externalUrl) return;
+    if (snap.section === 'home' && snap.homeView === 'chat' && snap.channelId) {
+      setActiveChannel(snap.channelId, snap.channelKind);
+    }
+  }, [currentWorkspace?.id, setActiveChannel]);
   // Live presence set for the chat header dot (hooks can't run inside the
   // header IIFE below, so subscribe here).
   const onlineUserIds = usePresenceStore((s) => s.onlineUserIds);
@@ -503,15 +523,20 @@ export default function MainLayout() {
     if (dmsData) setDmConversations(dmsData);
   }, [dmsData, setDmConversations]);
 
-  // Update store when channels change
+  // Update store when channels change. Auto-selects the first channel only
+  // when nothing is active — including when a restored selection points at a
+  // channel that no longer exists (deleted / access revoked since last session).
   useEffect(() => {
     if (channels.length > 0) {
       setChannels(channels);
-      if (!activeChannelId) {
+      if (
+        !activeChannelId ||
+        (activeChannelKind === 'channel' && !channels.some((c) => c.id === activeChannelId))
+      ) {
         setActiveChannel(channels[0].id);
       }
     }
-  }, [channels, activeChannelId, setChannels, setActiveChannel]);
+  }, [channels, activeChannelId, activeChannelKind, setChannels, setActiveChannel]);
 
   // Connect socket when workspace loads
   useEffect(() => {
