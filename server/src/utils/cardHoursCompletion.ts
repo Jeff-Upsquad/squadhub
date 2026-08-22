@@ -12,6 +12,10 @@
 // where hourly rate = monthly price / standard_monthly_hours (month-length
 // independent, since per-day-rate / daily-hours reduces to the same figure).
 //
+// PAUSED (Aug 2026): the delta + its money are switched off by
+// ADDITIONAL_HOURS_EFFECTIVE_FROM below — see the comment there for how to
+// re-enable from a chosen month without restating history.
+//
 // Compute-on-view: the Partner Payments + Gross Profit handlers already resolve
 // each card's CardBilling for the chosen month, so they pass it in and we reuse
 // it (never re-query prices). Results are upserted onto card_hours_completion
@@ -28,6 +32,25 @@ import { getFolderPlanTimeline, committedHoursForRange, istMonthBounds } from '.
 import { aggregateFolderTimeSummary, aggregateFolderElapsedSummary } from '../services/folderShareMetrics';
 
 const round2 = (n: number): number => Math.round(n * 100) / 100;
+
+// ------------------------------------------------------------
+// Additional-hours PAUSE switch
+//
+// The signed additional-hours delta (+ overage / − shortfall) and the money it
+// moves are currently PAUSED: payouts and revenue are computed on base price
+// only, everywhere (Partner Payments admin/mini-app/portal + Gross Profit).
+// To re-enable from a given IST month onward, set this to 'YYYY-MM' (e.g.
+// '2027-01'). Months BEFORE that value stay permanently excluded — even when
+// re-viewed or recomputed later — so historical months are never restated with
+// the delta; that month and after include it again.
+// ------------------------------------------------------------
+export const ADDITIONAL_HOURS_EFFECTIVE_FROM: string | null = null;
+
+/** True when the delta applies to an IST month ('YYYY-MM-01' or 'YYYY-MM'). */
+export function additionalHoursActiveForMonth(periodMonth: string): boolean {
+  if (!ADDITIONAL_HOURS_EFFECTIVE_FROM) return false;
+  return periodMonth.slice(0, 7) >= ADDITIONAL_HOURS_EFFECTIVE_FROM;
+}
 
 function pad2(n: number): string {
   return String(n).padStart(2, '0');
@@ -117,7 +140,9 @@ export async function computeCardHoursCompletion(
   const elapsedSec = elapsed.reduce((s, r) => s + Number(r.elapsed_seconds || 0), 0);
   const actualHours = round2((trackedSec + elapsedSec) / 3600);
 
-  const additionalHours = round2(actualHours - targetMonthly);
+  const additionalHours = additionalHoursActiveForMonth(periodMonth)
+    ? round2(actualHours - targetMonthly)
+    : 0;
 
   // Guard: a 0/unresolved target with hours logged is almost certainly a MISSING
   // target (legacy/hand-made card with no assignment terms, or a space whose
