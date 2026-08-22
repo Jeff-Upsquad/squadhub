@@ -561,7 +561,7 @@ function BySubscriptionView({ month }: { month: string }) {
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-divider bg-surface p-3">
         <div className="flex items-center gap-3">
           <div className="flex gap-1">
-            {(['active', 'all'] as Status[]).map((s) => (
+            {(['all', 'active'] as Status[]).map((s) => (
               <button
                 key={s}
                 onClick={() => setStatusFilter(s)}
@@ -830,7 +830,7 @@ function ByUserView({ month }: { month: string }) {
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-divider bg-surface p-3">
         <div className="flex items-center gap-3">
           <div className="flex gap-1">
-            {(['active', 'all'] as Status[]).map((s) => (
+            {(['all', 'active'] as Status[]).map((s) => (
               <button
                 key={s}
                 onClick={() => setStatusFilter(s)}
