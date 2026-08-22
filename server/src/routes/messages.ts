@@ -636,12 +636,12 @@ router.get('/:id/thread', requireAuth, async (req: Request, res: Response) => {
     const [{ data: root }, { data: replies }] = await Promise.all([
       supabaseAdmin
         .from('messages')
-        .select('*, sender:users!sender_id(id, display_name, avatar_url)')
+        .select('*, sender:users!sender_id(id, display_name, avatar_url), reactions(*, user:users!user_id(id, display_name, avatar_url))')
         .eq('id', rootId)
         .maybeSingle(),
       supabaseAdmin
         .from('messages')
-        .select('*, sender:users!sender_id(id, display_name, avatar_url)')
+        .select('*, sender:users!sender_id(id, display_name, avatar_url), reactions(*, user:users!user_id(id, display_name, avatar_url))')
         .eq('parent_message_id', rootId)
         .eq('is_deleted', false)
         .order('created_at', { ascending: true }),
