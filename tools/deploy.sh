@@ -128,41 +128,45 @@ else
     SERVICES=$(echo "$SERVICES" | xargs)
 fi
 
-if [ -z "$SERVICES" ]; then
-    echo "Changes detected but no Docker services need rebuilding."
-    echo "(Changed files are docs, workflows, or other non-service files.)"
-    exit 0
+if [ -n "$SERVICES" ]; then
+    echo "Rebuilding: $SERVICES"
+    echo "---"
+    docker compose build $SERVICES && docker compose up -d $SERVICES
+
+    # Habit: tag ALL three images with the deploy timestamp, even if only some
+    # rebuilt. This gives a consistent 3-service snapshot per deploy — rolling back
+    # to a tag restores the full trio to the state it had at that moment.
+    for svc in server web admin; do
+        if docker image inspect "squadhub-${svc}:latest" >/dev/null 2>&1; then
+            docker tag "squadhub-${svc}:latest" "squadhub-${svc}:${DEPLOY_TAG}"
+            echo "  tagged squadhub-${svc}:${DEPLOY_TAG}"
+        fi
+    done
+
+    # Habit: prune old deploy tags — keep the last 5 for rollback, delete the rest.
+    # Caps disk growth. Older rollback still works via git checkout + rebuild.
+    KEEP_DEPLOYS=5
+    for prune_svc in server web admin; do
+        docker images --format '{{.Repository}}:{{.Tag}}' \
+            | grep -E "^squadhub-${prune_svc}:[0-9]{8}-[0-9]{6}$" \
+            | sort -r \
+            | tail -n +$((KEEP_DEPLOYS+1)) \
+            | xargs -r docker rmi 2>/dev/null || true
+    done
+else
+    echo "No Docker services need rebuilding."
+    echo "(Changed files are docs, workflows, static sites, or other non-service files.)"
 fi
-
-echo "Rebuilding: $SERVICES"
-echo "---"
-docker compose build $SERVICES && docker compose up -d $SERVICES
-
-# Habit: tag ALL three images with the deploy timestamp, even if only some
-# rebuilt. This gives a consistent 3-service snapshot per deploy — rolling back
-# to a tag restores the full trio to the state it had at that moment.
-for svc in server web admin; do
-    if docker image inspect "squadhub-${svc}:latest" >/dev/null 2>&1; then
-        docker tag "squadhub-${svc}:latest" "squadhub-${svc}:${DEPLOY_TAG}"
-        echo "  tagged squadhub-${svc}:${DEPLOY_TAG}"
-    fi
-done
-
-# Habit: prune old deploy tags — keep the last 5 for rollback, delete the rest.
-# Caps disk growth. Older rollback still works via git checkout + rebuild.
-KEEP_DEPLOYS=5
-for prune_svc in server web admin; do
-    docker images --format '{{.Repository}}:{{.Tag}}' \
-        | grep -E "^squadhub-${prune_svc}:[0-9]{8}-[0-9]{6}$" \
-        | sort -r \
-        | tail -n +$((KEEP_DEPLOYS+1)) \
-        | xargs -r docker rmi 2>/dev/null || true
-done
 
 if echo "$CHANGED_FILES" | grep -qE '^Caddyfile$'; then
     echo ""
     echo "Reloading Caddy configuration..."
-    docker compose exec caddy caddy reload --config /etc/caddy/Caddyfile
+    # Pipe the host file via stdin instead of letting caddy read the mounted
+    # /etc/caddy/Caddyfile: git replaces files with a new inode, and a
+    # single-file bind mount keeps pointing at the OLD inode until the
+    # container is recreated — a plain in-container reload would silently
+    # load the stale pre-deploy config.
+    docker compose exec -T caddy caddy reload --config - --adapter caddyfile < Caddyfile
 fi
 
 if echo "$CHANGED_FILES" | grep -qE '^tools/set-r2-cors\.ts$'; then

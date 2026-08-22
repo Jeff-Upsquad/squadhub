@@ -86,3 +86,13 @@ See [rollback.md](rollback.md) for the full procedure, including how to list ava
 2. **Next.js rewrites are baked at build time.** The `INTERNAL_API_URL` env var must be present during `docker compose build`, not just at runtime. This is handled via `ARG` in the Dockerfiles.
 3. **`next.config.js` overrides `next.config.mjs`.** Never create manual `.js` config files on the VPS — they silently replace the git-tracked `.mjs` files and break API proxying.
 4. **Old repo at `/root/upsquad`** is a different project. The SquadHub deployment is at `/opt/squadhub`.
+5. **Caddyfile bind mount goes stale after `git pull`.** Git replaces edited files with a new inode, but caddy mounts `./Caddyfile` as a *single file*, so the container keeps reading the OLD inode even though the host file updated — an in-container `caddy reload --config /etc/caddy/Caddyfile` silently loads stale config. This is why deploy.sh pipes the host file over stdin instead (`exec -T caddy caddy reload --config - --adapter caddyfile < Caddyfile`). If applying a Caddyfile change manually on the VPS, use that same form or `docker compose up -d --force-recreate caddy`.
+
+## Static sites (no Docker service)
+
+Sites that are plain static files (e.g. `partner-portal/`, served at `https://squadhub.in/partners`) ship differently than Docker services:
+
+1. Files live on the VPS at `/var/www/<name>/` and are mounted read-only into caddy via a volume in `docker-compose.yml` (`/var/www/<name>:/srv/<name>:ro`). Adding a mount requires recreating caddy (`docker compose up -d --force-recreate caddy`).
+2. A site block/handle in the `Caddyfile` serves them (`root * /srv/<name>` + `file_server`, no-cache headers so updates land immediately).
+3. Uploading files: `scp <files> root@72.61.245.97:/var/www/<name>/` — deploy.sh does NOT do this step; do it after pushing and before/after running deploy.sh.
+4. SPA fallback: `try_files {path} /index.html`; if mounted under a path prefix, also redirect bare-path → trailing-slash so relative asset URLs resolve (`redir @x path-based 308`).
