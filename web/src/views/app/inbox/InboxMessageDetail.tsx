@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import api from '../../../services/api';
+import { getSocket } from '../../../services/socket';
 import MentionPicker from '../../../components/MentionPicker';
 import type { Notification } from '../InboxView';
 
@@ -105,6 +106,75 @@ export default function InboxMessageDetail({
       return res.data.data;
     },
   });
+
+  const rootId = data?.root?.id ?? null;
+  const convId = data?.root?.channel_id || data?.root?.dm_conversation_id || null;
+
+  // Live replies while the detail pane is open — same wiring as ThreadPanel,
+  // scoped to this thread's cache key. The inbox detail renders standalone
+  // (no ChatPanel mounted to join rooms for it), so it joins the conversation
+  // room itself once the fetch resolves the channel/DM id.
+  useEffect(() => {
+    const socket = getSocket();
+    if (!socket || !convId) return;
+    socket.emit('join_channel', convId);
+
+    const handleReply = (message?: { id?: string; parent_message_id?: string | null }) => {
+      if (message?.id && message.parent_message_id === rootId) {
+        queryClient.setQueryData<ThreadResponse>(['message-thread', messageId], (old) => {
+          if (!old) return old;
+          if (old.replies?.some((m) => m.id === message.id)) return old;
+          return { ...old, replies: [...(old.replies || []), message as MessageRow] };
+        });
+      }
+      // Reconcile in the background regardless — covers edits/deletes/reactions.
+      queryClient.invalidateQueries({ queryKey: ['message-thread', messageId] });
+
+      // A reply landing in the conversation already open on screen has been
+      // read on sight — clear its unread inbox rows for real (not just
+      // optimistically, or the next list refetch would bring them back).
+      // Mirrors ChatPanel's clearConversationNotifications.
+      const body =
+        data?.root?.dm_conversation_id
+          ? { dm_conversation_id: data.root.dm_conversation_id }
+          : data?.root?.channel_id
+            ? { channel_id: data.root.channel_id }
+            : null;
+      if (!body || !(message?.parent_message_id === rootId)) return;
+      api
+        .post('/notifications/read-conversation', body)
+        .then(() => {
+          queryClient.setQueryData<Notification[]>(['notifications', 'list'], (old) =>
+            (old || []).map((n) =>
+              !n.is_read &&
+              (n.metadata?.dm_conversation_id === convId || n.metadata?.channel_id === convId)
+                ? { ...n, is_read: true }
+                : n,
+            ),
+          );
+          queryClient.invalidateQueries({ queryKey: ['notifications', 'unread-count'] });
+        })
+        .catch(() => {
+          /* non-critical */
+        });
+    };
+    const handleMutated = () =>
+      queryClient.invalidateQueries({ queryKey: ['message-thread', messageId] });
+
+    socket.on('new_message', handleReply);
+    socket.on('thread_reply', handleReply);
+    socket.on('new_reaction', handleMutated);
+    socket.on('message_updated', handleMutated);
+    socket.on('message_deleted', handleMutated);
+    return () => {
+      socket.emit('leave_channel', convId);
+      socket.off('new_message', handleReply);
+      socket.off('thread_reply', handleReply);
+      socket.off('new_reaction', handleMutated);
+      socket.off('message_updated', handleMutated);
+      socket.off('message_deleted', handleMutated);
+    };
+  }, [convId, rootId, messageId, queryClient]);
 
   const sendReply = useMutation({
     mutationFn: async () => {

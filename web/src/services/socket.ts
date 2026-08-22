@@ -14,14 +14,18 @@ export function getSocket(): TypedSocket | null {
 export function connectSocket(): TypedSocket {
   if (socket?.connected) return socket;
 
-  const token = useAuthStore.getState().accessToken;
-
   // Polling-first (socket.io's default): websocket-first hangs forever in dev
   // because Next's rewrite proxy never completes WS upgrades — the client sits
   // in CONNECTING and never falls back. Polling connects everywhere, then
   // upgrades to websocket where the proxy supports it (prod nginx does).
+  //
+  // `auth` uses the FUNCTION form on purpose: socket.io calls it on every
+  // connection attempt (initial + each reconnect). An object literal would
+  // snapshot the access token once — Supabase rotates tokens hourly, so every
+  // later reconnect would fail auth and the tab would silently go deaf to all
+  // live events (messages, notifications, presence) until a manual reload.
   socket = io('/', {
-    auth: { token },
+    auth: (cb) => cb({ token: useAuthStore.getState().accessToken }),
     transports: ['polling', 'websocket'],
   }) as TypedSocket;
 
