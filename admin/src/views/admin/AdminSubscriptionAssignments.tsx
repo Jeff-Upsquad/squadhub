@@ -474,13 +474,34 @@ export default function AdminSubscriptionAssignments() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <input
-            type="month"
-            value={month}
-            onChange={(e) => setMonth(e.target.value || currentMonthKey())}
-            className="rounded-md border border-divider bg-surface px-3 py-1.5 text-sm outline-none focus:border-slate-400"
-            aria-label="Billing month"
-          />
+          <div className="flex items-center gap-1 rounded-md border border-divider bg-surface px-1 py-0.5">
+            <button
+              type="button"
+              onClick={() => setMonth(shiftMonth(month, -1))}
+              className="rounded px-1.5 py-1 text-sm text-foreground-muted hover:bg-canvas hover:text-foreground"
+              aria-label="Previous month"
+              title="Previous month"
+            >
+              ←
+            </button>
+            <input
+              type="month"
+              value={month}
+              onChange={(e) => setMonth(e.target.value || currentMonthKey())}
+              className="border-none bg-transparent px-1 py-1 text-sm outline-none focus:border-slate-400"
+              aria-label="Billing month"
+            />
+            <button
+              type="button"
+              onClick={() => setMonth(shiftMonth(month, 1))}
+              disabled={month >= currentMonthKey()}
+              className="rounded px-1.5 py-1 text-sm text-foreground-muted hover:bg-canvas hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
+              aria-label="Next month"
+              title={month >= currentMonthKey() ? 'Already at current month' : 'Next month'}
+            >
+              →
+            </button>
+          </div>
           <div className="flex gap-1 rounded-lg border border-divider bg-surface p-1">
             {(['user', 'subscription'] as ViewMode[]).map((v) => (
               <button
