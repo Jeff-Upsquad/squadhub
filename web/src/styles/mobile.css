@@ -931,6 +931,57 @@
   }
 }
 
+/* ── Hosted views · phone pass ────────────────────────────────────────
+ * Every remaining piece of desktop chrome inside hosted panes, so each
+ * drill-in reads like an app screen rather than a squeezed desktop.
+ */
+
+/* List/space pages — the "Group by" text label and its divider are table
+   furniture; the dropdowns carry their own icons in the scrolling chip row. */
+.msh-pane .lv-subtoolbar .st-label,
+.msh-pane .lv-subtoolbar .st-divider { display: none; }
+
+/* Named view tabs (List / Board / …) become a slim horizontal scroller. */
+.msh-pane .lv-tabs-row {
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding-left: 12px;
+  padding-right: 12px;
+}
+.msh-pane .lv-tabs-row::-webkit-scrollbar { display: none; }
+
+/* Board view keeps its Trello-style column scroller, at phone gutters. */
+.msh-pane .bv-board { padding: 12px 12px 20px; gap: 10px; }
+
+/* Inbox filter pills + search + mark-all: one scrolling row, never wrapped. */
+.msh-pane .sh-view .inbox-filter {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.msh-pane .sh-view .inbox-filter::-webkit-scrollbar { display: none; }
+.msh-pane .sh-view .inbox-filter > * { flex: none; }
+
+/* Wide centered page containers (Meetings, Check-Ins, Routines, client
+   Subscriptions / Hiring / Cash Book) drop to phone gutters. These are the
+   literal Tailwind classes on those roots, so this is one rule for all. */
+.msh-pane .max-w-3xl,
+.msh-pane .max-w-4xl,
+.msh-pane .max-w-6xl,
+.msh-pane .max-w-\[1060px\] {
+  padding-left: 16px;
+  padding-right: 16px;
+}
+
+/* Chat side panel ("Chat" details drawer) is portalled outside the shell and
+   sized min(48vw, 900px) for desktop split-view — on a phone that's ~180px.
+   Full width, like the thread panel. */
+@media (max-width: 767px) {
+  div.fixed.right-0.top-0:not(.inset-0) {
+    max-width: 100% !important;
+  }
+}
+
 /* Fixed widgets handed to the shell (the drafts list) anchor to the viewport
    bottom-right — on a phone that's underneath the tab bar and the FAB. The
    wrapper re-anchors them; `bottom: auto` neutralises their own offset. */
