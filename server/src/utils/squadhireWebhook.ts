@@ -10,6 +10,7 @@ import {
 } from '@squadhub/shared';
 import { config } from '../config';
 import { supabaseAdmin } from '../supabase';
+import { loadAssignmentMargin } from './assignmentCatalog';
 import { resolveHireBusinessUserIdForCardDelivery } from './clientExternalLinks';
 
 /**
@@ -601,6 +602,20 @@ export async function buildSquadhirePayloadForCard(
   // the bid-floor / percent-ceil rules sent to SquadHire.
   let stagedMarginRow: PlanMarginFields | null = null;
 
+  // Assignment cards have no plan snapshot: eagerly load the margin from
+  // the assignment catalog so downstream price derivation (partner price =
+  // finalized − margin) applies the correct cut instead of defaulting to zero.
+  if ((contentSource as any).card_type === 'assignment' && pricingCountryId) {
+    const tiers = Array.isArray((contentSource as any).target_tiers)
+      ? ((contentSource as any).target_tiers as string[]).filter(Boolean)
+      : [];
+    stagedMarginRow = await loadAssignmentMargin({
+      serviceType: (contentSource as any).service_type as string | null,
+      tier: tiers[0] ?? null,
+      countryId: pricingCountryId,
+    });
+  }
+
   if (planSnapshot && pricingCountryId) {
     // Frozen pricing path: use the snapshot captured at publish time.
     const customerRow = (planSnapshot.pricing ?? []).find(
@@ -734,6 +749,19 @@ export async function buildSquadhirePayloadForCard(
           margin_type: row.margin_type ?? 'fixed',
         };
       }
+    }
+    // Assignment cards have no plan snapshot: load the margin from the
+    // assignment catalog (service + tier + country) so the talent sees the
+    // partner price (finalized − margin) instead of the full customer price.
+    if (!nonStagedMargin && (contentSource as any).card_type === 'assignment') {
+      const tiers = Array.isArray((contentSource as any).target_tiers)
+        ? ((contentSource as any).target_tiers as string[]).filter(Boolean)
+        : [];
+      nonStagedMargin = await loadAssignmentMargin({
+        serviceType: (contentSource as any).service_type as string | null,
+        tier: tiers[0] ?? null,
+        countryId: pricingCountryId,
+      });
     }
     const finalized = resolveFinalizedPrice(contentSource as any);
     const partner = resolvePartnerPrice(contentSource as any, nonStagedMargin);
