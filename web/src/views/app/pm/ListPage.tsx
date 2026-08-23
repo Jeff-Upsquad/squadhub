@@ -22,7 +22,7 @@ import ViewSearchInput from '../../../components/pm/ViewSearchInput';
 import ContainerChatButton from '../../../components/pm/ContainerChatButton';
 import { LIST_GROUP_BY_OPTIONS, SORT_BY_OPTIONS, type SortBy } from '../../../lib/taskGrouping';
 import { type ListGroupBy } from '../../../stores/pmStore';
-import { EMPTY_FILTER, deriveAssigneeOptions, deriveTagOptions, type TaskFilterState } from '../../../lib/filters';
+import { EMPTY_FILTER, deriveAssigneeOptions, deriveTagOptions, filterTasks, type TaskFilterState } from '../../../lib/filters';
 import { useIsMobile } from '../../../hooks/useIsMobile';
 
 const SORT_ICON = (
@@ -142,6 +142,21 @@ export default function ListPage({
   const { data: tasksForOptions } = useTasks(activeListId, undefined);
   const assigneeOptions = useMemo(() => deriveAssigneeOptions(tasksForOptions ?? []), [tasksForOptions]);
   const tagOptions = useMemo(() => deriveTagOptions(tasksForOptions ?? []), [tasksForOptions]);
+
+  // ── Phone scope chips (the Partner app's TaskFilter: All / Today / Overdue).
+  // They drive the same working-config filters the desktop toolbar edits; on
+  // the phone this row replaces that toolbar entirely.
+  const tz = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone, []);
+  const overdueCount = useMemo(
+    () => filterTasks(tasksForOptions ?? [], { dueDate: ['overdue'] }, tz).length,
+    [tasksForOptions, tz],
+  );
+  const todayScoped = filters.dueDate?.length === 1 && filters.dueDate?.[0] === 'today';
+  const overdueScoped = filters.dueDate?.length === 1 && filters.dueDate?.[0] === 'overdue';
+  const allScoped = !todayScoped && !overdueScoped;
+  const scopeTo = (preset: 'today' | 'overdue' | null) =>
+    setWorkingConfig((c) => ({ ...c, filters: preset ? { dueDate: [preset] } : {} }));
+
 
   // ── View actions (tab strip + save) ─────────────────────────────────────
   const selectView = (viewId: string) => { if (activeListId) setActiveView(activeListId, viewId); };
@@ -349,6 +364,40 @@ export default function ListPage({
               <circle cx="12" cy="7" r="4" />
             </svg>
             My tasks
+          </button>
+        </div>
+      )}
+
+      {/* Phone scope chips — TaskFilter.kt's All / Today / Overdue pills with
+          counts; replaces the desktop toolbar above on narrow screens. */}
+      {contentType === 'list' && isMobile && (
+        <div className="lv-scope-row">
+          <button
+            type="button"
+            className="lv-scope-chip"
+            data-on={allScoped || undefined}
+            onClick={() => scopeTo(null)}
+          >
+            All
+            <span className="n">{(tasksForOptions ?? []).length}</span>
+          </button>
+          <button
+            type="button"
+            className="lv-scope-chip"
+            data-on={todayScoped || undefined}
+            onClick={() => scopeTo(todayScoped ? null : 'today')}
+          >
+            Today
+          </button>
+          <button
+            type="button"
+            className="lv-scope-chip"
+            data-on={overdueScoped || undefined}
+            data-overdue={overdueCount > 0 ? '' : undefined}
+            onClick={() => scopeTo(overdueScoped ? null : 'overdue')}
+          >
+            Overdue
+            {overdueCount > 0 && <span className="n">{overdueCount}</span>}
           </button>
         </div>
       )}

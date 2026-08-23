@@ -994,19 +994,53 @@
  * cards at 14dp radius, 15sp row titles, and flat hairline-separated
  * action rows instead of stacked bordered cards.
  *
- * And the desktop controls the app doesn't have: the list page's search
- * field (settings gear stays), and its whole List/Board/Chat tabs strip —
- * on the phone a task screen is title → chips → grouped cards, nothing
- * between. The toolbar dropdowns slim down into pill chips.
+ * The list page's search row (settings gear included) and its whole
+ * List/Board/Chat tabs strip don't exist in the app — gone. The desktop
+ * sort toolbar is replaced by the in-TSX scope chip row (TaskFilter.kt).
  */
-.msh-pane div:has(> div > .lv-search) .lv-search { display: none; }
+.msh-pane div:has(> div > .lv-search) { display: none; }
 .msh-pane .lv-tabs-row { display: none; }
-.msh-pane .lv-subtoolbar { gap: 6px; padding-top: 8px; padding-bottom: 8px; }
-.msh-pane .lv-subtoolbar .lv-toolbtn {
-  padding: 5px 10px;
-  font-size: 12px;
-  border-radius: var(--m-r-pill);
+.msh-pane .lv-subtoolbar { display: none; }
+
+/* Scope chips (TaskFilter.kt): pill row under the large title. Active chip
+   = carbon fill with white label; counts ride along at 80% white, and the
+   Overdue count is red while its chip is off — exactly the native rules. */
+.lv-scope-row {
+  flex: none;
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding: 4px 20px 10px;
+  border-bottom: 1px solid var(--m-hair-3);
 }
+.lv-scope-row::-webkit-scrollbar { display: none; }
+.lv-scope-chip {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 13px;
+  border: 1px solid var(--m-hair-2);
+  border-radius: var(--m-r-pill);
+  background: transparent;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--m-ink-2);
+  cursor: pointer;
+}
+.lv-scope-chip .n {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--m-ink-4);
+}
+.lv-scope-chip[data-overdue] .n { color: var(--m-overdue-fg); }
+.lv-scope-chip[data-on='true'] {
+  background: var(--m-ink);
+  border-color: var(--m-ink);
+  color: var(--m-surface);
+}
+.lv-scope-chip[data-on='true'] .n { color: color-mix(in srgb, var(--m-surface) 80%, transparent); }
 
 .msh-pane .lv-card { border-radius: 14px; }
 .msh-pane .lv-title { font-size: 15px; }
