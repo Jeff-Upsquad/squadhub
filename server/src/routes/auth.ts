@@ -16,6 +16,7 @@ import { requireAuth } from '../middleware/auth';
 import { rateLimit } from '../utils/rateLimit';
 import * as passwordReset from '../services/passwordReset';
 import type { UserType } from '@squadhub/shared';
+import { propagateIdentityNames } from '../utils/propagateIdentityNames';
 
 const router = Router();
 
@@ -83,6 +84,11 @@ router.post('/register', async (req: Request, res: Response) => {
     if (dbError) {
       console.error('Failed to insert user row:', dbError);
     }
+
+    void propagateIdentityNames({
+      email: body.email,
+      personName: body.display_name,
+    });
 
     // If invited: auto-approve, assign role, add to workspace
     if (isInvited) {

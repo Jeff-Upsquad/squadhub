@@ -23,6 +23,7 @@ import {
   runIdentityBackfill,
 } from '../utils/identityBackfill';
 import { ensureClientPortalAccess } from '../utils/ensureClientPortalAccess';
+import { propagateIdentityNames } from '../utils/propagateIdentityNames';
 
 const router = Router();
 
@@ -1293,6 +1294,14 @@ router.put('/:id', async (req: Request, res: Response) => {
     if (error) {
       res.status(500).json({ success: false, error: error.message });
       return;
+    }
+    if (body.contact_person || body.business_name) {
+      void propagateIdentityNames({
+        email: data.email,
+        phone: data.contact_number,
+        personName: body.contact_person,
+        brandName: body.business_name,
+      });
     }
     res.json({ success: true, data });
   } catch (err) {

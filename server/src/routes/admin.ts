@@ -5,6 +5,7 @@ import { requireAdmin } from '../middleware/admin';
 import { supabaseAdmin } from '../supabase';
 import { getDefaultRoleIdForUserType } from '../utils/defaultRole';
 import { propagateEmailChange } from '../utils/propagateEmailChange';
+import { propagateUserDisplayName } from '../utils/propagateIdentityNames';
 import { notifySquadhireOfCardRecall } from '../utils/squadhireWebhook';
 import { applyTempPassword, PasswordResetError } from '../services/passwordReset';
 import type { UserType } from '@squadhub/shared';
@@ -307,6 +308,9 @@ router.put('/users/:id/profile', async (req: Request, res: Response) => {
     if (body.email) {
       await supabaseAdmin.auth.admin.updateUserById(id, { email: body.email });
       await propagateEmailChange(id, body.email);
+    }
+    if (body.display_name) {
+      void propagateUserDisplayName(id, body.display_name);
     }
 
     res.json({ success: true, data });

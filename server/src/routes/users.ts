@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { requireAuth } from '../middleware/auth';
 import { supabaseAdmin } from '../supabase';
 import { hydrateCard } from '../utils/subscriptionCards';
+import { propagateUserDisplayName } from '../utils/propagateIdentityNames';
 
 const router = Router();
 
@@ -192,6 +193,10 @@ router.put('/me', requireAuth, async (req: Request, res: Response) => {
     if (error) {
       res.status(500).json({ success: false, error: error.message });
       return;
+    }
+
+    if (body.display_name) {
+      void propagateUserDisplayName(req.userId!, body.display_name);
     }
 
     res.json({ success: true, data });
