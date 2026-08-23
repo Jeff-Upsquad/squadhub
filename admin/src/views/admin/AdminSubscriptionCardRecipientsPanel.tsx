@@ -1587,11 +1587,11 @@ function CardDetails({ card, activeCard, isSecondaryView, countries, squadhireCa
         />
         <DetailRow
           label="Proposed price"
-          value={card.proposed_price ? `${cur} ${card.proposed_price.toLocaleString()}/mo` : EMPTY}
+          value={card.proposed_price ? `${cur} ${card.proposed_price.toLocaleString()}${per}` : EMPTY}
         />
         <DetailRow
           label="Subscription price"
-          value={card.subscription_price ? `${cur} ${card.subscription_price.toLocaleString()}/mo` : EMPTY}
+          value={card.subscription_price ? `${cur} ${card.subscription_price.toLocaleString()}${per}` : EMPTY}
         />
         {/* Preferred levels + client budgets from the brief. */}
         {(() => {

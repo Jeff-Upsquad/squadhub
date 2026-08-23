@@ -1928,7 +1928,7 @@ export default function AdminCardEditor({
                           >
                             {isSelected ? (
                               <PriceInput
-                                value={entry.subscriptionPrice ?? ''}
+                                value={entry.subscriptionPrice ?? entry.proposedPrice ?? ''}
                                 placeholder={
                                   clientProposed
                                     ? `${clientProposed}`
