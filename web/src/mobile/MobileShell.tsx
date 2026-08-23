@@ -99,7 +99,9 @@ export default function MobileShell({
   // Non-null while drilled into a screen. `target` is the space/list it opened
   // (null for screens with no PM scope, e.g. a conversation or Calendar), and
   // is what the create sheet pre-selects when you tap + inside that screen.
-  const [section, setSection] = useState<{ title: string; target: OpenTarget | null } | null>(null);
+  // `bare` drops the app-bar title: the screen paints the app's large in-body
+  // header instead (TasksScreen.kt has no top bar, just back + 28sp title).
+  const [section, setSection] = useState<{ title: string; target: OpenTarget | null; bare?: boolean } | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   // null = closed; otherwise the space the sheet should pre-target (undefined
   // for the FAB, which starts with no space chosen).
@@ -135,8 +137,8 @@ export default function MobileShell({
   // ---- Drilling in / out ----------------------------------------------
   // Entering a screen pushes a history entry so the browser's Back button (and
   // Android's system back) pops it, exactly like the native app's back stack.
-  const openSection = useCallback((title: string, target: OpenTarget | null = null) => {
-    setSection({ title, target });
+  const openSection = useCallback((title: string, target: OpenTarget | null = null, bare = false) => {
+    setSection({ title, target, bare });
     window.history.pushState({ mshSection: true }, '');
   }, []);
 
@@ -217,13 +219,15 @@ export default function MobileShell({
   const createIn = (t: OpenTarget) => setCreating({ preset: t });
 
   // Partner Home's briefing tiles and action chips. Each opens the web surface
-  // that answers the same question the Android screen does.
+  // that answers the same question the Android screen does. Screens that paint
+  // the app's own large header run bare (back-only app bar).
   const openPartnerAction = (a: PartnerAction) => {
     const view: HomeView = a === 'my-home' ? 'hub' : a === 'meetings' ? 'meetings' : a === 'checkin' ? 'checkin' : 'my-tasks';
     const title = a === 'my-home' ? 'My Home' : a === 'meetings' ? 'Meetings' : a === 'checkin' ? 'Daily Check-In' : 'My Tasks';
+    const bare = a !== 'my-home';
     setActiveSection('home');
     setHomeView(view);
-    openSection(title);
+    openSection(title, null, bare);
   };
 
   // ---- Chrome decisions ------------------------------------------------
@@ -272,7 +276,8 @@ export default function MobileShell({
             ) : (
               <span style={{ width: 12 }} />
             )}
-            <h1 className="msh-appbar-title">{title}</h1>
+            {!section?.bare && <h1 className="msh-appbar-title">{title}</h1>}
+            {section?.bare && <span style={{ flex: 1 }} />}
             {!onSection && (
               <button
                 type="button"

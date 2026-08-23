@@ -856,6 +856,22 @@
    shortcut; the phone gets straight to the list. */
 .msh-pane .mtk-private-head { display: none; }
 
+/* The phone header, ported from TasksScreen.kt: large bold title over an
+   "N open · your work" line. The shell's app bar runs back-only here. */
+.mtk-phone-head { padding: 10px 20px 8px; flex-shrink: 0; }
+.mtk-phone-head h1 {
+  margin: 0;
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+  color: var(--m-ink);
+}
+.mtk-phone-head p {
+  margin: 3px 0 0;
+  font-size: 13px;
+  color: var(--m-ink-3);
+}
+
 /* Chat — a thread opens as its own full-screen layer above the
    conversation. The pane's wrapper is position:relative, so anchoring is
    self-contained; the panel keeps its own ✕ close control. */
