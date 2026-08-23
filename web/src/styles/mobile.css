@@ -174,6 +174,100 @@
 .msh-hbtn:active { transform: scale(0.9); }
 .msh-hbtn svg { width: 20px; height: 20px; }
 
+/* Chat tab header — ChatScreen.kt: large title + compose + search pill. */
+.msh-chat-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  padding: 2px 0;
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: -0.6px;
+  color: var(--m-on-header);
+}
+.msh-search-pill,
+.msh-search-field {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  height: 40px;
+  margin-top: 12px;
+  padding: 0 13px;
+  border: 0;
+  border-radius: 13px;
+  background: var(--m-header-pill);
+  color: var(--m-on-header-dim);
+  text-align: left;
+  cursor: pointer;
+  font-size: 14.5px;
+}
+.msh-search-pill svg,
+.msh-search-field svg { width: 17px; height: 17px; flex: none; }
+.msh-search-pill span { flex: 1 1 auto; min-width: 0; }
+.msh-search-field { cursor: text; }
+.msh-search-field input {
+  flex: 1 1 auto;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  outline: none;
+  font-size: 14.5px;
+  color: var(--m-on-header);
+}
+.msh-search-field input::placeholder { color: var(--m-on-header-dim); }
+.msh-search-field button {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--m-on-header-dim);
+  cursor: pointer;
+}
+.msh-search-field button svg { width: 16px; height: 16px; }
+
+/* More tab profile block — MoreScreen.kt ProfileBlock. */
+.msh-more-profile {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  padding: 16px 20px;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+.msh-more-profile .who { min-width: 0; flex: 1 1 auto; }
+.msh-more-profile .who b {
+  display: block;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--m-ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.msh-more-profile .who span {
+  display: block;
+  margin-top: 2px;
+  font-size: 13px;
+  color: var(--m-ink-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.msh-more-hair {
+  height: 0.5px;
+  margin: 0 0 4px;
+  background: var(--m-hair-3);
+}
+
 /* ── White sheet — soft rounded top corners over the carbon header ────── */
 .msh-sheet {
   position: relative;
@@ -960,14 +1054,107 @@
 /* Board view keeps its Trello-style column scroller, at phone gutters. */
 .msh-pane .bv-board { padding: 12px 12px 20px; gap: 10px; }
 
-/* Inbox filter pills + search + mark-all: one scrolling row, never wrapped. */
+/* Inbox — InboxScreen.kt: 26sp title, Mark all read, filter pills, search. */
+.msh-pane .inbox-phone-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: calc(var(--m-safe-top) + 14px) 16px 12px;
+  flex: none;
+}
+.msh-pane .inbox-phone-head h1 {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: -0.6px;
+  color: var(--m-ink);
+}
+.msh-pane .inbox-mark-all {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: 16px;
+  background: transparent;
+  color: var(--m-accent);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.msh-pane .inbox-mark-all:disabled { color: var(--m-ink-4); cursor: default; }
+.msh-pane .inbox-mark-all svg { flex: none; }
+
 .msh-pane .sh-view .inbox-filter {
   flex-wrap: nowrap;
   overflow-x: auto;
   scrollbar-width: none;
+  padding: 0 16px 10px;
+  border-bottom: none;
+  background: transparent;
+  position: static;
 }
 .msh-pane .sh-view .inbox-filter::-webkit-scrollbar { display: none; }
 .msh-pane .sh-view .inbox-filter > * { flex: none; }
+.msh-pane .sh-view .inbox-filter .pill {
+  padding: 8px 15px;
+  border-radius: var(--m-r-pill);
+  background: var(--m-surface-alt);
+  color: var(--m-ink-2);
+  font-size: 13px;
+  font-weight: 600;
+}
+.msh-pane .sh-view .inbox-filter .pill[data-active='true'] {
+  background: var(--m-brand-deep);
+  color: #fff;
+}
+.dark .msh-pane .sh-view .inbox-filter .pill[data-active='true'] {
+  background: var(--m-ink);
+  color: var(--m-surface);
+}
+.msh-pane .inbox-phone-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 16px 12px;
+  padding: 11px 12px;
+  border-radius: var(--m-r-sm);
+  background: var(--m-surface-alt);
+  color: var(--m-ink-4);
+}
+.msh-pane .inbox-phone-search input {
+  flex: 1 1 auto;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  outline: none;
+  font-size: 14px;
+  color: var(--m-ink);
+}
+.msh-pane .inbox-phone-search input::placeholder { color: var(--m-ink-4); }
+.msh-pane .ib-item {
+  padding: 12px 16px;
+}
+.msh-pane .ib-item .ava {
+  width: 34px !important;
+  height: 34px !important;
+  border-radius: 31% !important;
+  font-size: 13px !important;
+}
+.msh-pane .ib-item .ib-from { font-size: 13px; }
+.msh-pane .ib-item .ib-title { font-size: 14px; }
+.msh-pane .ib-item[data-unread='true'] { background: color-mix(in srgb, var(--m-accent-soft) 55%, transparent); }
+.msh-pane .ib-item .ib-mark-read {
+  opacity: 1;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 0;
+  background: var(--m-surface-alt);
+}
 
 /* Wide centered page containers (Meetings, Check-Ins, Routines, client
    Subscriptions / Hiring / Cash Book) drop to phone gutters. These are the
@@ -1646,14 +1833,15 @@
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  padding: 12px 14px;
-  border: 1px solid var(--m-hair);
+  padding: 14px;
+  border: 0;
   border-radius: 18px;
-  background: transparent;
+  background: var(--m-surface-alt);
   text-align: left;
   cursor: pointer;
   transition: transform 0.14s cubic-bezier(0.22, 1, 0.36, 1);
 }
+.msh .mph-tile[data-alert='true'] { background: var(--m-overdue-bg); }
 .msh .mph-tile:active { transform: scale(0.97); }
 .msh .mph-tile em {
   display: flex;
@@ -1676,6 +1864,7 @@
   color: var(--m-ink);
   font-variant-numeric: tabular-nums;
 }
+.msh .mph-tile[data-alert='true'] em,
 .msh .mph-tile[data-alert='true'] b { color: var(--m-overdue-fg); }
 
 .msh .mph-quiet { display: flex; gap: 12px; padding: 12px var(--m-gutter) 0; }
@@ -1764,3 +1953,182 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+/* ════════════════════════════════════════════════════════════════════════
+   MOBILE LOGIN — LoginScreen.kt: carbon hero + white sheet pulled over it.
+   Lives outside .msh because auth pages aren't inside the app shell.
+   ════════════════════════════════════════════════════════════════════ */
+@media (max-width: 767px) {
+  .login-desktop { display: none !important; }
+  .auth-shell:has(.msh-login) {
+    display: block;
+    min-height: 100dvh;
+    padding: 0;
+    background: #fff;
+  }
+  .auth-shell:has(.msh-login) .auth-desktop-chrome { display: none; }
+  .auth-shell:has(.msh-login) .auth-inner {
+    max-width: none;
+    width: 100%;
+    gap: 0;
+  }
+}
+@media (min-width: 768px) {
+  .msh-login { display: none; }
+}
+
+.msh-login {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  background: #fff;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+}
+.msh-login-hero {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: calc(env(safe-area-inset-top, 0px) + 28px) 24px 56px;
+  background: linear-gradient(180deg, #0a0a0a, #191919);
+  color: #fff;
+}
+.msh-login-hero b {
+  font-family: 'Plus Jakarta Sans', 'Inter', sans-serif;
+  font-size: 26px;
+  font-weight: 800;
+  letter-spacing: -0.8px;
+}
+.msh-login-hero em {
+  margin-top: 14px;
+  font-style: normal;
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.16em;
+  color: #ffff99;
+}
+.msh-login-sheet {
+  flex: 1 1 auto;
+  margin-top: -28px;
+  padding: 34px 24px calc(env(safe-area-inset-bottom, 0px) + 36px);
+  border-radius: 32px 32px 0 0;
+  background: #fff;
+}
+.msh-login-sheet h1 {
+  margin: 0;
+  font-family: 'Plus Jakarta Sans', 'Inter', sans-serif;
+  font-size: 32px;
+  font-weight: 800;
+  letter-spacing: -0.8px;
+  line-height: 1.12;
+  color: #0a0a0a;
+}
+.msh-login-sheet > p {
+  margin: 8px 0 0;
+  font-size: 15px;
+  line-height: 22px;
+  color: #525252;
+}
+.msh-login-form { margin-top: 28px; }
+.msh-login-fields {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid #b0b0b0;
+  border-radius: 16px;
+  overflow: hidden;
+}
+.msh-login-fields label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 14px;
+  background: #fff;
+}
+.msh-login-fields label + label { border-top: 1px solid #e8e8e8; }
+.msh-login-fields label > span:first-child {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #a3a3a3;
+}
+.msh-login-fields input {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  outline: none;
+  font-size: 16px;
+  color: #0a0a0a;
+}
+.msh-login-pw { display: flex; align-items: center; gap: 8px; }
+.msh-login-pw input { flex: 1 1 auto; min-width: 0; }
+.msh-login-eye {
+  flex: none;
+  border: 0;
+  background: transparent;
+  color: #a3a3a3;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+}
+.msh-login-forgot {
+  display: inline-block;
+  margin-top: 14px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #0a0a0a;
+  text-decoration: none;
+}
+.msh-login-cta {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 58px;
+  margin-top: 24px;
+  border: 0;
+  border-radius: 999px;
+  background: #0a0a0a;
+  color: #fff;
+  font-family: 'Plus Jakarta Sans', 'Inter', sans-serif;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.msh-login-cta:disabled { background: rgba(10, 10, 10, 0.35); cursor: default; }
+.msh-login-error {
+  margin-bottom: 16px;
+  padding: 10px 12px;
+  border: 1px solid #efd9d9;
+  border-radius: 12px;
+  background: #fbf0f0;
+  color: #a3251f;
+  font-size: 13px;
+  line-height: 18px;
+}
+.msh-login-foot {
+  margin-top: 28px;
+  padding-top: 22px;
+  border-top: 1px solid rgba(0, 0, 0, 0.08);
+}
+.msh-login-foot b {
+  display: block;
+  font-family: 'Plus Jakarta Sans', 'Inter', sans-serif;
+  font-size: 15px;
+  font-weight: 600;
+  color: #0a0a0a;
+}
+.msh-login-foot span {
+  display: block;
+  margin-top: 6px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #525252;
+}
+.msh-login-foot p {
+  margin: 16px 0 0;
+  font-size: 13px;
+  color: #525252;
+}
+.msh-login-foot a { color: #0a0a0a; font-weight: 600; }

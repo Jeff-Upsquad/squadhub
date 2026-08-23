@@ -24,13 +24,12 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import type { Channel, DmConversation, User } from '@squadhub/shared';
 import type { ActiveSection, HomeView } from '../layouts/MainLayout';
 import { launchApp, type AppDef } from '../config/apps';
-import { useThemeStore } from '../stores/themeStore';
 import { useIsClient } from '../hooks/useUserType';
 import { usePMStore } from '../stores/pmStore';
 import MobileHome, { applyOpenTarget } from './MobileHome';
 import MobilePartnerHome, { type PartnerAction } from './MobilePartnerHome';
 import MobileChat from './MobileChat';
-import MobileMore, { type MoreTarget } from './MobileMore';
+import MobileMore, { MobileSettings, type MoreTarget } from './MobileMore';
 import MobileCreateSheet from './MobileCreateSheet';
 import MobileTour, { hasSeenMobileTour } from './MobileTour';
 import { MAvatar, MIcon, MRow } from './MobileKit';
@@ -89,13 +88,14 @@ export default function MobileShell({
   banner,
   floating,
 }: MobileShellProps) {
-  // Clients and client staff get the Business app's spaces-first Home; every
-  // other user type (internal, partner, partner_employee) gets the Partner
-  // app's briefing Home. The rest of the shell is shared — both Android apps
-  // use the same four tabs and the same SlackKit chrome.
+  // Business app UI (spaces-first Home) for client AND client_staff. Partner
+  // app UI (briefing Home) for everyone else — internal, partner, partner_employee.
+  // Both Android apps share the same four tabs and SlackKit chrome.
   const isClient = useIsClient();
 
   const [tab, setTab] = useState<MTab>('home');
+  const [chatQuery, setChatQuery] = useState('');
+  const [chatSearchOpen, setChatSearchOpen] = useState(false);
   // Non-null while drilled into a screen. `target` is the space/list it opened
   // (null for screens with no PM scope, e.g. a conversation or Calendar), and
   // is what the create sheet pre-selects when you tap + inside that screen.
@@ -131,6 +131,10 @@ export default function MobileShell({
   // there's never a pushed history entry to clean up here.
   const selectTab = (t: MTab) => {
     setTab(t);
+    if (t !== 'chat') {
+      setChatSearchOpen(false);
+      setChatQuery('');
+    }
     goRoot(t);
   };
 
@@ -191,6 +195,10 @@ export default function MobileShell({
   };
 
   const openMore = (t: MoreTarget) => {
+    if (t.kind === 'settings') {
+      openSection('Settings');
+      return;
+    }
     if (t.kind === 'view') {
       setActiveSection('home');
       setHomeView(t.view);
@@ -233,7 +241,11 @@ export default function MobileShell({
   // ---- Chrome decisions ------------------------------------------------
   const onSection = section !== null;
   const carbonHeader = !onSection && CARBON_TABS.has(tab);
-  const title = section?.title ?? (tab === 'inbox' ? 'Inbox' : 'More');
+  // Inbox and More paint their own large-title / profile chrome, matching the
+  // native apps. Only drilled-in screens use the generic back app bar.
+  const showAppBar = onSection;
+  const title = section?.title ?? '';
+  const settingsOpen = onSection && section?.title === 'Settings';
   // Home always offers create; inside a space/list the + files straight into it.
   const fabTarget = onSection ? section.target : null;
   const showFab = onSection ? !!fabTarget : tab === 'home';
@@ -242,52 +254,72 @@ export default function MobileShell({
     <div className="msh" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
       {carbonHeader && (
         <header className="msh-header">
-          <div className="msh-header-row">
-            <div className="msh-logo" aria-hidden>S</div>
-            <div className="msh-wordmark">
-              <b>SquadHub</b>
-              <span>powered by UpSquad</span>
+          {tab === 'chat' ? (
+            <>
+              <div className="msh-header-row">
+                <h1 className="msh-chat-title">Chat</h1>
+                <button type="button" className="msh-hbtn" aria-label="New message" onClick={onNewDm}>
+                  {MIcon.compose}
+                </button>
+              </div>
+              {chatSearchOpen ? (
+                <label className="msh-search-field">
+                  <span>{MIcon.search}</span>
+                  <input
+                    value={chatQuery}
+                    onChange={(e) => setChatQuery(e.target.value)}
+                    placeholder="Search channels, DMs…"
+                    autoFocus
+                  />
+                  <button
+                    type="button"
+                    aria-label="Close search"
+                    onClick={() => { setChatSearchOpen(false); setChatQuery(''); }}
+                  >
+                    {MIcon.close}
+                  </button>
+                </label>
+              ) : (
+                <button type="button" className="msh-search-pill" onClick={() => setChatSearchOpen(true)}>
+                  {MIcon.search}
+                  <span>Search channels, DMs…</span>
+                </button>
+              )}
+            </>
+          ) : (
+            <div className="msh-header-row">
+              <div className="msh-logo" aria-hidden>S</div>
+              <div className="msh-wordmark">
+                <b>SquadHub</b>
+                <span>powered by UpSquad</span>
+              </div>
+              <button type="button" className="msh-hbtn" aria-label="Search" onClick={onOpenSearch}>
+                {MIcon.search}
+              </button>
+              <button
+                type="button"
+                className="msh-hbtn"
+                style={{ background: 'transparent', padding: 0 }}
+                aria-label="Account"
+                onClick={() => setDrawerOpen(true)}
+              >
+                <MAvatar name={user?.display_name || user?.email} url={user?.avatar_url} size={34} presence />
+              </button>
             </div>
-            <button type="button" className="msh-hbtn" aria-label="Search" onClick={onOpenSearch}>
-              {MIcon.search}
-            </button>
-            <button
-              type="button"
-              className="msh-hbtn"
-              style={{ background: 'transparent', padding: 0 }}
-              aria-label="Account"
-              onClick={() => setDrawerOpen(true)}
-            >
-              <MAvatar name={user?.display_name || user?.email} url={user?.avatar_url} size={34} presence />
-            </button>
-          </div>
+          )}
         </header>
       )}
 
       <div className="msh-sheet" data-flush={!carbonHeader ? 'true' : undefined}>
-        {/* Section screens get a back app bar; Inbox/More roots get a plain
-            titled one (they're light-status-bar screens in the native app). */}
-        {!carbonHeader && (
+        {/* Drilled-in screens get a back app bar. Inbox and More roots paint
+            their own chrome, the way InboxScreen.kt / MoreScreen.kt do. */}
+        {showAppBar && (
           <div className="msh-appbar">
-            {onSection ? (
-              <button type="button" className="msh-appbar-btn" aria-label="Back" onClick={goBack}>
-                {MIcon.back}
-              </button>
-            ) : (
-              <span style={{ width: 12 }} />
-            )}
+            <button type="button" className="msh-appbar-btn" aria-label="Back" onClick={goBack}>
+              {MIcon.back}
+            </button>
             {!section?.bare && <h1 className="msh-appbar-title">{title}</h1>}
             {section?.bare && <span style={{ flex: 1 }} />}
-            {!onSection && (
-              <button
-                type="button"
-                className="msh-appbar-btn"
-                aria-label="Account"
-                onClick={() => setDrawerOpen(true)}
-              >
-                <MAvatar name={user?.display_name || user?.email} url={user?.avatar_url} size={30} />
-              </button>
-            )}
           </div>
         )}
 
@@ -298,7 +330,11 @@ export default function MobileShell({
             they sit directly in the flex column — wrapping them in .msh-scroll
             would collapse them to content height. The phone-native roots are
             plain documents and do scroll inside .msh-scroll. */}
-        {onSection || tab === 'inbox' ? (
+        {settingsOpen ? (
+          <div className="msh-scroll">
+            <MobileSettings />
+          </div>
+        ) : onSection || tab === 'inbox' ? (
           <div className="msh-pane">{renderPane()}</div>
         ) : (
           <div className="msh-scroll">
@@ -320,12 +356,19 @@ export default function MobileShell({
                 meId={user?.id}
                 supportChannelId={supportChannelId}
                 supportUnread={supportUnread}
+                query={chatQuery}
                 onOpenChannel={(id, t) => openConversation(id, 'channel', t)}
                 onOpenDm={(id, t) => openConversation(id, 'dm', t)}
-                onNewDm={onNewDm}
               />
             ) : (
-              <MobileMore onOpen={openMore} onOpenAccount={() => setDrawerOpen(true)} />
+              <MobileMore
+                onOpen={openMore}
+                onOpenAccount={() => setDrawerOpen(true)}
+                onLogout={() => {
+                  usePMStore.getState().reset();
+                  onLogout();
+                }}
+              />
             )}
           </div>
         )}
@@ -407,6 +450,11 @@ export default function MobileShell({
             setActiveSection('learning');
             openSection('Resources');
           }}
+          onOpenSettings={() => {
+            setDrawerOpen(false);
+            setTab('more');
+            openSection('Settings');
+          }}
           onLogout={() => {
             setDrawerOpen(false);
             usePMStore.getState().reset();
@@ -423,15 +471,15 @@ function AccountDrawer({
   user,
   onClose,
   onOpenResources,
+  onOpenSettings,
   onLogout,
 }: {
   user: User | null;
   onClose: () => void;
   onOpenResources: () => void;
+  onOpenSettings: () => void;
   onLogout: () => void;
 }) {
-  const theme = useThemeStore((s) => s.theme);
-  const setTheme = useThemeStore((s) => s.setTheme);
 
   // Escape closes, and the page behind must not scroll while it's open.
   useEffect(() => {
@@ -453,29 +501,16 @@ function AccountDrawer({
         </div>
 
         <div className="msh-drawer-body">
-          <div className="msh-group-head"><b>Appearance</b></div>
-          <div className="msh-seg" role="group" aria-label="Theme">
-            {(['light', 'dark', 'auto'] as const).map((t) => (
-              <button
-                key={t}
-                type="button"
-                data-on={theme === t ? 'true' : undefined}
-                onClick={() => setTheme(t)}
-              >
-                {t === 'auto' ? 'System' : t[0].toUpperCase() + t.slice(1)}
-              </button>
-            ))}
-          </div>
-
-          <div className="msh-group-head"><b>Account</b></div>
-          <MRow icon={MIcon.resources} title="Resources" onClick={onOpenResources} />
+          <MRow icon={MIcon.profile} title="Profile" onClick={onClose} />
           <MRow
             icon={MIcon.bell}
             title="Notifications"
             subtitle="Manage browser alerts in your browser settings"
             onClick={onClose}
-            trailing={<span />}
           />
+          <MRow icon={MIcon.resources} title="Resources" onClick={onOpenResources} />
+          <MRow icon={MIcon.settings} title="Settings" onClick={onOpenSettings} />
+          <MRow icon={MIcon.help} title="Help & feedback" onClick={onOpenResources} />
         </div>
 
         <div className="msh-drawer-foot">

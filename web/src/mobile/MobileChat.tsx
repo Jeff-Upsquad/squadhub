@@ -10,7 +10,7 @@
  * clients can reach it without hunting through the channel list.
  */
 
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import type { Channel, DmConversation } from '@squadhub/shared';
 import { usePresenceStore } from '../stores/presenceStore';
 import { MAvatar, MEmpty, MGroupHead, MIcon, MRow } from './MobileKit';
@@ -21,22 +21,22 @@ export default function MobileChat({
   meId,
   supportChannelId,
   supportUnread,
+  query = '',
   onOpenChannel,
   onOpenDm,
-  onNewDm,
 }: {
   channels: Channel[];
   dms: DmConversation[];
   meId: string | undefined;
   supportChannelId: string | null;
   supportUnread: number;
+  /** Header search pill — same filter the native Chat tab runs locally. */
+  query?: string;
   onOpenChannel: (id: string, title: string) => void;
   onOpenDm: (id: string, title: string) => void;
-  onNewDm: () => void;
 }) {
-  const [q, setQ] = useState('');
   const onlineUserIds = usePresenceStore((s) => s.onlineUserIds);
-  const needle = q.trim().toLowerCase();
+  const needle = query.trim().toLowerCase();
 
   // The support channel gets its own row above, so drop it from the list.
   // CRM-linked channels need no filtering here — GET /channels already strips
@@ -59,42 +59,7 @@ export default function MobileChat({
   const nothing = !filteredChannels.length && !filteredDms.length;
 
   return (
-    <div style={{ padding: '4px 0 96px' }}>
-      {/* In-sheet filter — the header's search pill opens the global palette;
-          this one just narrows the list you're looking at. */}
-      <div style={{ padding: '10px 16px 4px' }}>
-        <label
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 9,
-            height: 40,
-            padding: '0 13px',
-            borderRadius: 13,
-            background: 'var(--m-surface-alt)',
-            color: 'var(--m-ink-3)',
-          }}
-        >
-          <span style={{ display: 'grid', placeItems: 'center', width: 17, height: 17, flex: 'none' }}>
-            {MIcon.search}
-          </span>
-          <input
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="Filter conversations"
-            style={{
-              flex: '1 1 auto',
-              minWidth: 0,
-              border: 0,
-              background: 'transparent',
-              outline: 'none',
-              fontSize: 14.5,
-              color: 'var(--m-ink)',
-            }}
-          />
-        </label>
-      </div>
-
+    <div style={{ padding: '4px 0 24px' }}>
       {supportChannelId && !needle && (
         <>
           <MGroupHead title="Help desk" />
@@ -155,14 +120,8 @@ export default function MobileChat({
           />
         );
       })}
-      <MRow
-        icon={MIcon.plus}
-        title="New message"
-        onClick={onNewDm}
-        trailing={<span />}
-      />
 
-      {nothing && needle && <MEmpty title="No matches" body={`Nothing matched "${q}".`} />}
+      {nothing && needle && <MEmpty title="No matches" body={`Nothing matched "${query}".`} />}
     </div>
   );
 }

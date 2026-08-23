@@ -64,6 +64,42 @@ export const MIcon = {
       <path d="m16 16 4 4" />
     </svg>
   ),
+  compose: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4.6 16.2 15.8 5a1.9 1.9 0 0 1 2.7 2.7L7.3 18.9H4.6z" />
+      <path d="M13.4 7.4 16.6 10.6" />
+    </svg>
+  ),
+  profile: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="8.2" r="3.4" />
+      <path d="M5.2 19.4a6.8 6.8 0 0 1 13.6 0" />
+    </svg>
+  ),
+  help: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="8.4" />
+      <path d="M9.6 9.4a2.4 2.4 0 1 1 3.4 2.2c-.7.4-1 1-1 1.8V14" />
+      <path d="M12 17.2h.01" />
+    </svg>
+  ),
+  sun: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="3.6" />
+      <path d="M12 3.4v1.8M12 18.8v1.8M3.4 12h1.8M18.8 12h1.8M6.1 6.1l1.3 1.3M16.6 16.6l1.3 1.3M17.9 6.1l-1.3 1.3M7.4 16.6l-1.3 1.3" />
+    </svg>
+  ),
+  moon: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+      <path d="M16.8 13.6A6.6 6.6 0 0 1 10.4 7.2 6.6 6.6 0 1 0 16.8 13.6z" />
+    </svg>
+  ),
+  phone: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+      <rect x="7.4" y="3.4" width="9.2" height="17.2" rx="2.2" />
+      <path d="M11 17.6h2" />
+    </svg>
+  ),
   back: (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
       <path d="m14.5 5-7 7 7 7" />

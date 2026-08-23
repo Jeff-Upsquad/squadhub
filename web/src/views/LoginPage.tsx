@@ -1,3 +1,5 @@
+'use client';
+
 import { useState } from 'react';
 import Link from 'next/link';
 import axios from 'axios';
@@ -19,6 +21,7 @@ export default function LoginPage() {
   const [pendingReset, setPendingReset] = useState<PendingReset | null>(null);
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [passwordVisible, setPasswordVisible] = useState(false);
   const router = useRouter();
   const setAuth = useAuthStore((s) => s.setAuth);
 
@@ -81,6 +84,104 @@ export default function LoginPage() {
 
   return (
     <>
+      <div className="msh-login">
+        <div className="msh-login-hero">
+          <b>SquadHub</b>
+          <em>WEB APP</em>
+        </div>
+        <div className="msh-login-sheet">
+          <h1>{pendingReset ? 'Set a new password' : 'Welcome back'}</h1>
+          <p>
+            {pendingReset
+              ? 'Your password was reset. Choose one you’ll remember.'
+              : 'Log in to SquadHub with your account.'}
+          </p>
+
+          {pendingReset ? (
+            <form onSubmit={handleSetPassword} className="msh-login-form">
+              {error && <div className="msh-login-error">{error}</div>}
+              <div className="msh-login-fields">
+                <label>
+                  <span>New password</span>
+                  <input
+                    type={passwordVisible ? 'text' : 'password'}
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    required
+                    autoFocus
+                    placeholder="At least 8 characters"
+                  />
+                </label>
+                <label>
+                  <span>Confirm new password</span>
+                  <input
+                    type={passwordVisible ? 'text' : 'password'}
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    required
+                    placeholder="Re-enter password"
+                  />
+                </label>
+              </div>
+              <button type="submit" className="msh-login-cta" disabled={loading}>
+                {loading ? 'Saving…' : 'Save and sign in'}
+              </button>
+            </form>
+          ) : (
+            <form onSubmit={handleSubmit} className="msh-login-form">
+              {error && <div className="msh-login-error">{error}</div>}
+              <div className="msh-login-fields">
+                <label>
+                  <span>Email</span>
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    required
+                    autoComplete="email"
+                    placeholder="you@example.com"
+                  />
+                </label>
+                <label>
+                  <span>Password</span>
+                  <span className="msh-login-pw">
+                    <input
+                      type={passwordVisible ? 'text' : 'password'}
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      required
+                      autoComplete="current-password"
+                      placeholder="Enter password"
+                    />
+                    <button
+                      type="button"
+                      className="msh-login-eye"
+                      aria-label={passwordVisible ? 'Hide password' : 'Show password'}
+                      onClick={() => setPasswordVisible((v) => !v)}
+                    >
+                      {passwordVisible ? 'Hide' : 'Show'}
+                    </button>
+                  </span>
+                </label>
+              </div>
+              <Link href="/reset-password" className="msh-login-forgot">Forgot password?</Link>
+              <button type="submit" className="msh-login-cta" disabled={loading || !email || !password}>
+                {loading ? 'Signing in…' : 'Sign in'}
+              </button>
+            </form>
+          )}
+
+          <div className="msh-login-foot">
+            <b>Part of the Squad Hub suite</b>
+            <span>Your login connects you to tasks, chat, and your team’s workspace across Squad Hub.</span>
+            <p>
+              Don’t have an account? <Link href="/signup">Sign up</Link>
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div className="login-desktop flex w-full flex-col items-center gap-8">
       <div className="flex items-center gap-2">
         <span className="inline-flex h-6 w-6 items-center justify-center rounded-[7px] bg-[#0F172B] text-[10px] font-bold text-white dark:bg-white dark:text-[#0F172B]">
           SH
@@ -192,6 +293,7 @@ export default function LoginPage() {
             Sign up
           </Link>
         </p>
+      </div>
       </div>
     </>
   );

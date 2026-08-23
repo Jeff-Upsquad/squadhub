@@ -9,6 +9,7 @@ import InboxMessageDetail from './inbox/InboxMessageDetail';
 import ViewSearchInput from '../../components/pm/ViewSearchInput';
 import DesktopNotificationsBanner from '../../components/DesktopNotificationsBanner';
 import InstallPwaPrompt from '../../components/InstallPwaPrompt';
+import { useIsMobile } from '../../hooks/useIsMobile';
 import { formatDateHeader, toLocalDateKey } from '../../lib/formatDuration';
 
 export type Notification = {
@@ -114,6 +115,7 @@ export default function InboxView({
   const [filter, setFilter] = useState<Filter>('unread');
   const [activeId, setActiveId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const isMobile = useIsMobile();
 
   const { data: items = [], isLoading } = useQuery<Notification[]>({
     queryKey: ['notifications', 'list'],
@@ -254,29 +256,63 @@ export default function InboxView({
   return (
     <div className="sh-view inbox-view" data-detail={activeId ? 'true' : undefined}>
       <div className="inbox-list">
-        <DesktopNotificationsBanner />
-        <InstallPwaPrompt />
+        {!isMobile && <DesktopNotificationsBanner />}
+        {!isMobile && <InstallPwaPrompt />}
+        {isMobile && (
+          <div className="inbox-phone-head">
+            <h1>Inbox</h1>
+            <button
+              type="button"
+              className="inbox-mark-all"
+              disabled={unreadCount === 0 || markAllRead.isPending}
+              onClick={() => markAllRead.mutate()}
+            >
+              <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24" aria-hidden>
+                <path d="m5 13 4 4L19 7" />
+                <path d="M9 13 13 17 20 9" opacity="0.55" />
+              </svg>
+              Mark all read
+            </button>
+          </div>
+        )}
         <div className="inbox-filter">
           <div className="pill" data-active={filter === 'unread'} onClick={() => setFilter('unread')}>
             Unread{unreadCount > 0 ? ` · ${unreadCount}` : ''}
           </div>
           <div className="pill" data-active={filter === 'all'} onClick={() => setFilter('all')}>All</div>
           <div className="pill" data-active={filter === 'mentions'} onClick={() => setFilter('mentions')}>Mentions</div>
-          <div style={{ flex: 1 }} />
-          <ViewSearchInput value={searchQuery} onChange={setSearchQuery} placeholder="Search notifications..." />
-          <button
-            type="button"
-            className="pill"
-            disabled={unreadCount === 0 || markAllRead.isPending}
-            onClick={() => markAllRead.mutate()}
-            style={{ display: 'inline-flex', alignItems: 'center', gap: 4, opacity: unreadCount === 0 ? 0.5 : 1, cursor: unreadCount === 0 ? 'default' : 'pointer' }}
-          >
-            <svg width="11" height="11" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
-              <path d="m5 12 5 5L20 7" />
-            </svg>
-            Mark all read
-          </button>
+          {!isMobile && (
+            <>
+              <div style={{ flex: 1 }} />
+              <ViewSearchInput value={searchQuery} onChange={setSearchQuery} placeholder="Search notifications..." />
+              <button
+                type="button"
+                className="pill"
+                disabled={unreadCount === 0 || markAllRead.isPending}
+                onClick={() => markAllRead.mutate()}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 4, opacity: unreadCount === 0 ? 0.5 : 1, cursor: unreadCount === 0 ? 'default' : 'pointer' }}
+              >
+                <svg width="11" height="11" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+                  <path d="m5 12 5 5L20 7" />
+                </svg>
+                Mark all read
+              </button>
+            </>
+          )}
         </div>
+        {isMobile && (
+          <label className="inbox-phone-search">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.9} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <circle cx="11" cy="11" r="6.5" />
+              <path d="m16 16 4 4" />
+            </svg>
+            <input
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search notifications"
+            />
+          </label>
+        )}
 
         {isLoading && filtered.length === 0 ? (
           <div style={{ padding: 16, fontSize: 13, color: 'var(--sh-ink-3)' }}>Loading…</div>
