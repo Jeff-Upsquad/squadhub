@@ -12,6 +12,8 @@ const MODULES = [
   { key: 'items', label: 'Items' },
   { key: 'documents', label: 'Documents' },
   { key: 'reports', label: 'Reports' },
+  { key: 'gross_profit', label: 'Gross Profit (SquadHub billing)' },
+  { key: 'partner_payments', label: 'Partner Payments (SquadHub billing)' },
 ];
 const ALL_MODULES = MODULES.map((m) => m.key);
 const LEVELS = [
