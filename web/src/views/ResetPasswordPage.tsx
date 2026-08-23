@@ -29,6 +29,12 @@ const inputCls =
 const labelCls = 'mb-1.5 block text-sm font-medium text-[#0F172B] dark:text-foreground';
 const buttonCls =
   'h-11 w-full rounded-lg bg-[#2962FF] text-sm font-semibold text-white shadow-sm transition hover:bg-[#1E4BD8] disabled:opacity-50';
+const ghostButtonCls =
+  'h-11 w-full rounded-lg border border-[#E2E8F0] text-sm font-medium text-[#0F172B] transition hover:bg-[#F8FAFC] dark:border-divider dark:text-foreground dark:hover:bg-surface-alt';
+
+const SUPPORT_WHATSAPP_URL = `https://wa.me/919995266385?text=${encodeURIComponent(
+  'Hi, I need help resetting my SquadHub password.',
+)}`;
 
 export default function ResetPasswordPage() {
   const [step, setStep] = useState<Step>('phone');
@@ -191,6 +197,14 @@ export default function ResetPasswordPage() {
             <button type="submit" disabled={loading} className={buttonCls}>
               {loading ? 'Checking…' : 'Continue'}
             </button>
+            <a
+              href={SUPPORT_WHATSAPP_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={ghostButtonCls}
+            >
+              Contact support on WhatsApp
+            </a>
           </form>
         )}
 
