@@ -32,9 +32,16 @@ const buttonCls =
 const ghostButtonCls =
   'h-11 w-full rounded-lg border border-[#E2E8F0] text-sm font-medium text-[#0F172B] transition hover:bg-[#F8FAFC] dark:border-divider dark:text-foreground dark:hover:bg-surface-alt';
 
-const SUPPORT_WHATSAPP_URL = `https://wa.me/919995266385?text=${encodeURIComponent(
-  'Hi, I need help resetting my SquadHub password.',
-)}`;
+const SUPPORT_WHATSAPP_URLS = {
+  // Talents, partner employees and internal team → UpSquad's main WhatsApp.
+  upsquad: `https://wa.me/919995266385?text=${encodeURIComponent(
+    'Hi, I need help resetting my SquadHub password.',
+  )}`,
+  // Business clients → SquadHire by UpSquad's WhatsApp.
+  squadhire: `https://wa.me/919995266342?text=${encodeURIComponent(
+    'Hi, I need help resetting my SquadHub password.',
+  )}`,
+};
 
 export default function ResetPasswordPage() {
   const [step, setStep] = useState<Step>('phone');
@@ -198,12 +205,20 @@ export default function ResetPasswordPage() {
               {loading ? 'Checking…' : 'Continue'}
             </button>
             <a
-              href={SUPPORT_WHATSAPP_URL}
+              href={SUPPORT_WHATSAPP_URLS.upsquad}
               target="_blank"
               rel="noopener noreferrer"
               className={ghostButtonCls}
             >
-              Contact support on WhatsApp
+              Contact support on WhatsApp — Talents &amp; team
+            </a>
+            <a
+              href={SUPPORT_WHATSAPP_URLS.squadhire}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={ghostButtonCls}
+            >
+              Contact support on WhatsApp — Business
             </a>
           </form>
         )}
