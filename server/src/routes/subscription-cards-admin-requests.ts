@@ -1041,23 +1041,9 @@ router.post('/subscription-cards/:id/publish', async (req: Request, res: Respons
       return;
     }
 
-    // Subscription cards expand unselected levels from the catalog on publish,
-    // so an empty client selection is OK (all three levels go out at catalog).
-    // Assignments still need at least one selected level with a budget.
-    const cardTargetTiers: string[] = Array.isArray(card.target_tiers)
-      ? (card.target_tiers as string[]).filter(Boolean)
-      : [];
-    if (
-      publishTargets.includes('talent') &&
-      card.card_type === 'assignment' &&
-      cardTargetTiers.length === 0
-    ) {
-      res.status(400).json({
-        success: false,
-        error: 'Pick at least one tier — empty target_tiers would broadcast to every category-matching talent.',
-      });
-      return;
-    }
+    // Both card types now expand to all three standard tiers on publish.
+    // Subscription cards fill unpriced tiers from the catalog;
+    // Assignment cards fill unpriced tiers as "inviting bids" (proposed_price 0).
 
     // Broadcast product rule (subscription cards):
     //   - Client/admin "selected" levels keep their set Final price
@@ -1103,11 +1089,33 @@ router.post('/subscription-cards/:id/publish', async (req: Request, res: Respons
     >;
 
     if (card.card_type === 'assignment') {
-      // Assignments: only selected levels publish (no catalog monthly price).
-      targetTiers = selectedTiers;
+      // Assignments broadcast to ALL three standard tiers, just like
+      // subscription cards.  Tiers the client/admin set a budget for keep
+      // their price; tiers without a budget go out as "inviting bids"
+      // (proposed_price 0 = no fixed price, talent is invited to quote).
+      const ALL_TIERS = ['Top Talents', 'Pro', 'Junior'];
+      const ordered: string[] = [];
+      for (const t of selectedTiers) {
+        if (!ordered.includes(t)) ordered.push(t);
+      }
+      for (const t of ALL_TIERS) {
+        if (!ordered.includes(t)) ordered.push(t);
+      }
+      targetTiers = ordered;
       tierPricing = {};
       for (const t of targetTiers) {
-        if (rawTierPricing[t]) tierPricing[t] = rawTierPricing[t];
+        const existing = rawTierPricing[t];
+        if (existing && (existing.proposed_price ?? 0) > 0) {
+          tierPricing[t] = existing;
+        } else {
+          // Inviting bids — no fixed price.
+          tierPricing[t] = {
+            proposed_price: 0,
+            markup: null,
+            subscription_price: null,
+            ...(existing?.client_budget != null ? { client_budget: existing.client_budget } : {}),
+          };
+        }
       }
     } else {
       const expanded = await expandBroadcastTiersForPublish({
@@ -1129,16 +1137,13 @@ router.post('/subscription-cards/:id/publish', async (req: Request, res: Respons
     if (targetTiers.length === 0) {
       res.status(400).json({
         success: false,
-        error:
-          card.card_type === 'assignment'
-            ? 'Pick at least one level with a project budget.'
-            : 'No priced levels to broadcast — set a plan and pricing, or pick a level.',
+        error: 'No levels to broadcast — set a plan and pricing, or pick a level.',
       });
       return;
     }
 
     for (const tier of targetTiers) {
-      if (!tierHasPublishablePrice(tierPricing[tier])) {
+      if (!tierHasPublishablePrice(tierPricing[tier], card.card_type === 'assignment')) {
         res.status(400).json({
           success: false,
           error: `Missing pricing for tier "${tier}"`,

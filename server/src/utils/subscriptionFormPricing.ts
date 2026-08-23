@@ -176,14 +176,18 @@ export function resolveScalarClientBudget(
   return null;
 }
 
-/** True when a tier_pricing entry has a usable client-facing price. */
+/** True when a tier_pricing entry has a usable client-facing price.
+ *  For assignment cards, proposed_price === 0 means "inviting bids" and is
+ *  still broadcastable (the tier goes out without a fixed price). */
 export function tierHasPublishablePrice(entry: {
   proposed_price?: number | null;
   subscription_price?: number | null;
-} | null | undefined): boolean {
+} | null | undefined, assignmentTier = false): boolean {
   if (!entry) return false;
   if (entry.subscription_price != null && entry.subscription_price > 0) return true;
   if (entry.proposed_price != null && entry.proposed_price > 0) return true;
+  // Assignment tiers with proposed_price === 0 are "inviting bids" — still broadcastable.
+  if (assignmentTier && entry.proposed_price === 0) return true;
   return false;
 }
 

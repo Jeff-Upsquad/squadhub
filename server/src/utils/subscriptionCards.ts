@@ -454,7 +454,7 @@ export async function fanOutTierCards(
       const entry = tierPricing[targetTiers[0]];
       // Accept either a proposed price or a finalized subscription price
       // (catalog-seeded briefs often have Final set with Proposed = 0).
-      if (tierHasPublishablePrice(entry)) {
+      if (tierHasPublishablePrice(entry, original.card_type === 'assignment')) {
         updates.proposed_price = coerceProposedPrice(entry.proposed_price);
         // null markup = inherit the plan catalog margin (don't coerce to 0).
         updates.markup = entry.markup ?? null;
@@ -477,7 +477,7 @@ export async function fanOutTierCards(
   // OR finalized subscription price — catalog seeds often leave proposed at 0).
   for (const tier of targetTiers) {
     const entry = tierPricing[tier];
-    if (!tierHasPublishablePrice(entry)) {
+    if (!tierHasPublishablePrice(entry, original.card_type === 'assignment')) {
       throw new Error(`Missing pricing for tier "${tier}"`);
     }
   }

@@ -967,6 +967,9 @@ export default function AdminCardEditor({
   // seeded briefs often have Final set with Proposed left at 0).
   // Selected tiers need a Final/proposed. If none selected, catalog can still
   // fill all three standard levels on publish (needs service + plan).
+  // Publish gate:
+  // - Assignment cards always broadcast to all 3 tiers (unpriced = inviting bids), so they can always publish.
+  // - Subscription cards need either selected tiers with prices, or service+plan for catalog fill.
   const selectedHavePrices =
     tiers.length > 0 &&
     tiers.every((t) => {
@@ -978,7 +981,7 @@ export default function AdminCardEditor({
       const row = catalogByTier[t]?.pricing;
       return Array.isArray(row) && row.some((p) => p && p.price > 0);
     });
-  const canPublish = selectedHavePrices || (tiers.length === 0 && catalogCanFill);
+  const canPublish = isAssignment || selectedHavePrices || (tiers.length === 0 && catalogCanFill);
 
   if (isLoading) {
     return (
@@ -1121,15 +1124,11 @@ export default function AdminCardEditor({
                   disabled={publishMutation.isPending || !canPublish}
                   title={
                     !canPublish
-                      ? tiers.length === 0
-                        ? isAssignment
-                          ? 'Pick at least one experience level with a project budget — assignments have no catalog price to fall back on'
-                          : 'Set service + plan (catalog fills all levels) or select a tier with a Final price'
-                        : 'Every selected tier needs a proposed or final price'
+                      ? 'Set service + plan (catalog fills all levels) or select a tier with a Final price'
                       : distribution === 'manual'
                         ? 'Soft publish — build the list, then hand-pick recipients before broadcasting'
                         : isAssignment
-                          ? 'Publish — broadcasts to talent at the selected levels only'
+                          ? 'Publish — all levels broadcast (priced tiers at set price, unpriced tiers invite bids)'
                           : 'Publish — all levels broadcast (selected at set price, others at catalog)'
                   }
                   className="sh-btn-primary sh-btn-primary-sm"
@@ -1854,7 +1853,9 @@ export default function AdminCardEditor({
                           title={
                             isEditable
                               ? (isSelected
-                                  ? `Deselect ${tier} — will still broadcast at catalog price`
+                                  ? isAssignment
+                                    ? `Deselect ${tier} — will still broadcast as inviting bids`
+                                    : `Deselect ${tier} — will still broadcast at catalog price`
                                   : `Select ${tier} to set a custom Final (client preferred)`)
                               : undefined
                           }
@@ -1881,7 +1882,7 @@ export default function AdminCardEditor({
                               </span>
                             ) : (
                               <span className="mt-0.5 block text-[9px] font-medium text-[var(--color-sh-ink-faint)]">
-                                {isAssignment ? 'Not selected' : 'Catalog price · still broadcasts'}
+                                {isAssignment ? 'Inviting bids · still broadcasts' : 'Catalog price · still broadcasts'}
                               </span>
                             )}
                           </td>
