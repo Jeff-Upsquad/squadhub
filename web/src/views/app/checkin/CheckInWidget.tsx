@@ -59,7 +59,7 @@ export default function CheckInWidget({ title = 'Daily Check-In', context = 'def
       </div>
 
       {/* Tab bar */}
-      <div className="flex gap-1 border-b border-divider px-5 py-2">
+      <div className="flex gap-1 overflow-x-auto border-b border-divider px-5 py-2">
         {TABS.map((tab) => (
           <button
             key={tab.id}

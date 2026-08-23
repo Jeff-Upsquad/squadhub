@@ -845,6 +845,87 @@
   justify-content: flex-end;
 }
 
+/* ── Hosted views · drill-in pass ─────────────────────────────────────
+ * The overrides above shrink desktop chrome to phone proportions; this
+ * pass makes the screens that swap content (chat threads, inbox detail,
+ * docs) behave like the native app's pushed screens instead.
+ */
+
+/* Chat — a thread opens as its own full-screen layer above the
+   conversation. The pane's wrapper is position:relative, so anchoring is
+   self-contained; the panel keeps its own ✕ close control. */
+.msh-pane .sqc-thread-panel {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  width: auto !important;
+  border-left: none;
+}
+
+/* Inbox — tapping a notification drills in: the list swaps to a full-width
+   reading screen with a back chip ([data-detail] is set by InboxView from
+   the selected id). Desktop keeps the side-by-side split untouched. */
+.ib-back { display: none; }
+.msh-pane .sh-view.inbox-view[data-detail='true'] > .inbox-list { display: none; }
+.msh-pane .sh-view.inbox-view[data-detail='true'] > .inbox-detail {
+  display: block;
+  padding: 10px 16px 28px;
+}
+
+/* Docs (SquadNotes) — no page open: the pages list IS the screen; opening a
+   page swaps to the editor with its own back chip (NotesShell renders both
+   halves and tags the root [data-note-open]). */
+.sh-note-back { display: none; }
+
+/* The "visible" halves of those swaps sit behind the same breakpoint the
+   shell switches on, so a desktop pane mid-resize can't pick them up. */
+@media (max-width: 767px) {
+  .msh-pane .ib-back {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    margin: 2px 0 14px -6px;
+    padding: 7px 12px 7px 7px;
+    border: none;
+    border-radius: var(--m-r-pill);
+    background: var(--m-hair-3);
+    font-size: 13px;
+    font-weight: 550;
+    color: var(--m-ink-2);
+    cursor: pointer;
+  }
+
+  .msh-pane .sh-notes-sidebar {
+    flex: 1 1 auto !important;
+    width: auto !important;
+    max-width: none !important;
+    border-right: 0;
+  }
+  .msh-pane [data-note-open='true'] > .sh-notes-sidebar { display: none; }
+  /* …and with no page open the list is alone: drop the empty-state column. */
+  .msh-pane [data-note-open]:not([data-note-open='true']) > div:last-child {
+    display: none;
+  }
+  .msh-pane .sh-note-back {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    align-self: flex-start;
+    margin: 8px 16px 2px;
+    padding: 7px 12px 7px 7px;
+    border: none;
+    border-radius: var(--m-r-pill);
+    background: var(--m-hair-3);
+    font-size: 13px;
+    font-weight: 550;
+    color: var(--m-ink-2);
+    cursor: pointer;
+  }
+}
+
 /* Fixed widgets handed to the shell (the drafts list) anchor to the viewport
    bottom-right — on a phone that's underneath the tab bar and the FAB. The
    wrapper re-anchors them; `bottom: auto` neutralises their own offset. */

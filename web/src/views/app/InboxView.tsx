@@ -252,7 +252,7 @@ export default function InboxView({
   const unreadCount = items.filter((n) => !n.is_read).length;
 
   return (
-    <div className="sh-view inbox-view">
+    <div className="sh-view inbox-view" data-detail={activeId ? 'true' : undefined}>
       <div className="inbox-list">
         <DesktopNotificationsBanner />
         <InstallPwaPrompt />
@@ -318,6 +318,16 @@ export default function InboxView({
       </div>
 
       <div className="inbox-detail">
+        {/* Phone: the detail takes over the screen, so it owns a way back to
+            the list. Hidden on desktop by .ib-back's base rule. */}
+        {activeId && (
+          <button type="button" className="ib-back" onClick={() => setActiveId(null)}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <path d="m15 18-6-6 6-6" />
+            </svg>
+            All notifications
+          </button>
+        )}
         {current ? (
           renderDetail(current, () => openSource(current))
         ) : (
