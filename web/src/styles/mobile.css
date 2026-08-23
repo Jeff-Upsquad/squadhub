@@ -982,6 +982,25 @@
   }
 }
 
+/* ── Hosted views · native-matching polish ────────────────────────────
+ * Final pass against the Partner Android app's inner screens: grouped
+ * cards at 14dp radius, 15sp row titles, and flat hairline-separated
+ * action rows instead of stacked bordered cards.
+ */
+.msh-pane .lv-card { border-radius: 14px; }
+.msh-pane .lv-title { font-size: 15px; }
+
+/* Stacked tap-row lists (meeting rows etc.) become the app's flat rows:
+   no per-row borders, just a hairline between neighbours. */
+.msh-pane .space-y-2 > button {
+  border: none !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+}
+.msh-pane .space-y-2 > button + button {
+  border-top: 1px solid var(--m-hair-3) !important;
+}
+
 /* Fixed widgets handed to the shell (the drafts list) anchor to the viewport
    bottom-right — on a phone that's underneath the tab bar and the FAB. The
    wrapper re-anchors them; `bottom: auto` neutralises their own offset. */
