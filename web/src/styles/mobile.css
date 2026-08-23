@@ -941,14 +941,46 @@
 .msh-pane .lv-subtoolbar .st-label,
 .msh-pane .lv-subtoolbar .st-divider { display: none; }
 
-/* Named view tabs (List / Board / …) become a slim horizontal scroller. */
+/* Named view tabs (List / Board / …): desktop underline strip → the app's
+   segmented pills, selected = solid ink. Row keeps its sideways scroll. */
 .msh-pane .lv-tabs-row {
-  overflow-x: auto;
-  scrollbar-width: none;
-  padding-left: 12px;
-  padding-right: 12px;
+  height: auto;
+  gap: 6px;
+  padding-top: 8px;
+  padding-bottom: 8px;
 }
-.msh-pane .lv-tabs-row::-webkit-scrollbar { display: none; }
+.msh-pane .lv-tab {
+  border-bottom: none;
+  border-radius: var(--m-r-pill);
+  padding: 6px 13px;
+  background: var(--m-surface-alt);
+  color: var(--m-ink-2);
+}
+.msh-pane .lv-tab[data-active='true'] {
+  background: var(--m-ink);
+  color: var(--m-surface);
+}
+
+/* Toolbar controls (group-by / sort triggers, filter, focus/my-tasks toggles)
+   become rounded chips; an active toggle fills carbon like the app's chips. */
+.msh-pane .lv-groupby-trigger,
+.msh-pane .lv-toolbtn {
+  border-radius: var(--m-r-pill);
+  padding: 5px 12px;
+}
+.msh-pane .lv-groupby-trigger,
+.msh-pane .lv-toolbtn--outline {
+  background: var(--m-surface-alt);
+  border-color: var(--m-hair);
+}
+.msh-pane .lv-toolbtn[data-active='true'] {
+  background: var(--m-ink) !important;
+  border-color: transparent !important;
+  color: var(--m-surface) !important;
+}
+
+/* The `/` keyboard-shortcut hint is meaningless on a touchscreen. */
+.msh-pane .lv-search kbd { display: none; }
 
 /* Board view keeps its Trello-style column scroller, at phone gutters. */
 .msh-pane .bv-board { padding: 12px 12px 20px; gap: 10px; }
