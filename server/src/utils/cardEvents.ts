@@ -28,7 +28,9 @@ export type CardEventType =
   | 'client_chat_message'
   | 'client_unselected'
   | 'client_payment_link'
-  | 'assignees_updated';
+  | 'assignees_updated'
+  | 'deal_lost'
+  | 'deal_lost_cleared';
 
 export type CardEventActorType = 'admin' | 'partner' | 'talent' | 'system';
 

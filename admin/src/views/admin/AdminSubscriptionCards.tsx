@@ -57,6 +57,9 @@ export type AdminSubscriptionCard = {
   brief_group_id?: string | null;
   recalled_at?: string | null;
   cancelled_at?: string | null;
+  // Sales outcome tag: set when an admin marks the deal lost. The card files
+  // under the "Deal Lost" tab instead of "Cancelled" while this is set.
+  deal_lost_at?: string | null;
   archived_at?: string | null;
   closed_at?: string | null;
   paused_at?: string | null;
@@ -219,7 +222,7 @@ type GroupBy = 'status' | 'date';
 // webhook closes the card and pins a selection together), and the published-state
 // cards split into "published" (live, not yet broadcast) vs "broadcaster"
 // (already broadcast to recipients).
-export type Bucket = 'published' | 'broadcaster' | 'selected' | 'assigned' | 'paused' | 'cancelled';
+export type Bucket = 'published' | 'broadcaster' | 'selected' | 'assigned' | 'paused' | 'cancelled' | 'lost';
 
 /**
  * Precedence-based bucketing. A card with `selected_recipient_id` set always
@@ -228,10 +231,16 @@ export type Bucket = 'published' | 'broadcaster' | 'selected' | 'assigned' | 'pa
  * exists do we fall through to state-based buckets. A live published card then
  * splits by whether its recipients have been sent: `needs_broadcast` → the
  * "published" (awaiting-broadcast) bucket, otherwise the "broadcaster" bucket.
- * Closed cards land in "cancelled" and paused-but-still-assigned cards in
- * "paused", each surfaced by its own tab.
+ * Closed cards land in "cancelled" — or "lost" when an admin marked the deal
+ * lost (deal_lost_at wins over cancelled so re-tagging moves a card between
+ * the two tabs) — and paused-but-still-assigned cards in "paused", each
+ * surfaced by its own tab.
  */
 export function categorize(card: AdminSubscriptionCard): Bucket {
+  // Deal Lost wins over everything terminal: marking a card lost stamps
+  // deal_lost_at (and closes it if it was still live), and clearing the flag
+  // drops it back into Cancelled.
+  if (card.deal_lost_at) return 'lost';
   // Cancelled wins over the recipient pointer: cancelling a LIVE assignment
   // keeps selected_recipient_id for audit, and without this check the card
   // would sit in the Assigned tab forever offering actions that all 409.
@@ -274,12 +283,12 @@ function subscriptionCardTitle(card: AdminSubscriptionCard): string {
   return subName ? `${business} · ${subName}` : business;
 }
 
-type Tab = 'requests' | 'published' | 'broadcaster' | 'selected' | 'assigned' | 'paused' | 'cancelled' | 'archive' | 'custom';
+type Tab = 'requests' | 'published' | 'broadcaster' | 'selected' | 'assigned' | 'paused' | 'cancelled' | 'lost' | 'archive' | 'custom';
 
 // Tabs backed by the subscription-cards lists (as opposed to New deals / Custom,
 // which render their own components). These share the active + archived card
 // queries and support the card detail view.
-const CARD_LIST_TABS = ['published', 'broadcaster', 'selected', 'assigned', 'paused', 'cancelled', 'archive'] as const;
+const CARD_LIST_TABS = ['published', 'broadcaster', 'selected', 'assigned', 'paused', 'cancelled', 'lost', 'archive'] as const;
 
 const TABS: { key: Tab; label: string }[] = [
   { key: 'requests', label: 'New deals' },
@@ -289,6 +298,7 @@ const TABS: { key: Tab; label: string }[] = [
   { key: 'assigned', label: 'Assigned' },
   { key: 'paused', label: 'Paused' },
   { key: 'cancelled', label: 'Cancelled' },
+  { key: 'lost', label: 'Deal Lost' },
   { key: 'archive', label: 'Archive' },
   { key: 'custom', label: 'Custom' },
 ];
@@ -321,6 +331,10 @@ const HEADER_META: Record<Tab, { title: string; subtitle: string }> = {
   cancelled: {
     title: 'Cancelled',
     subtitle: 'Subscriptions that were cancelled. Billing stopped on the cancel date and the card is closed.',
+  },
+  lost: {
+    title: 'Deal Lost',
+    subtitle: 'Cards marked as lost from their details — the deal didn’t happen. Open one and undo “Mark as deal lost” to file it back under Cancelled.',
   },
   archive: {
     title: 'Archive',
@@ -358,6 +372,10 @@ const EMPTY_COPY: Record<(typeof CARD_LIST_TABS)[number], { title: string; hint:
   cancelled: {
     title: 'No cancelled subscriptions',
     hint: 'Subscriptions you cancel show up here with their final billing dates.',
+  },
+  lost: {
+    title: 'No lost deals',
+    hint: 'Open a card and use “Mark as deal lost” to file it here instead of Cancelled.',
   },
   archive: {
     title: 'Nothing archived yet',
@@ -555,7 +573,7 @@ export default function AdminSubscriptionCards({
     (pendingBriefRes?.data || []).length;
 
   const bucketed = useMemo(() => {
-    const out: Record<Bucket, AdminSubscriptionCard[]> = { published: [], broadcaster: [], selected: [], assigned: [], paused: [], cancelled: [] };
+    const out: Record<Bucket, AdminSubscriptionCard[]> = { published: [], broadcaster: [], selected: [], assigned: [], paused: [], cancelled: [], lost: [] };
     for (const c of activeCards) out[categorize(c)].push(c);
     return out;
   }, [activeCards]);
@@ -575,6 +593,7 @@ export default function AdminSubscriptionCards({
     assigned: buildCardListEntries(bucketed.assigned).length,
     paused: buildCardListEntries(bucketed.paused).length,
     cancelled: buildCardListEntries(bucketed.cancelled).length,
+    lost: buildCardListEntries(bucketed.lost).length,
     archive: buildCardListEntries(archiveCards).length,
   }), [bucketed, archiveCards]);
 
@@ -597,6 +616,7 @@ export default function AdminSubscriptionCards({
       case 'assigned': return bucketed.assigned;
       case 'paused': return bucketed.paused;
       case 'cancelled': return bucketed.cancelled;
+      case 'lost': return bucketed.lost;
       case 'archive': return archiveCards;
       default: return [] as AdminSubscriptionCard[];
     }
@@ -736,7 +756,7 @@ export default function AdminSubscriptionCards({
                 {TABS.map(({ key, label }) => {
                   const count =
                     key === 'published' || key === 'broadcaster' || key === 'selected' || key === 'assigned'
-                    || key === 'paused' || key === 'cancelled'
+                    || key === 'paused' || key === 'cancelled' || key === 'lost'
                       ? tabCounts[key]
                       : key === 'archive'
                         ? tabCounts.archive
@@ -910,23 +930,23 @@ export default function AdminSubscriptionCards({
           ) : groupBy === 'date' ? (
             <div className="space-y-7">
               {dateGroups.today.length > 0 && (
-                <CardGroup label="Today" color="#475569" items={dateGroups.today} onOpen={setSelectedCardId} showCancelledTag={activeTab === 'archive' || activeTab === 'cancelled'} showArchivedTag={activeTab === 'archive'} />
+                <CardGroup label="Today" color="#475569" items={dateGroups.today} onOpen={setSelectedCardId} showCancelledTag={activeTab === 'archive' || activeTab === 'cancelled' || activeTab === 'lost'} showArchivedTag={activeTab === 'archive'} />
               )}
               {dateGroups.yesterday.length > 0 && (
-                <CardGroup label="Yesterday" color="#475569" items={dateGroups.yesterday} onOpen={setSelectedCardId} showCancelledTag={activeTab === 'archive' || activeTab === 'cancelled'} showArchivedTag={activeTab === 'archive'} />
+                <CardGroup label="Yesterday" color="#475569" items={dateGroups.yesterday} onOpen={setSelectedCardId} showCancelledTag={activeTab === 'archive' || activeTab === 'cancelled' || activeTab === 'lost'} showArchivedTag={activeTab === 'archive'} />
               )}
               {dateGroups.thisWeek.length > 0 && (
-                <CardGroup label="Earlier this week" color="#475569" items={dateGroups.thisWeek} onOpen={setSelectedCardId} showCancelledTag={activeTab === 'archive' || activeTab === 'cancelled'} showArchivedTag={activeTab === 'archive'} />
+                <CardGroup label="Earlier this week" color="#475569" items={dateGroups.thisWeek} onOpen={setSelectedCardId} showCancelledTag={activeTab === 'archive' || activeTab === 'cancelled' || activeTab === 'lost'} showArchivedTag={activeTab === 'archive'} />
               )}
               {dateGroups.earlier.length > 0 && (
-                <CardGroup label="Earlier" color="#475569" items={dateGroups.earlier} onOpen={setSelectedCardId} showCancelledTag={activeTab === 'archive' || activeTab === 'cancelled'} showArchivedTag={activeTab === 'archive'} />
+                <CardGroup label="Earlier" color="#475569" items={dateGroups.earlier} onOpen={setSelectedCardId} showCancelledTag={activeTab === 'archive' || activeTab === 'cancelled' || activeTab === 'lost'} showArchivedTag={activeTab === 'archive'} />
               )}
             </div>
           ) : (
             <CardList
               items={cardsForTab}
               onOpen={setSelectedCardId}
-              canShowCancelled={activeTab === 'archive' || activeTab === 'cancelled'}
+              canShowCancelled={activeTab === 'archive' || activeTab === 'cancelled' || activeTab === 'lost'}
               canShowArchived={activeTab === 'archive'}
             />
           )}

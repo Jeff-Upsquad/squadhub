@@ -299,6 +299,26 @@ function CardPanelContent({
     },
   });
 
+  // Sales outcome tag: files this card under the pipeline's "Deal Lost" tab
+  // instead of Cancelled. Marking a live card lost closes it through the same
+  // server machinery as Cancel; undo clears the flag so a closed card falls
+  // back to Cancelled.
+  const dealLost = useMutation({
+    mutationFn: (lost: boolean) =>
+      api.post(`/admin/subscription-cards/${activeCardId}/deal-lost`, { lost }),
+    onSuccess: (_res, lost) => {
+      qc.invalidateQueries({ queryKey: ['admin-card-recipients', activeCardId] });
+      qc.invalidateQueries({ queryKey: ['admin-subscription-cards'] });
+      qc.invalidateQueries({ queryKey: ['admin-secondary-cards', card.id] });
+      showToast(lost ? 'Marked as deal lost — the card moved to the Deal Lost tab.' : 'Deal lost cleared — the card moved back to Cancelled.', 'success');
+      clearConfirm();
+    },
+    onError: (err: any) => {
+      showToast(err?.response?.data?.error || err.message || 'Failed to update deal outcome', 'error');
+      clearConfirm();
+    },
+  });
+
   // Resume a paused subscription by reopening it to Published (no broadcast yet):
   // the previous talent is released and shown as a former assignee, and the
   // matching pool becomes available so the admin can Broadcast + re-select.
@@ -545,6 +565,14 @@ function CardPanelContent({
             >
               {cancelCard.isPending ? 'Cancelling…' : 'Cancel this card'}
             </button>
+            <button
+              onClick={() => setConfirmAction({ kind: 'dealLost' })}
+              disabled={dealLost.isPending}
+              className="sh-btn-danger"
+              title="Close this card as a lost deal — files it under the Deal Lost tab instead of Cancelled"
+            >
+              {dealLost.isPending ? 'Marking…' : 'Mark as deal lost'}
+            </button>
             {activeCard.distribution === 'manual' && (
               <button
                 onClick={() => setConfirmAction({ kind: 'broadcast' })}
@@ -586,6 +614,37 @@ function CardPanelContent({
               <span className="font-bold">Recalled</span> on {formatFullDateTime(activeCard.recalled_at)}.
               Acceptees still see this card with a "Recalled" tag.
             </p>
+          </div>
+        )}
+
+        {/* Sales outcome: mark a closed (or still-live) card as lost, or undo
+            the tag to file it back under Cancelled. */}
+        {!activeCard.archived_at && (activeCard.state === 'published' || activeCard.state === 'assigned' || activeCard.state === 'closed') && (
+          <div className="mx-5 mb-3">
+            {activeCard.deal_lost_at ? (
+              <div className="rounded-lg border border-[#FBCFCB] bg-[#FDECEC] px-3 py-2.5">
+                <p className="text-xs text-[#B42318]">
+                  <span className="font-bold">Deal Lost</span> — marked on {formatFullDateTime(activeCard.deal_lost_at)}.
+                  Filed under the Deal Lost tab instead of Cancelled.
+                </p>
+                <button
+                  onClick={() => setConfirmAction({ kind: 'undoDealLost' })}
+                  disabled={dealLost.isPending}
+                  className="sh-btn-ghost sh-btn-ghost-sm mt-2"
+                >
+                  {dealLost.isPending ? 'Undoing…' : 'Undo deal lost'}
+                </button>
+              </div>
+            ) : activeCard.state === 'closed' ? (
+              <button
+                onClick={() => setConfirmAction({ kind: 'dealLost' })}
+                disabled={dealLost.isPending}
+                className="sh-btn-danger"
+                title="File this cancelled card under the Deal Lost tab instead"
+              >
+                {dealLost.isPending ? 'Marking…' : 'Mark as deal lost'}
+              </button>
+            ) : null}
           </div>
         )}
 
@@ -865,6 +924,8 @@ function CardPanelContent({
           undoSelection: undoSelection.isPending,
           recall: recallCard.isPending,
           cancel: cancelCard.isPending,
+          dealLost: dealLost.isPending && dealLost.variables !== false,
+          undoDealLost: dealLost.isPending && dealLost.variables === false,
           resume: resumeReopen.isPending,
           pause: pause.isPending,
           offerPrevious: offerPreviousTalent.isPending,
@@ -886,6 +947,8 @@ function CardPanelContent({
             case 'undoSelection': undoSelection.mutate(); break;
             case 'recall': recallCard.mutate(); break;
             case 'cancel': cancelCard.mutate(); break;
+            case 'dealLost': dealLost.mutate(true); break;
+            case 'undoDealLost': dealLost.mutate(false); break;
             case 'resume': resumeReopen.mutate(); break;
             case 'pause': pause.mutate(); break;
             case 'offerPrevious': offerPreviousTalent.mutate(); break;
@@ -912,6 +975,8 @@ type ConfirmAction =
   | { kind: 'undoSelection' }
   | { kind: 'recall' }
   | { kind: 'cancel' }
+  | { kind: 'dealLost' }
+  | { kind: 'undoDealLost' }
   | { kind: 'resume' }
   | { kind: 'pause' }
   | { kind: 'offerPrevious' }
@@ -1007,6 +1072,20 @@ function ConfirmActionDialog({
       confirmLabel: hasAcceptances ? 'Cancel anyway' : 'Cancel',
       pendingLabel: 'Cancelling…',
       variant: 'danger',
+    },
+    dealLost: {
+      title: 'Mark this deal as lost?',
+      description: 'A live card closes like a cancel — billing stops, pending recipients are dropped and the talent is released — but it files under Deal Lost instead of Cancelled.',
+      confirmLabel: 'Mark as deal lost',
+      pendingLabel: 'Marking…',
+      variant: 'danger',
+    },
+    undoDealLost: {
+      title: 'Undo deal lost?',
+      description: 'Clears the lost tag. A closed card files back under Cancelled — nothing is resurrected.',
+      confirmLabel: 'Undo',
+      pendingLabel: 'Undoing…',
+      variant: 'default',
     },
     resume: {
       title: 'Resume this subscription?',

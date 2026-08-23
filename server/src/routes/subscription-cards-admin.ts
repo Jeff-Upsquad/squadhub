@@ -1788,6 +1788,107 @@ router.post('/:id/cancel', async (req: Request, res: Response) => {
 });
 
 // ============================================================
+// POST /admin/subscription-cards/:id/deal-lost
+// Sales outcome tag. { lost: true } (default) marks the deal lost: a live
+// card is closed through the normal cancel path first (billing stops,
+// pending recipients dropped, talent released, SquadHire synced), then
+// deal_lost_at is stamped so the card files under the "Deal Lost" tab
+// instead of "Cancelled". Already-closed cards are simply re-tagged —
+// that's how a card moves between the two tabs.
+// { lost: false } clears the flag; a closed card falls back to Cancelled
+// and nothing is resurrected. Republish wipes the flag with the rest of
+// the lifecycle timestamps.
+// ============================================================
+router.post('/:id/deal-lost', async (req: Request, res: Response) => {
+  try {
+    const cardId = req.params.id as string;
+    const lost = req.body?.lost !== false;
+    const actor = {
+      userId: (req as any).userId ?? null,
+      userName: (req as any).userName ?? null,
+    };
+
+    const { data: card } = await supabaseAdmin
+      .from('subscription_cards')
+      .select('id, state, deal_lost_at')
+      .eq('id', cardId)
+      .maybeSingle();
+    if (!card) {
+      res.status(404).json({ success: false, error: 'Card not found' });
+      return;
+    }
+
+    if (!lost) {
+      if (!card.deal_lost_at) {
+        res.status(409).json({ success: false, error: 'Card is not marked as lost' });
+        return;
+      }
+      const { data: updated, error: updErr } = await supabaseAdmin
+        .from('subscription_cards')
+        .update({ deal_lost_at: null })
+        .eq('id', cardId)
+        .select('*')
+        .single();
+      if (updErr) {
+        res.status(500).json({ success: false, error: updErr.message });
+        return;
+      }
+      await logCardEvent({
+        cardId,
+        eventType: 'deal_lost_cleared',
+        actorId: actor.userId,
+        actorType: 'admin',
+        actorLabel: actor.userName ?? null,
+      });
+      res.json({ success: true, data: await hydrateCard(updated) });
+      return;
+    }
+
+    if (card.state === 'new' || card.state === 'draft') {
+      res.status(409).json({ success: false, error: 'Only published, assigned or closed cards can be marked lost' });
+      return;
+    }
+
+    // Close live cards through the exact cancel machinery so Deal Lost is a
+    // real terminal state everywhere else in the system (billing, terms,
+    // SquadHire mirror, linked client subscription), not just a tab filter.
+    let warning: string | undefined;
+    if (card.state === 'published' || card.state === 'assigned') {
+      const result = await cancelCardCore(cardId, actor);
+      if (result.httpStatus >= 400) {
+        res.status(result.httpStatus).json(result.body);
+        return;
+      }
+      warning = (result.body as any)?.warning;
+    }
+
+    const { data: updated, error: updErr } = await supabaseAdmin
+      .from('subscription_cards')
+      .update({ deal_lost_at: new Date().toISOString() })
+      .eq('id', cardId)
+      .select('*')
+      .single();
+    if (updErr) {
+      res.status(500).json({ success: false, error: updErr.message });
+      return;
+    }
+
+    await logCardEvent({
+      cardId,
+      eventType: 'deal_lost',
+      actorId: actor.userId,
+      actorType: 'admin',
+      actorLabel: actor.userName ?? null,
+    });
+
+    res.json({ success: true, data: await hydrateCard(updated), ...(warning ? { warning } : {}) });
+  } catch (err: any) {
+    console.error('Admin mark deal lost error:', err);
+    res.status(500).json({ success: false, error: err?.message || 'Internal server error' });
+  }
+});
+
+// ============================================================
 // POST /admin/subscription-cards/:id/archive
 // Soft-hide any card. Sets archived_at; the card stops appearing
 // in the default Subscription Cards list and is dropped from talent
@@ -2066,6 +2167,9 @@ router.post('/:id/republish', async (req: Request, res: Response) => {
         recalled_at: null,
         cancelled_at: null,
         closed_at: null,
+        // A fresh start forgets the sales outcome too — a republished card
+        // re-enters the pipeline as a live deal, not Deal Lost.
+        deal_lost_at: null,
         assigned_at: null,
         // A republished card starts a fresh life — never paused.
         paused_at: null,

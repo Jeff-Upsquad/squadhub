@@ -638,6 +638,24 @@ export default function AdminSubscriptionCardRecipientsView({
     },
   });
 
+  // Sales outcome tag: files this card under the pipeline's "Deal Lost" tab
+  // instead of Cancelled. Marking a live card lost closes it through the same
+  // server machinery as Cancel (billing stops, talent released); undo clears
+  // the flag so a closed card falls back to Cancelled.
+  const dealLostMutation = useMutation({
+    mutationFn: (lost: boolean) =>
+      api.post(`/admin/subscription-cards/${card.id}/deal-lost`, { lost }),
+    onSuccess: (_res, lost) => {
+      queryClient.invalidateQueries({ queryKey: ['admin-card-recipients', card.id] });
+      queryClient.invalidateQueries({ queryKey: ['admin-subscription-cards'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-stats'] });
+      showToast(lost ? 'Marked as deal lost — the card moved to the Deal Lost tab.' : 'Deal lost cleared — the card moved back to Cancelled.', 'success');
+    },
+    onError: (err: any) => {
+      showToast(err?.response?.data?.error || err.message || 'Failed to update deal outcome', 'error');
+    },
+  });
+
   // Duplicate: copy this card (minus recipients/assignees) into a fresh New Deals
   // draft. An optional targetType re-targets the copy into the OTHER product line
   // (subscription ⇄ assignment); the copy lands in that module's New Deals queue.
@@ -1129,6 +1147,15 @@ export default function AdminSubscriptionCardRecipientsView({
                 Recalled
               </span>
             )}
+            {card.deal_lost_at && (
+              <span
+                className="sh-status-pill"
+                style={{ backgroundColor: '#FEE2E2', color: '#B91C1C' }}
+                title="Marked as deal lost — filed under the Deal Lost tab"
+              >
+                Deal Lost
+              </span>
+            )}
             {isUnreviewed && (
               <span
                 className="sh-status-pill"
@@ -1193,6 +1220,36 @@ export default function AdminSubscriptionCardRecipientsView({
               >
                 {broadcastToTalentsMutation.isPending ? 'Broadcasting…' : hasFormerAssignees ? 'Broadcast to all matching' : 'Broadcast to talents'}
               </button>
+            )}
+            {/* Sales outcome: file this card under Deal Lost instead of
+                Cancelled. Live cards are closed through the cancel machinery;
+                already-cancelled cards just move tabs; undo reverts the tag. */}
+            {!card.archived_at && (card.state === 'published' || card.state === 'assigned' || card.state === 'closed') && (
+              card.deal_lost_at ? (
+                <button
+                  onClick={() => dealLostMutation.mutate(false)}
+                  disabled={dealLostMutation.isPending}
+                  className="sh-btn-ghost sh-btn-ghost-sm"
+                  title="Clear the lost tag — a closed card files back under Cancelled"
+                >
+                  {dealLostMutation.isPending ? 'Undoing…' : 'Undo deal lost'}
+                </button>
+              ) : (
+                <button
+                  onClick={() => {
+                    if (window.confirm(
+                      card.state === 'published' || card.state === 'assigned'
+                        ? 'Mark this deal as lost?\n\nA live card closes like a cancel — billing stops, pending recipients are dropped and the talent is released — but it files under Deal Lost instead of Cancelled.'
+                        : 'Mark this cancelled card as a lost deal?\n\nIt moves from the Cancelled tab to Deal Lost. You can undo this later.',
+                    )) dealLostMutation.mutate(true);
+                  }}
+                  disabled={dealLostMutation.isPending}
+                  className="sh-btn-danger"
+                  title="Tag this deal as lost — files it under the Deal Lost tab"
+                >
+                  {dealLostMutation.isPending ? 'Marking…' : 'Mark as deal lost'}
+                </button>
+              )
             )}
             {!card.archived_at && (
               <button
