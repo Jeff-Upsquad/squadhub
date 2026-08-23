@@ -851,6 +851,11 @@
  * docs) behave like the native app's pushed screens instead.
  */
 
+/* My Tasks — the private-list hero ("My Tasks · Private / Your personal
+   tasks / 🔒 …⌘⇧T on desktop") restates the app bar and pitches a desktop
+   shortcut; the phone gets straight to the list. */
+.msh-pane .mtk-private-head { display: none; }
+
 /* Chat — a thread opens as its own full-screen layer above the
    conversation. The pane's wrapper is position:relative, so anchoring is
    self-contained; the panel keeps its own ✕ close control. */

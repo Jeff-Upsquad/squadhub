@@ -15,7 +15,7 @@ export default function MyTasksView() {
   return (
     <div className="sh-view flex h-full min-h-0 flex-col">
       {/* Private header — the host header for the embedded ListPage below */}
-      <div style={{ padding: '14px 16px 10px', flexShrink: 0 }}>
+      <div className="mtk-private-head" style={{ padding: '14px 16px 10px', flexShrink: 0 }}>
         <div
           style={{
             fontSize: 11,
