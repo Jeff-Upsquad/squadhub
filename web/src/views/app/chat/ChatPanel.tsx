@@ -9,6 +9,7 @@ import ThreadPanel from './ThreadPanel';
 import { usePanelFileDrop } from '../pm/usePanelFileDrop';
 import { useWorkspaceStore, type ChatKind } from '../../../stores/workspaceStore';
 import { useAuthStore } from '../../../stores/authStore';
+import { UNREAD_SUMMARY_QUERY_KEY } from '../../../hooks/useUnreadSummary';
 import { useIsOnline } from '../../../stores/presenceStore';
 import type { Notification } from '../InboxView';
 
@@ -229,19 +230,22 @@ export default function ChatPanel({
       });
   }, [channelId, kind, queryClient]);
 
-  // Mirror of the native partner app's chat read tracking. Web has no chat
-  // unread badge of its own, but the Android app badges its Chat tab from a
-  // per-user read high-water mark (POST /messages/mark-read). Web only ever
-  // cleared inbox *notifications*, so reading or replying here never advanced
-  // that mark and the phone kept showing the conversation as unread. Advance it
-  // whenever the conversation is on screen so the two stay in sync.
+  // Mirror of the native partner app's chat read tracking. Web and Android
+  // both badge conversations from the same per-user read high-water mark
+  // (POST /messages/mark-read), so advance it whenever the conversation is on
+  // screen and refresh the sidebar's unread counts once the write lands.
   const markChatRead = useCallback(() => {
     if (!channelId) return;
     const body = kind === 'dm' ? { dm_conversation_id: channelId } : { channel_id: channelId };
-    api.post('/messages/mark-read', body).catch(() => {
-      /* non-critical — only affects the mobile app's unread badge */
-    });
-  }, [channelId, kind]);
+    api
+      .post('/messages/mark-read', body)
+      .then(() => {
+        queryClient.invalidateQueries({ queryKey: UNREAD_SUMMARY_QUERY_KEY });
+      })
+      .catch(() => {
+        /* non-critical — only affects the unread badges */
+      });
+  }, [channelId, kind, queryClient]);
 
   // Listen for real-time messages on the same channel/DM room.
   useEffect(() => {
