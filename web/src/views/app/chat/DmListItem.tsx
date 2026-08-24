@@ -1,14 +1,17 @@
 import type { DmConversation } from '@squadhub/shared';
 import { useAuthStore } from '../../../stores/authStore';
 import { useIsOnline } from '../../../stores/presenceStore';
+import UnreadBadge from '../../../components/UnreadBadge';
 
 interface Props {
   dm: DmConversation;
   active: boolean;
+  /** Unread message count — renders a badge when present and > 0. */
+  unreadCount?: number;
   onClick: () => void;
 }
 
-export default function DmListItem({ dm, active, onClick }: Props) {
+export default function DmListItem({ dm, active, onClick, unreadCount }: Props) {
   const meId = useAuthStore((s) => s.user?.id);
   const others = (dm.participants || []).filter((p) => p.id !== meId);
   const online = useIsOnline(others[0]?.id);
@@ -48,7 +51,8 @@ export default function DmListItem({ dm, active, onClick }: Props) {
           <span className={`sqc-presence sqc-presence--badge${online ? ' is-online' : ''}`} />
         )}
       </span>
-      <span className="truncate">{label}</span>
+      <span className="flex-1 truncate">{label}</span>
+      <UnreadBadge count={unreadCount ?? 0} />
     </button>
   );
 }

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import type { Channel, SubscriptionCardRecipient } from '@squadhub/shared';
+import type { Channel, DmConversation, SubscriptionCardRecipient } from '@squadhub/shared';
 import type { HomeView } from '../../layouts/MainLayout';
 import api from '../../services/api';
 import { useFavorites, useRemoveFavorite } from '../../hooks/useFavorites';
@@ -18,11 +18,13 @@ import { useAvailableApps } from '../../hooks/useApps';
 import { useAppFavorites, useMigrateLocalAppFavorites } from '../../hooks/useAppFavorites';
 import { AppIcon, type AppDef } from '../../config/apps';
 import { useUnreadCount } from '../../hooks/useUnreadCount';
+import { useUnreadSummary } from '../../hooks/useUnreadSummary';
 import { useWorkspaceStore } from '../../stores/workspaceStore';
 import { useIsClient, useIsPartner } from '../../hooks/useUserType';
 import { useDms } from '../../hooks/useDms';
 import NewDmModal from './chat/NewDmModal';
 import DmListItem from './chat/DmListItem';
+import UnreadBadge from '../../components/UnreadBadge';
 import { useCloseCrmChat, useCrmChats } from '../../hooks/useCrmChats';
 import { useChatSidePanelStore } from '../../stores/chatSidePanelStore';
 
@@ -252,10 +254,32 @@ export default function HomeSidebar({
   const cardsPinned = favoriteApps.some((a) => a.slug === 'leads');
   const cardsAttention = useCardsAttention(cardsPinned);
   const { data: inboxUnreadCount } = useUnreadCount();
+  const { data: unreadSummary } = useUnreadSummary();
+
+  // Channels shown in the sidebar (support has its own rail entry) — reused by
+  // the Channels section and the Unread section below.
+  const visibleChannels = channels.filter((c) => c.channel_kind !== 'support');
+
+  // Conversations with unread messages, most-unread first. Empty while the
+  // summary hasn't loaded, which keeps the Unread section hidden until then.
+  const unreadEntries: Array<
+    | { kind: 'channel'; channel: Channel; count: number }
+    | { kind: 'dm'; dm: DmConversation; count: number }
+  > = [];
+  for (const ch of visibleChannels) {
+    const count = unreadSummary?.channels[ch.id] ?? 0;
+    if (count > 0) unreadEntries.push({ kind: 'channel', channel: ch, count });
+  }
+  for (const dm of dms) {
+    const count = unreadSummary?.dms[dm.id] ?? 0;
+    if (count > 0) unreadEntries.push({ kind: 'dm', dm, count });
+  }
+  unreadEntries.sort((a, b) => b.count - a.count);
 
   const { data: workspaces } = useWorkspaces(isClient || isPartner ? undefined : workspaceId);
 
   const [expandedSections, setExpandedSections] = useState({
+    unread: true,
     apps: true,
     favorites: true,
     sharedWithMe: true,
@@ -419,6 +443,53 @@ export default function HomeSidebar({
 
         {/* Divider */}
         <div className="mx-2 border-t border-[var(--sh-hair)]" />
+
+        {/* Unread section — chats & channels with unread messages, most-unread
+            first. Hidden entirely while nothing is unread so the sidebar only
+            surfaces this when it needs attention. */}
+        {unreadEntries.length > 0 && (
+          <>
+            <div className="py-1">
+              <SectionHeader
+                title="Unread"
+                expanded={expandedSections.unread}
+                onToggle={() => toggleSection('unread')}
+              />
+              {expandedSections.unread && (
+                <div className="px-2 pb-1">
+                  {unreadEntries.map((entry) =>
+                    entry.kind === 'channel' ? (
+                      <button
+                        key={`channel-${entry.channel.id}`}
+                        onClick={() => onSelectChannel(entry.channel.id)}
+                        className="mb-[1px] flex w-full items-center rounded-[6px] px-2 py-[5px] text-left text-[13px] text-[var(--sh-ink-2)] transition hover:bg-[var(--sh-hair-3)] hover:text-[var(--sh-ink)]"
+                      >
+                        <span className="mr-[6px] text-[var(--sh-ink-4)]">#</span>
+                        <span className="flex-1 truncate">{entry.channel.name}</span>
+                        <UnreadBadge count={entry.count} />
+                      </button>
+                    ) : (
+                      <DmListItem
+                        key={`dm-${entry.dm.id}`}
+                        dm={entry.dm}
+                        active={
+                          activeChannelId === entry.dm.id &&
+                          activeChannelKind === 'dm' &&
+                          homeView === 'chat'
+                        }
+                        unreadCount={entry.count}
+                        onClick={() => onSelectDm(entry.dm.id)}
+                      />
+                    ),
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Divider */}
+            <div className="mx-2 border-t border-[var(--sh-hair)]" />
+          </>
+        )}
 
         {/* Apps section — pinned apps. Only shown when the user has app access;
             apps are pinned from the Apps module (the rail's grid icon). */}
@@ -743,11 +814,12 @@ export default function HomeSidebar({
           />
           {expandedSections.channels && (
             <div className="px-2 pb-1">
-              {channels.filter((c) => c.channel_kind !== 'support').length === 0 ? (
+              {visibleChannels.length === 0 ? (
                 <p className="px-2 py-2 text-center text-[11.5px] text-[var(--sh-ink-4)]">No channels yet</p>
               ) : (
-                channels.filter((c) => c.channel_kind !== 'support').map((ch) => {
+                visibleChannels.map((ch) => {
                   const isActive = activeChannelId === ch.id && homeView === 'chat';
+                  const unreadCount = unreadSummary?.channels[ch.id] ?? 0;
                   return (
                     <button
                       key={ch.id}
@@ -760,7 +832,8 @@ export default function HomeSidebar({
                       style={isActive ? { boxShadow: 'var(--sh-shadow-sm)' } : undefined}
                     >
                       <span className={`mr-[6px] ${isActive ? 'text-[var(--sh-ink-3)]' : 'text-[var(--sh-ink-4)]'}`}>#</span>
-                      <span className="truncate">{ch.name}</span>
+                      <span className="flex-1 truncate">{ch.name}</span>
+                      <UnreadBadge count={unreadCount} />
                     </button>
                   );
                 })
@@ -812,6 +885,7 @@ export default function HomeSidebar({
                     key={dm.id}
                     dm={dm}
                     active={activeChannelId === dm.id && activeChannelKind === 'dm' && homeView === 'chat'}
+                    unreadCount={unreadSummary?.dms[dm.id] ?? 0}
                     onClick={() => onSelectDm(dm.id)}
                   />
                 ))
