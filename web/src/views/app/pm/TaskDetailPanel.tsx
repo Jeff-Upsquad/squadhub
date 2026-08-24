@@ -836,7 +836,7 @@ export default function TaskDetailPanel({
     });
 
   return (
-    <div className="fixed inset-0 z-[90]">
+    <div className={`fixed inset-0 z-[90]${isMobile ? ' td-mobile-root' : ''}`}>
       {/* Backdrop — no blur, subtle dark tint only */}
       <div
         className="absolute inset-0 transition-opacity duration-300"
@@ -855,12 +855,12 @@ export default function TaskDetailPanel({
         data-peek={isPeek ? 'true' : undefined}
         data-mobile={isMobile ? 'true' : undefined}
         style={{
-          background: 'var(--surface)',
+          background: isMobile ? '#ffffff' : 'var(--surface)',
           // Peek slides in from the LEFT; primary slides in from the right.
           transform: mounted
             ? 'translateX(0)'
             : isPeek ? 'translateX(calc(-100% - 24px))' : 'translateX(calc(100% + 24px))',
-          transition: 'transform .42s cubic-bezier(0.23, 1, 0.32, 1), opacity .3s ease',
+          transition: isMobile ? 'none' : 'transform .42s cubic-bezier(0.23, 1, 0.32, 1), opacity .3s ease',
           opacity: mounted ? 1 : 0,
         }}
       >
