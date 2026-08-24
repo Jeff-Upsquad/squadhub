@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { requireAuth } from '../middleware/auth';
 import { requirePermission } from '../middleware/permissions';
 import { supabaseAdmin } from '../supabase';
+import { canActorDm, listDmContacts, loadDmActor } from '../utils/dmAccess';
 
 const router = Router();
 
@@ -58,11 +59,34 @@ router.get('/', requireAuth, async (req: Request, res: Response) => {
   }
 });
 
+// GET /dms/contacts — people the current user is allowed to start a DM with
+router.get('/contacts', requireAuth, requirePermission('can_send_dms'), async (req: Request, res: Response) => {
+  try {
+    const workspaceId = req.query.workspace_id as string;
+    if (!workspaceId) {
+      res.status(400).json({ success: false, error: 'workspace_id required' });
+      return;
+    }
+    const q = ((req.query.q as string) || '').trim();
+    const limit = Math.min(parseInt((req.query.limit as string) || '50', 10) || 50, 50);
+    const data = await listDmContacts(req.userId!, workspaceId, q, limit);
+    res.json({ success: true, data });
+  } catch (err) {
+    console.error('List DM contacts error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
 // POST /dms — create or find existing DM conversation (requires can_send_dms)
 router.post('/', requireAuth, requirePermission('can_send_dms'), async (req: Request, res: Response) => {
   try {
     const body = createDmSchema.parse(req.body);
-    const allParticipants = [...new Set([req.userId!, ...body.participant_ids])];
+    const others = [...new Set(body.participant_ids)].filter((id) => id !== req.userId);
+    if (others.length === 0) {
+      res.status(400).json({ success: false, error: 'Pick someone to message' });
+      return;
+    }
+    const allParticipants = [req.userId!, ...others];
 
     // Check if a DM with exactly these participants already exists in this workspace
     // (for 1:1 DMs only — group DMs always create new)
@@ -74,7 +98,8 @@ router.post('/', requireAuth, requirePermission('can_send_dms'), async (req: Req
       });
 
       if (existing && existing.length > 0) {
-        // Return existing conversation
+        // Return existing conversation even if the pairing rule would now
+        // block a *new* thread — they can still open what they already have.
         const { data: conv } = await supabaseAdmin
           .from('dm_conversations')
           .select('*, participants:dm_participants(user_id, user:users(id, display_name, avatar_url))')
@@ -82,6 +107,19 @@ router.post('/', requireAuth, requirePermission('can_send_dms'), async (req: Req
           .single();
 
         res.json({ success: true, data: conv });
+        return;
+      }
+    }
+
+    const actor = await loadDmActor(req.userId!, body.workspace_id);
+    if (!actor) {
+      res.status(403).json({ success: false, error: 'You cannot send direct messages' });
+      return;
+    }
+    for (const otherId of others) {
+      const verdict = await canActorDm(actor, otherId);
+      if (!verdict.ok) {
+        res.status(403).json({ success: false, error: verdict.reason });
         return;
       }
     }

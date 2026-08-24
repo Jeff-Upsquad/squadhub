@@ -96,7 +96,7 @@ export default function DmSidePanel({ user, onClose }: Props) {
             <ChatPanel channelId={dmId} kind="dm" />
           ) : failed ? (
             <div className="flex flex-1 items-center justify-center px-6 text-center text-sm text-foreground-dim">
-              Couldn’t open this conversation. You may not have permission to send direct messages.
+              Couldn’t open this conversation. You can only message people you share a space or channel with.
             </div>
           ) : (
             <div className="flex flex-1 items-center justify-center text-sm text-foreground-dim">Opening chat…</div>

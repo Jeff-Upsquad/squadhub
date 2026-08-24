@@ -63,7 +63,7 @@ const STEPS: Record<Audience, Step[]> = {
       anchor: 'chat-tab',
       title: 'Talk to your talent',
       body:
-        "The talent working on your space is a real person you can message any time.\n\nOpen Chat and look under Direct messages for their name — that's a private thread with just them. Channels are shared with the wider team, and Support reaches SquadHub itself.\n\nNo one to message yet? Tap New message and search for them.",
+        "Open Chat and look under Direct messages for your Squad Manager or client staff on the same space — that's a private thread with just them. Channels are shared with the wider team, and Support reaches SquadHub itself.\n\nNo one to message yet? Tap New message and search for them.",
     },
   ],
   partner: [
@@ -94,7 +94,7 @@ const STEPS: Record<Audience, Step[]> = {
       anchor: 'chat-tab',
       title: 'Channels and DMs',
       body:
-        'Chat holds the channels you belong to and your direct messages.\n\nChannels linked to a space or list are shared with everyone on that work; a DM is a private thread. Tap New message to start one, and Support reaches the SquadHub team.',
+        'Chat holds the channels you belong to and your direct messages.\n\nChannels linked to a space or list are shared with everyone on that work. A DM is a private thread with partners and Squad Managers on the same work. Tap New message to start one, and Support reaches the SquadHub team.',
     },
   ],
 };

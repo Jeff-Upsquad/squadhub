@@ -2,10 +2,11 @@ import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import { requireAuth } from '../middleware/auth';
 import { requireAdmin } from '../middleware/admin';
-import { checkResourceAccess, meetsAccessLevel, requirePermission, isWorkspaceAdmin } from '../middleware/permissions';
+import { checkResourceAccess, meetsAccessLevel, isWorkspaceAdmin } from '../middleware/permissions';
 import { supabaseAdmin } from '../supabase';
 import { findFirstUrl, unfurl } from '../services/unfurl';
 import { isSupportChannel, isSupportAgent, userOwnsSupportTicketRoot } from '../utils/supportAccess';
+import { canActorDm, isDmParticipant, loadDmActor, otherDmParticipantIds } from '../utils/dmAccess';
 import { deleteR2Object } from '../r2';
 import { config } from '../config';
 
@@ -79,6 +80,11 @@ router.get('/', requireAuth, async (req: Request, res: Response) => {
           res.status(403).json({ success: false, error: 'Use the Support tab to view your tickets' });
           return;
         }
+      }
+    } else if (dmConversationId) {
+      if (!(await isDmParticipant(req.userId!, dmConversationId))) {
+        res.status(403).json({ success: false, error: 'You do not have access to this conversation' });
+        return;
       }
     }
 
@@ -167,7 +173,7 @@ router.get('/', requireAuth, async (req: Request, res: Response) => {
   }
 });
 
-// POST /messages — send a message (commenter+ on channel, or can_send_dms for DMs)
+// POST /messages — send a message (commenter+ on channel, or pairing rule for DMs)
 router.post('/', requireAuth, async (req: Request, res: Response) => {
   try {
     const body = sendMessageSchema.parse(req.body);
@@ -178,6 +184,33 @@ router.post('/', requireAuth, async (req: Request, res: Response) => {
       if (!userLevel || !meetsAccessLevel(userLevel, 'commenter')) {
         res.status(403).json({ success: false, error: 'Commenter access required to send messages' });
         return;
+      }
+    } else if (body.dm_conversation_id) {
+      if (!(await isDmParticipant(req.userId!, body.dm_conversation_id))) {
+        res.status(403).json({ success: false, error: 'You do not have access to this conversation' });
+        return;
+      }
+      const { data: conv } = await supabaseAdmin
+        .from('dm_conversations')
+        .select('workspace_id')
+        .eq('id', body.dm_conversation_id)
+        .maybeSingle();
+      if (!conv?.workspace_id) {
+        res.status(404).json({ success: false, error: 'Conversation not found' });
+        return;
+      }
+      const actor = await loadDmActor(req.userId!, conv.workspace_id as string);
+      if (!actor) {
+        res.status(403).json({ success: false, error: 'You cannot send direct messages' });
+        return;
+      }
+      const others = await otherDmParticipantIds(body.dm_conversation_id, req.userId!);
+      for (const otherId of others) {
+        const verdict = await canActorDm(actor, otherId);
+        if (!verdict.ok) {
+          res.status(403).json({ success: false, error: verdict.reason });
+          return;
+        }
       }
     }
 

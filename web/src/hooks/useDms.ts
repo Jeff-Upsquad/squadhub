@@ -32,6 +32,30 @@ export function useDms(workspaceId: string | null) {
   });
 }
 
+export interface DmContact {
+  id: string;
+  display_name: string;
+  avatar_url: string | null;
+  user_type?: string;
+  role?: { name: string; color?: string | null } | null;
+}
+
+// People the current user is allowed to start a DM with.
+export function useDmContacts(workspaceId: string | null, query: string) {
+  const q = query.trim();
+  return useQuery({
+    queryKey: ['dm-contacts', workspaceId, q],
+    queryFn: async () => {
+      const r = await api.get('/dms/contacts', {
+        params: { workspace_id: workspaceId, q, limit: q ? 20 : 50 },
+      });
+      return (r.data?.data || []) as DmContact[];
+    },
+    enabled: !!workspaceId,
+    staleTime: 15_000,
+  });
+}
+
 // Create or find an existing DM. `participant_ids` should NOT include self.
 export function useCreateDm(workspaceId: string | null) {
   const qc = useQueryClient();

@@ -1,18 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { useQuery } from '@tanstack/react-query';
-import api from '../../../services/api';
+import { AxiosError } from 'axios';
 import { useAuthStore } from '../../../stores/authStore';
-import { useCreateDm } from '../../../hooks/useDms';
+import { useCreateDm, useDmContacts, type DmContact } from '../../../hooks/useDms';
 import { useWorkspaceStore } from '../../../stores/workspaceStore';
 
-interface UserPick {
-  id: string;
-  display_name: string;
-  avatar_url: string | null;
-  user_type?: string;
-  role?: { name: string; color?: string | null } | null;
-}
+type UserPick = DmContact;
 
 interface Props {
   workspaceId: string;
@@ -33,15 +26,7 @@ export default function NewDmModal({ workspaceId, onClose }: Props) {
     inputRef.current?.focus();
   }, []);
 
-  const { data: results = [] } = useQuery({
-    queryKey: ['user-search', query],
-    queryFn: async () => {
-      if (!query.trim()) return [] as UserPick[];
-      const r = await api.get('/users/search', { params: { q: query, limit: 8, workspace_id: workspaceId } });
-      return (r.data?.data || []) as UserPick[];
-    },
-    enabled: query.trim().length > 0,
-  });
+  const { data: results = [], isFetching } = useDmContacts(workspaceId, query);
 
   const filtered = results.filter(
     (u) => u.id !== me?.id && !picked.some((p) => p.id === u.id),
@@ -66,7 +51,11 @@ export default function NewDmModal({ workspaceId, onClose }: Props) {
       onClose();
     } catch (err) {
       console.error('Create DM failed:', err);
-      alert('Could not start DM. You may not have permission to send DMs.');
+      const msg =
+        err instanceof AxiosError && typeof err.response?.data?.error === 'string'
+          ? err.response.data.error
+          : 'Could not start this chat. You can only message people you share a space or channel with.';
+      alert(msg);
     } finally {
       setCreating(false);
     }
@@ -129,7 +118,7 @@ export default function NewDmModal({ workspaceId, onClose }: Props) {
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={handleBackspace}
-              placeholder={picked.length === 0 ? 'Search by name…' : ''}
+              placeholder={picked.length === 0 ? 'Search people you share work with…' : ''}
               className="flex-1 min-w-[80px] bg-transparent text-[14px] text-foreground outline-none"
               disabled={picked.length >= 7}
             />
@@ -141,8 +130,10 @@ export default function NewDmModal({ workspaceId, onClose }: Props) {
 
         {/* Results */}
         <div className="max-h-[280px] min-h-[80px] overflow-y-auto border-t border-divider">
-          {query && filtered.length === 0 && (
-            <p className="px-5 py-6 text-center text-[13px] text-foreground-muted">No matches for &ldquo;{query}&rdquo;</p>
+          {query && filtered.length === 0 && !isFetching && (
+            <p className="px-5 py-6 text-center text-[13px] text-foreground-muted">
+              No one you can message matches &ldquo;{query}&rdquo;
+            </p>
           )}
           {filtered.map((u) => (
             <button
@@ -172,8 +163,10 @@ export default function NewDmModal({ workspaceId, onClose }: Props) {
               </span>
             </button>
           ))}
-          {!query && picked.length === 0 && (
-            <p className="px-5 py-6 text-center text-[13px] text-foreground-muted">Start typing to find someone in your workspace.</p>
+          {!query && picked.length === 0 && filtered.length === 0 && !isFetching && (
+            <p className="px-5 py-6 text-center text-[13px] text-foreground-muted">
+              No one you can message yet. You can only DM people you share a space or channel with.
+            </p>
           )}
         </div>
 
