@@ -23,7 +23,9 @@ Push the current `main` to `origin` and deploy it to production. Assumes the cha
   git status --short          # expect: empty
   ```
   If there are uncommitted changes, run **CM** first ([cm.md](cm.md)) — PD does not commit.
-- If there are new DB migrations in `supabase/migrations/`, run them in the Supabase SQL Editor **before** deploying.
+- If there are new DB migrations in `supabase/migrations/`, apply them **before** deploying. Two ways:
+  - **Supabase CLI** (works headless — the machine is logged in): stage the migration as a timestamped file (`YYYYMMDDHHMMSS_name.sql`) in `supabase/migrations/`, then `supabase db push --dry-run` → confirm it lists ONLY your file → `supabase db push`. Gotcha: prod history uses timestamped versions while most repo files use the `NNN_` convention, so a plain push fails the history check or worse, replays old files. If the dry-run lists more than your file, stash the `NNN_` files, add empty placeholder files named after each remote version (`supabase migration list` → JSON), re-dry-run until exactly yours remains, push, then restore everything.
+  - **SQL Editor paste** (dashboard) — fallback when the CLI isn't available.
 
 ### 1. Push
 ```bash
