@@ -129,11 +129,23 @@ export default function TodayList() {
 
   // Split the focus list into the main list plus the manual Evening / Night
   // triage buckets that render as their own sections below it. Tasks already in
-  // the "In progress today" section are excluded here to avoid duplicates.
-  const focusTasks = useMemo(() => tasks.filter((t) => !inProgressIds.has(t.id)), [tasks, inProgressIds]);
+  // the "In progress today" section are excluded here to avoid duplicates,
+  // UNLESS they have been assigned a bucket (Evening/Night) — those flow into
+  // their bucket section instead.
+  const focusTasks = useMemo(() => tasks.filter((t) => {
+    if (!inProgressIds.has(t.id)) return true;
+    return !!effectiveFocusBucket(t, focusBuckets, recurringFocusBuckets);
+  }), [tasks, inProgressIds, focusBuckets, recurringFocusBuckets]);
   const mainTasks = useMemo(() => focusTasks.filter((t) => !effectiveFocusBucket(t, focusBuckets, recurringFocusBuckets)), [focusTasks, focusBuckets, recurringFocusBuckets]);
   const eveningTasks = useMemo(() => focusTasks.filter((t) => effectiveFocusBucket(t, focusBuckets, recurringFocusBuckets) === 'evening'), [focusTasks, focusBuckets, recurringFocusBuckets]);
   const nightTasks = useMemo(() => focusTasks.filter((t) => effectiveFocusBucket(t, focusBuckets, recurringFocusBuckets) === 'night'), [focusTasks, focusBuckets, recurringFocusBuckets]);
+
+  // In-progress tasks that have NOT been assigned a bucket — these stay in the
+  // "In progress today" card. Those with a bucket flow into Evening/Night below.
+  const unbucketedInProgress = useMemo(
+    () => inProgressTasks.filter((t) => !effectiveFocusBucket(t, focusBuckets, recurringFocusBuckets)),
+    [inProgressTasks, focusBuckets, recurringFocusBuckets],
+  );
 
   const groupBy = usePMStore((s) => s.todayListGroupBy);
   const setTodayListGroupBy = usePMStore((s) => s.setTodayListGroupBy);
@@ -270,12 +282,12 @@ export default function TodayList() {
 
   return (
     <>
-    {view === 'list' && !isLoading && !isError && inProgressTasks.length > 0 && (
+    {view === 'list' && !isLoading && !isError && inProgressTasks.length > 0 && unbucketedInProgress.length > 0 && (
       <div className="hm-card hm-inprogress-card">
         <div className="hm-card-head">
           <span className="hm-live-dot" aria-hidden="true" />
           <h3>In progress today</h3>
-          <span className="hm-count">· {inProgressTasks.length}</span>
+          <span className="hm-count">· {unbucketedInProgress.length}</span>
           <span className="hm-tracked-total" title="Total time tracked today">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" />
@@ -284,7 +296,7 @@ export default function TodayList() {
           </span>
         </div>
         <div className="hm-list">
-          {inProgressTasks.map((t) => (
+          {unbucketedInProgress.map((t) => (
             <TodayRow key={t.id} task={t} onOpen={openTask} secondsToday={secondsTodayByTask.get(t.id) || 0} />
           ))}
         </div>
