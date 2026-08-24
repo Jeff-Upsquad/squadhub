@@ -417,6 +417,21 @@ export default function ChatPanel({
     }
   }, [messages]);
 
+  // A page can render shorter than the viewport (e.g. a DM whose newest 50
+  // rows are mostly hidden thread replies), leaving the message container with
+  // no overflow. Then it can't scroll, onScroll never fires, and scroll-up
+  // pagination is unreachable — the user sees a handful of messages with no
+  // way to load more. Keep pulling older pages until the container actually
+  // overflows (so scrolling — and scroll-up loading — can engage) or history
+  // runs out. Runs per loaded page via the `messages` dep.
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el || !hasNextPage || isFetchingNextPage) return;
+    if (el.scrollHeight - el.clientHeight <= 40) {
+      fetchNextPage();
+    }
+  }, [messages, hasNextPage, isFetchingNextPage, fetchNextPage]);
+
   // Pull older messages when the user scrolls near the top of the history.
   const handleScroll = useCallback(() => {
     const el = scrollRef.current;

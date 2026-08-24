@@ -137,13 +137,18 @@ router.get('/', async (req: Request, res: Response) => {
     }
   }
 
-  const messages = (data || []).reverse().map((m: any) => ({
+  // `data` comes back newest-first (created_at desc). Derive the pagination
+  // cursor from the OLDEST row — its last element — BEFORE reversing, because
+  // reverse() mutates in place and would otherwise flip which end is the
+  // oldest (which made scroll-back re-fetch the newest page forever).
+  const rows = data || [];
+  const nextCursor = rows.length ? rows[rows.length - 1].created_at : null;
+  const messages = [...rows].reverse().map((m: any) => ({
     ...m,
     receipts: receiptMap.get(m.id) || [],
   }));
-  const nextCursor = data && data.length > 0 ? data[data.length - 1].created_at : null;
 
-  res.json({ success: true, data: messages, cursor: nextCursor, has_more: data?.length === limit });
+  res.json({ success: true, data: messages, cursor: nextCursor, has_more: rows.length === limit });
 });
 
 // -------------------------------------------------------------
