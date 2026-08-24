@@ -46,6 +46,7 @@ import {
 } from '../../../hooks/useWorkBlocks';
 import { useParallelTimers } from '../../../hooks/useParallelTimers';
 import { useLearningStore } from '../../../stores/learningStore';
+import { useIsMobile } from '../../../hooks/useIsMobile';
 
 function parseTimeInput(input: string): number | null {
   const trimmed = input.trim().toLowerCase();
@@ -337,6 +338,7 @@ export default function TaskDetailPanel({
   const deleteTask = useDeleteTask(listId);
   const workspaceId = useWorkspaceStore((s) => s.currentWorkspace?.id);
   const currentUser = useAuthStore((s) => s.user);
+  const isMobile = useIsMobile();
   const { data: timeStats } = useTimeStats({ workspaceId, context: 'default' });
   const canEditTimeLogs = timeStats?.data?.time_log_edit?.can_edit === true;
   const createTask = useCreateTask(listId);
@@ -821,6 +823,9 @@ export default function TaskDetailPanel({
   const attachmentCount = nonAudioAttachments.length;
   const subtasks = task?.subtasks || [];
   const subtaskDone = subtasks.filter((s: any) => s.status === 'done' || s.status === 'closed').length;
+  const checklistItems = (checklists || []).flatMap((c) => c.items || []);
+  const progressTotal = subtasks.length + checklistItems.length;
+  const progressDone = subtaskDone + checklistItems.filter((i) => i.is_done).length;
 
   // Real change history from the server (field changes, assignees, labels,
   // comments, attachments, move, creation…), already merged + sorted newest-first.
@@ -848,6 +853,7 @@ export default function TaskDetailPanel({
         {...(canEdit && task ? panelHandlers : {})}
         className="td-panel td-panel-luma apple td-shell absolute flex flex-col"
         data-peek={isPeek ? 'true' : undefined}
+        data-mobile={isMobile ? 'true' : undefined}
         style={{
           background: 'var(--surface)',
           // Peek slides in from the LEFT; primary slides in from the right.
@@ -873,6 +879,101 @@ export default function TaskDetailPanel({
             </div>
           </div>
         )}
+        {isMobile && task && (
+          <div className="td-m-hero">
+            <div className="td-m-hero-nav">
+              <button type="button" className="td-m-hero-icon" aria-label="Back" onClick={() => setActiveTask(null)}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6" /></svg>
+              </button>
+              <span style={{ flex: 1 }} />
+              <button
+                type="button"
+                className="td-m-hero-icon"
+                data-on={isFocused ? 'true' : undefined}
+                aria-label={isFocused ? 'Unstar' : 'Star'}
+                onClick={() => focusTask.mutate({ id: task.id, focused: !isFocused })}
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill={isFocused ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="1.8"><path d="M12 2.8l2.7 5.5 6.1.9-4.4 4.3 1 6.1L12 16.8 6.6 19.6l1-6.1L3.2 9.2l6.1-.9z" /></svg>
+              </button>
+              <button type="button" className="td-m-hero-icon" aria-label="Copy link" onClick={handleCopyLink}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71" /><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71" /></svg>
+              </button>
+              <div className="relative">
+                <button type="button" className="td-m-hero-icon" aria-label="More" onClick={() => setMoreMenuOpen((v) => !v)}>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.6" /><circle cx="12" cy="12" r="1.6" /><circle cx="19" cy="12" r="1.6" /></svg>
+                </button>
+                {moreMenuOpen && (
+                  <>
+                    <div className="fixed inset-0 z-10" onClick={() => setMoreMenuOpen(false)} />
+                    <div className="absolute right-0 top-full z-20 mt-1 w-44 overflow-hidden rounded-lg border shadow-lg" style={{ borderColor: 'var(--sh-hair)', background: 'var(--surface)' }}>
+                      {canEdit && workspaceId && (
+                        <button onClick={() => { setMoreMenuOpen(false); setMovePickerOpen(true); }} className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm" style={{ color: 'var(--sh-ink)' }}>Move to another list</button>
+                      )}
+                      {canEdit && workspaceId && (
+                        <button onClick={() => { setMoreMenuOpen(false); setAddPickerOpen(true); }} className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm" style={{ color: 'var(--sh-ink)' }}>Add to list</button>
+                      )}
+                      {canEdit && (
+                        <button onClick={() => { handleDelete(); setMoreMenuOpen(false); }} className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm" style={{ color: 'oklch(0.55 0.18 25)' }}>Delete task</button>
+                      )}
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+            <div className="td-m-hero-title">
+              <button
+                type="button"
+                onClick={handleToggleDone}
+                disabled={!canEdit}
+                className="td-checkbox-lg td-m-hero-check"
+                data-done={(isDone || mainCelebrating) ? 'true' : 'false'}
+                aria-label={isDone ? 'Mark incomplete' : 'Mark complete'}
+              />
+              <div className="td-m-hero-copy">
+                <h1 className={isDone ? 'is-done' : undefined}>{task.title}</h1>
+                {(spaceName || listName) && (
+                  <p>{[spaceName, folderName, listName].filter(Boolean).join(' › ')}</p>
+                )}
+              </div>
+              {progressTotal > 0 && (
+                <span className="td-m-ring" aria-label={`${progressDone} of ${progressTotal}`}>
+                  <svg viewBox="0 0 46 46" aria-hidden>
+                    <circle cx="23" cy="23" r="18" fill="none" stroke="rgba(255,255,255,0.22)" strokeWidth="3.5" />
+                    <circle
+                      cx="23" cy="23" r="18" fill="none" stroke="#fff" strokeWidth="3.5" strokeLinecap="round"
+                      strokeDasharray={2 * Math.PI * 18}
+                      strokeDashoffset={2 * Math.PI * 18 * (1 - progressDone / progressTotal)}
+                      transform="rotate(-90 23 23)"
+                    />
+                  </svg>
+                  <b>{progressDone}/{progressTotal}</b>
+                </span>
+              )}
+            </div>
+            <div className="td-m-hero-cmds">
+              {canEdit && (
+                isAnyRunningForThisTask ? (
+                  <button type="button" className="td-m-cmd is-running" onClick={handleStopTimer}>
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="1" /></svg>
+                    {formatSeconds(isWorkBlockRunForThisTask ? timerElapsed : (task.time_tracked || 0) + timerElapsed)}
+                  </button>
+                ) : (
+                  <button type="button" className="td-m-cmd" onClick={handleStartTimer}>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z" /></svg>
+                    Start timer
+                  </button>
+                )
+              )}
+              {canEdit && (
+                <button type="button" className={`td-m-cmd td-m-cmd-complete${isDone ? ' is-done' : ''}`} onClick={handleToggleDone}>
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="m5 12.5 4.5 4.5L19 7" /></svg>
+                  {isDone ? 'Completed' : 'Complete'}
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* Top bar — task code chip + breadcrumb + actions */}
         <div className="td-head td-head-luma flex items-center gap-2 shrink-0">
           <button
@@ -1142,7 +1243,7 @@ export default function TaskDetailPanel({
               )}
 
               {/* Title row */}
-              <div className="flex items-start gap-3" style={{ marginBottom: 14 }}>
+              <div className="td-title-row flex items-start gap-3" style={{ marginBottom: 14 }}>
                 <button
                   type="button"
                   onClick={handleToggleDone}

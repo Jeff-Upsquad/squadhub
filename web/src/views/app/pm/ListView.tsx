@@ -5,6 +5,7 @@ import { usePMStore, type ListGroupBy } from '../../../stores/pmStore';
 import { useAuthStore } from '../../../stores/authStore';
 import { groupTasks as groupTasksGeneric, partitionByCompletion, sortTasks, buildFocusTodayGroup, isTaskFocused, type SortBy } from '../../../lib/taskGrouping';
 import { filterTasks, countActiveFilters, EMPTY_FILTER, type TaskFilterState } from '../../../lib/filters';
+import { useIsMobile } from '../../../hooks/useIsMobile';
 import TaskGroupCard from './TaskGroupCard';
 
 export default function ListView({
@@ -37,6 +38,7 @@ export default function ListView({
   const { selectedTasks, clearSelection, fadingTaskIds } = usePMStore();
   const currentUserId = useAuthStore((s) => s.user?.id);
   const tz = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone, []);
+  const isMobile = useIsMobile();
 
   const filteredTasks = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
@@ -68,9 +70,9 @@ export default function ListView({
   );
 
   const focusGroup = useMemo(() => {
-    if (focusToday) return null;
+    if (isMobile || focusToday) return null;
     return buildFocusTodayGroup(openTasks, sortBy);
-  }, [openTasks, focusToday, sortBy]);
+  }, [openTasks, focusToday, sortBy, isMobile]);
 
   const statusGroups = useMemo(() => {
     if (groupBy !== 'status') return null;

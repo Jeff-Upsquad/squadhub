@@ -202,7 +202,9 @@ export default function MobileShell({
     if (t.kind === 'view') {
       setActiveSection('home');
       setHomeView(t.view);
-      openSection(t.title);
+      // My Tasks / Check-in / Meetings paint the app's own large header.
+      const bare = t.view === 'my-tasks' || t.view === 'checkin' || t.view === 'meetings';
+      openSection(t.title, null, bare);
       return;
     }
     if (t.kind === 'section') {

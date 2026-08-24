@@ -821,52 +821,9 @@
  * These selectors carry `!important` and sit after globals.css because the
  * desktop card-row rule is itself `!important`.
  */
-.msh-pane .lv-card-canvas { padding: 10px; }
-.msh-pane .lv-card { border-radius: var(--m-r-sm); margin-bottom: 10px; }
-
-/* Column labels describe columns that no longer exist here. */
-.msh-pane .lv-card-head {
-  display: flex !important;
-  align-items: center;
-  padding: 0 12px !important;
-}
-.msh-pane .lv-card-head .gh-col { display: none !important; }
-.msh-pane .lv-card-head .gh-left { flex: 1 1 auto; padding-right: 8px; }
+.msh-pane .lv-card-canvas { padding: 8px 0 24px; }
 .msh-pane .lv-header { display: none !important; }
-
-.msh-pane .lv-card .lv-row,
-.msh-pane .lv-canvas .lv-card .lv-row,
-.msh-pane .lv-card .lv-card-body .lv-row,
-.msh-pane .lv-row {
-  display: flex !important;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 4px 8px !important;
-  padding: 10px 12px !important;
-  min-height: 0;
-}
-/* The title claims the rest of line 1, so every meta cell wraps below it.
-   The basis leaves room for the two order:0 items that share that line —
-   the completion checkbox and the row's overflow "…" button. */
-.msh-pane .lv-row > div.min-w-0 {
-  flex: 1 0 calc(100% - 60px);
-  min-width: 0;
-  order: 1;
-}
-.msh-pane .lv-row > .lv-glyph { order: 0; }
-.msh-pane .lv-row > .lv-cell--more { order: 2; }
-.msh-pane .lv-row > .lv-cell {
-  order: 2;
-  flex: 0 0 auto;
-  padding: 2px 6px;
-  font-size: 11.5px;
-}
-/* Indent the meta line to sit under the title, not the checkbox. */
-.msh-pane .lv-row > .lv-cell:nth-of-type(1) { margin-left: 24px; }
-/* Empty cells are placeholders for column alignment — pure noise once the
-   columns are gone. */
-.msh-pane .lv-row > .lv-cell[data-empty="true"] { display: none; }
-.msh-pane .lv-title { font-size: 14px; }
+.msh-pane .lv-card-head .gh-col { display: none !important; }
 .msh-pane .lv-row[data-depth="1"] { padding-left: 26px !important; }
 .msh-pane .lv-row[data-depth="2"] { padding-left: 40px !important; }
 .msh-pane .lv-row[data-depth="3"] { padding-left: 54px !important; }
@@ -951,13 +908,26 @@
 .msh-pane .mtk-private-head { display: none; }
 
 /* The phone header, ported from TasksScreen.kt: large bold title over an
-   "N open · your work" line. The shell's app bar runs back-only here. */
-.mtk-phone-head { padding: 10px 20px 8px; flex-shrink: 0; }
+   "N open · your work" line. Back sits in the same row as the title, like
+   the native screen — the shell's app bar overlays as a back-only control. */
+.msh-sheet:has(.mtk-phone-head) .msh-appbar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 3;
+  background: transparent;
+  border-bottom: none;
+  pointer-events: none;
+}
+.msh-sheet:has(.mtk-phone-head) .msh-appbar-btn { pointer-events: auto; }
+.mtk-phone-head { padding: 14px 20px 8px 52px; flex-shrink: 0; }
 .mtk-phone-head h1 {
   margin: 0;
   font-size: 26px;
   font-weight: 700;
   letter-spacing: -0.5px;
+  line-height: 1.15;
   color: var(--m-ink);
 }
 .mtk-phone-head p {
@@ -965,6 +935,109 @@
   font-size: 13px;
   color: var(--m-ink-3);
 }
+
+/* My Tasks (TasksScreen.kt) — assigned work, not the personal list. */
+.mmt {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  background: var(--m-surface);
+}
+.mmt-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 4px 0 40px;
+}
+.mmt-sec-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 16px 20px 7px;
+}
+.mmt-sec-head b {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  color: var(--m-ink-3);
+}
+.mmt-sec-head span {
+  display: inline-flex;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--m-hair-3);
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--m-ink-3);
+}
+.mmt-sec-head[data-overdue] b,
+.mmt-sec-head[data-overdue] span { color: var(--m-overdue-fg); }
+.mmt-sec-head[data-overdue] span { background: var(--m-overdue-bg); }
+.mmt-card {
+  margin: 0 16px 8px;
+  border: 1px solid var(--m-hair);
+  border-radius: 14px;
+  overflow: hidden;
+  background: var(--m-surface);
+}
+.mmt-card[data-overdue] { background: color-mix(in srgb, var(--m-overdue-bg) 35%, var(--m-surface)); }
+.mmt-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 12px 14px;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+.mmt-row + .mmt-row { border-top: 0.5px solid var(--m-hair-3); }
+.mmt-row[data-done] b { color: var(--m-ink-4); text-decoration: line-through; }
+.mmt-check {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 7px;
+  border: 1.6px solid var(--m-ink-4);
+  background: transparent;
+}
+.mmt-check[data-p='urgent'],
+.mmt-check[data-p='emergency'] { border-color: #ef4444; }
+.mmt-check[data-p='high'] { border-color: #f59e0b; }
+.mmt-check[data-done] {
+  background: var(--m-ink);
+  border-color: var(--m-ink);
+  box-shadow: inset 0 0 0 2px var(--m-surface);
+}
+.mmt-row-body { flex: 1 1 auto; min-width: 0; }
+.mmt-row-body b {
+  display: block;
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--m-ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mmt-date {
+  flex: none;
+  font-size: 12px;
+  color: var(--m-ink-3);
+  white-space: nowrap;
+}
+.mmt-date[data-overdue] { color: var(--m-overdue-fg); font-weight: 600; }
+.mmt-flag {
+  flex: none;
+  width: 10px;
+  height: 12px;
+  clip-path: polygon(0 0, 100% 0, 100% 100%, 50% 75%, 0 100%);
+  background: #f59e0b;
+}
+.mmt-flag[data-p='urgent'],
+.mmt-flag[data-p='emergency'] { background: #ef4444; }
 
 /* Chat — a thread opens as its own full-screen layer above the
    conversation. The pane's wrapper is position:relative, so anchoring is
@@ -1198,8 +1271,8 @@
   gap: 8px;
   overflow-x: auto;
   scrollbar-width: none;
-  padding: 4px 20px 10px;
-  border-bottom: 1px solid var(--m-hair-3);
+  padding: 4px 20px 12px;
+  border-bottom: none;
 }
 .lv-scope-row::-webkit-scrollbar { display: none; }
 .lv-scope-chip {
@@ -1229,8 +1302,271 @@
 }
 .lv-scope-chip[data-on='true'] .n { color: color-mix(in srgb, var(--m-surface) 80%, transparent); }
 
-.msh-pane .lv-card { border-radius: 14px; }
-.msh-pane .lv-title { font-size: 15px; }
+.msh-pane .lv-card {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  margin: 0 0 4px;
+  border-radius: 0;
+}
+.msh-pane .lv-card-head {
+  display: flex !important;
+  align-items: center;
+  gap: 8px;
+  width: auto;
+  margin: 0 4px;
+  padding: 16px 16px 7px !important;
+  background: transparent !important;
+  border: none !important;
+}
+.msh-pane .lv-card-head .gh-left { flex: 1 1 auto; min-width: 0; gap: 8px; }
+.msh-pane .lv-card-head .gh-title {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  color: var(--m-ink-3);
+}
+.msh-pane .lv-card-head .lv-fraction {
+  display: inline-flex;
+  align-items: center;
+  min-width: 18px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--m-hair-3);
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--m-ink-3);
+}
+.msh-pane .lv-card-head .lv-progress,
+.msh-pane .lv-card-head .gh-chevron,
+.msh-pane .lv-card-head .lv-glyph-dot { display: none; }
+.msh-pane .lv-card-body {
+  margin: 0 16px 8px;
+  border: 1px solid var(--m-hair);
+  border-radius: 14px;
+  overflow: hidden;
+  background: var(--m-surface);
+}
+.msh-pane .lv-title { font-size: 15px; font-weight: 500; white-space: normal; }
+.msh-pane .lv-row {
+  display: flex !important;
+  flex-wrap: nowrap !important;
+  align-items: center !important;
+  gap: 12px !important;
+  padding: 12px 14px !important;
+  min-height: 0;
+}
+.msh-pane .lv-row + .lv-row {
+  border-top: 0.5px solid var(--m-hair-3);
+}
+.msh-pane .lv-row > .lv-glyph { order: 0; flex: none; }
+.msh-pane .lv-row > div.min-w-0 {
+  order: 1;
+  flex: 1 1 auto;
+  min-width: 0;
+  margin-left: 0 !important;
+}
+.msh-pane .lv-cell--assignee { order: 2; flex: none; padding: 0 !important; }
+.msh-pane .lv-cell--date { order: 3; flex: none; padding: 0 !important; }
+.msh-pane .lv-cell--priority { order: 4; flex: none; padding: 0 !important; }
+.msh-pane .lv-cell--more,
+.msh-pane .lv-focus-star,
+.msh-pane .lv-date-today-btn,
+.msh-pane .lv-pri-label,
+.msh-pane .lv-cell[data-empty="true"],
+.msh-pane .lv-add { display: none !important; }
+.msh-pane .lv-cell--date .lv-cell-value {
+  font-size: 12px;
+  color: var(--m-ink-3);
+  white-space: nowrap;
+}
+.msh-pane .lv-ava { width: 22px; height: 22px; font-size: 10px; }
+
+/* ── Task detail — TaskDetailScreen.kt hero + soft cards ─────────────── */
+@media (max-width: 767px) {
+  .td-panel-luma.apple.td-shell[data-mobile='true'] {
+    background: var(--m-surface) !important;
+  }
+  .td-panel-luma.apple.td-shell[data-mobile='true'] .td-head-luma { display: none !important; }
+  .td-panel-luma.apple.td-shell[data-mobile='true'] .td-title-row { display: none !important; }
+  .td-panel-luma.apple.td-shell[data-mobile='true'] .td-scroll {
+    padding: 8px 10px 28px !important;
+  }
+  .td-panel-luma.apple.td-shell[data-mobile='true'] .td-also { display: none; }
+  .td-panel-luma.apple.td-shell[data-mobile='true'] .td-date-today-btn { display: none; }
+  .td-panel-luma.apple.td-shell[data-mobile='true'] .td-details-head { display: none; }
+
+  .td-m-hero {
+    flex: none;
+    margin: calc(var(--m-safe-top, 0px) + 6px) 10px 12px;
+    padding: 8px 14px 14px;
+    border-radius: 26px;
+    background: linear-gradient(180deg, #101014, #2a2b33);
+    color: #fff;
+  }
+  .td-m-hero-nav {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+  }
+  .td-m-hero-icon {
+    display: grid;
+    place-items: center;
+    width: 36px;
+    height: 36px;
+    padding: 0;
+    border: 0;
+    border-radius: 10px;
+    background: transparent;
+    color: rgba(255, 255, 255, 0.72);
+    cursor: pointer;
+  }
+  .td-m-hero-icon[data-on='true'] { color: #f59e0b; }
+  .td-m-hero-title {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    margin-top: 6px;
+  }
+  .td-m-hero-check {
+    margin-top: 4px;
+    border-color: rgba(255, 255, 255, 0.6) !important;
+  }
+  .td-m-hero-copy { flex: 1 1 auto; min-width: 0; }
+  .td-m-hero-copy h1 {
+    margin: 0;
+    font-size: 24px;
+    font-weight: 700;
+    line-height: 1.25;
+    letter-spacing: -0.4px;
+    color: #fff;
+  }
+  .td-m-hero-copy h1.is-done {
+    text-decoration: line-through;
+    color: rgba(255, 255, 255, 0.72);
+  }
+  .td-m-hero-copy p {
+    margin: 4px 0 0;
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.72);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .td-m-ring {
+    position: relative;
+    flex: none;
+    width: 46px;
+    height: 46px;
+  }
+  .td-m-ring svg { width: 46px; height: 46px; }
+  .td-m-ring b {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    font-size: 10px;
+    font-weight: 700;
+    color: #fff;
+  }
+  .td-m-hero-cmds {
+    display: flex;
+    gap: 10px;
+    margin-top: 16px;
+  }
+  .td-m-cmd {
+    flex: 1 1 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    height: 46px;
+    border: 0;
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.14);
+    color: #fff;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .td-m-cmd.is-running {
+    background: #fff;
+    color: #16171b;
+  }
+  .td-m-cmd-complete {
+    background: #fff;
+    color: #16171b;
+    font-weight: 700;
+  }
+  .td-m-cmd-complete.is-done {
+    background: #2bac76;
+    color: #fff;
+  }
+
+  .td-panel-luma.apple.td-shell[data-mobile='true'] .td-desc-box,
+  .td-panel-luma.apple.td-shell[data-mobile='true'] .td-assignee-bar,
+  .td-panel-luma.apple.td-shell[data-mobile='true'] .td-settings-card {
+    border: none !important;
+    border-radius: 18px !important;
+    background: var(--m-surface-alt) !important;
+    box-shadow: none !important;
+    padding: 14px !important;
+    margin-bottom: 12px !important;
+  }
+  .td-panel-luma.apple.td-shell[data-mobile='true'] .td-settings-card[data-twocol='true'] {
+    padding: 0 !important;
+    margin: 0 !important;
+    background: transparent !important;
+  }
+  .td-panel-luma.apple.td-shell[data-mobile='true'] .td-desc-box-label,
+  .td-panel-luma.apple.td-shell[data-mobile='true'] .td-assignee-bar .label {
+    display: block;
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--m-ink);
+    margin-bottom: 8px;
+  }
+  .td-panel-luma.apple.td-shell[data-mobile='true'] .td-assignee-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+  }
+  .td-panel-luma.apple.td-shell[data-mobile='true'] .td-assignee-bar .label { flex: 1 1 100%; margin-bottom: 4px; }
+  .td-panel-luma.apple.td-shell[data-mobile='true'] .td-assignee-bar .reassign {
+    margin-left: auto;
+    border: 0.5px solid var(--m-hair-2);
+    border-radius: 999px;
+    padding: 5px 10px;
+    background: transparent;
+    font-size: 11px;
+    font-weight: 600;
+  }
+  .td-panel-luma.apple.td-shell[data-mobile='true'] .td-comment-box {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 8px 0 0;
+    padding: 0 4px 0 16px;
+    border: 1px solid var(--m-hair);
+    border-radius: 999px;
+    background: var(--m-surface);
+    min-height: 44px;
+  }
+  .td-panel-luma.apple.td-shell[data-mobile='true'] .td-settings-row .k {
+    display: block;
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--m-ink-3);
+  }
+  .td-panel-luma.apple.td-shell[data-mobile='true'] .td-settings-row .k svg { display: none; }
+  .td-panel-luma.apple.td-shell[data-mobile='true'] .td-settings-row .v {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--m-ink);
+  }
+}
 
 /* Stacked tap-row lists (meeting rows etc.) become the app's flat rows:
    no per-row borders, just a hairline between neighbours. */
