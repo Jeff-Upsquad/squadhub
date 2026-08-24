@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import api from '../../services/api';
 import { usePMStore } from '../../stores/pmStore';
@@ -6,11 +6,9 @@ import { useWorkspaceStore, type ChatKind } from '../../stores/workspaceStore';
 import type { HomeView } from '../../layouts/MainLayout';
 import InboxTaskDetail from './inbox/InboxTaskDetail';
 import InboxMessageDetail from './inbox/InboxMessageDetail';
-import ViewSearchInput from '../../components/pm/ViewSearchInput';
 import DesktopNotificationsBanner from '../../components/DesktopNotificationsBanner';
 import InstallPwaPrompt from '../../components/InstallPwaPrompt';
 import { useIsMobile } from '../../hooks/useIsMobile';
-import { formatDateHeader, toLocalDateKey } from '../../lib/formatDuration';
 
 export type Notification = {
   id: string;
@@ -38,12 +36,20 @@ export type Notification = {
   actor: { id: string; display_name: string; email: string; avatar_url: string | null } | null;
 };
 
-type Filter = 'all' | 'unread' | 'mentions';
+type Filter = 'all' | 'mentions' | 'threads' | 'tasks';
 
-const NEEDS_YOU = new Set<Notification['type']>(['task_assigned', 'mention', 'message_mention']);
+// Where to land in chat when opening a message notification: the exact
+// message, plus its thread root when it lives in a thread. ChatPanel scrolls
+// to + flashes top-level targets; thread targets open the thread panel (and
+// ThreadPanel flashes the reply).
+export type ChatJump = { messageId: string; parentId: string | null };
 
 function isMention(t: Notification['type']) {
   return t === 'mention' || t === 'message_mention';
+}
+
+function isThread(n: Notification) {
+  return n.reference_type === 'message' || n.reference_type === 'chat_message' || n.type === 'dm_received';
 }
 
 export function avatarFor(n: Notification): { initials: string; color: string } {
@@ -74,21 +80,99 @@ export function chatTargetFor(n: Notification): { id: string; kind: ChatKind } |
   return null;
 }
 
-function ctxLabel(n: Notification): string {
+// Slack-style context line — what the notification lives in ("Thread in a
+// direct message", "Task"), shown as the row's small header above the actor.
+function ctxLine(n: Notification): string {
+  const chat = chatTargetFor(n);
   switch (n.type) {
-    case 'task_assigned': return 'task';
-    case 'task_completed': return 'task done';
-    case 'task_commented': return 'comment';
-    case 'mention': return 'mention';
-    case 'message_mention': return 'mention';
-    case 'task_updated': return 'task update';
-    case 'task_due_soon': return 'due soon';
-    case 'dm_received': return 'DM';
-    case 'reaction_added': return 'reaction';
-    case 'lms_assigned': return 'learning';
-    case 'lms_updated': return 'learning';
+    case 'dm_received': return 'Thread in a direct message';
+    case 'message_mention': return chat?.kind === 'dm' ? 'Mention in a direct message' : 'Thread in a channel';
+    case 'mention': return 'Mention in a task';
+    case 'task_assigned': return 'Task';
+    case 'task_updated': return 'Task update';
+    case 'task_completed': return 'Task done';
+    case 'task_commented': return 'Task comment';
+    case 'task_due_soon': return 'Due soon';
+    case 'reaction_added': return 'Reaction';
+    case 'lms_assigned': return 'Learning';
+    case 'lms_updated': return 'Learning';
     default: return n.type;
   }
+}
+
+// Small glyph that prefixes the context line, mirroring Slack's per-source
+// icons (chat bubble for threads, @ for mentions, checkbox for tasks…).
+function CtxGlyph({ n }: { n: Notification }) {
+  const chat = isThread(n);
+  const common = {
+    width: 12,
+    height: 12,
+    viewBox: '0 0 24 24',
+    fill: 'none',
+    stroke: 'currentColor',
+    strokeWidth: 1.8,
+    strokeLinecap: 'round' as const,
+    strokeLinejoin: 'round' as const,
+    'aria-hidden': true as const,
+  };
+  if (chat) {
+    return (
+      <svg {...common}>
+        <path d="M21 11.5a8.38 8.38 0 0 1-9 8.36 8.5 8.5 0 0 1-3.4-.7L3 20l.84-5.6A8.38 8.38 0 0 1 12 3.14a8.38 8.38 0 0 1 9 8.36z" />
+      </svg>
+    );
+  }
+  if (n.type === 'mention') {
+    return (
+      <svg {...common}>
+        <circle cx="12" cy="12" r="4" />
+        <path d="M16 8v5a3 3 0 0 0 6 0v-1a10 10 0 1 0-3.92 7.94" />
+      </svg>
+    );
+  }
+  if (n.type === 'reaction_added') {
+    return (
+      <svg {...common}>
+        <circle cx="12" cy="12" r="9" />
+        <path d="M8 14s1.5 2 4 2 4-2 4-2" />
+        <path d="M9 9h.01M15 9h.01" />
+      </svg>
+    );
+  }
+  if (n.type.startsWith('lms')) {
+    return (
+      <svg {...common}>
+        <path d="m4 19 8-4 8 4-8 4z" />
+        <path d="M12 15V5l8 4-8 4" />
+        <path d="m4 9 8-4 8 4" />
+      </svg>
+    );
+  }
+  return (
+    <svg {...common}>
+      <rect x="3" y="3" width="18" height="18" rx="4" />
+      <path d="m8.5 12.5 2.5 2.5 4.5-5" />
+    </svg>
+  );
+}
+
+// Slack-style timestamp: "Just now", "9:35 PM", "Yesterday", "Thursday", "Aug 12".
+function slackTime(iso: string): string {
+  const d = new Date(iso);
+  const now = new Date();
+  const mins = Math.floor((now.getTime() - d.getTime()) / 60000);
+  if (mins < 1) return 'Just now';
+  if (d.toDateString() === now.toDateString()) {
+    if (mins < 60) return `${mins}m ago`;
+    return d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  }
+  const yest = new Date(now);
+  yest.setDate(now.getDate() - 1);
+  if (d.toDateString() === yest.toDateString()) return 'Yesterday';
+  if (now.getTime() - d.getTime() < 7 * 86_400_000) {
+    return d.toLocaleDateString([], { weekday: 'long' });
+  }
+  return d.toLocaleDateString([], { month: 'short', day: 'numeric' });
 }
 
 function timeAgo(iso: string): string {
@@ -111,10 +195,14 @@ export default function InboxView({
   const queryClient = useQueryClient();
   const setActiveTask = usePMStore((s) => s.setActiveTask);
   const setActiveChannel = useWorkspaceStore((s) => s.setActiveChannel);
+  const requestMessageJump = useWorkspaceStore((s) => s.requestMessageJump);
 
-  const [filter, setFilter] = useState<Filter>('unread');
+  const [unreadsOnly, setUnreadsOnly] = useState(true);
+  const [filter, setFilter] = useState<Filter>('all');
   const [activeId, setActiveId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [searchOpen, setSearchOpen] = useState(false);
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const isMobile = useIsMobile();
 
   const { data: items = [], isLoading } = useQuery<Notification[]>({
@@ -186,50 +274,26 @@ export default function InboxView({
     },
   });
 
+  const unreadCount = items.filter((n) => !n.is_read).length;
+
   const filtered = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
     return items.filter((it) => {
-      if (filter === 'unread' && it.is_read) return false;
+      if (unreadsOnly && it.is_read) return false;
       if (filter === 'mentions' && !isMention(it.type)) return false;
+      if (filter === 'threads' && !isThread(it)) return false;
+      if (filter === 'tasks' && !(it.reference_type === 'task' || it.type === 'mention')) return false;
       if (q) {
         const haystack = `${it.title || ''} ${it.body || ''} ${it.actor?.display_name || ''}`.toLowerCase();
         if (!haystack.includes(q)) return false;
       }
       return true;
     });
-  }, [items, filter, searchQuery]);
-
-  const groups = useMemo(() => {
-    const out: { needs: Notification[]; fyi: Notification[] } = { needs: [], fyi: [] };
-    for (const n of filtered) {
-      if (NEEDS_YOU.has(n.type)) out.needs.push(n);
-      else out.fyi.push(n);
-    }
-    return out;
-  }, [filtered]);
-
-  // The All view groups by date, latest first. `filtered` arrives pre-sorted by
-  // created_at DESC, so the first time a date key appears it is the most recent —
-  // pushing in encounter order keeps both the groups and their rows newest-first.
-  const dateGroups = useMemo(() => {
-    const out: { key: string; items: Notification[] }[] = [];
-    const index = new Map<string, Notification[]>();
-    for (const n of filtered) {
-      const key = toLocalDateKey(n.created_at);
-      let bucket = index.get(key);
-      if (!bucket) {
-        bucket = [];
-        index.set(key, bucket);
-        out.push({ key, items: bucket });
-      }
-      bucket.push(n);
-    }
-    return out;
-  }, [filtered]);
+  }, [items, filter, unreadsOnly, searchQuery]);
 
   const current = items.find((n) => n.id === activeId) || filtered[0] || null;
 
-  const openSource = (n: Notification) => {
+  const openSource = (n: Notification, jump?: ChatJump) => {
     if (n.reference_type === 'task' && n.metadata?.task_id) {
       setActiveTask(n.metadata.task_id as string);
       return;
@@ -238,6 +302,16 @@ export default function InboxView({
     if (target) {
       setActiveChannel(target.id, target.kind);
       setHomeView?.('chat');
+      // Land on the exact message: highlight it, or open its thread when it
+      // lives in one (same pipeline the search palette uses).
+      if (jump) {
+        requestMessageJump({
+          conversationId: target.id,
+          kind: target.kind,
+          messageId: jump.messageId,
+          parentId: jump.parentId,
+        });
+      }
     }
   };
 
@@ -251,16 +325,71 @@ export default function InboxView({
     openSource(n);
   };
 
-  const unreadCount = items.filter((n) => !n.is_read).length;
+  const TABS: { key: Filter; label: string; icon: ReactNode }[] = [
+    {
+      key: 'all',
+      label: 'All',
+      icon: (
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+          <path d="M8 6h13M8 12h13M8 18h13" />
+          <path d="M3 6h.01M3 12h.01M3 18h.01" />
+        </svg>
+      ),
+    },
+    {
+      key: 'mentions',
+      label: 'Mentions',
+      icon: (
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+          <circle cx="12" cy="12" r="4" />
+          <path d="M16 8v5a3 3 0 0 0 6 0v-1a10 10 0 1 0-3.92 7.94" />
+        </svg>
+      ),
+    },
+    {
+      key: 'threads',
+      label: 'Threads',
+      icon: (
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+          <path d="M21 11.5a8.38 8.38 0 0 1-9 8.36 8.5 8.5 0 0 1-3.4-.7L3 20l.84-5.6A8.38 8.38 0 0 1 12 3.14a8.38 8.38 0 0 1 9 8.36z" />
+        </svg>
+      ),
+    },
+    {
+      key: 'tasks',
+      label: 'Tasks',
+      icon: (
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+          <rect x="3" y="3" width="18" height="18" rx="4" />
+          <path d="m8.5 12.5 2.5 2.5 4.5-5" />
+        </svg>
+      ),
+    },
+  ];
+
+  const unreadsToggle = (
+    <button
+      type="button"
+      className="ib-unreads"
+      data-on={unreadsOnly}
+      role="switch"
+      aria-checked={unreadsOnly}
+      onClick={() => setUnreadsOnly((v) => !v)}
+    >
+      <span className="ib-unreads-lbl">Unreads</span>
+      <span className="ib-switch"><span className="ib-knob" /></span>
+    </button>
+  );
 
   return (
     <div className="sh-view inbox-view" data-detail={activeId ? 'true' : undefined}>
       <div className="inbox-list">
         {!isMobile && <DesktopNotificationsBanner />}
         {!isMobile && <InstallPwaPrompt />}
-        {isMobile && (
+        {isMobile ? (
           <div className="inbox-phone-head">
-            <h1>Inbox</h1>
+            <h1>Activity</h1>
+            {unreadsToggle}
             <button
               type="button"
               className="inbox-mark-all"
@@ -274,17 +403,83 @@ export default function InboxView({
               Mark all read
             </button>
           </div>
+        ) : (
+          <div className="inbox-head">
+            <h1>Activity</h1>
+            {unreadsToggle}
+          </div>
         )}
         <div className="inbox-filter">
-          <div className="pill" data-active={filter === 'unread'} onClick={() => setFilter('unread')}>
-            Unread{unreadCount > 0 ? ` · ${unreadCount}` : ''}
-          </div>
-          <div className="pill" data-active={filter === 'all'} onClick={() => setFilter('all')}>All</div>
-          <div className="pill" data-active={filter === 'mentions'} onClick={() => setFilter('mentions')}>Mentions</div>
-          {!isMobile && (
+          {TABS.map((t) => (
+            <button
+              key={t.key}
+              type="button"
+              className="ib-tab"
+              data-active={filter === t.key}
+              onClick={() => setFilter(t.key)}
+            >
+              {t.icon}
+              {t.label}
+            </button>
+          ))}
+          {isMobile ? (
+            <div style={{ flex: 1 }} />
+          ) : (
             <>
               <div style={{ flex: 1 }} />
-              <ViewSearchInput value={searchQuery} onChange={setSearchQuery} placeholder="Search notifications..." />
+              {/* Collapsed search icon — expands into an input on click
+                  (or via the global "/" shortcut, which focuses it). */}
+              <div className="ib-search" data-open={searchOpen}>
+                <button
+                  type="button"
+                  className="ib-search-btn"
+                  aria-label={searchOpen ? 'Close search' : 'Search activity'}
+                  title="Search"
+                  onClick={() => {
+                    if (searchOpen && !searchQuery) {
+                      setSearchOpen(false);
+                    } else {
+                      setSearchOpen(true);
+                      requestAnimationFrame(() => searchInputRef.current?.focus());
+                    }
+                  }}
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.9} strokeLinecap="round" aria-hidden>
+                    <circle cx="11" cy="11" r="7" />
+                    <path d="m20 20-3.8-3.8" />
+                  </svg>
+                </button>
+                <input
+                  ref={searchInputRef}
+                  data-view-search="true"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onFocus={() => setSearchOpen(true)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Escape') {
+                      setSearchQuery('');
+                      setSearchOpen(false);
+                      e.currentTarget.blur();
+                    }
+                  }}
+                  placeholder="Search activity…"
+                  className="ib-search-input"
+                  aria-hidden={!searchOpen}
+                  tabIndex={searchOpen ? 0 : -1}
+                />
+                {searchOpen && searchQuery && (
+                  <button
+                    type="button"
+                    className="ib-search-clear"
+                    aria-label="Clear search"
+                    onClick={() => { setSearchQuery(''); searchInputRef.current?.focus(); }}
+                  >
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" aria-hidden>
+                      <path d="M6 18 18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                )}
+              </div>
               <button
                 type="button"
                 className="pill"
@@ -309,7 +504,7 @@ export default function InboxView({
             <input
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search notifications"
+              placeholder="Search activity"
             />
           </label>
         )}
@@ -317,39 +512,23 @@ export default function InboxView({
         {isLoading && filtered.length === 0 ? (
           <div style={{ padding: 16, fontSize: 13, color: 'var(--sh-ink-3)' }}>Loading…</div>
         ) : filtered.length === 0 ? (
-          <div style={{ padding: 24, fontSize: 13, color: 'var(--sh-ink-3)' }}>
-            {filter === 'unread' ? 'You\u2019re all caught up.' : filter === 'mentions' ? 'No mentions yet.' : 'No notifications yet.'}
+          <div className="ib-empty">
+            {unreadsOnly
+              ? 'You\u2019re all caught up.'
+              : filter === 'mentions'
+                ? 'No mentions yet.'
+                : 'No notifications yet.'}
           </div>
-        ) : filter === 'all' ? (
-          <>
-            {dateGroups.map((g) => (
-              <div key={g.key}>
-                <div className="inbox-group-hd">{formatDateHeader(g.key)} · {g.items.length}</div>
-                {g.items.map((n) => (
-                  <NotifRow key={n.id} n={n} active={current?.id === n.id} onClick={() => onRowClick(n)} onMarkRead={() => markRead.mutate(n.id)} />
-                ))}
-              </div>
-            ))}
-          </>
         ) : (
-          <>
-            {groups.needs.length > 0 && (
-              <div>
-                <div className="inbox-group-hd">Needs you · {groups.needs.length}</div>
-                {groups.needs.map((n) => (
-                  <NotifRow key={n.id} n={n} active={current?.id === n.id} onClick={() => onRowClick(n)} onMarkRead={() => markRead.mutate(n.id)} />
-                ))}
-              </div>
-            )}
-            {groups.fyi.length > 0 && (
-              <div>
-                <div className="inbox-group-hd">FYI · {groups.fyi.length}</div>
-                {groups.fyi.map((n) => (
-                  <NotifRow key={n.id} n={n} active={current?.id === n.id} onClick={() => onRowClick(n)} onMarkRead={() => markRead.mutate(n.id)} />
-                ))}
-              </div>
-            )}
-          </>
+          filtered.map((n) => (
+            <NotifRow
+              key={n.id}
+              n={n}
+              active={current?.id === n.id}
+              onClick={() => onRowClick(n)}
+              onMarkRead={() => markRead.mutate(n.id)}
+            />
+          ))
         )}
       </div>
 
@@ -365,10 +544,10 @@ export default function InboxView({
           </button>
         )}
         {current ? (
-          renderDetail(current, () => openSource(current))
+          renderDetail(current, (jump?: ChatJump) => openSource(current, jump))
         ) : (
-          <div style={{ padding: 32, fontSize: 13, color: 'var(--sh-ink-3)' }}>
-            Pick a notification to see the detail.
+          <div className="ib-empty" style={{ padding: 32 }}>
+            Pick a notification to see the thread.
           </div>
         )}
       </div>
@@ -376,7 +555,7 @@ export default function InboxView({
   );
 }
 
-function renderDetail(n: Notification, onOpen: () => void) {
+function renderDetail(n: Notification, onOpen: (jump?: ChatJump) => void) {
   if (n.reference_type === 'task' && n.metadata?.task_id) {
     return <InboxTaskDetail taskId={n.metadata.task_id as string} notificationId={n.id} onOpen={onOpen} />;
   }
@@ -388,7 +567,7 @@ function renderDetail(n: Notification, onOpen: () => void) {
       />
     );
   }
-  return <DetailPane n={n} onOpen={onOpen} />;
+  return <DetailPane n={n} onOpen={() => onOpen()} />;
 }
 
 function NotifRow({
@@ -403,6 +582,14 @@ function NotifRow({
   onMarkRead: () => void;
 }) {
   const av = avatarFor(n);
+  // Action line: the title minus the leading actor name ("Alex Smith assigned
+  // you to apple 6" -> "assigned you to apple 6"), mirroring Slack's
+  // "replied to: …" pattern under the actor name.
+  let action = (n.title || '').trim();
+  const actor = n.actor?.display_name?.trim();
+  if (actor && action.toLowerCase().startsWith(actor.toLowerCase())) {
+    action = action.slice(actor.length).trim();
+  }
   return (
     <div
       className="ib-item"
@@ -410,19 +597,25 @@ function NotifRow({
       data-active={active}
       onClick={onClick}
     >
-      <div className="line1">
+      <div className="ib-ctxline">
+        {!n.is_read && <span className="ib-dot" aria-hidden />}
+        <span className="ib-ctxglyph"><CtxGlyph n={n} /></span>
+        <span className="ib-ctx-txt">{ctxLine(n)}</span>
+        <span className="ib-time">{slackTime(n.created_at)}</span>
+      </div>
+      <div className="ib-body-row">
         <div
           className="ava"
-          style={{ width: 20, height: 20, borderRadius: '50%', background: av.color, fontSize: 9, fontWeight: 600 }}
+          style={{ width: 30, height: 30, borderRadius: '50%', background: av.color, fontSize: 10.5, flexShrink: 0 }}
         >
           {av.initials}
         </div>
-        <span className="ib-from">{n.actor?.display_name || 'System'}</span>
-        <span className="ib-ctx">{ctxLabel(n)}</span>
-        <span className="ib-time">{timeAgo(n.created_at)}</span>
+        <div className="ib-content">
+          <div className="ib-from">{n.actor?.display_name || 'System'}</div>
+          {action && action !== (n.body || '').trim() && <div className="ib-action">{action}</div>}
+          {n.body && <div className="ib-snip">{n.body}</div>}
+        </div>
       </div>
-      <div className="ib-title">{n.title}</div>
-      {n.body && <div className="ib-snip">{n.body}</div>}
       {!n.is_read && (
         <button
           type="button"
@@ -446,15 +639,18 @@ function NotifRow({
 function DetailPane({ n, onOpen }: { n: Notification; onOpen: () => void }) {
   const av = avatarFor(n);
   return (
-    <>
-      <div className="detail-head">
-        <div className="ava" style={{ width: 40, height: 40, borderRadius: '50%', background: av.color, fontWeight: 600 }}>
+    <div className="th-pane">
+      <div className="th-head">
+        <div
+          className="ava"
+          style={{ width: 36, height: 36, borderRadius: '50%', background: av.color, fontSize: 12 }}
+        >
           {av.initials}
         </div>
-        <div style={{ flex: 1 }}>
+        <div className="th-head-txt">
           <h1>{n.title}</h1>
-          <div style={{ fontSize: 12, color: 'var(--sh-ink-3)', marginTop: 2 }}>
-            From <b style={{ color: 'var(--sh-ink)' }}>{n.actor?.display_name || 'System'}</b> · {ctxLabel(n)} · {timeAgo(n.created_at)}
+          <div className="th-sub">
+            {n.actor?.display_name || 'System'} · {ctxLine(n)} · {timeAgo(n.created_at)}
           </div>
         </div>
         <button type="button" className="top-btn ghost-border" onClick={onOpen}>
@@ -464,9 +660,27 @@ function DetailPane({ n, onOpen }: { n: Notification; onOpen: () => void }) {
           Open
         </button>
       </div>
-      <div className="detail-body">
-        {n.body ? <p>{n.body}</p> : <p style={{ color: 'var(--sh-ink-3)' }}>No preview available.</p>}
+      <div className="th-scroll">
+        {n.body ? (
+          <div className="th-msg">
+            <div
+              className="ava"
+              style={{ width: 32, height: 32, borderRadius: '50%', background: av.color, fontSize: 11 }}
+            >
+              {av.initials}
+            </div>
+            <div className="th-msg-body">
+              <div className="th-msg-hd">
+                <b>{n.actor?.display_name || 'System'}</b>
+                <span>{slackTime(n.created_at)}</span>
+              </div>
+              <p style={{ margin: '2px 0 0' }}>{n.body}</p>
+            </div>
+          </div>
+        ) : (
+          <div style={{ fontSize: 13, color: 'var(--sh-ink-3)' }}>No preview available.</div>
+        )}
       </div>
-    </>
+    </div>
   );
 }

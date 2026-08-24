@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import api from '../../../services/api';
 import { getSocket } from '../../../services/socket';
@@ -100,6 +100,32 @@ export default function ThreadPanel({ parentId, channelId, kind, onClose }: Prop
     }
   }, [parentId, root, replies.length]);
 
+  // Jump-to-message (from search or the inbox's "Open in chat"): ChatPanel
+  // opens this panel for thread targets and leaves the request in the store —
+  // consume it here to scroll to the exact message and flash the highlight.
+  const messageJumpTarget = useWorkspaceStore((s) => s.messageJumpTarget);
+  const clearMessageJump = useWorkspaceStore((s) => s.clearMessageJump);
+  const [highlightId, setHighlightId] = useState<string | null>(null);
+  useEffect(() => {
+    const t = messageJumpTarget;
+    if (!t || t.parentId !== parentId) return;
+    if (t.conversationId !== channelId || t.kind !== kind) return;
+    setHighlightId(t.messageId);
+    clearMessageJump();
+    // Run after the pin-to-bottom effect above so the target scroll wins.
+    const raf = requestAnimationFrame(() => {
+      scrollRef.current
+        ?.querySelector(`[data-message-id="${t.messageId}"]`)
+        ?.scrollIntoView({ block: 'center' });
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [messageJumpTarget, parentId, channelId, kind, clearMessageJump]);
+
+  // A fresh thread starts un-highlighted.
+  useEffect(() => {
+    setHighlightId(null);
+  }, [parentId]);
+
   return (
     <div
       className="sqc-thread-panel relative flex w-[400px] shrink-0 flex-col border-l border-divider bg-white dark:bg-surface"
@@ -134,7 +160,7 @@ export default function ThreadPanel({ parentId, channelId, kind, onClose }: Prop
         {root && (
           <>
             <div className="pt-2">
-              <MessageBubble message={root} inThread />
+              <MessageBubble message={root} inThread highlighted={highlightId === root.id} />
             </div>
             {replies.length > 0 && (
               <div className="sqc-thread-divider">
@@ -144,7 +170,7 @@ export default function ThreadPanel({ parentId, channelId, kind, onClose }: Prop
           </>
         )}
         {replies.map((r) => (
-          <MessageBubble key={r.id} message={r} inThread />
+          <MessageBubble key={r.id} message={r} inThread highlighted={highlightId === r.id} />
         ))}
       </div>
 

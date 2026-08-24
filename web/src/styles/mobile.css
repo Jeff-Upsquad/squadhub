@@ -1056,9 +1056,31 @@
 .ib-back { display: none; }
 .msh-pane .sh-view.inbox-view[data-detail='true'] > .inbox-list { display: none; }
 .msh-pane .sh-view.inbox-view[data-detail='true'] > .inbox-detail {
-  display: block;
-  padding: 10px 16px 28px;
+  display: flex;
+  padding: 0;
 }
+.msh-pane .sh-view.inbox-view[data-detail='true'] > .inbox-detail > .ib-back {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin: 10px 16px 0;
+  padding: 6px 12px;
+  border: 0;
+  border-radius: 16px;
+  background: var(--m-surface-alt);
+  color: var(--m-ink-2);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  align-self: flex-start;
+}
+/* Thread pane sections pad themselves; tighten gutters for phone width. */
+.msh-pane .th-head { padding: 10px 16px 12px; }
+.msh-pane .th-scroll { padding: 14px 16px; }
+.msh-pane .th-compose { padding: 10px 16px 16px; }
+.msh-pane .th-compose--chat { padding: 0; }
+.msh-pane .th-compose--chat .sqc-composer-wrap { padding: 10px 12px 14px; }
 
 /* Docs (SquadNotes) — no page open: the pages list IS the screen; opening a
    page swaps to the editor with its own back chip (NotesShell renders both
@@ -1172,7 +1194,7 @@
 }
 .msh-pane .sh-view .inbox-filter::-webkit-scrollbar { display: none; }
 .msh-pane .sh-view .inbox-filter > * { flex: none; }
-.msh-pane .sh-view .inbox-filter .pill {
+.msh-pane .sh-view .inbox-filter .ib-tab {
   padding: 8px 15px;
   border-radius: var(--m-r-pill);
   background: var(--m-surface-alt);
@@ -1180,14 +1202,20 @@
   font-size: 13px;
   font-weight: 600;
 }
-.msh-pane .sh-view .inbox-filter .pill[data-active='true'] {
+.msh-pane .sh-view .inbox-filter .ib-tab[data-active='true'] {
   background: var(--m-brand-deep);
   color: #fff;
 }
-.dark .msh-pane .sh-view .inbox-filter .pill[data-active='true'] {
+.dark .msh-pane .sh-view .inbox-filter .ib-tab[data-active='true'] {
   background: var(--m-ink);
   color: var(--m-surface);
 }
+/* Phone header keeps just the switch (label would crowd the title row). */
+.msh-pane .ib-unreads-lbl { display: none; }
+.msh-pane .ib-unreads { padding: 8px; }
+.msh-pane .ib-unreads .ib-switch { width: 34px; height: 20px; }
+.msh-pane .ib-unreads .ib-knob { width: 16px; height: 16px; }
+.msh-pane .ib-unreads[data-on='true'] .ib-knob { transform: translateX(14px); }
 .msh-pane .inbox-phone-search {
   display: flex;
   align-items: center;

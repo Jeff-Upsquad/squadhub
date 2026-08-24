@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useTask, useTaskComments, useAddComment, useUpdateTask } from '../../../hooks/useTasks';
 import api from '../../../services/api';
-import MentionPicker from '../../../components/MentionPicker';
+import ThreadComposer from './ThreadComposer';
 import { linkifyText } from '../../../lib/linkify';
 import type { Notification } from '../InboxView';
 
@@ -87,7 +87,7 @@ export default function InboxTaskDetail({
   };
 
   if (isLoading || !task) {
-    return <div style={{ padding: 24, fontSize: 13, color: 'var(--sh-ink-3)' }}>Loading task…</div>;
+    return <div className="th-pane"><div className="th-scroll" style={{ fontSize: 13, color: 'var(--sh-ink-3)' }}>Loading task…</div></div>;
   }
 
   const t: any = task;
@@ -96,25 +96,20 @@ export default function InboxTaskDetail({
   const isDone = ['done', 'closed', 'completed'].includes(String(status).toLowerCase());
 
   return (
-    <div className="flex h-full flex-col">
-      <div className="detail-head">
-        <div
-          className="ava"
-          style={{ width: 40, height: 40, borderRadius: 8, background: colorFor(t.id), fontWeight: 600, fontSize: 14 }}
-        >
-          {initials(t.title)}
-        </div>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <h1 style={{ fontSize: 20, lineHeight: 1.25 }}>{t.title}</h1>
-          <div style={{ fontSize: 12, color: 'var(--sh-ink-3)', marginTop: 4, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-            <span>
-              Status ·{' '}
-              <b style={{ color: 'var(--sh-ink)', textTransform: 'capitalize' }}>{status}</b>
-            </span>
-            {t.due_date && <span>Due · {new Date(t.due_date).toLocaleDateString([], { month: 'short', day: 'numeric' })}</span>}
-            {t.priority && t.priority !== 'none' && (
-              <span style={{ textTransform: 'capitalize' }}>Priority · {t.priority}</span>
-            )}
+    <div className="th-pane">
+      <div className="th-head">
+        <span className="th-glyph" aria-hidden>
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+            <rect x="3" y="3" width="18" height="18" rx="4" />
+            <path d="m8.5 12.5 2.5 2.5 4.5-5" />
+          </svg>
+        </span>
+        <div className="th-head-txt">
+          <h1>{t.title}</h1>
+          <div className="th-sub" style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            <span style={{ textTransform: 'capitalize' }}>{status}</span>
+            {t.due_date && <span>Due {new Date(t.due_date).toLocaleDateString([], { month: 'short', day: 'numeric' })}</span>}
+            {t.priority && t.priority !== 'none' && <span style={{ textTransform: 'capitalize' }}>{t.priority}</span>}
           </div>
         </div>
         {!isDone && (
@@ -140,79 +135,67 @@ export default function InboxTaskDetail({
         </button>
       </div>
 
-      {assignees.length > 0 && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0 24px 8px', fontSize: 12, color: 'var(--sh-ink-3)' }}>
-          <span>Assignees</span>
-          <div style={{ display: 'flex', gap: -4 }}>
-            {assignees.map((a, i) => (
-              <div
-                key={a.id || i}
-                title={a.display_name}
-                style={{
-                  width: 22,
-                  height: 22,
-                  borderRadius: '50%',
-                  background: colorFor(a.id || a.display_name || String(i)),
-                  color: '#fff',
-                  fontSize: 9,
-                  fontWeight: 600,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  marginLeft: i === 0 ? 0 : -6,
-                  border: '2px solid var(--surface, #fff)',
-                }}
-              >
-                {initials(a.display_name)}
-              </div>
-            ))}
+      <div className="th-scroll">
+        {assignees.length > 0 && (
+          <div className="th-assignees">
+            <span>Assignees</span>
+            <div className="th-assignee-stack">
+              {assignees.map((a, i) => (
+                <div
+                  key={a.id || i}
+                  title={a.display_name}
+                  className="ava"
+                  style={{
+                    width: 22,
+                    height: 22,
+                    borderRadius: '50%',
+                    background: colorFor(a.id || a.display_name || String(i)),
+                    fontSize: 8.5,
+                    marginLeft: i === 0 ? 0 : -6,
+                    border: '2px solid var(--surface)',
+                  }}
+                >
+                  {initials(a.display_name)}
+                </div>
+              ))}
+            </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {t.description && (
-        <div style={{ padding: '0 24px 12px', fontSize: 13.5, lineHeight: 1.55, color: 'var(--sh-ink-2)', whiteSpace: 'pre-wrap' }}>
-          {linkifyText(t.description)}
-        </div>
-      )}
+        {t.description && (
+          <div className="th-msg" style={{ marginBottom: 18 }}>
+            <div className="th-msg-body">
+              <div className="th-msg-text">{linkifyText(t.description)}</div>
+            </div>
+          </div>
+        )}
 
-      <div style={{ borderTop: '1px solid var(--sh-hair)', margin: '4px 24px 12px' }} />
-
-      <div style={{ flex: 1, overflowY: 'auto', padding: '0 24px 12px' }}>
-        <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', color: 'var(--sh-ink-3)', letterSpacing: 0.5, margin: '4px 0 12px' }}>
-          Comments {comments && comments.length > 0 ? `· ${comments.length}` : ''}
+        <div className="th-replies-hd">
+          <span>Comments {comments && comments.length > 0 ? `· ${comments.length}` : ''}</span>
         </div>
+
         {comments && comments.length > 0 ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
             {comments.map((c: any) => (
-              <div key={c.id} style={{ display: 'flex', gap: 10 }}>
+              <div key={c.id} className="th-msg">
                 <div
+                  className="ava"
                   style={{
-                    width: 26,
-                    height: 26,
+                    width: 32,
+                    height: 32,
                     borderRadius: '50%',
                     background: colorFor(c.user?.id || c.user?.email || ''),
-                    color: '#fff',
-                    fontSize: 10,
-                    fontWeight: 600,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    flexShrink: 0,
+                    fontSize: 11,
                   }}
                 >
                   {initials(c.user?.display_name || c.user?.email)}
                 </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
-                    <b style={{ fontSize: 13, color: 'var(--sh-ink)' }}>
-                      {c.user?.display_name || c.user?.email}
-                    </b>
-                    <span style={{ fontSize: 11, color: 'var(--sh-ink-4)' }}>{formatTime(c.created_at)}</span>
+                <div className="th-msg-body">
+                  <div className="th-msg-hd">
+                    <b>{c.user?.display_name || c.user?.email}</b>
+                    <span>{formatTime(c.created_at)}</span>
                   </div>
-                  <div style={{ fontSize: 13, lineHeight: 1.55, color: 'var(--sh-ink-2)', marginTop: 2, whiteSpace: 'pre-wrap' }}>
-                    {c.content}
-                  </div>
+                  <div className="th-msg-text">{c.content}</div>
                 </div>
               </div>
             ))}
@@ -222,44 +205,15 @@ export default function InboxTaskDetail({
         )}
       </div>
 
-      <div
-        style={{
-          borderTop: '1px solid var(--sh-hair)',
-          padding: '12px 24px 16px',
-          background: 'var(--surface)',
-        }}
-      >
-        <div
-          style={{
-            display: 'flex',
-            gap: 8,
-            alignItems: 'flex-end',
-            border: '1px solid var(--sh-hair)',
-            borderRadius: 8,
-            padding: '8px 12px',
-            background: 'var(--surface-alt)',
-          }}
-        >
-          <MentionPicker
-            value={text}
-            mentions={mentions}
-            onChange={(t, m) => { setText(t); setMentions(m); }}
-            onSubmit={handleSend}
-            multiline
-            rows={2}
-            placeholder="Reply… use @ to mention"
-            className="w-full bg-transparent text-[13px] text-[color:var(--sh-ink)] placeholder:text-[color:var(--sh-ink-3)] focus:outline-none resize-none"
-          />
-          <button
-            type="button"
-            onClick={handleSend}
-            disabled={!text.trim() || addComment.isPending}
-            className="td-pill-btn"
-            style={text.trim() ? { background: 'var(--sh-ink)', color: 'var(--surface)', borderColor: 'var(--sh-ink)' } : undefined}
-          >
-            Send
-          </button>
-        </div>
+      <div className="th-compose">
+        <ThreadComposer
+          value={text}
+          mentions={mentions}
+          onChange={(t2, m) => { setText(t2); setMentions(m); }}
+          onSubmit={handleSend}
+          pending={addComment.isPending}
+          placeholder="Reply… use @ to mention"
+        />
       </div>
     </div>
   );

@@ -455,6 +455,8 @@ export default function ChatPanel({
 
   // A jump request in the store that targets THIS conversation seeds the search:
   // thread replies open the thread panel; top-level messages seed pendingJumpId.
+  // For thread targets the request is left in the store — the mounted
+  // ThreadPanel consumes it to flash the exact reply (see ThreadPanel).
   useEffect(() => {
     const t = messageJumpTarget;
     if (!t || t.conversationId !== channelId || t.kind !== kind) return;
@@ -462,7 +464,6 @@ export default function ChatPanel({
     jumpProcessedNonce.current = t.nonce;
     if (t.parentId) {
       setActiveThread(t.parentId);
-      clearMessageJump();
       return;
     }
     jumpFetchCount.current = 0;

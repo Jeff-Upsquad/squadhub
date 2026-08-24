@@ -352,6 +352,44 @@ export default function MainLayout() {
   // Schedule in-app toasts for upcoming work-block windows today.
   useWorkBlockNotifier();
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  // Module sidebar width — shortened default (240px), user-resizable by
+  // dragging the right edge. Persisted per browser; clamped 220–420.
+  const SIDEBAR_W_KEY = 'sh-sidebar-width';
+  const SIDEBAR_W_DEFAULT = 240;
+  const [sidebarWidth, setSidebarWidth] = useState(SIDEBAR_W_DEFAULT);
+  const [resizingSidebar, setResizingSidebar] = useState(false);
+  const sidebarResize = useRef<{ startX: number; startW: number } | null>(null);
+  // Load the persisted width after mount — lazy-init from localStorage would
+  // diverge from the server render and trip hydration.
+  useEffect(() => {
+    const stored = Number(window.localStorage.getItem(SIDEBAR_W_KEY));
+    if (Number.isFinite(stored) && stored >= 220 && stored <= 420) setSidebarWidth(stored);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const beginSidebarResize = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    sidebarResize.current = { startX: e.clientX, startW: sidebarWidth };
+    setResizingSidebar(true);
+    e.currentTarget.setPointerCapture(e.pointerId);
+    document.body.classList.add('sb-resizing');
+  };
+  const moveSidebarResize = (e: React.PointerEvent<HTMLDivElement>) => {
+    const st = sidebarResize.current;
+    if (!st) return;
+    setSidebarWidth(Math.min(420, Math.max(220, st.startW + e.clientX - st.startX)));
+  };
+  const endSidebarResize = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!sidebarResize.current) return;
+    sidebarResize.current = null;
+    setResizingSidebar(false);
+    e.currentTarget.releasePointerCapture(e.pointerId);
+    document.body.classList.remove('sb-resizing');
+    window.localStorage.setItem(SIDEBAR_W_KEY, String(sidebarWidth));
+  };
+  const resetSidebarWidth = () => {
+    setSidebarWidth(SIDEBAR_W_DEFAULT);
+    window.localStorage.setItem(SIDEBAR_W_KEY, String(SIDEBAR_W_DEFAULT));
+  };
   const isMobile = useIsMobile();
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
   const [showCreateChannel, setShowCreateChannel] = useState(false);
@@ -1362,13 +1400,14 @@ export default function MainLayout() {
         </div>
       </div>
 
-      {/* Module sidebar — always visible, flat edges, drop shadow to the right */}
+      {/* Module sidebar — always visible, flat edges, drop shadow to the right.
+          Width is user-resizable via the edge handle (double-click resets). */}
       {currentWorkspace && activeSection !== 'learning' && activeSection !== 'docs' && activeSection !== 'cal' && (
         <div
-          className={`flex h-full shrink-0 flex-col overflow-hidden bg-[var(--sidebar)] border-r border-[var(--sh-hair)] relative z-[2] transition-[width] duration-200 ease-in-out ${
-            sidebarOpen ? 'w-[280px]' : 'w-0'
-          }`}
-          style={{ boxShadow: 'var(--sh-sidebar-drop)' }}
+          className={`flex h-full shrink-0 flex-col overflow-hidden bg-[var(--sidebar)] border-r border-[var(--sh-hair)] relative z-[2] ${
+            resizingSidebar ? '' : 'transition-[width] duration-200 ease-in-out'
+          } ${sidebarOpen ? '' : 'w-0'}`}
+          style={{ boxShadow: 'var(--sh-sidebar-drop)', width: sidebarOpen ? sidebarWidth : 0 }}
         >
           {activeSection === 'apps' ? (
             <AppsSidebar
@@ -1399,6 +1438,20 @@ export default function MainLayout() {
               onOpenSearch={() => setSearchOpen(true)}
               onOpenApps={() => { setActiveSection('apps'); setMobileDrawerOpen(false); }}
               onLaunchApp={handleLaunchApp}
+            />
+          )}
+          {sidebarOpen && !isMobile && (
+            <div
+              className="sb-resize"
+              data-resizing={resizingSidebar}
+              role="separator"
+              aria-orientation="vertical"
+              title="Drag to resize — double-click to reset"
+              onPointerDown={beginSidebarResize}
+              onPointerMove={moveSidebarResize}
+              onPointerUp={endSidebarResize}
+              onPointerCancel={endSidebarResize}
+              onDoubleClick={resetSidebarWidth}
             />
           )}
         </div>
