@@ -121,6 +121,7 @@ export default function MobileShell({
   const goRoot = useCallback(
     (t: MTab) => {
       setSection(null);
+      usePMStore.getState().setActiveDashboardTab(null);
       setActiveSection('home');
       setHomeView(t === 'inbox' ? 'inbox' : 'hub');
     },
@@ -184,7 +185,8 @@ export default function MobileShell({
     applyOpenTarget(t);
     setActiveSection('home');
     setHomeView('tasks');
-    openSection(t.title, t);
+    // Lists/spaces/folders paint mtk-phone-head; back-only app bar like Android.
+    openSection(t.title, t, true);
   };
 
   const openConversation = (id: string, kind: 'channel' | 'dm', title: string) => {
@@ -202,6 +204,7 @@ export default function MobileShell({
     if (t.kind === 'view') {
       setActiveSection('home');
       setHomeView(t.view);
+      if (t.view === 'my-tasks') usePMStore.getState().setActiveDashboardTab(null);
       // My Tasks / Check-in / Meetings paint the app's own large header.
       const bare = t.view === 'my-tasks' || t.view === 'checkin' || t.view === 'meetings';
       openSection(t.title, null, bare);
@@ -232,6 +235,15 @@ export default function MobileShell({
   // that answers the same question the Android screen does. Screens that paint
   // the app's own large header run bare (back-only app bar).
   const openPartnerAction = (a: PartnerAction) => {
+    const buckets = { today: 'Today', overdue: 'Overdue', tomorrow: 'Tomorrow', all: 'All tasks' } as const;
+    if (a in buckets) {
+      usePMStore.getState().setActiveDashboardTab(a as keyof typeof buckets);
+      setActiveSection('home');
+      setHomeView('my-tasks');
+      openSection(buckets[a as keyof typeof buckets], null, true);
+      return;
+    }
+    if (a === 'my-tasks') usePMStore.getState().setActiveDashboardTab(null);
     const view: HomeView = a === 'my-home' ? 'hub' : a === 'meetings' ? 'meetings' : a === 'checkin' ? 'checkin' : 'my-tasks';
     const title = a === 'my-home' ? 'My Home' : a === 'meetings' ? 'Meetings' : a === 'checkin' ? 'Daily Check-In' : 'My Tasks';
     const bare = a !== 'my-home';

@@ -45,9 +45,15 @@ export default function CheckInWidget({ title = 'Daily Check-In', context = 'def
     'bg-amber-50 text-amber-600 dark:bg-amber-500/15 dark:text-amber-300';
 
   return (
-    <div className="flex flex-1 flex-col">
+    <div className="ckw flex flex-1 flex-col">
+      <div className="mtk-phone-head ck-phone-head">
+        <h1>Daily Check-In</h1>
+        <span className={`ck-badge rounded-full px-2.5 py-0.5 text-[10px] font-medium ${statusColor}`}>
+          {statusLabel}
+        </span>
+      </div>
       {/* Header */}
-      <div className="border-b border-divider px-5 py-3">
+      <div className="ck-desk-head border-b border-divider px-5 py-3">
         <div className="flex items-center justify-between">
           <h2 className="font-[family-name:var(--font-display)] text-sm font-semibold text-foreground">
             {title}
@@ -59,10 +65,11 @@ export default function CheckInWidget({ title = 'Daily Check-In', context = 'def
       </div>
 
       {/* Tab bar */}
-      <div className="flex gap-1 overflow-x-auto border-b border-divider px-5 py-2">
+      <div className="ck-tabs flex gap-1 overflow-x-auto border-b border-divider px-5 py-2">
         {TABS.map((tab) => (
           <button
             key={tab.id}
+            data-tab={tab.id}
             onClick={() => setActiveTab(tab.id)}
             className={`rounded-full px-3 py-1 text-xs font-medium transition ${
               activeTab === tab.id

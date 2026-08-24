@@ -20,7 +20,7 @@ import FilterBar from '../../../components/pm/FilterBar';
 import GroupByDropdown from '../../../components/pm/GroupByDropdown';
 import ViewSearchInput from '../../../components/pm/ViewSearchInput';
 import ContainerChatButton from '../../../components/pm/ContainerChatButton';
-import { LIST_GROUP_BY_OPTIONS, SORT_BY_OPTIONS, type SortBy } from '../../../lib/taskGrouping';
+import { LIST_GROUP_BY_OPTIONS, SORT_BY_OPTIONS, isTaskCompleted, type SortBy } from '../../../lib/taskGrouping';
 import { type ListGroupBy } from '../../../stores/pmStore';
 import { EMPTY_FILTER, deriveAssigneeOptions, deriveTagOptions, filterTasks, type TaskFilterState } from '../../../lib/filters';
 import { useIsMobile } from '../../../hooks/useIsMobile';
@@ -212,12 +212,24 @@ export default function ListPage({
     );
   }
 
+  const listTaskTotal = (tasksForOptions ?? []).length;
+  const listTaskDone = (tasksForOptions ?? []).filter(isTaskCompleted).length;
+
   return (
     // min-h-0 is load-bearing: without it this flex child's automatic minimum
-    // is its content height, so the .lv-canvas scroll area below grows past the
-    // viewport and gets clipped by MainLayout's overflow-hidden instead of
-    // scrolling (same fix as the chat view in MainLayout).
+    // is its content height, so the .lv-canvas scroll area below gets clipped.
     <div className="relative flex min-h-0 flex-1 flex-col">
+      {isMobile && !embedded && (
+        <div className="mtk-phone-head">
+          <h1>{listData?.name || 'List'}</h1>
+          <p>{listTaskTotal === 0 ? 'No tasks' : `${listTaskDone} of ${listTaskTotal} done`}</p>
+          {listTaskTotal > 0 && (
+            <div className="lv-phone-track" aria-hidden>
+              <i style={{ width: `${Math.round((listTaskDone / listTaskTotal) * 100)}%` }} />
+            </div>
+          )}
+        </div>
+      )}
       {/* Row 1: Breadcrumb + global actions */}
       <div className="lv-breadcrumb-row">
         {/* Left: breadcrumb (hidden when embedded — the host view renders its own header) */}

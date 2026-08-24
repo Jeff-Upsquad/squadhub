@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useMyMeetingEvents } from '../../../hooks/useMeetingEvents';
 import { useAuthStore } from '../../../stores/authStore';
 import { useMeetingPanelStore } from '../../../stores/meetingPanelStore';
+import { useIsMobile } from '../../../hooks/useIsMobile';
 import { MEETING_ACCENT } from './meetingUtils';
 import MeetingDetailPanel from './MeetingDetailPanel';
 
@@ -17,10 +18,14 @@ export default function MeetingsView() {
   const openMeetingPanel = useMeetingPanelStore((s) => s.openMeetingPanel);
   const { data: meetings = [], isLoading } = useMyMeetingEvents();
   const [openId, setOpenId] = useState<string | null>(null);
+  const isMobile = useIsMobile();
 
   return (
-    <div className="mx-auto h-full w-full max-w-3xl overflow-y-auto p-6">
-      <div className="mb-5 flex items-center justify-between">
+    <div className={`mmg mx-auto h-full w-full max-w-3xl overflow-y-auto ${isMobile ? 'p-0' : 'p-6'}`}>
+      <div className="mtk-phone-head mmg-phone">
+        <h1>Meetings</h1>
+      </div>
+      <div className="mb-5 flex items-center justify-between mmg-desk">
         <div>
           <h1 className="text-xl font-semibold text-[#0F172B]">Meetings</h1>
           <p className="text-sm text-[#64748B]">Propose times, vote on availability, and lock a slot.</p>
@@ -64,6 +69,13 @@ export default function MeetingsView() {
       {openId && currentUserId && (
         <MeetingDetailPanel meetingId={openId} currentUserId={currentUserId} onClose={() => setOpenId(null)} />
       )}
+
+      <button type="button" className="mmg-fab" onClick={() => openMeetingPanel()}>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+          <path d="M12 5v14M5 12h14" />
+        </svg>
+        Schedule meeting
+      </button>
     </div>
   );
 }

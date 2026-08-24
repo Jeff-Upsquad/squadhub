@@ -21,7 +21,15 @@ import { MGroupHead, MIcon } from './MobileKit';
 import { MobileSpaceGroups } from './MobileHome';
 import { useMobileSpaces, type OpenTarget } from './useMobileSpaces';
 
-export type PartnerAction = 'my-home' | 'meetings' | 'checkin' | 'my-tasks';
+export type PartnerAction =
+  | 'my-home'
+  | 'meetings'
+  | 'checkin'
+  | 'my-tasks'
+  | 'today'
+  | 'overdue'
+  | 'tomorrow'
+  | 'all';
 
 export default function MobilePartnerHome({
   workspaceId,
@@ -59,7 +67,7 @@ export default function MobilePartnerHome({
         <button
           type="button"
           className="mph-today"
-          onClick={() => onAction('my-tasks')}
+          onClick={() => onAction('today')}
         >
           <span className="mph-today-head">
             <em>TODAY</em>
@@ -80,7 +88,7 @@ export default function MobilePartnerHome({
             type="button"
             className="mph-tile"
             data-alert={overdue.length > 0 ? 'true' : undefined}
-            onClick={() => onAction('my-tasks')}
+            onClick={() => onAction('overdue')}
           >
             <em>Overdue</em>
             <b>{n(overdue.length)}</b>
@@ -96,11 +104,11 @@ export default function MobilePartnerHome({
       </div>
 
       <div className="mph-quiet">
-        <button type="button" onClick={() => onAction('my-tasks')}>
+        <button type="button" onClick={() => onAction('tomorrow')}>
           <em>Tomorrow</em>
           <b>{n(tomorrow.length)}</b>
         </button>
-        <button type="button" onClick={() => onAction('my-tasks')}>
+        <button type="button" onClick={() => onAction('all')}>
           <em>All open</em>
           <b>{n(allOpen)}</b>
         </button>

@@ -51,7 +51,6 @@ const PRIORITY_LABEL: Record<string, string | null> = {
 export default function DashboardTaskRow({ task }: { task: Task }) {
   const setActiveTask = usePMStore((s) => s.setActiveTask);
   const setPeekTask = usePMStore((s) => s.setPeekTask);
-  const setActiveDashboardTab = usePMStore((s) => s.setActiveDashboardTab);
   const updateTask = useUpdateTask(null);
   const isMobile = useIsMobile();
   const [isFadingOut, setIsFadingOut] = useState(false);
@@ -72,7 +71,6 @@ export default function DashboardTaskRow({ task }: { task: Task }) {
 
   const onOpen = () => {
     if (isMobile) {
-      setActiveDashboardTab(null);
       setActiveTask(task.id);
       return;
     }

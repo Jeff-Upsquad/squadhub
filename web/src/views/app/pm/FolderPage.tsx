@@ -4,6 +4,7 @@ import type { Folder, List, SpaceStatus, Task } from '@squadhub/shared';
 import api from '../../../services/api';
 import { usePMStore } from '../../../stores/pmStore';
 import { useSpace, useReorderLists } from '../../../hooks/useSpaces';
+import { useIsMobile } from '../../../hooks/useIsMobile';
 import TaskGroupCard from './TaskGroupCard';
 import { GROUP_BY_OPTIONS, groupTasks, partitionByCompletion, buildFocusTodayGroup, isTaskCompleted, type GroupBy } from '../../../lib/taskGrouping';
 import FilterBar from '../../../components/pm/FilterBar';
@@ -37,6 +38,7 @@ export default function FolderPage({ folderId: propFolderId }: { folderId?: stri
   const groupByScope = usePMStore((s) => s.groupByScope);
   const setScopedGroupBy = usePMStore((s) => s.setScopedGroupBy);
   const fadingTaskIds = usePMStore((s) => s.fadingTaskIds);
+  const isMobile = useIsMobile();
   const [listFilter, setListFilter] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const groupScopeKey = activeFolderId ? `folder:${activeFolderId}` : '';
@@ -163,6 +165,12 @@ export default function FolderPage({ folderId: propFolderId }: { folderId?: stri
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
+      {isMobile && (
+        <div className="mtk-phone-head">
+          <h1>{folder?.name || 'Folder'}</h1>
+          <p>{totalCount === 0 ? 'No tasks' : `${totalCount} task${totalCount === 1 ? '' : 's'}`}</p>
+        </div>
+      )}
       {/* Header */}
       <div className="flex items-center justify-between border-b border-[var(--sh-hair)] bg-[var(--surface)] px-4 py-2.5">
         <div className="flex items-center gap-2">

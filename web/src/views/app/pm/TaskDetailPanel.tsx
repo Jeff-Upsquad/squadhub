@@ -77,9 +77,21 @@ function formatTracked(seconds: number | null | undefined): string {
   if (!seconds) return '';
   const h = Math.floor(seconds / 3600);
   const m = Math.floor((seconds % 3600) / 60);
+  const s = seconds % 60;
   if (h && m) return `${h}h ${m}m`;
   if (h) return `${h}h`;
-  return `${m}m`;
+  if (m) return `${m}m`;
+  return `${s}s`;
+}
+
+function formatPlanDate(iso: string | null | undefined): string {
+  if (!iso) return '';
+  const dateOnlyMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+  const d = dateOnlyMatch
+    ? new Date(Number(dateOnlyMatch[1]), Number(dateOnlyMatch[2]) - 1, Number(dateOnlyMatch[3]))
+    : new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  return d.toLocaleDateString([], { month: 'short', day: 'numeric' });
 }
 
 function formatCreatedAt(iso: string): string {
@@ -1294,7 +1306,7 @@ export default function TaskDetailPanel({
                   />
                 ) : (
                   <div className={`td-about ${!task.description ? 'empty' : ''} ${canEdit ? 'cursor-text' : ''}`}>
-                    {task.description ? linkifyText(task.description) : 'Click to add a description…'}
+                    {task.description ? linkifyText(task.description) : (isMobile ? 'Tap to add a description…' : 'Click to add a description…')}
                   </div>
                 )}
               </div>
@@ -1452,9 +1464,10 @@ export default function TaskDetailPanel({
                     </span>
                   </div>
                 )}
+                <div className="td-m-group" data-td-group="status">
                 {/* Type — read-only; resolved from the cached useTaskTypes() list
                     since /pm/tasks/:id doesn't hydrate the task_type join */}
-                <div className="td-settings-row" data-half="true" style={{ cursor: 'default' }}>
+                <div className="td-settings-row" data-half="true" data-td="type" style={{ cursor: 'default' }}>
                   <span className="k">{META_ICONS.Type}Type</span>
                   <span className="v">
                     {displayType ? (
@@ -1480,6 +1493,7 @@ export default function TaskDetailPanel({
                 <div
                   className="td-settings-row"
                   data-half="true"
+                  data-td="status"
                   style={{ cursor: canEdit ? 'pointer' : 'default' }}
                   onClick={undefined}
                 >
@@ -1510,6 +1524,7 @@ export default function TaskDetailPanel({
                 <div
                   className="td-settings-row"
                   data-half="true"
+                  data-td="priority"
                   style={{ cursor: canEdit ? 'pointer' : 'default' }}
                   onClick={canEdit ? (e) => {
                     setPriorityAnchor((e.currentTarget as HTMLElement).getBoundingClientRect());
@@ -1536,11 +1551,14 @@ export default function TaskDetailPanel({
                     )}
                   </span>
                 </div>
+                </div>
 
+                <div className="td-m-group" data-td-group="plan">
                 {/* Work date */}
                 <div
                   className="td-settings-row td-date-row"
                   data-half="true"
+                  data-td="work"
                   style={{ cursor: canEdit ? 'pointer' : 'default' }}
                   onClick={canEdit ? (e) => {
                     setWorkDateAnchor((e.currentTarget as HTMLElement).getBoundingClientRect());
@@ -1551,9 +1569,9 @@ export default function TaskDetailPanel({
                   <span className="v">
                     <span className="td-date-text">
                       {task.work_date ? (
-                        formatDueRelative(task.work_date).text
+                        isMobile ? formatPlanDate(task.work_date) : formatDueRelative(task.work_date).text
                       ) : (
-                        <span className="td-prop-empty">Set work date</span>
+                        <span className="td-prop-empty">{isMobile ? 'Set date' : 'Set work date'}</span>
                       )}
                     </span>
                     {canEdit && (
@@ -1585,6 +1603,7 @@ export default function TaskDetailPanel({
                 <div
                   className="td-settings-row td-date-row"
                   data-half="true"
+                  data-td="start"
                   style={{ cursor: canEdit ? 'pointer' : 'default' }}
                   onClick={canEdit ? (e) => {
                     setStartDateAnchor((e.currentTarget as HTMLElement).getBoundingClientRect());
@@ -1595,9 +1614,9 @@ export default function TaskDetailPanel({
                   <span className="v">
                     <span className="td-date-text">
                       {task.start_date ? (
-                        formatDueRelative(task.start_date).text
+                        isMobile ? formatPlanDate(task.start_date) : formatDueRelative(task.start_date).text
                       ) : (
-                        <span className="td-prop-empty">Set start date</span>
+                        <span className="td-prop-empty">{isMobile ? 'Set date' : 'Set start date'}</span>
                       )}
                     </span>
                     {canEdit && (
@@ -1629,6 +1648,7 @@ export default function TaskDetailPanel({
                 <div
                   className="td-settings-row td-date-row"
                   data-half="true"
+                  data-td="due"
                   style={{ cursor: canEdit ? 'pointer' : 'default' }}
                   onClick={canEdit ? (e) => {
                     setDueDateAnchor((e.currentTarget as HTMLElement).getBoundingClientRect());
@@ -1640,10 +1660,10 @@ export default function TaskDetailPanel({
                     <span className="td-date-text">
                       {task.due_date ? (
                         <span style={{ color: due.accent ? 'oklch(0.55 0.18 25)' : 'var(--sh-ink)' }}>
-                          {due.text}{due.accent ? ' · Overdue' : ''}
+                          {isMobile ? formatPlanDate(task.due_date) : `${due.text}${due.accent ? ' · Overdue' : ''}`}
                         </span>
                       ) : (
-                        <span className="td-prop-empty">Set due date</span>
+                        <span className="td-prop-empty">{isMobile ? 'Set date' : 'Set due date'}</span>
                       )}
                     </span>
                     {canEdit && (
@@ -1676,6 +1696,7 @@ export default function TaskDetailPanel({
                 <div
                   className="td-settings-row"
                   data-half="true"
+                  data-td="repeat"
                   style={{ cursor: canEdit || task.recurring_parent_id ? 'pointer' : 'default' }}
                   onClick={(e) => {
                     if (task.recurring_parent_id) {
@@ -1716,6 +1737,7 @@ export default function TaskDetailPanel({
                 <div
                   className="td-settings-row"
                   data-half="true"
+                  data-td="estimate"
                   style={{ cursor: canEdit ? 'pointer' : 'default' }}
                   onClick={canEdit && !editingEstimate ? () => { setEditingEstimate(true); setEstimateInput(formatMinutes(task.time_estimate)); } : undefined}
                 >
@@ -1752,51 +1774,11 @@ export default function TaskDetailPanel({
                   </span>
                 </div>
 
-                {/* Labels */}
-                <div
-                  className="td-settings-row"
-                  data-half="true"
-                  role={canEdit ? 'button' : undefined}
-                  tabIndex={canEdit ? 0 : undefined}
-                  onClick={canEdit ? (e) => {
-                    setLabelAnchorRect((e.currentTarget as HTMLElement).getBoundingClientRect());
-                    setLabelPickerOpen((v) => !v);
-                  } : undefined}
-                  style={canEdit ? { cursor: 'pointer' } : undefined}
-                >
-                  <span className="k">{META_ICONS.Labels}Labels</span>
-                  <span className="v" style={{ flexWrap: 'wrap', gap: 6 }}>
-                    {task.tags && task.tags.length > 0 ? (
-                      task.tags.map((t) => (
-                        <span
-                          key={t.id}
-                          className="td-hashtag"
-                          style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}
-                        >
-                          <span style={{ width: 8, height: 8, borderRadius: 9999, background: t.color || '#6b7280', display: 'inline-block' }} aria-hidden />
-                          {t.name}
-                          {canEdit && (
-                            <span
-                              role="button"
-                              aria-label={`Remove ${t.name}`}
-                              onClick={(e) => { e.stopPropagation(); if (task) detachLabel.mutate(t.id); }}
-                              style={{ cursor: 'pointer', opacity: 0.6, paddingLeft: 2 }}
-                            >
-                              ×
-                            </span>
-                          )}
-                        </span>
-                      ))
-                    ) : (
-                      <span className="td-prop-empty">+ Add label</span>
-                    )}
-                  </span>
-                </div>
-
                 {/* Time logged */}
                 <div
                   className="td-settings-row"
                   data-half="true"
+                  data-td="time"
                   style={{ cursor: canEditTimeLogs && !editingLogged && !isTimerForThisTask ? 'pointer' : 'default' }}
                   onClick={canEditTimeLogs && !editingLogged && !isTimerForThisTask ? () => {
                     const total = task.time_tracked || 0;
@@ -1863,7 +1845,7 @@ export default function TaskDetailPanel({
                         {formatTracked(isTimerForThisTask ? ((task.time_tracked || 0) + timerElapsed) : task.time_tracked) || '0m'}
                       </span>
                     ) : (
-                      <span className="td-prop-empty">0h logged</span>
+                      <span className="td-prop-empty">{isMobile ? '0m' : '0h logged'}</span>
                     )}
                   </span>
                 </div>
@@ -1872,7 +1854,7 @@ export default function TaskDetailPanel({
                     per-space/day figure (not task-specific); managers edit it in
                     the space Reports tab. Hidden when the folder has none today. */}
                 {elapsedTodaySeconds > 0 && (
-                  <div className="td-settings-row" data-half="true" style={{ cursor: 'default' }}>
+                  <div className="td-settings-row" data-half="true" data-td="elapsed" style={{ cursor: 'default' }}>
                     <span className="k">{META_ICONS.Estimate}Elapsed (idle)</span>
                     <span className="v">
                       <span title="Idle-day time elapsed for this space today. Edit it in the space's Reports tab.">
@@ -1881,9 +1863,53 @@ export default function TaskDetailPanel({
                     </span>
                   </div>
                 )}
+                </div>
 
-                {/* Created by — full width */}
-                <div className="td-settings-row" data-half="true" style={{ gridColumn: '1 / -1', borderRight: 'none', borderBottom: 'none' }}>
+                <div className="td-m-group" data-td-group="labels">
+                <div
+                  className="td-settings-row"
+                  data-half="true"
+                  data-td="labels"
+                  role={canEdit ? 'button' : undefined}
+                  tabIndex={canEdit ? 0 : undefined}
+                  onClick={canEdit ? (e) => {
+                    setLabelAnchorRect((e.currentTarget as HTMLElement).getBoundingClientRect());
+                    setLabelPickerOpen((v) => !v);
+                  } : undefined}
+                  style={canEdit ? { cursor: 'pointer' } : undefined}
+                >
+                  <span className="k">{META_ICONS.Labels}Labels</span>
+                  <span className="v" style={{ flexWrap: 'wrap', gap: 6 }}>
+                    {task.tags && task.tags.length > 0 ? (
+                      task.tags.map((t) => (
+                        <span
+                          key={t.id}
+                          className="td-hashtag"
+                          style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                        >
+                          <span style={{ width: 8, height: 8, borderRadius: 9999, background: t.color || '#6b7280', display: 'inline-block' }} aria-hidden />
+                          {t.name}
+                          {canEdit && (
+                            <span
+                              role="button"
+                              aria-label={`Remove ${t.name}`}
+                              onClick={(e) => { e.stopPropagation(); if (task) detachLabel.mutate(t.id); }}
+                              style={{ cursor: 'pointer', opacity: 0.6, paddingLeft: 2 }}
+                            >
+                              ×
+                            </span>
+                          )}
+                        </span>
+                      ))
+                    ) : (
+                      <span className="td-prop-empty">+ Add label</span>
+                    )}
+                  </span>
+                </div>
+                </div>
+
+                <div className="td-m-group" data-td-group="created">
+                <div className="td-settings-row" data-half="true" data-td="created" style={{ gridColumn: '1 / -1', borderRight: 'none', borderBottom: 'none' }}>
                   <span className="k">{META_ICONS.Reporter}Created by</span>
                   <span className="v">
                     {task.creator ? (
@@ -1900,6 +1926,7 @@ export default function TaskDetailPanel({
                       <span className="muted">—</span>
                     )}
                   </span>
+                </div>
                 </div>
                 </div>
               </div>
