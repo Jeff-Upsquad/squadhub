@@ -214,8 +214,9 @@ export default function NewTaskRow({
   const assigneeIds = useMemo(() => assignees.map((a) => a.id), [assignees]);
   const priority = (t.priority as string) || 'none';
   const priDef = PRIORITIES.find((p) => p.key === priority);
-  const breadcrumb = [t.space?.name, t.folder?.name, t.list?.name].filter(Boolean).join(' / ') || t.parent_task?.title || '';
+  const breadcrumb = [t.space?.name, t.folder?.name, t.list?.name].filter(Boolean).join(' / ') || '';
   const isFocused = isTaskFocused(task);
+  const isSubtask = !!t.parent_task_id;
 
   // Optimistically patch both queue caches so a cell updates instantly, then let the
   // server be the source of truth (a refetch may legitimately drop the row — e.g.
@@ -309,7 +310,18 @@ export default function NewTaskRow({
             {isFocused ? '★' : '☆'}
           </button>
           <div className="nt-task-text">
-            <button type="button" className="nt-title" title={`Open “${t.title}”`} onClick={() => setActiveTask(task.id)}>{t.title}</button>
+            {isSubtask && t.parent_task && (
+              <button
+                type="button"
+                className="lv-parent-ref"
+                onClick={(e) => { e.stopPropagation(); setActiveTask(t.parent_task!.id); }}
+                title={`Parent task: ${t.parent_task.title}`}
+              >
+                <span aria-hidden>↳</span>
+                <span className="lv-parent-ref-title">{t.parent_task.title}</span>
+              </button>
+            )}
+            <button type="button" className="nt-title" title={`Open "${t.title}"`} onClick={() => setActiveTask(task.id)}>{t.title}</button>
             {breadcrumb && <div className="nt-breadcrumb" title={breadcrumb}>{breadcrumb}</div>}
           </div>
         </div>
