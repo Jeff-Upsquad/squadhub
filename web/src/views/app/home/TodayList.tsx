@@ -672,29 +672,29 @@ function TodayRow({ task: t, onOpen, secondsToday = 0 }: { task: Task; onOpen: (
       />
       <div className="t">
         {subtasks.length > 0 && (
-          <>
-            <button
-              type="button"
-              className="hm-sub-chevron"
-              data-expanded={subsExpanded || undefined}
-              aria-label={subsExpanded ? 'Collapse subtasks' : 'Expand subtasks'}
-              aria-expanded={subsExpanded}
-              title={subsExpanded ? 'Collapse subtasks' : `Subtasks · ${subsDone}/${subtasks.length} done`}
-              onClick={(e) => { e.stopPropagation(); setSubsExpanded((v) => !v); }}
-            >
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <path d="m9 18 6-6-6-6" />
-              </svg>
-            </button>
-            <span className="hm-sub-count" title={`${subsDone} of ${subtasks.length} subtasks done`}>
-              {subsDone}/{subtasks.length}
-            </span>
-          </>
+          <button
+            type="button"
+            className="hm-sub-chevron"
+            data-expanded={subsExpanded || undefined}
+            aria-label={subsExpanded ? 'Collapse subtasks' : 'Expand subtasks'}
+            aria-expanded={subsExpanded}
+            title={subsExpanded ? 'Collapse subtasks' : `Subtasks · ${subsDone}/${subtasks.length} done`}
+            onClick={(e) => { e.stopPropagation(); setSubsExpanded((v) => !v); }}
+          >
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="m9 18 6-6-6-6" />
+            </svg>
+          </button>
         )}
         <span className="title">
           {isSubtask && <span style={{ color: 'var(--sh-ink-4)', marginRight: 4 }}>↳</span>}
           {t.title}
         </span>
+        {subtasks.length > 0 && (
+          <span className="hm-sub-count" title={`${subsDone} of ${subtasks.length} subtasks done`}>
+            {subsDone}/{subtasks.length}
+          </span>
+        )}
         {isSubtask && parentTitle && <span className="hm-parent">↳ {parentTitle}</span>}
         {label && <span className="hm-tag">{label}</span>}
       </div>
