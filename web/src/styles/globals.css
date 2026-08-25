@@ -6180,6 +6180,82 @@ textarea.td-input-shell {
   100% { background: var(--sqc-hit-bg); }
 }
 
+/* CRM activity lines (comments, task events, stage moves mirrored from CRM).
+   Compact system-style rows: small tinted icon chip in the avatar gutter,
+   "Name <activity text>" in muted ink, quiet time on the right. */
+.sqc-activity {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr);
+  align-items: flex-start;
+  gap: 8px;
+  padding: 4px 20px;
+  font-family: var(--sh-font);
+}
+.sqc-activity__gutter {
+  display: flex;
+  justify-content: center;
+  padding-top: 3px;
+}
+.sqc-activity__icon {
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--sh-bg-soft);
+  border: 1px solid var(--sh-border-soft, var(--sh-border));
+  color: var(--sh-text-2);
+  flex-shrink: 0;
+}
+.sqc-activity--comment .sqc-activity__icon { color: #2962ff; }
+.sqc-activity--task-created .sqc-activity__icon { color: #2962ff; }
+.sqc-activity--task-completed .sqc-activity__icon { color: #1d8a4e; }
+.sqc-activity--task-rescheduled .sqc-activity__icon { color: #b26a00; }
+.sqc-activity--stage .sqc-activity__icon { color: var(--sh-brand); }
+.sqc-activity--substage .sqc-activity__icon { color: #7c4dbe; }
+.dark .sqc-activity--comment .sqc-activity__icon,
+.dark .sqc-activity--task-created .sqc-activity__icon { color: #7da4ff; }
+.dark .sqc-activity--task-completed .sqc-activity__icon { color: #5ec98a; }
+.dark .sqc-activity--task-rescheduled .sqc-activity__icon { color: #e0a04a; }
+.dark .sqc-activity--substage .sqc-activity__icon { color: #b28ae8; }
+
+.sqc-activity__body {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  flex-wrap: wrap;
+  min-width: 0;
+  padding-top: 2px;
+}
+.sqc-activity__actor {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--sh-text-2);
+  white-space: nowrap;
+}
+.sqc-activity__text {
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--sh-text-2);
+  word-wrap: break-word;
+  flex: 1 1 auto;
+}
+.sqc-activity__text .sqc-paragraph { margin: 0; display: inline; }
+.sqc-activity__text strong { font-weight: 700; color: var(--sh-text); }
+.sqc-activity__time {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--sh-text-3);
+  white-space: nowrap;
+  opacity: 0.7;
+}
+.sqc-activity.is-search-hit {
+  background: var(--sqc-hit-bg);
+  box-shadow: inset 3px 0 0 var(--sh-brand);
+  animation: sqc-search-pulse 1s ease-out;
+}
+
 /* Message rows */
 .sqc-msg-scroll {
   flex: 1;

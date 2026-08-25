@@ -192,6 +192,19 @@ export interface SupportRoutingRule {
 // ---- Messages ----
 export type MessageType = 'text' | 'image' | 'audio' | 'video' | 'file';
 
+/** Marker payload for rows mirrored from CRM as entity activity lines
+ *  (Squad CRM server services/team-chat-mirror.ts) — the chat renderer
+ *  styles these as compact activity lines instead of chat bubbles. */
+export interface CrmActivityMeta {
+  kind: 'comment' | 'task' | 'stage' | 'substage';
+  /** For tasks: created | completed | rescheduled. */
+  action?: string;
+}
+
+export interface MessageMetadata {
+  crm_activity?: CrmActivityMeta;
+}
+
 export interface Message {
   id: string;
   channel_id: string | null;
@@ -211,6 +224,8 @@ export interface Message {
   // When set, this message is an interactive meeting poll card — MessageBubble
   // renders <MeetingPollCard> instead of text content (see migration 139).
   meeting_event_id?: string | null;
+  // System sidecar — e.g. crm_activity marks CRM-mirrored activity lines.
+  metadata?: MessageMetadata | null;
   created_at: string;
   updated_at: string;
   is_deleted: boolean;

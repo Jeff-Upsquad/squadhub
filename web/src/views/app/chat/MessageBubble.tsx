@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useQueryClient } from '@tanstack/react-query';
-import type { Message, Reaction } from '@squadhub/shared';
+import type { CrmActivityMeta, Message, Reaction } from '@squadhub/shared';
 import api from '../../../services/api';
 import { useAuthStore } from '../../../stores/authStore';
 import EmojiPicker from './EmojiPicker';
@@ -189,6 +189,94 @@ export function DateSeparator({ date }: { date: string }) {
   return (
     <div className="sqc-day-divider">
       <div className="sqc-day-divider__label">{date}</div>
+    </div>
+  );
+}
+
+// ---- CRM activity lines ----
+// Messages mirrored from CRM carry metadata.crm_activity; they render as
+// compact system-style activity rows instead of chat bubbles.
+export function getActivityMeta(message: Message): CrmActivityMeta | null {
+  return message.metadata?.crm_activity ?? null;
+}
+
+function activityVariant(meta: CrmActivityMeta): string {
+  if (meta.kind === 'task') return `task-${meta.action || 'created'}`;
+  return meta.kind;
+}
+
+const ACTIVITY_ICON: Record<string, React.ReactNode> = {
+  // comment — speech bubble
+  comment: (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M8 10h8M8 14h4M21 12a9 9 0 11-3.3-6.96L21 3l-1.1 3.85A8.96 8.96 0 0121 12z" />
+    </svg>
+  ),
+  'task-created': (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9h6m-3-3v6" />
+    </svg>
+  ),
+  'task-completed': (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+    </svg>
+  ),
+  'task-rescheduled': (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+    </svg>
+  ),
+  // stage move — double chevron
+  stage: (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M5 6l6 6-6 6m8-12l6 6-6 6" />
+    </svg>
+  ),
+  // sub-stage — corner-down-right (nested under a stage)
+  substage: (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v6a4 4 0 004 4h12m0 0l-4-4m4 4l-4 4" />
+    </svg>
+  ),
+};
+
+export function ActivityRow({
+  message,
+  meta,
+  highlighted,
+}: {
+  message: Message;
+  meta: CrmActivityMeta;
+  /** Flash styling when a search result jumped here. */
+  highlighted?: boolean;
+}) {
+  const time = useMemo(
+    () => new Date(message.created_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }),
+    [message.created_at],
+  );
+  const variant = activityVariant(meta);
+  const icon = ACTIVITY_ICON[variant] ?? ACTIVITY_ICON.comment;
+
+  return (
+    <div className={`sqc-activity sqc-activity--${variant}${highlighted ? ' is-search-hit' : ''}`} data-message-id={message.id}>
+      <div className="sqc-activity__gutter">
+        <span className="sqc-activity__icon">{icon}</span>
+      </div>
+      <div className="sqc-activity__body">
+        <span className="sqc-activity__actor">{message.sender?.display_name || 'Someone'}</span>
+        <span className="sqc-activity__text">
+          {renderContent(message.content || '').map((block, i) => (
+            <Fragment key={i}>
+              {i > 0 ? ' ' : ''}
+              {block}
+            </Fragment>
+          ))}
+        </span>
+        <span className="sqc-activity__time" title={new Date(message.created_at).toLocaleString()}>
+          {time}
+        </span>
+      </div>
     </div>
   );
 }
@@ -755,6 +843,10 @@ interface Props {
 }
 
 export default function MessageBubble({ message, onOpenThread, inThread, grouped, threadMeta, highlighted }: Props) {
+  return <ChatMessageBubble {...{ message, onOpenThread, inThread, grouped, threadMeta, highlighted }} />;
+}
+
+function ChatMessageBubble({ message, onOpenThread, inThread, grouped, threadMeta, highlighted }: Props) {
   const queryClient = useQueryClient();
   const [showPicker, setShowPicker] = useState(false);
   const emojiBtnRef = useRef<HTMLButtonElement>(null);

@@ -3,7 +3,7 @@ import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
 import api from '../../../services/api';
 import { getSocket } from '../../../services/socket';
 import type { Message } from '@squadhub/shared';
-import MessageBubble, { DateSeparator } from './MessageBubble';
+import MessageBubble, { DateSeparator, getActivityMeta } from './MessageBubble';
 import MessageComposer, { type MessageComposerHandle } from './MessageComposer';
 import ThreadPanel from './ThreadPanel';
 import { usePanelFileDrop } from '../pm/usePanelFileDrop';
@@ -507,6 +507,9 @@ export default function ChatPanel({
     const prev = messagesWithDates[idx - 1];
     const cur = messagesWithDates[idx];
     if (!prev || prev.type !== 'message' || cur.type !== 'message') return false;
+    // Activity lines break the stacking chain — the next real message keeps
+    // its avatar/header even from the same author.
+    if (getActivityMeta(prev.message!) || getActivityMeta(cur.message!)) return false;
     if (prev.message!.sender_id !== cur.message!.sender_id) return false;
     const dt = new Date(cur.message!.created_at).getTime() - new Date(prev.message!.created_at).getTime();
     return dt >= 0 && dt < 5 * 60 * 1000;
