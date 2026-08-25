@@ -214,7 +214,7 @@ export default function NewTaskRow({
   const assigneeIds = useMemo(() => assignees.map((a) => a.id), [assignees]);
   const priority = (t.priority as string) || 'none';
   const priDef = PRIORITIES.find((p) => p.key === priority);
-  const breadcrumb = [t.space?.name, t.list?.name].filter(Boolean).join(' / ') || t.parent_task?.title || '';
+  const breadcrumb = [t.space?.name, t.folder?.name, t.list?.name].filter(Boolean).join(' / ') || t.parent_task?.title || '';
   const isFocused = isTaskFocused(task);
 
   // Optimistically patch both queue caches so a cell updates instantly, then let the
