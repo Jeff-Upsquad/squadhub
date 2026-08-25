@@ -35,6 +35,9 @@ export interface LogTaskTimeResult {
  *   3. daily_time_summaries — daily timesheet total + design Reports
  *      (unless skipDailySummary).
  *
+ * Also applies the unassigned-task fallback: logging positive time on a task
+ * with no assignees makes the logger the assignee (see ensureAssigneeOnTimeLogged).
+ *
  * Extracted from POST /pm/tasks/:id/time-entries so the work-block run-close
  * path logs block time through the exact same flow. Callers are responsible for
  * any access-control checks before invoking.
@@ -45,7 +48,7 @@ export async function logTaskTimeEntry(params: LogTaskTimeParams): Promise<LogTa
   // Resolve list → space → workspace for the entry's workspace_id.
   const { data: task } = await supabaseAdmin
     .from('tasks')
-    .select('id, list_id, time_tracked')
+    .select('id, list_id, time_tracked, assignee_ids')
     .eq('id', taskId)
     .single();
   if (!task) return { ok: false, error: 'Task not found' };
@@ -83,11 +86,34 @@ export async function logTaskTimeEntry(params: LogTaskTimeParams): Promise<LogTa
     .update({ time_tracked: newTotal })
     .eq('id', taskId);
 
+  if (durationSeconds > 0) {
+    await ensureAssigneeOnTimeLogged(taskId, userId, ((task as any).assignee_ids as string[] | null) ?? null);
+  }
+
   if (!skipDailySummary) {
     await upsertDailySummary(userId, workspaceId, startedAt, stoppedAt, durationSeconds);
   }
 
   return { ok: true, entry, workspaceId };
+}
+
+/**
+ * Unassigned-task fallback: whoever logs time on a task with no assignees
+ * becomes its assignee — logged work implies ownership. Only fires when
+ * `currentAssigneeIds` is empty/null; callers must pass the value they read
+ * in the same flow (never undefined) so we can't clobber existing assignees.
+ */
+export async function ensureAssigneeOnTimeLogged(
+  taskId: string,
+  userId: string,
+  currentAssigneeIds: string[] | null,
+): Promise<void> {
+  if (!currentAssigneeIds || currentAssigneeIds.length === 0) {
+    await supabaseAdmin
+      .from('tasks')
+      .update({ assignee_ids: [userId] })
+      .eq('id', taskId);
+  }
 }
 
 /**

@@ -10,7 +10,7 @@ import { getUserRoleIds } from '../../utils/roles';
 import { PARTNER_USER_TYPES } from '@squadhub/shared';
 import { spawnRoutineInstance } from '../../services/routineSpawner';
 import { todayIST } from '../../utils/ist';
-import { logTaskTimeEntry } from '../../utils/taskTime';
+import { logTaskTimeEntry, ensureAssigneeOnTimeLogged } from '../../utils/taskTime';
 import { logTaskActivity, type TaskActivityEvent } from '../../utils/taskActivity';
 
 const router = Router();
@@ -1734,7 +1734,7 @@ router.patch('/tasks/:id/time-tracked', async (req: Request, res: Response) => {
     // the entry correctly. If old == new, skip the entry (no-op edit).
     const { data: existing } = await supabaseAdmin
       .from('tasks')
-      .select('time_tracked, list_id')
+      .select('time_tracked, list_id, assignee_ids')
       .eq('id', id)
       .single();
     const oldTotal = (existing as any)?.time_tracked || 0;
@@ -1778,6 +1778,10 @@ router.patch('/tasks/:id/time-tracked', async (req: Request, res: Response) => {
           duration_seconds: delta,
           source: 'manual',
         });
+
+        if (delta > 0) {
+          await ensureAssigneeOnTimeLogged(id, req.userId!, ((existing as any).assignee_ids as string[] | null) ?? null);
+        }
 
         // Also update daily_time_summaries for the dashboard
         const IST_OFFSET = 5.5 * 60 * 60 * 1000;
