@@ -1,4 +1,5 @@
-import { Fragment, useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import type { Message, Reaction } from '@squadhub/shared';
 import api from '../../../services/api';
@@ -273,18 +274,22 @@ function HoverActions({
   onReplyInThread,
   onMore,
   showMore,
+  emojiRef,
+  moreRef,
 }: {
   onAddReaction: () => void;
   onReplyInThread?: () => void;
   onMore?: () => void;
   showMore?: boolean;
+  emojiRef?: React.RefObject<HTMLButtonElement | null>;
+  moreRef?: React.RefObject<HTMLButtonElement | null>;
 }) {
   return (
     <div className="sqc-msg__hover" onClick={(e) => e.stopPropagation()}>
       <button type="button" title="Mark as complete">
         <span style={{ fontSize: 14 }}>✓</span>
       </button>
-      <button type="button" onClick={onAddReaction} title="Add reaction">
+      <button ref={emojiRef} type="button" onClick={onAddReaction} title="Add reaction">
         <svg className="h-[14px] w-[14px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M15.182 15.182a4.5 4.5 0 01-6.364 0M21 12a9 9 0 11-18 0 9 9 0 0118 0zM9.75 9.75c0 .414-.168.75-.375.75S9 10.164 9 9.75 9.168 9 9.375 9s.375.336.375.75zm5.625 0c0 .414-.168.75-.375.75s-.375-.336-.375-.75.168-.75.375-.75.375.336.375.75z" />
         </svg>
@@ -302,7 +307,7 @@ function HoverActions({
         </svg>
       </button>
       {showMore && (
-        <button type="button" onClick={onMore} title="More">
+        <button ref={moreRef} type="button" onClick={onMore} title="More">
           <span style={{ fontSize: 16, lineHeight: 0.7 }}>⋯</span>
         </button>
       )}
@@ -311,6 +316,9 @@ function HoverActions({
 }
 
 // ---- Message action menu (⋯) ----
+// Rendered through a portal with position:fixed so it can't be clipped by the
+// messages scroller (overflow-y:auto) — flips above the ⋯ button and clamps
+// to the viewport edges when space is tight.
 function MessageActionMenu({
   canEdit,
   canDelete,
@@ -319,6 +327,7 @@ function MessageActionMenu({
   onDelete,
   onHistory,
   onClose,
+  anchor,
 }: {
   canEdit: boolean;
   canDelete: boolean;
@@ -327,13 +336,35 @@ function MessageActionMenu({
   onDelete: () => void;
   onHistory: () => void;
   onClose: () => void;
+  anchor: { top: number; bottom: number; left: number; right: number } | null;
 }) {
-  return (
+  const menuStyle = useMemo<React.CSSProperties>(() => {
+    if (!anchor || typeof window === 'undefined') return { visibility: 'hidden' };
+    const estimatedH = 128; // up to 3 menu items + vertical padding
+    const spaceBelow = window.innerHeight - anchor.bottom;
+    const spaceAbove = anchor.top;
+    const openUpward = spaceBelow < estimatedH && spaceAbove > spaceBelow;
+    // Right-align to the ⋯ button, but never let the menu cross either edge.
+    const right = Math.max(8, Math.min(window.innerWidth - anchor.right, window.innerWidth - 168));
+    return {
+      position: 'fixed',
+      ...(openUpward ? { bottom: window.innerHeight - anchor.top + 6 } : { top: anchor.bottom + 6 }),
+      right,
+      maxHeight: window.innerHeight - 16,
+      overflowY: 'auto',
+      zIndex: 100,
+    };
+  }, [anchor]);
+
+  if (typeof document === 'undefined') return null;
+
+  return createPortal(
     <>
       {/* click-away backdrop */}
-      <div className="fixed inset-0 z-40" onClick={onClose} />
+      <div style={{ position: 'fixed', inset: 0, zIndex: 99 }} onClick={onClose} />
       <div
-        className="absolute right-3 top-9 z-50 min-w-[160px] overflow-hidden rounded-[8px] border border-[var(--sh-border)] bg-[var(--sh-bg)] py-1 shadow-lg"
+        className="min-w-[160px] overflow-hidden rounded-[8px] border border-[var(--sh-border)] bg-[var(--sh-bg)] py-1 shadow-lg"
+        style={menuStyle}
         onClick={(e) => e.stopPropagation()}
         role="menu"
       >
@@ -358,7 +389,48 @@ function MessageActionMenu({
           </button>
         )}
       </div>
-    </>
+    </>,
+    document.body,
+  );
+}
+
+// ---- Emoji picker popover (portaled, clip-proof like MessageActionMenu) ----
+function EmojiPickerPopover({
+  anchor,
+  onPick,
+  onClose,
+}: {
+  anchor: { top: number; bottom: number; left: number; right: number } | null;
+  onPick: (emoji: string) => void;
+  onClose: () => void;
+}) {
+  const pickerStyle = useMemo<React.CSSProperties>(() => {
+    if (!anchor || typeof window === 'undefined') return { visibility: 'hidden' };
+    const width = 320;
+    const estimatedH = 336; // search box + 280px emoji grid
+    const spaceBelow = window.innerHeight - anchor.bottom;
+    const spaceAbove = anchor.top;
+    const openUpward = spaceBelow < estimatedH && spaceAbove > spaceBelow;
+    // Keep the 320px picker fully on-screen horizontally.
+    let right = window.innerWidth - anchor.right;
+    const maxRight = window.innerWidth - width - 8;
+    if (right > maxRight) right = maxRight;
+    if (right < 8) right = 8;
+    return {
+      position: 'fixed',
+      ...(openUpward ? { bottom: window.innerHeight - anchor.top + 6 } : { top: anchor.bottom + 6 }),
+      right,
+      zIndex: 100,
+    };
+  }, [anchor]);
+
+  if (typeof document === 'undefined') return null;
+
+  return createPortal(
+    <div style={pickerStyle}>
+      <EmojiPicker onPick={onPick} onClose={onClose} />
+    </div>,
+    document.body,
   );
 }
 
@@ -685,6 +757,14 @@ interface Props {
 export default function MessageBubble({ message, onOpenThread, inThread, grouped, threadMeta, highlighted }: Props) {
   const queryClient = useQueryClient();
   const [showPicker, setShowPicker] = useState(false);
+  const emojiBtnRef = useRef<HTMLButtonElement>(null);
+  const moreBtnRef = useRef<HTMLButtonElement>(null);
+  const [pickerAnchor, setPickerAnchor] = useState<{ top: number; bottom: number; left: number; right: number } | null>(
+    null,
+  );
+  const [menuAnchor, setMenuAnchor] = useState<{ top: number; bottom: number; left: number; right: number } | null>(
+    null,
+  );
   const sender = message.sender;
   const meId = useAuthStore((s) => s.user?.id);
   const time = useMemo(
@@ -712,6 +792,13 @@ export default function MessageBubble({ message, onOpenThread, inThread, grouped
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState('');
   const [historyOpen, setHistoryOpen] = useState(false);
+
+  // Capture the trigger button's viewport rect when opening a popover so the
+  // menu can be rendered via portal with position:fixed (clip-proof).
+  const captureRect = (ref: React.RefObject<HTMLButtonElement | null>) => {
+    const r = ref.current?.getBoundingClientRect();
+    return r ? { top: r.top, bottom: r.bottom, left: r.left, right: r.right } : null;
+  };
 
   // Mirror the server rules (routes/messages.ts): a sender can edit/delete their
   // own message within 10 minutes; edits are text-only. Admins can view the edit
@@ -803,9 +890,17 @@ export default function MessageBubble({ message, onOpenThread, inThread, grouped
   return (
     <div className={cls} data-message-id={message.id}>
       <HoverActions
-        onAddReaction={() => setShowPicker(true)}
+        emojiRef={emojiBtnRef}
+        moreRef={moreBtnRef}
+        onAddReaction={() => {
+          setPickerAnchor(captureRect(emojiBtnRef));
+          setShowPicker(true);
+        }}
         onReplyInThread={!inThread && onOpenThread ? onOpenThread : undefined}
-        onMore={() => setMenuOpen((v) => !v)}
+        onMore={() => {
+          setMenuAnchor(captureRect(moreBtnRef));
+          setMenuOpen((v) => !v);
+        }}
         showMore={showMore}
       />
       {menuOpen && (
@@ -820,19 +915,19 @@ export default function MessageBubble({ message, onOpenThread, inThread, grouped
             setMenuOpen(false);
           }}
           onClose={() => setMenuOpen(false)}
+          anchor={menuAnchor}
         />
       )}
       {historyOpen && <EditHistoryModal messageId={message.id} onClose={() => setHistoryOpen(false)} />}
       {showPicker && (
-        <div className="absolute right-4 top-4 z-50">
-          <EmojiPicker
-            onPick={(em) => {
-              toggleReaction(em);
-              setShowPicker(false);
-            }}
-            onClose={() => setShowPicker(false)}
-          />
-        </div>
+        <EmojiPickerPopover
+          anchor={pickerAnchor}
+          onPick={(em) => {
+            toggleReaction(em);
+            setShowPicker(false);
+          }}
+          onClose={() => setShowPicker(false)}
+        />
       )}
 
       <div className="sqc-msg__gutter">
