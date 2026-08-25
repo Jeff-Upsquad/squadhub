@@ -843,6 +843,13 @@ interface Props {
 }
 
 export default function MessageBubble({ message, onOpenThread, inThread, grouped, threadMeta, highlighted }: Props) {
+  // CRM-mirrored activity rows render as system lines, not chat bubbles.
+  // (Branch lives in this hook-free wrapper so ChatMessageBubble's hooks
+  // always run unconditionally.)
+  const activity = getActivityMeta(message);
+  if (activity) {
+    return <ActivityRow message={message} meta={activity} highlighted={highlighted} />;
+  }
   return <ChatMessageBubble {...{ message, onOpenThread, inThread, grouped, threadMeta, highlighted }} />;
 }
 
