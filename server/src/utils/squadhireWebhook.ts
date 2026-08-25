@@ -44,9 +44,9 @@ const SWEEPER_BATCH_SIZE = 20;
 // request-cards.controller so both sides agree on the talent-facing label.
 const PLAN_HOURS: Record<string, number> = {
   starter: 1,
-  basic: 2.5,
-  plus: 4.5,
-  pro: 6.5,
+  basic: 2,
+  plus: 4,
+  pro: 6,
   personal: 8,
 };
 

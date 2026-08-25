@@ -68,9 +68,9 @@ FROM subscriptions s
 CROSS JOIN (
   VALUES
     ('Starter',  1, 1.0,  5),
-    ('Basic',    2, 2.5, 10),
-    ('Plus',     3, 4.5, 20),
-    ('Pro',      4, 6.5, 30),
+    ('Basic',    2, 2.0, 10),
+    ('Plus',     3, 4.0, 20),
+    ('Pro',      4, 6.0, 30),
     ('Personal', 5, 8.0, 40)
 ) AS p(plan, sort_order, daily_hours, weekly_hours)
 CROSS JOIN (
