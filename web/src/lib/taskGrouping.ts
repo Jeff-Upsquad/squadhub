@@ -13,6 +13,7 @@ export const GROUP_BY_OPTIONS: { value: GroupBy; label: string }[] = [
   { value: 'work_date', label: 'Work date' },
   { value: 'due_date', label: 'Due date' },
   { value: 'priority', label: 'Priority' },
+  { value: 'status', label: 'Status' },
   { value: 'space', label: 'Space' },
   { value: 'folder', label: 'Folder' },
   { value: 'list', label: 'List' },
