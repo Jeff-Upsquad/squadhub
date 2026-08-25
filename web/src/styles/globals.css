@@ -7374,6 +7374,20 @@ ol.sqc-list {
 .hm-home .hm-task.hm-grouped .title { font-weight: 600; color: color-mix(in srgb, var(--sh-ink) 82%, transparent); }
 .hm-home .hm-grouped-children { padding-left: 14px; box-shadow: inset 2px 0 0 var(--sh-hair-3); margin: 2px 0 4px; }
 
+/* Inline subtask dropdown on Home rows — chevron + N/M done chip sit before the
+   title; expanding reveals the child rows below, indented like grouped children. */
+.hm-home .hm-sub-chevron { display: grid; place-items: center; width: 16px; height: 16px; padding: 0; border: none; background: transparent; border-radius: 4px; flex: none; color: var(--sh-ink-4); cursor: pointer; transition: transform 0.15s ease, background 0.13s ease, color 0.13s ease; }
+.hm-home .hm-sub-chevron[data-expanded] { transform: rotate(90deg); }
+.hm-home .hm-sub-chevron:hover { background: var(--sh-hair); color: var(--sh-ink); }
+.hm-home .hm-sub-count { font-family: 'Inter', sans-serif; font-size: 10.5px; font-weight: 600; color: color-mix(in srgb, var(--sh-ink) 55%, transparent); background: color-mix(in srgb, var(--sh-ink) 7%, transparent); border-radius: 999px; padding: 1px 7px; white-space: nowrap; flex: none; font-variant-numeric: tabular-nums; }
+.hm-home .hm-subtask-list { display: flex; flex-direction: column; gap: 1px; padding: 1px 10px 6px 40px; }
+.hm-home .hm-subtask { display: flex; align-items: center; gap: 10px; padding: 5px 8px; border-radius: 7px; cursor: pointer; }
+.hm-home .hm-subtask:hover { background: var(--sh-hair-3); }
+.hm-home .hm-subtask .t { flex: 1; min-width: 0; font-size: 12.5px; font-weight: 450; color: color-mix(in srgb, var(--sh-ink) 75%, transparent); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hm-home .hm-subtask[data-done="true"] .t { color: var(--sh-ink-4); text-decoration: line-through; }
+.hm-home .hm-subtask .checkbox { width: 14px; height: 14px; border-radius: 4px; }
+.hm-home .hm-subtask .hm-when { font-size: 10.5px; }
+
 /* Group headers */
 .hm-home .hm-group + .hm-group { border-top: 1px solid var(--sh-hair-3); margin-top: 6px; }
 .hm-home .hm-group-head { padding: 12px 18px 2px; font-family: 'Inter', sans-serif; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: color-mix(in srgb, var(--sh-ink) 50%, transparent); display: flex; align-items: center; gap: 6px; }
@@ -7580,7 +7594,7 @@ ol.sqc-list {
 .nt-check:hover { border-color: var(--sh-ink-3); }
 .nt-check[data-checked] { background: var(--sh-ink); border-color: var(--sh-ink); color: var(--surface); }
 
-.nt-title { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; width: 100%; text-align: left; background: none; border: 0; padding: 0; font-family: inherit; font-size: 13px; font-weight: 500; line-height: 1.35; color: color-mix(in srgb, var(--sh-ink) 90%, transparent); white-space: normal; overflow: hidden; overflow-wrap: anywhere; text-overflow: ellipsis; cursor: pointer; }
+.nt-title { display: block; width: 100%; text-align: left; background: none; border: 0; padding: 0; font-family: inherit; font-size: 11.5px; font-weight: 500; line-height: 1.4; color: color-mix(in srgb, var(--sh-ink) 90%, transparent); white-space: normal; overflow-wrap: anywhere; cursor: pointer; }
 .nt-title:hover { color: var(--sh-ink); text-decoration: underline; text-underline-offset: 2px; }
 .nt-breadcrumb { font-size: 11px; color: var(--sh-ink-4); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 1px; }
 

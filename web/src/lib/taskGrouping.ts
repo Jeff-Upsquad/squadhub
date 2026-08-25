@@ -365,3 +365,55 @@ export function buildFocusTodayGroup(tasks: Task[], sortBy: SortBy = 'manual'): 
       : sortTasks(matched, sortBy);
   return { key: 'focus_today', label: 'Focus Today', sort: -1, tasks: ordered };
 }
+
+// Nest flat subtask rows (list endpoints with include_subtasks return them as
+// top-level siblings) under their parents, so each parent row can offer the
+// expandable subtask dropdown (TaskRow chevron). Subtasks whose parent isn't in
+// the array — e.g. the parent only lives here via a multi-home link while the
+// children belong to its primary list — stay at the top level with their parent
+// breadcrumb, preserving the previous flat behaviour for those orphans.
+export function nestSubtasks(tasks: Task[]): Task[] {
+  if (!tasks.some((t) => t.parent_task_id)) return tasks;
+  const byParent = new Map<string, Task[]>();
+  const tops: Task[] = [];
+  for (const t of tasks) {
+    if (t.parent_task_id) {
+      const arr = byParent.get(t.parent_task_id);
+      if (arr) arr.push(t);
+      else byParent.set(t.parent_task_id, [t]);
+    } else {
+      tops.push(t);
+    }
+  }
+  const presentIds = new Set(tasks.map((t) => t.id));
+  const nested = tops.map((t) => {
+    const subs = byParent.get(t.id);
+    return subs ? { ...t, subtasks: subs } : t;
+  });
+  for (const [pid, subs] of byParent) {
+    if (!presentIds.has(pid)) nested.push(...subs);
+  }
+  return nested;
+}
+
+// Run a predicate over a nested list subtask-aware: a parent is kept when the
+// parent itself matches (all its subtasks stay) OR when any subtask matches
+// (the parent is kept carrying just the matching subtasks) — so searching or
+// filtering for a subtask surfaces it under its parent instead of hiding it.
+export function filterWithSubtasks(tasks: Task[], pred: (t: Task) => boolean): Task[] {
+  const out: Task[] = [];
+  for (const t of tasks) {
+    const subs = t.subtasks;
+    if (!subs || subs.length === 0) {
+      if (pred(t)) out.push(t);
+      continue;
+    }
+    if (pred(t)) {
+      out.push(t);
+      continue;
+    }
+    const matching = subs.filter(pred);
+    if (matching.length > 0) out.push({ ...t, subtasks: matching });
+  }
+  return out;
+}

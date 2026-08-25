@@ -1,9 +1,9 @@
 import { useMemo } from 'react';
-import type { SpaceStatus } from '@squadhub/shared';
+import type { SpaceStatus, Task } from '@squadhub/shared';
 import { useTasks, useUpdateTask, groupTasksByStatus } from '../../../hooks/useTasks';
 import { usePMStore, type ListGroupBy } from '../../../stores/pmStore';
 import { useAuthStore } from '../../../stores/authStore';
-import { groupTasks as groupTasksGeneric, partitionByCompletion, sortTasks, buildFocusTodayGroup, isTaskFocused, type SortBy } from '../../../lib/taskGrouping';
+import { groupTasks as groupTasksGeneric, partitionByCompletion, sortTasks, buildFocusTodayGroup, isTaskFocused, nestSubtasks, filterWithSubtasks, type SortBy } from '../../../lib/taskGrouping';
 import { filterTasks, countActiveFilters, EMPTY_FILTER, type TaskFilterState } from '../../../lib/filters';
 import { useIsMobile } from '../../../hooks/useIsMobile';
 import TaskGroupCard from './TaskGroupCard';
@@ -31,31 +31,33 @@ export default function ListView({
   sortBy?: SortBy;
   focusToday?: boolean;
 }) {
-  // Include subtasks as flat rows so a subtask is discoverable in the list and
-  // can show its parent (TaskRow renders a parent breadcrumb for these).
-  const { data: tasks, isLoading } = useTasks(listId, { includeSubtasks: true });
+  // Include subtasks as flat rows, then nest them under their parents so each
+  // parent row gets the expandable subtask dropdown (TaskRow's chevron) instead
+  // of subtasks cluttering the top level.
+  const { data: flatTasks, isLoading } = useTasks(listId, { includeSubtasks: true });
+  const tasks = useMemo(() => nestSubtasks(flatTasks ?? []), [flatTasks]);
   const updateTask = useUpdateTask(listId);
   const { selectedTasks, clearSelection, fadingTaskIds } = usePMStore();
   const currentUserId = useAuthStore((s) => s.user?.id);
   const tz = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone, []);
   const isMobile = useIsMobile();
 
+  // One predicate for filters + search + scoping, applied subtask-aware so a
+  // match on a subtask keeps its parent visible (with just matching subtasks).
   const filteredTasks = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
-    let arr = filterTasks(tasks ?? [], filters ?? EMPTY_FILTER, tz);
-    if (q) arr = arr.filter((t) => t.title.toLowerCase().includes(q));
-    if (myTasksOnly) {
-      if (!currentUserId) return [];
-      arr = arr.filter((t) => {
+    const matches = (t: Task): boolean => {
+      if (filterTasks([t], filters ?? EMPTY_FILTER, tz).length === 0) return false;
+      if (q && !t.title.toLowerCase().includes(q)) return false;
+      if (myTasksOnly) {
+        if (!currentUserId) return false;
         const assignees = (t.assignees || []) as { id: string }[];
-        return assignees.some((a) => a.id === currentUserId);
-      });
-    }
-    if (focusToday) {
-      // Focus is server-backed (the task's focused_at column) and persistent —
-      // a star stays until explicitly cleared; it does not reset overnight.
-      arr = arr.filter((t) => isTaskFocused(t));
-    }
+        if (!assignees.some((a) => a.id === currentUserId)) return false;
+      }
+      if (focusToday && !isTaskFocused(t)) return false;
+      return true;
+    };
+    let arr = filterWithSubtasks(tasks, matches);
     if (sortBy !== 'manual') {
       arr = sortTasks(arr, sortBy);
     }

@@ -177,6 +177,31 @@ export async function hydrateLabels<T extends { id: string }>(
   return tasks.map(t => ({ ...t, tags: byTask.get(t.id) || [] }));
 }
 
+// Attach each task's direct subtasks (`subtasks`) in one batched query, so list
+// payloads can render an expandable subtask dropdown without an extra fetch per
+// row (the detail panel keeps its own richer copy via GET /tasks/:id). Children
+// include done/closed rows so completed subtasks render struck-through.
+export async function hydrateSubtasks<T extends { id: string }>(
+  tasks: T[],
+): Promise<(T & { subtasks: any[] })[]> {
+  if (tasks.length === 0) return [];
+  const ids = tasks.map(t => t.id);
+  const { data: children } = await supabaseAdmin
+    .from('tasks')
+    .select('id, title, status, priority, due_date, work_date, parent_task_id, assignee_ids, created_at')
+    .in('parent_task_id', ids)
+    .order('created_at', { ascending: true });
+  const hydratedChildren = await hydrateAssignees(children || []);
+  const byParent = new Map<string, any[]>();
+  for (const c of hydratedChildren) {
+    const pid = (c as any).parent_task_id as string;
+    const arr = byParent.get(pid);
+    if (arr) arr.push(c);
+    else byParent.set(pid, [c]);
+  }
+  return tasks.map(t => ({ ...t, subtasks: byParent.get(t.id) || [] }));
+}
+
 // Attach `list: { id, name }`, `folder: { id, name }`, and `space: { id, name }`
 // to each task so the frontend can show the task's parent list/folder/space
 // without a second round-trip.
@@ -530,8 +555,9 @@ router.get('/tasks/my', async (req: Request, res: Response) => {
     const withGroups = await hydrateMultiHomeGroups(withLists);
     const withParents = await hydrateParents(withGroups);
     // Attach Labels (`tags`) so the Home "disappearing cards" (Recordings /
-    // Meetings / Calls) can filter by label name client-side.
-    const tasks = await hydrateLabels(withParents);
+    // Meetings / Calls) can filter by label name client-side, plus each task's
+    // direct subtasks so Home rows can expand their subtask list inline.
+    const tasks = await hydrateSubtasks(await hydrateLabels(withParents));
 
     // Compute day boundaries in user's timezone
     const fmt = new Intl.DateTimeFormat('en-CA', {
@@ -612,7 +638,7 @@ router.get('/tasks/my', async (req: Request, res: Response) => {
       if (!includeDone) {
         extra = extra.filter((t: any) => t.status !== 'done' && t.status !== 'closed');
       }
-      const hydratedExtra = await hydrateLabels(await hydrateParents(await hydrateLists(await hydrateAssignees(extra))));
+      const hydratedExtra = await hydrateSubtasks(await hydrateLabels(await hydrateParents(await hydrateLists(await hydrateAssignees(extra)))));
       buckets.focused = [...fromExisting, ...hydratedExtra];
     }
 
@@ -650,7 +676,7 @@ router.get('/tasks/my', async (req: Request, res: Response) => {
         const filtered = includeDone
           ? (extraRows ?? [])
           : (extraRows ?? []).filter((t: any) => t.status !== 'done' && t.status !== 'closed');
-        workedExtras = await hydrateParents(await hydrateLists(await hydrateAssignees(filtered)));
+        workedExtras = await hydrateSubtasks(await hydrateParents(await hydrateLists(await hydrateAssignees(filtered))));
       }
       const workedById = new Map<string, any>([
         ...have,

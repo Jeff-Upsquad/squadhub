@@ -611,6 +611,15 @@ function TodayRow({ task: t, onOpen, secondsToday = 0 }: { task: Task; onOpen: (
   const status = (t as any).status as string | undefined;
   const isDone = status === 'done' || status === 'closed';
   const displayDone = isDone || isFading;
+  // Inline subtask dropdown — hydrated by GET /pm/tasks/my (direct children,
+  // done ones included so they render struck-through). Chevron + N/M done
+  // counter sit before the title; expanding reveals the child rows below.
+  const subtasks = t.subtasks ?? [];
+  const [subsExpanded, setSubsExpanded] = useState(false);
+  const subsDone = subtasks.filter((s) => {
+    const st = (s as any).status as string | undefined;
+    return st === 'done' || st === 'closed';
+  }).length;
 
   const onToggleDone = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -639,6 +648,7 @@ function TodayRow({ task: t, onOpen, secondsToday = 0 }: { task: Task; onOpen: (
   if (isHidden) return null;
 
   return (
+    <>
     <div
       className="hm-task"
       data-done={displayDone}
@@ -661,6 +671,26 @@ function TodayRow({ task: t, onOpen, secondsToday = 0 }: { task: Task; onOpen: (
         onClick={onToggleDone}
       />
       <div className="t">
+        {subtasks.length > 0 && (
+          <>
+            <button
+              type="button"
+              className="hm-sub-chevron"
+              data-expanded={subsExpanded || undefined}
+              aria-label={subsExpanded ? 'Collapse subtasks' : 'Expand subtasks'}
+              aria-expanded={subsExpanded}
+              title={subsExpanded ? 'Collapse subtasks' : `Subtasks · ${subsDone}/${subtasks.length} done`}
+              onClick={(e) => { e.stopPropagation(); setSubsExpanded((v) => !v); }}
+            >
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="m9 18 6-6-6-6" />
+              </svg>
+            </button>
+            <span className="hm-sub-count" title={`${subsDone} of ${subtasks.length} subtasks done`}>
+              {subsDone}/{subtasks.length}
+            </span>
+          </>
+        )}
         <span className="title">
           {isSubtask && <span style={{ color: 'var(--sh-ink-4)', marginRight: 4 }}>↳</span>}
           {t.title}
@@ -756,6 +786,63 @@ function TodayRow({ task: t, onOpen, secondsToday = 0 }: { task: Task; onOpen: (
           )}
         </div>,
         document.body,
+      )}
+    </div>
+    {subsExpanded && subtasks.length > 0 && (
+      <div className="hm-subtask-list">
+        {subtasks.map((s) => (
+          <HomeSubtaskRow key={s.id} sub={s} onOpen={onOpen} />
+        ))}
+      </div>
+    )}
+    </>
+  );
+}
+
+// One subtask inside a Home row's expanded dropdown: checkbox + title (+ due
+// date + assignee). Clicking the row opens the subtask; the checkbox toggles
+// completion. Kept deliberately lighter than a full TodayRow.
+function HomeSubtaskRow({ sub: s, onOpen }: { sub: Task; onOpen: (id: string) => void }) {
+  const updateTask = useUpdateTask(null);
+  const status = (s as any).status as string | undefined;
+  const isDone = status === 'done' || status === 'closed';
+  const when = formatWhen(s.due_date);
+  const assignee = s.assignees?.[0];
+  return (
+    <div
+      className="hm-subtask"
+      data-done={isDone || undefined}
+      onClick={() => onOpen(s.id)}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen(s.id); } }}
+    >
+      <div
+        className="checkbox"
+        data-done={isDone || undefined}
+        role="button"
+        aria-label={isDone ? 'Mark incomplete' : 'Mark complete'}
+        onClick={(e) => {
+          e.stopPropagation();
+          updateTask.mutate({ id: s.id, status: isDone ? 'todo' : 'done' } as any);
+        }}
+      />
+      <span className="t">{s.title}</span>
+      {when.text && (
+        <span className="hm-when" data-overdue={when.state === 'overdue' || undefined}>
+          {when.text}
+        </span>
+      )}
+      {assignee ? (
+        <div
+          className="hm-ava"
+          style={{ background: avatarColor(assignee.id || assignee.email) }}
+          title={assignee.display_name || assignee.email}
+        >
+          {initialOf(assignee.display_name || assignee.email)}
+        </div>
+      ) : (
+        <div className="hm-ava" data-empty="true" title="Unassigned">–</div>
       )}
     </div>
   );
