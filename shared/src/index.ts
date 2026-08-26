@@ -987,6 +987,7 @@ export interface RolePermissions {
 
 // ---- Notifications ----
 export type NotificationType =
+  | 'announcement'
   | 'message_mention'
   | 'dm_received'
   | 'task_assigned'

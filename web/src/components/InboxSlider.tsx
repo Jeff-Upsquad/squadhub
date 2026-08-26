@@ -15,6 +15,7 @@ import { avatarFor, chatTargetFor, type Notification } from '../views/app/InboxV
  */
 
 const ACTION_LABEL: Record<Notification['type'], string> = {
+  announcement: 'Announcement',
   task_assigned: 'Assigned you a task',
   task_updated: 'Updated a task',
   task_completed: 'Completed a task',

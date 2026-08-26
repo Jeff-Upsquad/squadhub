@@ -14,6 +14,7 @@ export type Notification = {
   id: string;
   user_id: string;
   type:
+    | 'announcement'
     | 'task_assigned'
     | 'task_updated'
     | 'task_completed'
@@ -85,6 +86,7 @@ export function chatTargetFor(n: Notification): { id: string; kind: ChatKind } |
 function ctxLine(n: Notification): string {
   const chat = chatTargetFor(n);
   switch (n.type) {
+    case 'announcement': return 'Announcement';
     case 'dm_received': return 'Thread in a direct message';
     case 'message_mention': return chat?.kind === 'dm' ? 'Mention in a direct message' : 'Thread in a channel';
     case 'mention': return 'Mention in a task';
