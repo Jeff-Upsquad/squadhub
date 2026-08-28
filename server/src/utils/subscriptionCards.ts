@@ -452,9 +452,8 @@ export async function fanOutTierCards(
     };
     if (targetTiers.length === 1) {
       const entry = tierPricing[targetTiers[0]];
-      // Accept either a proposed price or a finalized subscription price
-      // (catalog-seeded briefs often have Final set with Proposed = 0).
-      if (tierHasPublishablePrice(entry, original.card_type === 'assignment')) {
+      // Accept either a priced tier or a request-quote tier (0).
+      if (tierHasPublishablePrice(entry, true)) {
         updates.proposed_price = coerceProposedPrice(entry.proposed_price);
         // null markup = inherit the plan catalog margin (don't coerce to 0).
         updates.markup = entry.markup ?? null;
@@ -473,11 +472,12 @@ export async function fanOutTierCards(
     return [originalCardId];
   }
 
-  // Multi-tier: every selected tier needs a client-facing price (proposed
-  // OR finalized subscription price — catalog seeds often leave proposed at 0).
+  // Multi-tier: every tier needs a price — but request-quote tiers
+  // (proposed_price 0, no Final) are valid for both assignments and
+  // subscriptions (unselected subscription levels now go as request quote).
   for (const tier of targetTiers) {
     const entry = tierPricing[tier];
-    if (!tierHasPublishablePrice(entry, original.card_type === 'assignment')) {
+    if (!tierHasPublishablePrice(entry, true)) {
       throw new Error(`Missing pricing for tier "${tier}"`);
     }
   }

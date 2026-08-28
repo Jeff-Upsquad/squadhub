@@ -178,16 +178,18 @@ export function resolveScalarClientBudget(
 
 /** True when a tier_pricing entry has a usable client-facing price.
  *  For assignment cards, proposed_price === 0 means "inviting bids" and is
- *  still broadcastable (the tier goes out without a fixed price). */
+ *  still broadcastable (the tier goes out without a fixed price).
+ *  For subscription cards, unselected tiers are now also "request quote"
+ *  (proposed_price 0 / no subscription_price) — same inviting-bids shape. */
 export function tierHasPublishablePrice(entry: {
   proposed_price?: number | null;
   subscription_price?: number | null;
-} | null | undefined, assignmentTier = false): boolean {
+} | null | undefined, allowInvite = false): boolean {
   if (!entry) return false;
   if (entry.subscription_price != null && entry.subscription_price > 0) return true;
   if (entry.proposed_price != null && entry.proposed_price > 0) return true;
-  // Assignment tiers with proposed_price === 0 are "inviting bids" — still broadcastable.
-  if (assignmentTier && entry.proposed_price === 0) return true;
+  // 0 = "request quote" / "inviting bids" — still broadcastable when allowed.
+  if (allowInvite && entry.proposed_price === 0) return true;
   return false;
 }
 
@@ -199,9 +201,9 @@ export function coerceProposedPrice(value: number | null | undefined): number | 
 
 /**
  * Standard talent levels always broadcast on subscription publish.
- * Client/admin "selected" levels use their set Final price; every other
- * level still fans out using the Subscriptions catalog price.
- * Custom is only included when already selected (no catalog default).
+ * Selected levels keep their set Final price; unselected levels go out
+ * as "request quote" (no fixed price — talent is invited to quote).
+ * Custom is only included when already selected.
  */
 export const BROADCAST_STANDARD_TIERS = ['Top Talents', 'Pro', 'Junior'] as const;
 
@@ -214,12 +216,12 @@ const SERVICE_TYPE_TO_SLUG: Record<string, string> = {
 
 /**
  * Expand a draft's selected tiers + pricing into the full broadcast set:
- *   - every standard level that has a catalog price for this plan
+ *   - every standard level (Junior/Pro/Top) always broadcasts
  *   - plus Custom if it was selected with a publishable price
  *
- * Selected / already-priced tiers keep their tier_pricing entry (client
- * budget Final, admin override, etc.). Unselected standard tiers get
- * catalog-seeded Final so they still broadcast at default rates.
+ * Selected tiers with a publishable price keep their entry. Unselected
+ * standard tiers go out as "request quote" (proposed_price 0, no
+ * subscription_price) — talent quotes, no catalog price.
  */
 export async function expandBroadcastTiersForPublish(opts: {
   serviceType: string | null | undefined;
@@ -277,6 +279,7 @@ export async function expandBroadcastTiersForPublish(opts: {
 
   for (const tier of ordered) {
     const existingEntry = existing[tier];
+    const isSelected = selected.includes(tier);
     if (tierHasPublishablePrice(existingEntry)) {
       tierPricing[tier] = {
         proposed_price: existingEntry!.proposed_price ?? 0,
@@ -290,21 +293,38 @@ export async function expandBroadcastTiersForPublish(opts: {
       continue;
     }
 
-    // Unselected (or selected but blank Final): catalog default, if any.
-    // Skip Custom — no catalog row for Custom.
     if (tier === 'Custom') continue;
-    const cat = catalog[tier];
-    if (tierHasPublishablePrice(cat)) {
-      tierPricing[tier] = {
-        proposed_price: 0,
-        markup: cat.markup ?? null,
-        subscription_price: cat.subscription_price ?? null,
-        ...(typeof existingEntry?.client_budget === 'number' && existingEntry.client_budget > 0
-          ? { client_budget: existingEntry.client_budget }
-          : {}),
-      };
-      targetTiers.push(tier);
+
+    // Selected but blank: try catalog fallback; otherwise fall through to
+    // request-quote (still broadcastable).
+    if (isSelected) {
+      const cat = catalog[tier];
+      if (tierHasPublishablePrice(cat)) {
+        tierPricing[tier] = {
+          proposed_price: 0,
+          markup: cat.markup ?? null,
+          subscription_price: cat.subscription_price ?? null,
+          ...(typeof existingEntry?.client_budget === 'number' && existingEntry.client_budget > 0
+            ? { client_budget: existingEntry.client_budget }
+            : {}),
+        };
+        targetTiers.push(tier);
+        continue;
+      }
     }
+
+    // Unselected (or selected with no catalog): "request quote" — no fixed
+    // price, talent is invited to quote. Uses 0 sentinel so tierHasPublishablePrice(...,
+    // true) treats it as broadcastable, and fan-out coerces 0 → NULL.
+    tierPricing[tier] = {
+      proposed_price: 0,
+      markup: null,
+      subscription_price: null,
+      ...(typeof existingEntry?.client_budget === 'number' && existingEntry.client_budget > 0
+        ? { client_budget: existingEntry.client_budget }
+        : {}),
+    };
+    targetTiers.push(tier);
   }
 
   return { targetTiers, tierPricing };

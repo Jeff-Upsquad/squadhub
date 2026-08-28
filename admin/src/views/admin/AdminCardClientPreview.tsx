@@ -300,11 +300,22 @@ export default function AdminCardClientPreview({
   const hasSelection = useMemo(() => recipients.some((r) => r.selected_at), [recipients]);
 
   // ── One talent, one section ────────────────────────────────────────────────
+  // Subscription "request quote" tiers have no fixed price (proposed_price
+  // null). Their first talent quote (pending_business) should sit in
+  // "For Review" so business sees it as a new quote to review, not in
+  // the Bidding negotiation section. SquadHire still lists normally.
+  const isRequestQuoteCard =
+    card.card_type !== 'assignment' &&
+    card.subscription_price == null &&
+    (card.proposed_price == null || card.proposed_price === 0);
   const sectionOf = (r: BusinessRecipient): string | null => {
     if (r.selected_at && r.subscription_activated_at) return 'assigned';
     if (r.selected_at) return 'selected';
     if (r.business_review_status === 'shortlisted') return 'shortlisted';
-    if (r.offer_id && (r.offer_status === 'pending_business' || r.offer_status === 'pending_talent')) return 'bidding';
+    if (r.offer_id && (r.offer_status === 'pending_business' || r.offer_status === 'pending_talent')) {
+      if (isRequestQuoteCard && r.offer_status === 'pending_business') return 'review';
+      return 'bidding';
+    }
     if (!r.business_review_status) return 'review';
     return null;
   };
@@ -608,6 +619,11 @@ export default function AdminCardClientPreview({
           cardId={card.id}
           clientView
           hideWhenEmpty
+          isRequestQuote={
+            card.card_type !== 'assignment' &&
+            (card as any).subscription_price == null &&
+            ((card as any).proposed_price == null || (card as any).proposed_price === 0)
+          }
           onOpenChat={
             isClosed ? undefined : (talentUserId, talentName) => setChatTarget({ id: talentUserId, name: talentName })
           }

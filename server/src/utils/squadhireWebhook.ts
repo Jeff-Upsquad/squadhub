@@ -979,6 +979,23 @@ export async function buildSquadhirePayloadForCard(
       delete content.customer_monthly_price;
     }
   }
+  // Subscription "request quote" tiers: no fixed price (both proposed and
+  // subscription_price are empty). Strip prices so SquadHire shows
+  // "Request quote" and talent is invited to quote — same as unpriced
+  // assignments. Delivered normally, just without a price.
+  {
+    const isSubscriptionRequestQuote =
+      cardType === 'subscription' &&
+      (contentSource as any).subscription_price == null &&
+      ((contentSource as any).proposed_price == null ||
+        (contentSource as any).proposed_price === 0);
+    if (isSubscriptionRequestQuote) {
+      delete content.monthly_price;
+      delete content.customer_monthly_price;
+      delete content.min_customer_price;
+      delete content.min_partner_price;
+    }
+  }
 
   const distribution: 'broadcast' | 'manual' =
     card.distribution === 'manual' ? 'manual' : 'broadcast';

@@ -1042,14 +1042,10 @@ router.post('/subscription-cards/:id/publish', async (req: Request, res: Respons
       return;
     }
 
-    // Both card types now expand to all three standard tiers on publish.
-    // Subscription cards fill unpriced tiers from the catalog;
-    // Assignment cards fill unpriced tiers as "inviting bids" (proposed_price 0).
-
-    // Broadcast product rule (subscription cards):
-    //   - Client/admin "selected" levels keep their set Final price
-    //   - Unselected standard levels (Junior / Pro / Top Talents) STILL
-    //     broadcast, priced from the Subscriptions catalog
+    // Both card types expand to all three standard tiers on publish.
+    // Subscription: selected levels keep their set Final price; unselected
+    // levels go out as "request quote" (no fixed price, talent quotes).
+    // Assignment: same — unpriced tiers are "inviting bids" (proposed_price 0).
     // Expand before fan-out so one card per level reaches talent.
     const selectedTiers: string[] = Array.isArray(card.target_tiers)
       ? (card.target_tiers as string[]).filter(Boolean)
@@ -1144,7 +1140,10 @@ router.post('/subscription-cards/:id/publish', async (req: Request, res: Respons
     }
 
     for (const tier of targetTiers) {
-      if (!tierHasPublishablePrice(tierPricing[tier], card.card_type === 'assignment')) {
+      // Request-quote tiers (proposed_price 0, no Final) are publishable
+      // for both subscriptions and assignments — allowInvite true.
+      const allowInvite = true;
+      if (!tierHasPublishablePrice(tierPricing[tier], allowInvite)) {
         res.status(400).json({
           success: false,
           error: `Missing pricing for tier "${tier}"`,
@@ -1154,7 +1153,7 @@ router.post('/subscription-cards/:id/publish', async (req: Request, res: Respons
     }
 
     // Persist expanded target_tiers + tier_pricing so fan-out creates one
-    // sibling card per level (selected at set price, others at catalog).
+    // sibling card per level (selected at set price, others as request quote).
     {
       const { error: expandErr } = await supabaseAdmin
         .from('subscription_cards')

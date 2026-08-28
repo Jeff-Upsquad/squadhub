@@ -1404,7 +1404,16 @@ export default function AdminSubscriptionCardRecipientsView({
             {/* Bidding — live from SquadHire (subscription + assignment).
                 Accept locks the figure; Select stays on the recipients funnel. */}
             {(card.card_type === 'assignment' || card.card_type === 'subscription' || !card.card_type) &&
-              !allTiersMode && <AdminAssignmentOffers cardId={card.id} />}
+              !allTiersMode && (
+                <AdminAssignmentOffers
+                  cardId={card.id}
+                  isRequestQuote={
+                    card.card_type !== 'assignment' &&
+                    card.subscription_price == null &&
+                    (card.proposed_price == null || card.proposed_price === 0)
+                  }
+                />
+              )}
 
             {/* One-click broadcast for every tier still awaiting broadcast. */}
             {allTiersMode && (

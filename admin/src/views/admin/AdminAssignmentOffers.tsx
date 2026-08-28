@@ -83,6 +83,7 @@ export default function AdminAssignmentOffers({
   onOpenChat,
   clientView = false,
   hideWhenEmpty = false,
+  isRequestQuote = false,
 }: {
   cardId: string;
   onOpenChat?: (talentUserId: string, talentName: string) => void;
@@ -96,6 +97,8 @@ export default function AdminAssignmentOffers({
    * nothing is lost by staying quiet.
    */
   hideWhenEmpty?: boolean;
+  /** Subscription "request quote" tiers: first talent quote lives in For Review, not Bidding. */
+  isRequestQuote?: boolean;
 }) {
   const qc = useQueryClient();
   const { data, isLoading } = useQuery({
@@ -146,7 +149,10 @@ export default function AdminAssignmentOffers({
   const [counterVal, setCounterVal] = useState('');
   const [openThread, setOpenThread] = useState<string | null>(null);
 
-  const offers = data?.offers ?? [];
+  const rawOffers = data?.offers ?? [];
+  // Subscription request-quote: initial talent quotes (pending_business) belong
+  // in For Review, not Bidding. Hide them here; the review funnel shows them.
+  const offers = isRequestQuote ? rawOffers.filter((o) => o.status !== 'pending_business') : rawOffers;
   const source = data?.source;
   const bidPricing = data?.bid_pricing ?? null;
   const busy = counter.isPending || accept.isPending || decline.isPending;
