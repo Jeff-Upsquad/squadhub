@@ -6,6 +6,7 @@ import { config } from '../config';
 import { supabaseAdmin } from '../supabase';
 import { expandBusinessBid, loadCardBidPricing } from '../utils/cardBidPricing';
 import { lockAcceptedBidPrice } from '../utils/lockAcceptedBidPrice';
+import { buildSquadhirePayloadForCard, deliverCardToSquadhire } from '../utils/squadhireWebhook';
 
 /**
  * Card offers / bids — admin management for subscription + assignment cards.
@@ -196,6 +197,19 @@ router.get('/:id/offers', async (req: Request, res: Response) => {
     try {
       const snap = await fetchOffersSnapshot(cardId);
       recordSuccess();
+      // If bidding has started and this card originally had a fixed margin,
+      // push the percent-derived margin to SquadHire so subsequent counters
+      // use percent (talent price stays proportional, never drops to zero).
+      // Fire-and-forget — the bid_pricing we already return is already percent-derived.
+      if (snap?.offers && snap.offers.length > 0 && bidPricing && bidPricing.margin_type === 'percent') {
+        // Check if original was fixed by re-reading raw pricing (best-effort).
+        // If webhook still has fixed, this delivery will flip it to percent.
+        buildSquadhirePayloadForCard(cardId)
+          .then((payload) => {
+            if (payload) return deliverCardToSquadhire(cardId, payload);
+          })
+          .catch(() => {});
+      }
       res.json({
         success: true,
         source: 'live',

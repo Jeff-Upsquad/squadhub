@@ -15,12 +15,41 @@
 import {
   partnerPriceFromCustomer,
   resolveFinalMargin,
+  resolveFinalizedPrice,
   resolveMinCustomerPrice,
   resolveMinPartnerPrice,
   type PlanMarginFields,
 } from '@squadhub/shared';
+import { config } from '../config';
 import { supabaseAdmin } from '../supabase';
 import { loadAssignmentMargin } from './assignmentCatalog';
+
+async function hasBiddingStarted(cardId: string): Promise<boolean> {
+  if (!config.squadhireWebhookUrl || !config.squadhireWebhookSecret) return false;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 2000);
+  try {
+    const url = new URL(config.squadhireWebhookUrl);
+    url.pathname = '/api/webhooks/squadhub/cards/offers-snapshot';
+    url.search = '';
+    const res = await fetch(url.toString(), {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-SquadHub-Signature': config.squadhireWebhookSecret,
+      },
+      body: JSON.stringify({ external_id: cardId, source: 'squadhub' }),
+      signal: controller.signal,
+    });
+    if (!res.ok) return false;
+    const json = (await res.json()) as { snapshot?: { offers?: unknown[] } };
+    return Array.isArray(json?.snapshot?.offers) && json.snapshot.offers.length > 0;
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 export interface CardBidPricing {
   card: {
@@ -159,7 +188,7 @@ export async function loadCardBidPricing(cardId: string): Promise<CardBidPricing
   }
 
   // Card-level adjusted margin freezes the TYPE to fixed.
-  const marginType: 'fixed' | 'percent' | null =
+  let marginType: 'fixed' | 'percent' | null =
     cardFields.markup != null
       ? 'fixed'
       : marginRow?.margin_type === 'percent'
@@ -167,18 +196,40 @@ export async function loadCardBidPricing(cardId: string): Promise<CardBidPricing
         : marginRow?.margin_value != null
           ? 'fixed'
           : null;
-  const marginValue =
+  let marginValue: number | null =
     cardFields.markup != null
       ? cardFields.markup
       : marginRow?.margin_value != null
         ? marginRow.margin_value
         : null;
+  let effectivePricing = marginRow;
+
+  // When bidding has started, fixed margins are auto-derived to percent so
+  // talent price scales proportionally and never drops to zero. Derived pct =
+  // fixed / listingPrice (e.g. 5000/25000=20%). Applies per-card only.
+  if (marginType === 'fixed' && marginValue != null) {
+    const listingPrice = resolveFinalizedPrice(cardFields as any) ?? marginRow?.price ?? null;
+    if (listingPrice != null && listingPrice > 0) {
+      let bidding = false;
+      try {
+        bidding = await hasBiddingStarted(card.id as string);
+      } catch {}
+      if (bidding) {
+        const pct = Math.round((marginValue / listingPrice) * 1000) / 10;
+        if (pct > 0 && pct < 100) {
+          marginType = 'percent';
+          marginValue = pct;
+          effectivePricing = { price: listingPrice, margin_value: pct, margin_type: 'percent' };
+        }
+      }
+    }
+  }
 
   return {
     card: { id: card.id as string, ...cardFields },
-    pricing: marginRow,
-    min_customer_price: resolveMinCustomerPrice(marginRow),
-    min_partner_price: resolveMinPartnerPrice(cardFields, marginRow),
+    pricing: effectivePricing,
+    min_customer_price: resolveMinCustomerPrice(effectivePricing),
+    min_partner_price: resolveMinPartnerPrice(cardFields, effectivePricing),
     margin_type: marginType,
     margin_value: marginValue,
   };

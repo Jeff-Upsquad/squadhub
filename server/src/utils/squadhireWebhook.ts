@@ -36,6 +36,35 @@ const INLINE_ATTEMPTS = 3;
 const INLINE_BACKOFF_MS = [0, 2_000, 10_000];
 const MAX_SYNC_ATTEMPTS = 10;
 const SWEEPER_INTERVAL_MS = 5 * 60 * 1_000;
+
+// Check if a card has any offers (bidding started) — used to auto-derive
+// percent from fixed margin so talent price never drops to zero on counters.
+async function fetchBiddingStateForWebhook(externalId: string): Promise<{ hasOffers: boolean }> {
+  if (!config.squadhireWebhookUrl || !config.squadhireWebhookSecret) return { hasOffers: false };
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 2000);
+  try {
+    const url = new URL(config.squadhireWebhookUrl);
+    url.pathname = '/api/webhooks/squadhub/cards/offers-snapshot';
+    url.search = '';
+    const res = await fetch(url.toString(), {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-SquadHub-Signature': config.squadhireWebhookSecret,
+      },
+      body: JSON.stringify({ external_id: externalId, source: 'squadhub' }),
+      signal: controller.signal,
+    });
+    if (!res.ok) return { hasOffers: false };
+    const json = (await res.json()) as { snapshot?: { offers?: unknown[] } };
+    return { hasOffers: Array.isArray(json?.snapshot?.offers) && json.snapshot.offers.length > 0 };
+  } catch {
+    return { hasOffers: false };
+  } finally {
+    clearTimeout(timer);
+  }
+}
 const SWEEPER_BATCH_SIZE = 20;
 
 // Default hours/day per standard plan name. Used as a fallback for
@@ -885,6 +914,8 @@ export async function buildSquadhirePayloadForCard(
 
   // Bidding rules for SquadHire: keep the same margin across counters, and
   // enforce catalog min floors (business + talent). Percent cuts ceil to ₹100.
+  // Fixed margins are auto-derived to percent when bidding so talent price
+  // never goes below zero proportionally: pct = fixed / listingPrice.
   {
     const cardFields = {
       markup: (contentSource as any).markup as number | null,
@@ -909,16 +940,52 @@ export async function buildSquadhirePayloadForCard(
     if (minPartner != null) content.min_partner_price = minPartner;
 
     // Effective margin rule: card markup freezes to fixed absolute; else plan.
+    // For bidding safety, fixed margins are converted to percent derived from
+    // the listing price so counters scale proportionally and talent never hits zero.
+    let effectiveMarginType: 'fixed' | 'percent' | null = null;
+    let effectiveMarginValue: number | null = null;
     if (cardFields.markup != null) {
-      content.margin_type = 'fixed';
-      content.margin_value = cardFields.markup;
+      effectiveMarginType = 'fixed';
+      effectiveMarginValue = cardFields.markup;
     } else if (marginRow && marginRow.margin_value != null) {
-      content.margin_type = marginRow.margin_type ?? 'fixed';
-      content.margin_value = marginRow.margin_value;
+      effectiveMarginType = marginRow.margin_type ?? 'fixed';
+      effectiveMarginValue = marginRow.margin_value;
+    }
+    // Auto-derive percent from fixed when we have a listing price — this keeps
+    // the initial partner price identical (e.g. 5000/25000=20% → 5000 cut) but
+    // makes subsequent counters proportional (6000 → 4800 talent, not 1000).
+    const listingPrice = resolveFinalizedPrice(cardFields) ?? resolvedCustomerMonthlyPrice ?? null;
+    if (effectiveMarginType === 'fixed' && effectiveMarginValue != null && listingPrice != null && listingPrice > 0) {
+      // Detect if bidding has started by checking SquadHire offers snapshot.
+      // We do a best-effort check; if it fails we keep fixed to avoid blocking delivery.
+      let biddingStarted = false;
+      try {
+        const snap = await fetchBiddingStateForWebhook(card.id as string);
+        biddingStarted = snap.hasOffers;
+      } catch {}
+      if (biddingStarted) {
+        const pct = Math.round((effectiveMarginValue / listingPrice) * 1000) / 10;
+        if (pct > 0 && pct < 100) {
+          effectiveMarginType = 'percent';
+          effectiveMarginValue = pct;
+        }
+      }
+    }
+    if (effectiveMarginType != null) {
+      content.margin_type = effectiveMarginType;
+      content.margin_value = effectiveMarginValue;
     }
     // Absolute cut at the current finalized price (for display / first bid).
+    // Use the effective (possibly percent-derived) margin row so margin_amount matches.
+    const effectiveMarginRowForAbs: PlanMarginFields | null =
+      effectiveMarginType === 'percent' && effectiveMarginValue != null
+        ? { price: listingPrice ?? 0, margin_value: effectiveMarginValue, margin_type: 'percent' }
+        : marginRow;
     const base = resolveFinalizedPrice(cardFields);
-    const absMargin = resolveFinalMargin(cardFields, marginRow, base);
+    const absMargin =
+      effectiveMarginType === 'percent'
+        ? resolveFinalMargin({ markup: null, partner_price_override: null } as any, effectiveMarginRowForAbs, base)
+        : resolveFinalMargin(cardFields, marginRow, base);
     if (absMargin != null) content.margin_amount = absMargin;
 
     // When we already have a customer price but partner was missing, derive it
