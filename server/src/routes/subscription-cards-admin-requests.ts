@@ -459,8 +459,9 @@ const clientBriefSchema = z.object({
   // Build-your-own-subscription: experience level(s), weekly plan, and the
   // client's stated monthly budget. Enum-guarded so target_tiers can't trip
   // the subscription_cards CHECK constraint.
+  // Agencies is a delivery option alongside individual talent levels.
   target_tiers: z
-    .array(z.enum(['Junior', 'Pro', 'Top Talents', 'Custom']))
+    .array(z.enum(['Junior', 'Pro', 'Top Talents', 'Agencies', 'Custom']))
     .optional()
     .default([]),
   plan_name: z.string().optional(),

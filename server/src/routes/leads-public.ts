@@ -373,8 +373,10 @@ const submissionSchema = z.object({
         // Build-your-own-subscription: experience level(s), weekly plan, and
         // the client's stated monthly budget. tiers are enum-guarded so they
         // can't trip the subscription_cards.target_tiers CHECK.
+        // Agencies is a delivery option alongside individual talent levels —
+        // forwarded verbatim to the requirement card.
         tiers: z
-          .array(z.enum(['Junior', 'Pro', 'Top Talents', 'Custom']))
+          .array(z.enum(['Junior', 'Pro', 'Top Talents', 'Agencies', 'Custom']))
           .max(5)
           .optional(),
         plan: z.string().trim().max(50).optional(),
@@ -950,7 +952,8 @@ const cardSubmitSchema = z.object({
   // Subscription choices — the client's own selections. tiers enum-guarded so
   // they can't trip the subscription_cards.target_tiers CHECK; budget > 0 maps
   // to proposed_price (0 / omitted = "not stated" → leaves it null).
-  tiers: z.array(z.enum(['Junior', 'Pro', 'Top Talents', 'Custom'])).max(5).optional().default([]),
+  // Agencies is a delivery option alongside individual talent levels.
+  tiers: z.array(z.enum(['Junior', 'Pro', 'Top Talents', 'Agencies', 'Custom'])).max(5).optional().default([]),
   plan: z.string().trim().max(50).optional().or(z.literal('')),
   // Per-tier monthly budget (the client's proposed price for that level),
   // keyed by tier. Stored into tier_pricing so the multi-tier publish/fan-out
