@@ -1465,8 +1465,8 @@ export default function AdminCardEditor({
               </div>
               <p className="mt-2 text-[11px] text-[var(--color-sh-ink-faint)]">
                 {isAssignment
-                  ? 'Only the levels you pick here go out — an assignment has no catalog price to fall back on, so unpicked levels never broadcast. Agencies is a delivery option alongside the talent levels.'
-                  : 'On publish, all levels (Junior / Pro / Top Talents) broadcast — Agencies is a delivery option alongside them. Levels you mark here use your Final price; unmarked levels use catalog pricing.'}
+                  ? 'On publish, all levels (Junior / Pro / Top Talents / Agencies) broadcast — unmarked levels go as Request quote (no fixed price).'
+                  : 'On publish, all levels (Junior / Pro / Top Talents / Agencies) broadcast — marked levels use your Final price; unmarked levels go as Request quote (no fixed price). Agencies has no catalog price.'}
               </p>
             </Field>
             {!isAssignment && (

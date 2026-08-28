@@ -1090,7 +1090,8 @@ router.post('/subscription-cards/:id/publish', async (req: Request, res: Respons
       // subscription cards.  Tiers the client/admin set a budget for keep
       // their price; tiers without a budget go out as "inviting bids"
       // (proposed_price 0 = no fixed price, talent is invited to quote).
-      const ALL_TIERS = ['Top Talents', 'Pro', 'Junior'];
+      // Agencies is a delivery option alongside talent tiers — also auto-broadcasts as request-quote when not selected.
+      const ALL_TIERS = ['Top Talents', 'Pro', 'Junior', 'Agencies'];
       const ordered: string[] = [];
       for (const t of selectedTiers) {
         if (!ordered.includes(t)) ordered.push(t);

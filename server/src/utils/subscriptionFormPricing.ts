@@ -200,12 +200,14 @@ export function coerceProposedPrice(value: number | null | undefined): number | 
 }
 
 /**
- * Standard talent levels always broadcast on subscription publish.
+ * Standard levels always broadcast on subscription publish.
  * Selected levels keep their set Final price; unselected levels go out
  * as "request quote" (no fixed price — talent is invited to quote).
- * Custom is only included when already selected.
+ * Custom is only included when already selected. Agencies is a delivery
+ * option alongside talent tiers but now also auto-broadcasts as
+ * request-quote when not selected (no catalog price).
  */
-export const BROADCAST_STANDARD_TIERS = ['Top Talents', 'Pro', 'Junior'] as const;
+export const BROADCAST_STANDARD_TIERS = ['Top Talents', 'Pro', 'Junior', 'Agencies'] as const;
 
 const SERVICE_TYPE_TO_SLUG: Record<string, string> = {
   Designers: 'designer',
@@ -216,12 +218,13 @@ const SERVICE_TYPE_TO_SLUG: Record<string, string> = {
 
 /**
  * Expand a draft's selected tiers + pricing into the full broadcast set:
- *   - every standard level (Junior/Pro/Top) always broadcasts
+ *   - every standard level (Junior/Pro/Top Talents/Agencies) always broadcasts
  *   - plus Custom if it was selected with a publishable price
  *
  * Selected tiers with a publishable price keep their entry. Unselected
  * standard tiers go out as "request quote" (proposed_price 0, no
- * subscription_price) — talent quotes, no catalog price.
+ * subscription_price) — talent quotes, no catalog price. Agencies has no
+ * catalog price, so unselected Agencies is always request-quote.
  */
 export async function expandBroadcastTiersForPublish(opts: {
   serviceType: string | null | undefined;
