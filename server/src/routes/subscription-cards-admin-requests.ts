@@ -1060,6 +1060,34 @@ router.post('/subscription-cards/:id/publish', async (req: Request, res: Respons
       return;
     }
 
+    // Ensure squadhire_category_ids are synced to the current service_type
+    const SERVICE_TYPE_TO_SLUG: Record<string, string> = {
+      Designers: 'designer',
+      Editors: 'video_editor',
+      'Designer plus Editor': 'designer_video_editor',
+    };
+    const currentServiceType = card.service_type as string | null | undefined;
+    const subscriptionSlug = currentServiceType ? SERVICE_TYPE_TO_SLUG[currentServiceType] : null;
+    if (subscriptionSlug) {
+      const { data: subRow } = await supabaseAdmin
+        .from('subscriptions')
+        .select('id')
+        .eq('slug', subscriptionSlug)
+        .maybeSingle();
+      if (subRow?.id) {
+        const { data: profileRows } = await supabaseAdmin
+          .from('subscription_squadhire_profiles')
+          .select('squadhire_category_id')
+          .eq('subscription_id', subRow.id);
+        if (profileRows && profileRows.length > 0) {
+          await supabaseAdmin
+            .from('subscription_cards')
+            .update({ squadhire_category_ids: profileRows.map((r: any) => r.squadhire_category_id) })
+            .eq('id', cardId);
+        }
+      }
+    }
+
     const publishTargets: string[] = card.publish_targets || ['partner', 'talent'];
     const distribution = parsed.data.distribution;
 
