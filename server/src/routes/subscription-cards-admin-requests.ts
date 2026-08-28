@@ -873,7 +873,33 @@ router.patch('/subscription-cards/:id/edit', async (req: Request, res: Response)
     if (body.customer_email !== undefined) updates.customer_email = body.customer_email;
     if (body.customer_phone !== undefined) updates.customer_phone = body.customer_phone;
     if (body.customer_location !== undefined) updates.customer_location = body.customer_location;
-    if (body.service_type !== undefined) updates.service_type = body.service_type;
+    if (body.service_type !== undefined) {
+      updates.service_type = body.service_type;
+      // Resolve new squadhire_category_ids based on the updated service_type
+      const serviceToSlug: Record<string, string> = {
+        Designers: 'designer',
+        Editors: 'video_editor',
+        'Designer plus Editor': 'designer_video_editor',
+      };
+      const newServiceType = body.service_type as string | null | undefined;
+      const subscriptionSlug = newServiceType ? serviceToSlug[newServiceType] : null;
+      if (subscriptionSlug) {
+        const { data: subRow } = await supabaseAdmin
+          .from('subscriptions')
+          .select('id')
+          .eq('slug', subscriptionSlug)
+          .maybeSingle();
+        if (subRow?.id) {
+          const { data: profileRows } = await supabaseAdmin
+            .from('subscription_squadhire_profiles')
+            .select('squadhire_category_id')
+            .eq('subscription_id', subRow.id);
+          if (profileRows && profileRows.length > 0) {
+            updates.squadhire_category_ids = profileRows.map((r: any) => r.squadhire_category_id);
+          }
+        }
+      }
+    }
     if (body.plan_name !== undefined) updates.plan_name = body.plan_name;
     // Assignment project fields ride in a JSONB column — merge rather than
     // replace so keys this editor doesn't render survive the save. Ignored
