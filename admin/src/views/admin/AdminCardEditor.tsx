@@ -228,14 +228,14 @@ interface Deliverable {
 }
 
 const VALID_DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-const VALID_TIERS = ['Junior', 'Pro', 'Top Talents', 'Custom'];
+const VALID_TIERS = ['Junior', 'Pro', 'Top Talents', 'Agencies', 'Custom'];
 // Always shown in the Pricing table (client-selected levels are highlighted).
 const PRICING_TABLE_TIERS = ['Top Talents', 'Pro', 'Junior'] as const;
 // Display order for the per-tier deliverables + pricing blocks: highest tier
 // first (Top Talents → Pro → Junior). Independent of selection order.
-// Custom sorts last.
+// Agencies and Custom sort last.
 const TIER_DISPLAY_RANK: Record<string, number> = {
-  'top talents': 0, pro: 1, junior: 2, custom: 3,
+  'top talents': 0, pro: 1, junior: 2, agencies: 3, custom: 4,
 };
 const VALID_PLANS = ['starter', 'basic', 'plus', 'pro', 'personal'];
 const SERVICE_TYPES = ['Designers', 'Editors', 'Designer plus Editor', 'Accountants'];
@@ -306,9 +306,10 @@ export default function AdminCardEditor({
     ),
     [tiers],
   );
-  // Pricing table always shows Junior / Pro / Top Talents (+ Custom if selected).
+  // Pricing table always shows Junior / Pro / Top Talents (+ Agencies/Custom if selected).
   const pricingTableTiers = useMemo(() => {
     const base = [...PRICING_TABLE_TIERS] as string[];
+    if (tiers.includes('Agencies')) base.push('Agencies');
     if (tiers.includes('Custom')) base.push('Custom');
     return base;
   }, [tiers]);
@@ -1464,8 +1465,8 @@ export default function AdminCardEditor({
               </div>
               <p className="mt-2 text-[11px] text-[var(--color-sh-ink-faint)]">
                 {isAssignment
-                  ? 'Only the levels you pick here go out — an assignment has no catalog price to fall back on, so unpicked levels never broadcast.'
-                  : 'On publish, all three levels (Junior / Pro / Top Talents) broadcast. Levels you mark here use your Final price; unmarked levels use catalog pricing.'}
+                  ? 'Only the levels you pick here go out — an assignment has no catalog price to fall back on, so unpicked levels never broadcast. Agencies is a delivery option alongside the talent levels.'
+                  : 'On publish, all levels (Junior / Pro / Top Talents) broadcast — Agencies is a delivery option alongside them. Levels you mark here use your Final price; unmarked levels use catalog pricing.'}
               </p>
             </Field>
             {!isAssignment && (

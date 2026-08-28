@@ -105,11 +105,12 @@ const uniq = (arr: string[]) => Array.from(new Set(arr.filter(Boolean)));
 
 // Build-your-own-subscription workflow (mirrors upsquadconnect.com/pricing):
 // experience level(s) → plan → budget. Display labels are plural; stored
-// values match subscription_cards.target_tiers' CHECK (Junior/Pro/Top Talents).
+// values are forwarded to the requirement card (Junior/Pro/Top Talents/Agencies).
 const EXPERIENCE_LEVELS: { label: string; value: string; desc: string }[] = [
   { label: 'Juniors', value: 'Junior', desc: 'Less than 2 years of experience. Great for straightforward tasks and cost-effective output.' },
   { label: 'Pros', value: 'Pro', desc: 'More than 2 years of experience with strong, well-rounded skill sets. Reliable quality across a wide range of work.' },
   { label: 'Top Talents', value: 'Top Talents', desc: 'Top talents with 5+ years of experience. Best for high-stakes, complex, or premium creative work.' },
+  { label: 'Agencies', value: 'Agencies', desc: 'Specialized teams and companies that can take on your work.' },
 ];
 
 // Plans differ by availability (Mon–Fri) — the same five bands seeded for
