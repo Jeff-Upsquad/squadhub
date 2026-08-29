@@ -1,6 +1,6 @@
 {
   "title": "Getting around: the interface",
-  "summary": "The three areas of SquadHub — the icon bar, module sidebar, and content panel.",
+  "summary": "A visual guide to the navigation rail, sidebar, and main workspace.",
   "category": "Getting Started",
   "nav": [
     { "clickText": "My Home", "wait": 1800 }
@@ -8,18 +8,18 @@
   "blocks": [
     {
       "kind": "text",
-      "heading": "The three-part layout",
+      "heading": "The desktop layout",
       "paragraphs": [
-        "Every screen in SquadHub uses the same three-part structure. Once you know it, you can find anything.",
-        "1 — Icon bar: switch between the main modules. 2 — Module sidebar: navigate within the selected module. 3 — Content panel: view and complete the work you opened. There is no permanent right panel."
+        "SquadHub keeps navigation on the left and your active work in the large workspace beside it.",
+        "The narrow navigation rail opens top-level features. The sidebar provides search, quick views, pinned items, workspaces and conversations. The main workspace shows the page or item you selected."
       ]
     },
     {
       "kind": "shot",
       "region": "body",
       "wait": 700,
-      "caption": "The current three-part SquadHub layout",
-      "alt": "The app interface with the icon bar, module sidebar, and content panel numbered 1 to 3",
+      "caption": "The current SquadHub Home screen",
+      "alt": "The live SquadHub Home screen with its navigation rail, sidebar, and main workspace",
       "markings": [
         { "selector": "button[title='My Home']", "type": "badge", "color": "blue", "label": "1" },
         { "matchText": "Day Planner", "type": "badge", "color": "blue", "label": "2" },
