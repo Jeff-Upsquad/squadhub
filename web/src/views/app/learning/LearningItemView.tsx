@@ -144,7 +144,7 @@ export default function LearningItemView({
   return (
     <div className="flex h-full flex-col overflow-hidden">
       {/* Top bar */}
-      <div className="flex items-center gap-2 border-b border-[var(--sh-hair)] px-4 py-2.5">
+      <div className="flex min-h-[52px] items-center gap-2 border-b border-[var(--sh-hair)] bg-[var(--surface)] px-4 py-2.5 md:px-5">
         <button
           onClick={onBack}
           title="Back to Resources"
@@ -156,7 +156,10 @@ export default function LearningItemView({
           </svg>
         </button>
         {item.icon && <span className="text-[15px] leading-none">{item.icon}</span>}
-        <span className="truncate text-[12.5px] font-medium text-[var(--sh-ink)]">{item.title}</span>
+        <span className="min-w-0">
+          <span className="block truncate text-[13px] font-semibold text-[var(--sh-ink)]">{item.title}</span>
+          <span className="hidden text-[10.5px] text-[var(--sh-ink-3)] sm:block">{isSop ? 'Standard operating procedure' : isCourse ? 'Learning course' : 'Resource'}</span>
+        </span>
         <span className="ml-auto flex items-center gap-2">
           {assignment && isCourse && (
             <>
@@ -187,7 +190,21 @@ export default function LearningItemView({
       )}
 
       {/* left nav | content | right rail */}
-      <div className="grid min-h-0 flex-1 grid-cols-1 md:grid-cols-[264px_1fr]">
+      {isSop && lessons.length > 0 && (
+        <div className="border-b border-[var(--sh-hair)] bg-[var(--sidebar)] px-3 py-2 md:hidden">
+          <label className="sr-only" htmlFor="mobile-sop-page">SOP page</label>
+          <select
+            id="mobile-sop-page"
+            value={activeLessonId || ''}
+            onChange={(e) => setActiveLessonId(e.target.value)}
+            className="w-full rounded-lg border border-[var(--sh-hair)] bg-[var(--surface)] px-3 py-2 text-[13px] font-medium text-[var(--sh-ink)] outline-none focus:border-[var(--sh-ink-3)]"
+          >
+            {lessons.map((lesson) => <option key={lesson.id} value={lesson.id}>{lesson.title}</option>)}
+          </select>
+        </div>
+      )}
+
+      <div className="grid min-h-0 flex-1 grid-cols-1 md:grid-cols-[248px_minmax(0,1fr)] xl:grid-cols-[264px_minmax(0,1fr)]">
         {/* Left — item-specific nav */}
         <aside className="hidden min-h-0 overflow-y-auto border-r border-[var(--sh-hair)] bg-[var(--sidebar)] md:block">
           {isSop ? (
@@ -200,8 +217,8 @@ export default function LearningItemView({
         </aside>
 
         {/* Middle + right */}
-        <div className="grid min-h-0 grid-cols-1 lg:grid-cols-[1fr_248px]">
-          <main ref={contentRef} className="min-h-0 overflow-y-auto">
+        <div className="grid min-h-0 min-w-0 grid-cols-1 xl:grid-cols-[minmax(0,1fr)_264px]">
+          <main ref={contentRef} className="min-h-0 min-w-0 overflow-y-auto bg-[var(--surface)] scroll-smooth">
             {isSop ? (
               <SopBody item={item} lessons={lessons} activeLesson={activeLesson} onPick={setActiveLessonId} />
             ) : isCourse ? (
@@ -211,7 +228,7 @@ export default function LearningItemView({
             )}
           </main>
 
-          <aside className="hidden min-h-0 overflow-y-auto border-l border-[var(--sh-hair)] bg-[var(--sidebar)] lg:block">
+          <aside className="hidden min-h-0 overflow-y-auto border-l border-[var(--sh-hair)] bg-[var(--sidebar)] xl:block">
             {isSop && activeLesson ? (
               <SopRightRail lessons={lessons} activeLesson={activeLesson} onPick={setActiveLessonId} containerRef={contentRef} scanKey={activeLesson.id} />
             ) : (
@@ -410,7 +427,7 @@ function SopBody({ item, lessons, activeLesson, onPick }: {
   const children = lessons.filter((l) => l.parent_lesson_id === activeLesson.id).sort((a, b) => a.position - b.position);
 
   return (
-    <article className="mx-auto w-full max-w-3xl px-6 py-8">
+    <article className="mx-auto w-full max-w-[880px] px-5 py-8 sm:px-8 md:py-10 xl:px-10">
       {(crumbs.length > 0) && (
         <nav className="mb-3 flex flex-wrap items-center gap-1.5 text-[12px] text-[var(--sh-ink-3)]">
           {crumbs.map((c) => (
@@ -422,15 +439,16 @@ function SopBody({ item, lessons, activeLesson, onPick }: {
           <span className="text-[var(--sh-ink-2)]">{activeLesson.title}</span>
         </nav>
       )}
-      <header className="mb-6">
-        {activeLesson.icon && <div className="mb-1 text-[40px] leading-none">{activeLesson.icon}</div>}
-        <h1 className="serif text-[32px] leading-tight text-[var(--sh-ink)]" style={{ fontFamily: 'var(--font-serif, Plus Jakarta Sans, sans-serif)', letterSpacing: '-0.01em' }}>
+      <header className="mb-8 border-b border-[var(--sh-hair)] pb-7">
+        {activeLesson.icon && <div className="mb-3 text-[36px] leading-none" aria-hidden="true">{activeLesson.icon}</div>}
+        <p className="mb-2 text-[10.5px] font-semibold uppercase tracking-[0.12em] text-[var(--sh-ink-3)]">SOP page</p>
+        <h1 className="serif text-[34px] font-bold leading-[1.15] text-[var(--sh-ink)] sm:text-[40px]" style={{ fontFamily: 'var(--font-serif, Plus Jakarta Sans, sans-serif)', letterSpacing: '-0.025em' }}>
           {activeLesson.title}
         </h1>
-        {activeLesson.summary && <p className="mt-2 text-[14px] text-[var(--sh-ink-2)]">{activeLesson.summary}</p>}
+        {activeLesson.summary && <p className="mt-3 max-w-2xl text-[15px] leading-7 text-[var(--sh-ink-2)]">{activeLesson.summary}</p>}
       </header>
 
-      <div className="space-y-4">
+      <div className="space-y-6">
         {activeLesson.blocks?.map((block: any) => (
           <BlockRenderer key={block.id} block={block} assignmentId={null} />
         ))}
@@ -470,7 +488,7 @@ function SopRightRail({ lessons, activeLesson, onPick, containerRef, scanKey }: 
 }) {
   const children = lessons.filter((l) => l.parent_lesson_id === activeLesson.id).sort((a, b) => a.position - b.position);
   return (
-    <div className="px-3 py-4">
+    <div className="px-4 py-6">
       {children.length > 0 && (
         <div className="mb-4">
           <div className="px-1.5 pb-1.5 text-[10.5px] font-semibold uppercase tracking-[0.08em] text-[var(--sh-ink-3)]">Sub-pages</div>
@@ -743,7 +761,7 @@ function OnThisPage({ containerRef, scanKey }: { containerRef: React.RefObject<H
             return (
               <li key={h.id}>
                 <button onClick={() => jumpTo(h.id)} style={{ paddingLeft: `${(h.level - 1) * 12 + 12}px` }}
-                  className={`-ml-px block w-full border-l py-1.5 pr-2 text-left text-[12px] leading-snug transition ${active ? 'border-[var(--sh-ink)] font-medium text-[var(--sh-ink)]' : 'border-transparent text-[var(--sh-ink-3)] hover:text-[var(--sh-ink)]'}`}>
+                  className={`-ml-px block w-full border-l py-2 pr-2 text-left text-[12px] leading-snug transition ${active ? 'border-[var(--sh-ink)] font-semibold text-[var(--sh-ink)]' : 'border-transparent text-[var(--sh-ink-3)] hover:border-[var(--sh-hair)] hover:text-[var(--sh-ink)]'}`}>
                   {h.text}
                 </button>
               </li>

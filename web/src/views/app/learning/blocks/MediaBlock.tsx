@@ -17,13 +17,13 @@ export function ImageBlock({ block }: { block: LmsContentBlock }) {
   const alt = (block.metadata as { alt?: string } | undefined)?.alt || block.caption || '';
   const annotations = getAnnotations(block);
   return (
-    <figure className="my-2">
+    <figure className="my-6 overflow-hidden rounded-xl border border-[var(--sh-hair)] bg-[var(--sidebar)] p-2 shadow-sm">
       {annotations ? (
         <AnnotationOverlay src={block.file_url} alt={alt} data={annotations} />
       ) : (
-        <img src={block.file_url} alt={alt} className="w-full rounded-lg border border-[var(--sh-hair)]" />
+        <img src={block.file_url} alt={alt} className="mx-auto block h-auto max-h-[720px] max-w-full rounded-lg object-contain" />
       )}
-      {block.caption && <figcaption className="mt-2 text-center text-[13px] text-[var(--sh-ink-3)]">{block.caption}</figcaption>}
+      {block.caption && <figcaption className="px-3 pb-1 pt-3 text-center text-[12px] leading-relaxed text-[var(--sh-ink-3)]">{block.caption}</figcaption>}
     </figure>
   );
 }
