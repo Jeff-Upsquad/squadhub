@@ -1,48 +1,49 @@
 {
   "title": "How to use My Home",
-  "summary": "Your daily launchpad: what needs attention, today and overdue, at a glance.",
+  "summary": "Read your day, track time, review task totals, and build a Focus list.",
   "category": "Core Apps",
   "nav": [
-    { "clickText": "My Home", "wait": 1800 }
+    { "clickText": "Home", "wait": 1800 },
+    { "clickText": "My home", "wait": 1000 }
   ],
   "blocks": [
     {
       "kind": "text",
       "heading": "My Home at a glance",
       "paragraphs": [
-        "My Home is the first screen you see each day. It pulls together what needs your attention — new tasks to triage, what's due today, and anything overdue — so you can start with the smallest next step.",
-        "The markings below point out the key areas."
+        "My Home is your daily starting point. It combines time tracking, task totals, SOPs, and the tasks you have chosen to focus on.",
+        "Use the summary at the top to decide what needs attention, then work from the Focus list below."
       ]
     },
     {
       "kind": "shot",
-      "region": "body",
-      "wait": 600,
-      "caption": "My Home — the daily overview",
-      "alt": "The My Home dashboard with the task summary cards highlighted",
-      "markings": [
-        { "matchText": "NEW TASKS", "type": "badge", "color": "blue", "label": "1" },
-        { "matchText": "TODAY", "type": "badge", "color": "blue", "label": "2" },
-        { "matchText": "OVERDUE", "type": "rect", "color": "red" },
-        { "matchText": "Focus list", "type": "text", "color": "ink", "text": "Starred tasks land here" }
-      ]
+      "region": "main",
+      "caption": "The live My Home workspace",
+      "alt": "The current My Home workspace showing the greeting, time tracker, task totals, SOP count, and Focus list",
+      "markings": []
     },
     {
-      "kind": "gif",
-      "region": "body",
-      "caption": "Jumping between Home and Tasks",
-      "maxWidth": 760,
-      "delay": 1100,
-      "frames": [
-        { "wait": 700 },
-        { "clickText": "Tasks", "wait": 1600 },
-        { "clickText": "My Home", "wait": 1600 }
+      "kind": "text",
+      "heading": "Greeting and time tracker",
+      "paragraphs": [
+        "The top of My Home shows the current day, week, and quarter. The time tracker shows how much of your work target is complete and whether tracking is active.",
+        "Choose Work, Break, or No work to start the matching timer. The status and progress update in the same card."
       ]
     },
     {
       "kind": "text",
+      "heading": "Task summary",
       "paragraphs": [
-        "Tip: star a task (★) and it appears in your Focus list so it's one click away."
+        "The summary cards group your workload into New tasks, Today, Overdue, Tomorrow, and All tasks. Select a card to open the matching task view.",
+        "The SOPs badge shows how many assigned SOP items need attention."
+      ]
+    },
+    {
+      "kind": "text",
+      "heading": "Focus list",
+      "paragraphs": [
+        "Star a task to add it to the Focus list. This creates a short working list without changing the task itself.",
+        "Use Group to organize starred tasks, and use the calendar button to switch the Focus list to a date-based view."
       ]
     }
   ]
