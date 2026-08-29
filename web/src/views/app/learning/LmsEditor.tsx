@@ -318,7 +318,8 @@ export default function LmsEditor({ draftItemId, isClone, onExit, onSubmitted }:
 function SopPageContent({ item, lesson, m }: { item: any; lesson: any; m: any }) {
   const blocks: any[] = lesson.blocks || [];
   const primary = blocks.find((b) => b.type === 'text');
-  const attachments = blocks.filter((b) => b.type !== 'text');
+  const ordered = [...blocks].sort((a, b) => a.position - b.position);
+  const isSingleDocument = ordered.length === 1 && ordered[0].type === 'text';
   const initRef = useRef<Set<string>>(new Set());
 
   // Every SOP page is backed by a single text block used as its document.
@@ -331,7 +332,7 @@ function SopPageContent({ item, lesson, m }: { item: any; lesson: any; m: any })
 
   return (
     <div>
-      {primary ? (
+      {isSingleDocument ? (
         <NotionEditor
           key={primary.id}
           itemId={item.id}
@@ -339,24 +340,31 @@ function SopPageContent({ item, lesson, m }: { item: any; lesson: any; m: any })
           content={primary.text_content}
           onChange={(doc) => m.patchBlock.mutate({ id: primary.id, text_content: doc })}
         />
-      ) : (
+      ) : ordered.length === 0 ? (
         <p className="text-[13px] text-[var(--sh-ink-3)]">Preparing page…</p>
-      )}
-
-      {attachments.length > 0 && (
-        <div className="mt-8 space-y-3 border-t border-[var(--sh-hair)] pt-5">
-          <p className="text-[11px] font-semibold uppercase tracking-wider text-[var(--sh-ink-3)]">Attachments</p>
-          {attachments.map((block) => (
+      ) : (
+        <div className="space-y-4">
+          {ordered.map((block, index) => (
             <BlockCard
               key={block.id}
               block={block}
-              canMoveUp={false}
-              canMoveDown={false}
-              onMove={() => {}}
+              canMoveUp={index > 0}
+              canMoveDown={index < ordered.length - 1}
+              onMove={(direction) => {
+                const target = index + direction;
+                if (target < 0 || target >= ordered.length) return;
+                const next = [...ordered];
+                [next[index], next[target]] = [next[target], next[index]];
+                m.reorderBlocks.mutate({
+                  lessonId: lesson.id,
+                  items: next.map((entry, position) => ({ id: entry.id, position })),
+                });
+              }}
               onPatch={(patch) => m.patchBlock.mutate({ id: block.id, ...patch })}
               onDelete={() => { if (confirm('Delete this block?')) m.deleteBlock.mutate(block.id); }}
             />
           ))}
+          <AddBlock onAdd={(type) => m.addBlock.mutate({ lessonId: lesson.id, type })} />
         </div>
       )}
     </div>
