@@ -1,0 +1,17 @@
+{
+  "title": "How to use Day Planner",
+  "summary": "Schedule tasks by placing them on a daily calendar.",
+  "category": "Core Apps",
+  "nav": [{ "clickText": "Home", "wait": 1800 }, { "clickText": "Day Planner", "wait": 1200 }],
+  "blocks": [
+    {
+      "kind": "text",
+      "heading": "Plan the day",
+      "paragraphs": [
+        "Day Planner places unscheduled tasks beside a daily calendar. Drag a task from the Planner list into a time slot to reserve time for it.",
+        "Use Group to organize the task list and the date arrows to move between days."
+      ]
+    },
+    { "kind": "shot", "region": "main", "caption": "The live Day Planner", "alt": "The Day Planner with an unscheduled task list and daily calendar", "markings": [] }
+  ]
+}

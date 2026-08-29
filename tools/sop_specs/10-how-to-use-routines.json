@@ -1,0 +1,17 @@
+{
+  "title": "How to use Routines",
+  "summary": "Create repeating tasks that generate fresh copies on schedule.",
+  "category": "Core Apps",
+  "nav": [{ "clickText": "Home", "wait": 1800 }, { "clickText": "Routines", "wait": 1200 }],
+  "blocks": [
+    {
+      "kind": "text",
+      "heading": "Repeating work",
+      "paragraphs": [
+        "A routine creates a fresh task on its schedule, including its assignees, description, and checklists.",
+        "The table shows the repeat rule, assignees, number of tasks spawned, and next run. New copies are created shortly after midnight IST."
+      ]
+    },
+    { "kind": "shot", "region": "main", "caption": "The live Routines screen", "alt": "The Routines table with repeat rules, assignees, spawn counts, and next runs", "markings": [] }
+  ]
+}
