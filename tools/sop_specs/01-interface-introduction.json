@@ -1,6 +1,6 @@
 {
   "title": "Getting around: the interface",
-  "summary": "The three zones of SquadHub — the icon bar, the module menu, and the content panel.",
+  "summary": "The three areas of SquadHub — the icon bar, module sidebar, and content panel.",
   "category": "Getting Started",
   "nav": [
     { "clickText": "My Home", "wait": 1800 }
@@ -8,23 +8,22 @@
   "blocks": [
     {
       "kind": "text",
-      "heading": "The lay of the land",
+      "heading": "The three-part layout",
       "paragraphs": [
-        "Every screen in SquadHub is built from the same three zones. Once you know them, you can find anything.",
-        "1 — Left icon bar: switch between modules (Home, Inbox, Tasks, Apps, Learning…). 2 — Module menu: the items inside the module you're in. 3 — Content panel: your main workspace, where everything opens. 4 — Home sections: your day at a glance."
+        "Every screen in SquadHub uses the same three-part structure. Once you know it, you can find anything.",
+        "1 — Icon bar: switch between the main modules. 2 — Module sidebar: navigate within the selected module. 3 — Content panel: view and complete the work you opened. There is no permanent right panel."
       ]
     },
     {
       "kind": "shot",
       "region": "body",
       "wait": 700,
-      "caption": "The three zones (plus your home sections)",
-      "alt": "The app interface with the icon bar, module menu, content panel and home sections numbered 1 to 4",
+      "caption": "The current three-part SquadHub layout",
+      "alt": "The app interface with the icon bar, module sidebar, and content panel numbered 1 to 3",
       "markings": [
         { "selector": "button[title='My Home']", "type": "badge", "color": "blue", "label": "1" },
         { "matchText": "Day Planner", "type": "badge", "color": "blue", "label": "2" },
-        { "matchText": "Good afternoon", "type": "badge", "color": "blue", "label": "3" },
-        { "matchText": "New tasks", "type": "badge", "color": "blue", "label": "4" }
+        { "matchText": "Good afternoon", "type": "badge", "color": "blue", "label": "3" }
       ]
     }
   ]
