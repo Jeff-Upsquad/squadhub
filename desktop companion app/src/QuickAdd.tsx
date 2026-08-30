@@ -423,6 +423,11 @@ export default function QuickAdd() {
       }
       job.files = failed;
       job.active = false;
+      // A completed upload job is not an error. Remove it instead of leaving an
+      // inactive, empty job that renders as "0 files failed to upload".
+      if (failed.length === 0) {
+        bgJobsRef.current = bgJobsRef.current.filter((j) => j.key !== job.key);
+      }
       syncBgJobs();
     })();
   };
@@ -711,9 +716,9 @@ export default function QuickAdd() {
         </div>
       )}
 
-      {bgJobs.length > 0 && (
+      {bgJobs.some((j) => j.active || j.files.length > 0) && (
         <div className="qa-bgjobs">
-          {bgJobs.map((j) => (
+          {bgJobs.filter((j) => j.active || j.files.length > 0).map((j) => (
             <div key={j.key} className="qa-bgjob">
               {j.active ? (
                 <span className="qa-bg-note">
