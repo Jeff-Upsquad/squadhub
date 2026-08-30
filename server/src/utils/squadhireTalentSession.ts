@@ -29,6 +29,7 @@ import { assertSignInAllowed, mintSession, SquadhireSsoError } from './squadhire
 import type { SquadhireSsoSession } from './squadhireSsoShared';
 import { getDefaultRoleIdForUserType } from './defaultRole';
 import type { SquadhireTalentSsoIdentity } from './squadhireTalentSso';
+import { syncTalentActivatedClientSpaces } from './activatedClientSpaces';
 
 /** The only account types a SquadHire talent may sign in as. */
 const PARTNER_USER_TYPES = new Set(['partner', 'partner_employee']);
@@ -138,11 +139,20 @@ export async function startSquadhireTalentSession(
     }
     assertSignInAllowed(existing.status);
 
+    await syncTalentActivatedClientSpaces({
+      talentUserId: identity.talent_user_id,
+      squadhubUserId: existing.id,
+    }).catch((err) => console.error('[squadhire-talent-sso] space access sync failed:', err));
+
     const tokens = await mintSession(identity.email);
     return { user: existing, ...tokens };
   }
 
   const userId = await provisionPartner(identity);
+  await syncTalentActivatedClientSpaces({
+    talentUserId: identity.talent_user_id,
+    squadhubUserId: userId,
+  }).catch((err) => console.error('[squadhire-talent-sso] space access sync failed:', err));
   const tokens = await mintSession(identity.email);
 
   const { data: profile } = await supabaseAdmin

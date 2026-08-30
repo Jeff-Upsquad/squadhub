@@ -34,6 +34,7 @@ import {
   type CardLifecycleResult,
 } from '../utils/clientCardLink';
 import { lockAcceptedBidPrice } from '../utils/lockAcceptedBidPrice';
+import { provisionActivatedClientSpaces } from '../utils/activatedClientSpaces';
 import crypto from 'crypto';
 
 const router = Router();
@@ -487,7 +488,14 @@ router.post('/subscription-cards/:id/finalize-selection', async (req: Request, r
       return;
     }
     if (card.selected_recipient_id) {
-      res.status(409).json({ success: false, error: 'Card is already assigned' });
+      // Make Finalize safe to retry after a partial side-effect failure. The
+      // assignment is already live, but folder/space provisioning is
+      // idempotent and may still need to finish.
+      const spaces = await provisionActivatedClientSpaces({ cardId }).catch((err) => {
+        console.error('[finalize] retry client-space provisioning failed', err);
+        return null;
+      });
+      res.json({ success: true, data: { already_assigned: true, client_spaces: spaces } });
       return;
     }
 
@@ -569,13 +577,33 @@ router.post('/subscription-cards/:id/finalize-selection', async (req: Request, r
       console.error('[finalize] promote lead failed', promote.error);
     }
 
+    // Create/reuse the brand client folder and the service-specific child
+    // space(s), link this card, and grant both sides access. Awaited so the
+    // admin receives a useful warning, while the assignment itself remains
+    // successful if this secondary setup needs a retry.
+    let clientSpaces = null;
+    let clientSpaceWarning: string | null = null;
+    try {
+      clientSpaces = await provisionActivatedClientSpaces({
+        cardId,
+        clientId: promote?.ok ? promote.promotion.clientId : null,
+      });
+    } catch (err: any) {
+      clientSpaceWarning = err?.message || 'Client-space provisioning failed';
+      console.error('[finalize] client-space provisioning failed', err);
+    }
+
     notifySquadhireOfActivation(cardId).catch((err) => {
       console.error('[finalize] notify squadhire failed', err);
     });
 
     res.json({
       success: true,
-      data: { promotion: promote && promote.ok ? promote.promotion : undefined },
+      data: {
+        promotion: promote && promote.ok ? promote.promotion : undefined,
+        client_spaces: clientSpaces,
+        warnings: clientSpaceWarning ? [clientSpaceWarning] : [],
+      },
     });
   } catch (err: any) {
     console.error('Finalize selection error:', err);

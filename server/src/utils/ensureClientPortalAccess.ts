@@ -12,6 +12,7 @@
 
 import { supabaseAdmin } from '../supabase';
 import { getDefaultRoleIdForUserType } from './defaultRole';
+import { syncClientFolderMemberships } from './activatedClientSpaces';
 
 const PLACEHOLDER_EMAIL_RE = /@placeholder\.|@example\.|@test\./i;
 
@@ -104,6 +105,7 @@ export async function grantClientUserAccess(opts: {
     .maybeSingle();
   if (existing) {
     await mirrorGrantToSpace(opts.clientId, opts.userId, createdBy);
+    await syncClientFolderMemberships(opts.clientId, opts.userId);
     return true;
   }
 
@@ -119,6 +121,7 @@ export async function grantClientUserAccess(opts: {
     return false;
   }
   await mirrorGrantToSpace(opts.clientId, opts.userId, createdBy);
+  await syncClientFolderMemberships(opts.clientId, opts.userId);
   return true;
 }
 

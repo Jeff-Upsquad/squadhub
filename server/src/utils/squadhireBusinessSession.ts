@@ -42,6 +42,7 @@ import {
 } from './applyInvitation';
 import type { SquadhireBusinessSsoIdentity } from './squadhireBusinessSso';
 import type { UserType } from '@squadhub/shared';
+import { syncClientFolderMemberships } from './activatedClientSpaces';
 
 export { SquadhireSsoError };
 export type { SquadhireSsoSession };
@@ -107,6 +108,14 @@ export async function startSquadhireBusinessSession(
     }
     assertSignInAllowed(existing.status);
 
+    const { data: access } = await supabaseAdmin
+      .from('client_user_access')
+      .select('client_id')
+      .eq('user_id', existing.id);
+    await Promise.all(
+      (access ?? []).map((row: any) => syncClientFolderMemberships(row.client_id, existing.id)),
+    ).catch((err) => console.error('[squadhire-sso] client folder sync failed:', err));
+
     const tokens = await mintSession(identity.email);
     return { user: existing, ...tokens };
   }
@@ -129,6 +138,11 @@ export async function startSquadhireBusinessSession(
   }
 
   const userId = await provisionFromInvitation(identity, invitation, userType);
+  if (invitation.client_id) {
+    await syncClientFolderMemberships(invitation.client_id, userId).catch((err) =>
+      console.error('[squadhire-sso] client folder sync failed:', err),
+    );
+  }
   const tokens = await mintSession(identity.email);
 
   const { data: profile } = await supabaseAdmin
