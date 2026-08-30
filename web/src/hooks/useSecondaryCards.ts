@@ -105,7 +105,12 @@ export function useSecondaryCards(): SecondaryCardsResult {
           setActiveSecondaryCard(null);
           setActiveTask(t.id);
         },
-        toggleDone: () => updateTask.mutate({ id: t.id, status: 'done' }),
+        // SOP acknowledgements must be completed while reading the SOP. The
+        // Home panel remains a navigation surface and deliberately has no
+        // completion checkbox for these rows.
+        toggleDone: t.source_kind === 'sop'
+          ? undefined
+          : () => updateTask.mutate({ id: t.id, status: 'done' }),
       };
     };
 

@@ -1,6 +1,6 @@
 'use client';
 import { useMemo, useState } from 'react';
-import { useMyLearning, type MyLearningEntry } from '../../../hooks/useLms';
+import { useMyLearning, useOpenSopTasks, type MyLearningEntry } from '../../../hooks/useLms';
 import { useSharedWithMe } from '../../../hooks/useLmsCollab';
 
 // Module side menu for the Resources section. Mirrors AppsSidebar conventions:
@@ -54,6 +54,7 @@ function groupByCategory(entries: MyLearningEntry[], keyPrefix = ''): Group[] {
 
 export default function LearningSidebar({ activeItemId, onSelectItem }: LearningSidebarProps) {
   const { data: assignments, isLoading } = useMyLearning();
+  const { data: openSopTasks } = useOpenSopTasks();
   const { data: shared } = useSharedWithMe();
   const [query, setQuery] = useState('');
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
@@ -98,6 +99,11 @@ export default function LearningSidebar({ activeItemId, onSelectItem }: Learning
   const courseGroups = useMemo(() => groupByCategory(courseVisible), [courseVisible]);
   const sopGroups = useMemo(() => groupByCategory(sopVisible, 'sop::'), [sopVisible]);
   const sharedGroups = useMemo(() => groupByCategory(sharedVisible, 'shared::'), [sharedVisible]);
+  const taskCountByItem = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const task of openSopTasks || []) counts.set(task.item_id, (counts.get(task.item_id) || 0) + 1);
+    return counts;
+  }, [openSopTasks]);
 
   const nothing = courseVisible.length === 0 && sopVisible.length === 0 && sharedVisible.length === 0;
 
@@ -165,6 +171,7 @@ export default function LearningSidebar({ activeItemId, onSelectItem }: Learning
                   setCollapsed={setCollapsed}
                   activeItemId={activeItemId}
                   onSelectItem={onSelectItem}
+                  taskCountByItem={taskCountByItem}
                 />
               </Section>
             )}
@@ -186,6 +193,7 @@ export default function LearningSidebar({ activeItemId, onSelectItem }: Learning
                   setCollapsed={setCollapsed}
                   activeItemId={activeItemId}
                   onSelectItem={onSelectItem}
+                  taskCountByItem={taskCountByItem}
                 />
               </Section>
             )}
@@ -208,6 +216,7 @@ export default function LearningSidebar({ activeItemId, onSelectItem }: Learning
                   setCollapsed={setCollapsed}
                   activeItemId={activeItemId}
                   onSelectItem={onSelectItem}
+                  taskCountByItem={taskCountByItem}
                 />
               </Section>
             )}
@@ -247,12 +256,14 @@ function GroupList({
   setCollapsed,
   activeItemId,
   onSelectItem,
+  taskCountByItem,
 }: {
   groups: Group[];
   collapsed: Record<string, boolean>;
   setCollapsed: React.Dispatch<React.SetStateAction<Record<string, boolean>>>;
   activeItemId: string | null;
   onSelectItem: (id: string) => void;
+  taskCountByItem: Map<string, number>;
 }) {
   const showGroupHeaders = groups.length > 1;
   return (
@@ -280,6 +291,7 @@ function GroupList({
                   entry={entry}
                   active={activeItemId === entry.item.id}
                   onClick={() => onSelectItem(entry.item.id)}
+                  taskCount={taskCountByItem.get(entry.item.id) || 0}
                 />
               ))}
           </div>
@@ -289,7 +301,7 @@ function GroupList({
   );
 }
 
-function ItemRow({ entry, active, onClick }: { entry: MyLearningEntry; active: boolean; onClick: () => void }) {
+function ItemRow({ entry, active, onClick, taskCount }: { entry: MyLearningEntry; active: boolean; onClick: () => void; taskCount: number }) {
   const { item, status, progress_percent } = entry;
   const isSop = item.track === 'sop';
   const done = status === 'completed';
@@ -317,6 +329,7 @@ function ItemRow({ entry, active, onClick }: { entry: MyLearningEntry; active: b
       <span className="flex min-w-0 flex-1 flex-col gap-1">
         <span className="flex items-center gap-1.5">
           <span className="truncate text-[12.5px] font-medium leading-tight">{item.title}</span>
+          {isSop && taskCount > 0 && <TaskCountBadge count={taskCount} />}
         </span>
         {/* SOPs are reference docs — show a short subtitle instead of progress chrome. */}
         {isSop ? (
@@ -338,5 +351,16 @@ function ItemRow({ entry, active, onClick }: { entry: MyLearningEntry; active: b
         )}
       </span>
     </button>
+  );
+}
+
+function TaskCountBadge({ count }: { count: number }) {
+  return (
+    <span
+      className="grid h-[17px] min-w-[17px] shrink-0 place-items-center rounded-full bg-[var(--sh-badge-alert,#dc4c3e)] px-1 text-[9.5px] font-semibold leading-none text-white"
+      aria-label={`${count} open ${count === 1 ? 'task' : 'tasks'}`}
+    >
+      {count}
+    </span>
   );
 }

@@ -1,7 +1,8 @@
 'use client';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { LmsAccessLevel, LmsAssignment, LmsItem, LmsLesson } from '@squadhub/shared';
-import { useLmsItem, useStartAssignment, useCompleteLesson } from '../../../hooks/useLms';
+import { useLmsItem, useStartAssignment, useCompleteLesson, useOpenSopTasks, type OpenSopTask } from '../../../hooks/useLms';
+import { useUpdateTask } from '../../../hooks/useTasks';
 import { useStartEditDraft } from '../../../hooks/useLmsCollab';
 import BlockRenderer from './blocks/BlockRenderer';
 import LmsEditor from './LmsEditor';
@@ -51,6 +52,8 @@ export default function LearningItemView({
 }) {
   const { data, isLoading, refetch } = useLmsItem(itemId);
   const start = useStartAssignment();
+  const completeTask = useUpdateTask(null);
+  const { data: openSopTasks } = useOpenSopTasks();
   const startEdit = useStartEditDraft();
   const [activeLessonId, setActiveLessonId] = useState<string | null>(initialLessonId ?? null);
   const [editing, setEditing] = useState<{ draftItemId: string; isClone: boolean } | null>(null);
@@ -73,6 +76,21 @@ export default function LearningItemView({
   const isSop = item?.track === 'sop';
   const lessons = useMemo(() => item?.lessons || [], [item]);
   const completedSet = useMemo(() => new Set(assignment?.completed_lesson_ids || []), [assignment]);
+  const itemTasks = useMemo(
+    () => (openSopTasks || []).filter((task) => task.item_id === itemId),
+    [openSopTasks, itemId],
+  );
+  const taskCountByLesson = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const task of itemTasks) {
+      if (task.lesson_id) counts.set(task.lesson_id, (counts.get(task.lesson_id) || 0) + 1);
+    }
+    return counts;
+  }, [itemTasks]);
+  const activeTasks = useMemo(
+    () => itemTasks.filter((task) => task.scope === 'item' || (!!activeLessonId && task.lesson_id === activeLessonId)),
+    [itemTasks, activeLessonId],
+  );
 
   // Deep-link target (from a search result) wins once, when it arrives.
   useEffect(() => {
@@ -189,18 +207,29 @@ export default function LearningItemView({
         </div>
       )}
 
+      {isSop && activeTasks.length > 0 && (
+        <SopTaskBar
+          tasks={activeTasks}
+          completing={completeTask.isPending}
+          onComplete={(taskId) => completeTask.mutate({ id: taskId, status: 'done' })}
+        />
+      )}
+
       {/* left nav | content | right rail */}
       {isSop && lessons.length > 0 && (
-        <div className="border-b border-[var(--sh-hair)] bg-[var(--sidebar)] px-3 py-2 md:hidden">
+        <div className="flex items-center gap-2 border-b border-[var(--sh-hair)] bg-[var(--sidebar)] px-3 py-2 md:hidden">
           <label className="sr-only" htmlFor="mobile-sop-page">SOP page</label>
           <select
             id="mobile-sop-page"
             value={activeLessonId || ''}
             onChange={(e) => setActiveLessonId(e.target.value)}
-            className="w-full rounded-lg border border-[var(--sh-hair)] bg-[var(--surface)] px-3 py-2 text-[13px] font-medium text-[var(--sh-ink)] outline-none focus:border-[var(--sh-ink-3)]"
+            className="min-w-0 flex-1 rounded-lg border border-[var(--sh-hair)] bg-[var(--surface)] px-3 py-2 text-[13px] font-medium text-[var(--sh-ink)] outline-none focus:border-[var(--sh-ink-3)]"
           >
             {lessons.map((lesson) => <option key={lesson.id} value={lesson.id}>{lesson.title}</option>)}
           </select>
+          {(taskCountByLesson.get(activeLessonId || '') || 0) > 0 && (
+            <TaskCountBadge count={taskCountByLesson.get(activeLessonId || '') || 0} />
+          )}
         </div>
       )}
 
@@ -208,7 +237,7 @@ export default function LearningItemView({
         {/* Left — item-specific nav */}
         <aside className="hidden min-h-0 overflow-y-auto border-r border-[var(--sh-hair)] bg-[var(--sidebar)] md:block">
           {isSop ? (
-            <SopTreePane lessons={lessons} activeId={activeLessonId} onPick={setActiveLessonId} />
+            <SopTreePane lessons={lessons} activeId={activeLessonId} onPick={setActiveLessonId} taskCountByLesson={taskCountByLesson} />
           ) : isCourse ? (
             <LessonRail lessons={lessons} completedSet={completedSet} activeLessonId={activeLessonId} onPick={setActiveLessonId} />
           ) : (
@@ -250,6 +279,46 @@ export default function LearningItemView({
   );
 }
 
+function SopTaskBar({ tasks, completing, onComplete }: {
+  tasks: OpenSopTask[];
+  completing: boolean;
+  onComplete: (taskId: string) => void;
+}) {
+  const task = tasks[0];
+  const due = task.due_date
+    ? new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(new Date(task.due_date))
+    : null;
+  return (
+    <div className="flex min-h-[48px] items-center gap-3 border-b border-amber-200 bg-amber-50 px-4 py-2.5 md:px-5" role="status">
+      <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-amber-100 text-amber-700">
+        <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M9 11l3 3L22 4" /><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" /></svg>
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-[12.5px] font-semibold text-amber-950">{task.title}</span>
+        <span className="block text-[10.5px] text-amber-800/75">
+          Assigned task{due ? ` · Due ${due}` : ''}{tasks.length > 1 ? ` · ${tasks.length - 1} more open` : ''}
+        </span>
+      </span>
+      <button
+        type="button"
+        disabled={completing}
+        onClick={() => onComplete(task.task_id)}
+        className="shrink-0 rounded-[7px] bg-amber-900 px-3 py-1.5 text-[11.5px] font-semibold text-white transition hover:bg-amber-950 disabled:cursor-wait disabled:opacity-60"
+      >
+        {completing ? 'Completing…' : 'Mark complete'}
+      </button>
+    </div>
+  );
+}
+
+function TaskCountBadge({ count }: { count: number }) {
+  return (
+    <span className="grid h-[17px] min-w-[17px] shrink-0 place-items-center rounded-full bg-[var(--sh-badge-alert,#dc4c3e)] px-1 text-[9.5px] font-semibold leading-none text-white" aria-label={`${count} open ${count === 1 ? 'task' : 'tasks'}`}>
+      {count}
+    </span>
+  );
+}
+
 /* ================================================================== */
 /* SOP — nested page tree (left)                                       */
 /* ================================================================== */
@@ -286,7 +355,7 @@ function ancestorsOf(lessons: Lesson[], id: string | null): Set<string> {
   return out;
 }
 
-function SopTreePane({ lessons, activeId, onPick }: { lessons: Lesson[]; activeId: string | null; onPick: (id: string) => void }) {
+function SopTreePane({ lessons, activeId, onPick, taskCountByLesson }: { lessons: Lesson[]; activeId: string | null; onPick: (id: string) => void; taskCountByLesson: Map<string, number> }) {
   const [q, setQ] = useState('');
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const tree = useMemo(() => buildTree(lessons), [lessons]);
@@ -352,6 +421,7 @@ function SopTreePane({ lessons, activeId, onPick }: { lessons: Lesson[]; activeI
                     <span className="flex items-center gap-1.5 text-[12.5px] font-medium text-[var(--sh-ink)]">
                       <span>{r.lesson.icon || (r.kind === 'text' ? '¶' : '📄')}</span>
                       <span className="truncate">{r.lesson.title}</span>
+                      {(taskCountByLesson.get(r.lesson.id) || 0) > 0 && <TaskCountBadge count={taskCountByLesson.get(r.lesson.id) || 0} />}
                     </span>
                     {r.path.length > 0 && <span className="mt-0.5 block truncate text-[10.5px] text-[var(--sh-ink-3)]">{r.path.join(' › ')}</span>}
                     {r.snippet && <span className="mt-0.5 block text-[11px] leading-snug text-[var(--sh-ink-3)]">{r.snippet}</span>}
@@ -361,16 +431,17 @@ function SopTreePane({ lessons, activeId, onPick }: { lessons: Lesson[]; activeI
             </ul>
           )
         ) : (
-          <TreeList nodes={tree} depth={0} activeId={activeId} expanded={expanded} onToggle={(id) => setExpanded((p) => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n; })} onPick={onPick} />
+          <TreeList nodes={tree} depth={0} activeId={activeId} expanded={expanded} onToggle={(id) => setExpanded((p) => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n; })} onPick={onPick} taskCountByLesson={taskCountByLesson} />
         )}
       </div>
     </div>
   );
 }
 
-function TreeList({ nodes, depth, activeId, expanded, onToggle, onPick }: {
+function TreeList({ nodes, depth, activeId, expanded, onToggle, onPick, taskCountByLesson }: {
   nodes: TreeNode[]; depth: number; activeId: string | null; expanded: Set<string>;
   onToggle: (id: string) => void; onPick: (id: string) => void;
+  taskCountByLesson: Map<string, number>;
 }) {
   return (
     <ul>
@@ -394,10 +465,11 @@ function TreeList({ nodes, depth, activeId, expanded, onToggle, onPick }: {
               <button onClick={() => onPick(n.lesson.id)} className="flex min-w-0 flex-1 items-center gap-1.5 py-[6px] text-left">
                 <span className="text-[13px] leading-none">{n.lesson.icon || '📄'}</span>
                 <span className={`truncate text-[12.5px] leading-snug ${active ? 'font-medium text-[var(--sh-ink)]' : 'text-[var(--sh-ink-2)]'}`}>{n.lesson.title}</span>
+                {(taskCountByLesson.get(n.lesson.id) || 0) > 0 && <TaskCountBadge count={taskCountByLesson.get(n.lesson.id) || 0} />}
               </button>
             </div>
             {hasChildren && open && (
-              <TreeList nodes={n.children} depth={depth + 1} activeId={activeId} expanded={expanded} onToggle={onToggle} onPick={onPick} />
+              <TreeList nodes={n.children} depth={depth + 1} activeId={activeId} expanded={expanded} onToggle={onToggle} onPick={onPick} taskCountByLesson={taskCountByLesson} />
             )}
           </li>
         );

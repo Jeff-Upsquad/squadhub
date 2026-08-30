@@ -30,6 +30,29 @@ export function useDueCourses(enabled = true) {
   });
 }
 
+export interface OpenSopTask {
+  task_id: string;
+  title: string;
+  due_date: string | null;
+  item_id: string;
+  scope: 'item' | 'lesson' | 'section';
+  lesson_id: string | null;
+  section_anchor: string | null;
+  section_label: string | null;
+}
+
+export function useOpenSopTasks() {
+  return useQuery<OpenSopTask[]>({
+    queryKey: ['lms-open-sop-tasks'],
+    queryFn: async () => {
+      const res = await api.get('/lms/my-open-sop-tasks');
+      return res.data.data;
+    },
+    staleTime: 30_000,
+    refetchInterval: 60_000,
+  });
+}
+
 export function useLmsCategories() {
   return useQuery<LmsCategory[]>({
     queryKey: ['lms-categories'],

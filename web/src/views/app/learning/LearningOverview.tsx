@@ -1,6 +1,6 @@
 'use client';
 import { useMemo } from 'react';
-import { useMyLearning, useLmsSearch, type MyLearningEntry, type LmsSearchHit } from '../../../hooks/useLms';
+import { useMyLearning, useLmsSearch, useOpenSopTasks, type MyLearningEntry, type LmsSearchHit } from '../../../hooks/useLms';
 
 // The Resources "web page": an at-a-glance catalog plus a cross-content search
 // that returns inline results (item titles, page titles and page body text)
@@ -16,6 +16,7 @@ export default function LearningOverview({
   onSelectItem: (itemId: string, lessonId?: string | null) => void;
 }) {
   const { data: assignments, isLoading } = useMyLearning();
+  const { data: openSopTasks } = useOpenSopTasks();
   const all = assignments || [];
   const search = useLmsSearch(query);
 
@@ -37,6 +38,11 @@ export default function LearningOverview({
     !q || a.item.title.toLowerCase().includes(q) || (a.item.summary || '').toLowerCase().includes(q);
   const visibleCourses = useMemo(() => activeCourses.filter(matches), [activeCourses, q]); // eslint-disable-line react-hooks/exhaustive-deps
   const visibleSops = useMemo(() => sops.filter(matches), [sops, q]); // eslint-disable-line react-hooks/exhaustive-deps
+  const taskCountByItem = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const task of openSopTasks || []) counts.set(task.item_id, (counts.get(task.item_id) || 0) + 1);
+    return counts;
+  }, [openSopTasks]);
 
   const hasLearning = inProgress.length + assigned.length + completed.length > 0;
 
@@ -97,10 +103,10 @@ export default function LearningOverview({
         ) : (
           <>
             {visibleCourses.length > 0 && (
-              <Section title="Courses" entries={visibleCourses} onSelectItem={onSelectItem} />
+              <Section title="Courses" entries={visibleCourses} onSelectItem={onSelectItem} taskCountByItem={taskCountByItem} />
             )}
             {visibleSops.length > 0 && (
-              <Section title="Systems and Procedures" entries={visibleSops} onSelectItem={onSelectItem} />
+              <Section title="Systems and Procedures" entries={visibleSops} onSelectItem={onSelectItem} taskCountByItem={taskCountByItem} />
             )}
             {all.length === 0 && (
               <p className="mt-10 text-center text-[13px] text-[var(--sh-ink-3)]">
@@ -213,24 +219,26 @@ function Section({
   title,
   entries,
   onSelectItem,
+  taskCountByItem,
 }: {
   title: string;
   entries: MyLearningEntry[];
   onSelectItem: (id: string) => void;
+  taskCountByItem: Map<string, number>;
 }) {
   return (
     <section className="mt-7">
       <h2 className="mb-3 text-[12px] font-semibold uppercase tracking-wider text-[var(--sh-ink-3)]">{title}</h2>
       <div className="grid gap-3 sm:grid-cols-2">
         {entries.slice(0, 6).map((entry) => (
-          <OverviewCard key={entry.id} entry={entry} onClick={() => onSelectItem(entry.item.id)} />
+          <OverviewCard key={entry.id} entry={entry} onClick={() => onSelectItem(entry.item.id)} taskCount={taskCountByItem.get(entry.item.id) || 0} />
         ))}
       </div>
     </section>
   );
 }
 
-function OverviewCard({ entry, onClick }: { entry: MyLearningEntry; onClick: () => void }) {
+function OverviewCard({ entry, onClick, taskCount }: { entry: MyLearningEntry; onClick: () => void; taskCount: number }) {
   const { item, status, progress_percent } = entry;
   const isSop = item.track === 'sop';
   return (
@@ -257,6 +265,12 @@ function OverviewCard({ entry, onClick }: { entry: MyLearningEntry; onClick: () 
           )}
         </span>
         <span className="truncate text-[13.5px] font-semibold leading-tight text-[var(--sh-ink)]">{item.title}</span>
+        {isSop && taskCount > 0 && (
+          <span className="mt-0.5 inline-flex w-fit items-center gap-1 rounded-full bg-red-50 px-2 py-0.5 text-[10.5px] font-semibold text-red-600">
+            <span className="h-1.5 w-1.5 rounded-full bg-red-500" />
+            {taskCount} open {taskCount === 1 ? 'task' : 'tasks'}
+          </span>
+        )}
         {/* SOPs are reference docs — show a short summary instead of a progress bar. */}
         {isSop ? (
           item.summary ? (

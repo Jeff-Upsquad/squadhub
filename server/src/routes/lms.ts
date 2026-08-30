@@ -159,6 +159,67 @@ router.get('/my-due', async (req: Request, res: Response) => {
 });
 
 // ------------------------------------------------------------
+// GET /lms/my-open-sop-tasks — the caller's open SOP task mirrors, resolved
+// back to their item/page target. This is the single source for Resources
+// badges and the completion bar inside the SOP reader.
+// ------------------------------------------------------------
+router.get('/my-open-sop-tasks', async (req: Request, res: Response) => {
+  try {
+    const { data: tasks, error: taskError } = await supabaseAdmin
+      .from('tasks')
+      .select('id, title, due_date, source_id, status')
+      .eq('source_kind', 'sop')
+      .eq('source_user_id', req.userId!)
+      .not('status', 'in', '(done,closed)')
+      .order('due_date', { ascending: true, nullsFirst: false });
+
+    if (taskError) {
+      res.status(500).json({ success: false, error: taskError.message });
+      return;
+    }
+
+    const recipientIds = (tasks || []).map((task: any) => task.source_id).filter(Boolean);
+    if (!recipientIds.length) {
+      res.json({ success: true, data: [] });
+      return;
+    }
+
+    const { data: recipients, error: recipientError } = await supabaseAdmin
+      .from('lms_task_send_recipients')
+      .select('id, user_id, send:lms_task_sends(id, item_id, scope, lesson_id, section_anchor, section_label, source_kind)')
+      .in('id', recipientIds)
+      .eq('user_id', req.userId!);
+
+    if (recipientError) {
+      res.status(500).json({ success: false, error: recipientError.message });
+      return;
+    }
+
+    const recipientById = new Map((recipients || []).map((row: any) => [row.id, row]));
+    const data = (tasks || []).flatMap((task: any) => {
+      const recipient: any = recipientById.get(task.source_id);
+      const send = recipient?.send;
+      if (!send || send.source_kind !== 'sop') return [];
+      return [{
+        task_id: task.id,
+        title: task.title,
+        due_date: task.due_date,
+        item_id: send.item_id,
+        scope: send.scope,
+        lesson_id: send.lesson_id ?? null,
+        section_anchor: send.section_anchor ?? null,
+        section_label: send.section_label ?? null,
+      }];
+    });
+
+    res.json({ success: true, data });
+  } catch (err) {
+    console.error('List open SOP tasks error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// ------------------------------------------------------------
 // GET /lms/shared-with-me — published items shared with the user (directly or
 // via a role) that they can access. Powers a "Shared with me" catalog group,
 // including items with no learner assignment. Excludes draft clones.

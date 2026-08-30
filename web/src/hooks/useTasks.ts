@@ -15,6 +15,7 @@ function invalidateTaskLists(qc: QueryClient, listId: string | null) {
   qc.invalidateQueries({ queryKey: ['space-tasks'] });
   qc.invalidateQueries({ queryKey: ['my-tasks'] });
   qc.invalidateQueries({ queryKey: ['my-tasks-summary'] });
+  qc.invalidateQueries({ queryKey: ['lms-open-sop-tasks'] });
   qc.invalidateQueries({ queryKey: ['emergency-tasks'] });
   // Day Planner candidate list depends on due_date / work_date / start_date /
   // focused_at — any task edit can flip membership, so re-evaluate on server.

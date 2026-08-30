@@ -79,6 +79,7 @@ import BrowserNotificationsToggle from '../components/BrowserNotificationsToggle
 import { useIsMobile } from '../hooks/useIsMobile';
 import FeatureTipOverlay from '../components/FeatureTipOverlay';
 import { usePendingTips } from '../hooks/usePendingTips';
+import { useOpenSopTasks } from '../hooks/useLms';
 import { featureTipStore } from '../stores/featureTipStore';
 import TabBar from '../components/TabBar';
 import MobileShell from '../mobile/MobileShell';
@@ -344,6 +345,8 @@ export default function MainLayout() {
   const onlineUserIds = usePresenceStore((s) => s.onlineUserIds);
   const { data: unreadData } = useUnreadCount();
   const unreadCount = unreadData ?? 0;
+  const { data: openSopTasks } = useOpenSopTasks();
+  const openSopTaskCount = openSopTasks?.length ?? 0;
   // Mirror Inbox unread onto the installed-PWA Dock/taskbar icon badge.
   useAppBadge(unreadCount);
   // Drive the notification badge's red/pulse states from changes in the count.
@@ -1285,7 +1288,7 @@ export default function MainLayout() {
           )}
           <RailBtn icon={ICON.cal}  label="Cal"  anchorKey="rail.cal"  active={activeSection === 'cal'}  onClick={() => setActiveSection('cal')} />
           <RailBtn icon={ICON.apps} label="Apps" anchorKey="rail.apps" active={activeSection === 'apps'} onClick={() => setActiveSection('apps')} />
-          <RailBtn icon={ICON.learning} label="Resources" anchorKey="rail.learning" active={activeSection === 'learning'} onClick={() => setActiveSection('learning')} />
+          <RailBtn icon={ICON.learning} label="Resources" anchorKey="rail.learning" badge={openSopTaskCount || undefined} active={activeSection === 'learning'} onClick={() => setActiveSection('learning')} />
           <button
             onClick={(e) => {
               setTimesheetAnchor((e.currentTarget as HTMLElement).getBoundingClientRect());
