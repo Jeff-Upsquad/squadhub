@@ -49,6 +49,7 @@ COPY --from=builder /app/server/package.json ./server/
 # In-app updater version manifest (served by GET /partner-app/version). Can be
 # overridden at runtime via PARTNER_RELEASE_MANIFEST_PATH (e.g. a mounted file).
 COPY --from=builder /app/server/partner-release-manifest.json ./server/
+COPY --from=builder /app/server/internal-release-manifest.json ./server/
 # Generator script + recipe specs (spawned as a child process by the server).
 COPY tools/ ./tools/
 

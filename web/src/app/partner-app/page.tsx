@@ -1,9 +1,10 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { usePathname } from 'next/navigation';
 
-// Release manifest served by GET /partner-app/version — the same source of
-// truth the in-app updater polls and that `tools/release.sh` (GO LIVE) updates.
+// Release manifest served by each app's /version endpoint — the same source of
+// truth its in-app updater polls and its GO LIVE release script updates.
 type Manifest = {
   version_code: number;
   version_name: string;
@@ -72,24 +73,28 @@ const FEATURES = [
   },
 ];
 
-const STEPS = [
-  'Tap Download APK above on your Android phone.',
-  'If prompted, allow installation from this source in Settings.',
-  'Open SquadHub Partner and sign in with your partner email. It auto-updates after that.',
-];
-
-export default function PartnerAppLanding() {
+export default function AppDownloadLanding() {
+  const pathname = usePathname();
+  const isInternal = pathname.startsWith('/internal-app');
+  const appName = isInternal ? 'SquadHub Internal' : 'SquadHub Partner';
+  const accountLabel = isInternal ? 'internal' : 'partner';
+  const versionEndpoint = isInternal ? '/internal-app/version' : '/partner-app/version';
+  const steps = [
+    'Tap Download APK above on your Android phone.',
+    'If prompted, allow installation from this source in Settings.',
+    `Open ${appName} and sign in with your ${accountLabel} email. It auto-updates after that.`,
+  ];
   const [manifest, setManifest] = useState<Manifest | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch('/partner-app/version')
+    fetch(versionEndpoint)
       .then((r) => r.json())
       .then((res: { success: boolean; data: Manifest | null }) => setManifest(res.data))
       .catch(() => setError('Could not load app details. Please try again.'))
       .finally(() => setLoading(false));
-  }, []);
+  }, [versionEndpoint]);
 
   // version_code starts at 1 (the bootstrap/fallback). A real release bumps it,
   // so only offer the download once an actual version has been published.
@@ -129,7 +134,7 @@ export default function PartnerAppLanding() {
               <span className="absolute -right-1.5 -top-1.5 h-4 w-4 rounded-full border-2 border-[#FAFAFA] bg-[#FFFF99]" />
             </div>
             <h1 className="up-heading text-[32px] font-extrabold tracking-[-0.03em] text-[#0A0A0A] sm:text-[40px]">
-              SquadHub Partner
+              {appName}
             </h1>
             <p className="mx-auto mt-3 max-w-md text-[16px] leading-relaxed text-[#525252] sm:text-[18px]">
               Your tasks and inbox, in your pocket. Stay on top of what&apos;s due today, tomorrow, and overdue — nothing more.
@@ -229,7 +234,7 @@ export default function PartnerAppLanding() {
           <section className="up-card mt-8 p-6">
             <h2 className="up-heading mb-4 text-[16px] font-bold tracking-[-0.02em] text-[#0A0A0A]">How to install</h2>
             <ol className="space-y-3">
-              {STEPS.map((step, i) => (
+              {steps.map((step, i) => (
                 <li key={i} className="flex items-start gap-3">
                   <span className="up-mono flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#0A0A0A] text-[11px] text-white">
                     {i + 1}
@@ -242,9 +247,11 @@ export default function PartnerAppLanding() {
 
           {/* Bottom CTA */}
           <section className="up-card mt-8 p-6 text-center">
-            <div className="up-heading mb-1 text-[14px] font-semibold text-[#0A0A0A]">Already a partner?</div>
+            <div className="up-heading mb-1 text-[14px] font-semibold text-[#0A0A0A]">
+              Already {isInternal ? 'part of the team' : 'a partner'}?
+            </div>
             <p className="mb-4 text-[13px] text-[#525252]">
-              Sign in with your SquadHub partner email — on the app or the web.
+              Sign in with your SquadHub {accountLabel} email — on the app or the web.
             </p>
             <a href="/login" className="up-btn-secondary inline-flex items-center gap-2 rounded-full px-5 py-2.5 text-[13px] font-semibold">
               Open web app

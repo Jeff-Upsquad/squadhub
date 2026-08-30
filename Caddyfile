@@ -62,6 +62,18 @@ api.squadhub.in {
 		file_server
 	}
 
+	# Sideloaded APKs for the SquadHub Internal app's in-app updater.
+	handle /internal-downloads/* {
+		root * /srv/internal-downloads
+		uri strip_prefix /internal-downloads
+
+		@internal_apk path *.apk
+		header @internal_apk Content-Type application/vnd.android.package-archive
+		header @internal_apk Content-Disposition "attachment"
+
+		file_server
+	}
+
 	# Sideloaded APKs for the Squad Hub Business app's in-app updater.
 	# Drop release APKs in /var/www/business-downloads on the host; the
 	# version manifest (GET /business-app/version) points apk_url here.

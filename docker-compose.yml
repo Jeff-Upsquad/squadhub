@@ -15,6 +15,7 @@ services:
       - /var/www/attendanceapp:/srv/attendanceapp:ro
       - /var/www/cashbook-downloads:/srv/cashbook-downloads:ro
       - /var/www/partner-downloads:/srv/partner-downloads:ro
+      - /var/www/internal-downloads:/srv/internal-downloads:ro
       - /var/www/business-downloads:/srv/business-downloads:ro
       - /var/www/kia:/srv/kia:ro
       - /var/www/cashbook-web:/srv/cashbook-web:ro
@@ -54,6 +55,8 @@ services:
       # host file (below) so `tools/release.sh` can update the version live by
       # writing that file — the server hot-reloads it (fs.watchFile), no redeploy.
       - PARTNER_RELEASE_MANIFEST_PATH=/data/partner-release-manifest.json
+      # Separate manifest for SquadHub Internal (GET /internal-app/version).
+      - INTERNAL_RELEASE_MANIFEST_PATH=/data/internal-release-manifest.json
       # In-app updater manifest for the Business app (GET /business-app/version).
       - BUSINESS_RELEASE_MANIFEST_PATH=/data/business-release-manifest.json
       # SOP auto-generator (admin "Auto-generate" button): drive the in-network
@@ -64,6 +67,8 @@ services:
     volumes:
       # Partner-app release manifest, editable live by tools/release.sh.
       - /var/www/partner-release-manifest.json:/data/partner-release-manifest.json:ro
+      # Internal-app release manifest, editable live by its GO LIVE script.
+      - /var/www/internal-release-manifest.json:/data/internal-release-manifest.json:ro
       # Business-app release manifest, editable live by the Business app's tools/release.sh.
       - /var/www/business-release-manifest.json:/data/business-release-manifest.json:ro
     dns:
