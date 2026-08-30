@@ -11,6 +11,7 @@ import { groupTasks, isFutureDay, isTaskFocused, collapseGroupedTasks, isGrouped
 import GroupedTaskRow from './GroupedTaskRow';
 import DayCalendar from '../day-planner/DayCalendar';
 import { planDateKey } from '../../../hooks/useDayPlanner';
+import { useIsMobile } from '../../../hooks/useIsMobile';
 
 const GROUP_OPTIONS: { value: GroupBy; label: string }[] = [
   { value: 'none', label: 'None' },
@@ -67,6 +68,7 @@ function useRetainFading(fresh: Task[], fadingTaskIds: ReadonlyMap<string, strin
 
 export default function TodayList() {
   const { data, isLoading, isError, refetch } = useMyTasks();
+  const isMobile = useIsMobile();
   const setActiveTask = usePMStore((s) => s.setActiveTask);
   const setActiveDashboardTab = usePMStore((s) => s.setActiveDashboardTab);
   const focusBuckets = usePMStore((s) => s.focusBuckets);
@@ -109,7 +111,12 @@ export default function TodayList() {
     const merged = [...data.overdue, ...data.today, ...(data.focused ?? [])];
     const seen = new Set<string>();
     const unique = merged.filter((t) => (seen.has(t.id) ? false : (seen.add(t.id), true)));
-    return unique.filter((t) => isTaskFocused(t) && !isFutureDay(t.work_date, tz));
+    // Match the canonical Focus Today ordering used by the web task lists.
+    // Previously this inherited the overdue/today bucket order above, which
+    // made the same focused tasks appear in a different sequence on Home.
+    return unique
+      .filter((t) => isTaskFocused(t) && !isFutureDay(t.work_date, tz))
+      .sort((a, b) => (a.focused_at ?? '').localeCompare(b.focused_at ?? ''));
   }, [data, tz]);
   // Keep just-completed rows rendered until their slide-out finishes. The
   // my-tasks query DROPS done tasks, and completing one triggers a refetch —
@@ -152,6 +159,7 @@ export default function TodayList() {
   const view = usePMStore((s) => s.todayListView);
   const setTodayListView = usePMStore((s) => s.setTodayListView);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [mobileFocusExpanded, setMobileFocusExpanded] = useState(false);
   const anchorRef = useRef<HTMLDivElement>(null);
 
   const today = useMemo(() => planDateKey(), []);
@@ -253,10 +261,6 @@ export default function TodayList() {
     return () => clearInterval(id);
   }, [rolloverFocusBuckets]);
 
-  const groups = useMemo(
-    () => (groupBy === 'none' ? [] : groupTasks(mainTasks, groupBy, tz, fadingTaskIds)),
-    [mainTasks, groupBy, tz, fadingTaskIds],
-  );
   const currentLabel = GROUP_OPTIONS.find((o) => o.value === groupBy)?.label ?? 'None';
 
   // Render a section's rows, collapsing any tasks whose container has Group Tasks
@@ -279,6 +283,31 @@ export default function TodayList() {
         <TodayRow key={item.id} task={item} onOpen={openTask} secondsToday={secondsTodayByTask.get(item.id) || 0} />
       ),
     );
+
+  const renderTaskCollection = (list: Task[]) => {
+    if (groupBy === 'none') {
+      return <div className="hm-list">{renderTaskRows(list)}</div>;
+    }
+    return groupTasks(list, groupBy, tz, fadingTaskIds).map((g) => (
+      <div key={g.key} className="hm-group">
+        <div className="hm-group-head">
+          <span>{g.label}</span>
+          <span className="count">· {g.tasks.length}</span>
+        </div>
+        <div className="hm-list" style={{ paddingTop: 0 }}>
+          {renderTaskRows(g.tasks)}
+        </div>
+      </div>
+    ));
+  };
+
+  const hasMobileFocusOverflow = isMobile && mainTasks.length > 3;
+  const primaryFocusTasks = hasMobileFocusOverflow ? mainTasks.slice(0, 3) : mainTasks;
+  const remainingFocusTasks = hasMobileFocusOverflow ? mainTasks.slice(3) : [];
+
+  useEffect(() => {
+    if (!hasMobileFocusOverflow) setMobileFocusExpanded(false);
+  }, [hasMobileFocusOverflow]);
 
   return (
     <>
@@ -415,23 +444,34 @@ export default function TodayList() {
           )}
 
           {!isLoading && !isError && mainTasks.length > 0 && (
-            groupBy === 'none' ? (
-              <div className="hm-list">
-                {renderTaskRows(mainTasks)}
-              </div>
-            ) : (
-              groups.map((g) => (
-                <div key={g.key} className="hm-group">
-                  <div className="hm-group-head">
-                    <span>{g.label}</span>
-                    <span className="count">· {g.tasks.length}</span>
-                  </div>
-                  <div className="hm-list" style={{ paddingTop: 0 }}>
-                    {renderTaskRows(g.tasks)}
+            <div className="hm-focus-tasks" data-expanded={mobileFocusExpanded || undefined}>
+              {renderTaskCollection(primaryFocusTasks)}
+              {hasMobileFocusOverflow && (
+                <div
+                  className="hm-focus-more"
+                  aria-hidden={!mobileFocusExpanded}
+                  // Keep the hidden task controls out of keyboard navigation.
+                  inert={!mobileFocusExpanded ? true : undefined}
+                >
+                  <div className="hm-focus-more-inner">
+                    {renderTaskCollection(remainingFocusTasks)}
                   </div>
                 </div>
-              ))
-            )
+              )}
+              {hasMobileFocusOverflow && (
+                <button
+                  type="button"
+                  className="hm-focus-expand"
+                  aria-expanded={mobileFocusExpanded}
+                  onClick={() => setMobileFocusExpanded((expanded) => !expanded)}
+                >
+                  <span>{mobileFocusExpanded ? 'Show fewer tasks' : `Show ${remainingFocusTasks.length} more`}</span>
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="m6 9 6 6 6-6" />
+                  </svg>
+                </button>
+              )}
+            </div>
           )}
 
         </>

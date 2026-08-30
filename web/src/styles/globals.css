@@ -7509,6 +7509,47 @@ ol.sqc-list {
   .hm-home .hm-stat:nth-child(n+3) { border-top: 1px solid var(--sh-hair-3); }
   .hm-home .hm-stat:last-child { grid-column: 1 / -1; }
   .hm-home .hm-parent { display: none; }
+
+  /* Keep mobile Focus concise without maintaining a second task-row design.
+     The first three rows use the exact desktop component and data; the rest
+     live in an animatable disclosure region. */
+  .hm-home .hm-focus-more {
+    display: grid;
+    grid-template-rows: 0fr;
+    opacity: 0;
+    transition: grid-template-rows 320ms cubic-bezier(0.22, 1, 0.36, 1), opacity 180ms ease;
+  }
+  .hm-home .hm-focus-more-inner { min-height: 0; overflow: hidden; }
+  .hm-home .hm-focus-tasks[data-expanded] .hm-focus-more {
+    grid-template-rows: 1fr;
+    opacity: 1;
+  }
+  .hm-home .hm-focus-expand {
+    width: calc(100% - 16px);
+    height: 38px;
+    margin: 1px 8px 8px;
+    border: 0;
+    border-top: 1px solid var(--sh-hair-3);
+    border-radius: 0 0 9px 9px;
+    background: transparent;
+    color: color-mix(in srgb, var(--sh-ink) 62%, transparent);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    font: 600 12px/1 'Inter', sans-serif;
+    cursor: pointer;
+    transition: color 160ms ease, background 160ms ease;
+  }
+  .hm-home .hm-focus-expand:active { background: var(--sh-hair-3); }
+  .hm-home .hm-focus-expand:focus-visible { outline: 2px solid var(--hm-accent); outline-offset: -2px; }
+  .hm-home .hm-focus-expand svg { transition: transform 280ms cubic-bezier(0.22, 1, 0.36, 1); }
+  .hm-home .hm-focus-tasks[data-expanded] .hm-focus-expand svg { transform: rotate(180deg); }
+
+  @media (prefers-reduced-motion: reduce) {
+    .hm-home .hm-focus-more,
+    .hm-home .hm-focus-expand svg { transition: none; }
+  }
 }
 
 /* ── Bucket slide-over (opens from the stat strip) ──
