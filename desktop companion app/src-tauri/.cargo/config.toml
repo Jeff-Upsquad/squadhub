@@ -1,0 +1,5 @@
+# macOS Spotlight / Launch Services skip folders whose name ends in .noindex.
+# Without this, every `tauri build` registers a second "SquadHub Companion"
+# next to the copy in /Applications.
+[build]
+target-dir = "target.noindex"
