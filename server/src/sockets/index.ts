@@ -59,6 +59,15 @@ export function setupSocketIO(httpServer: HttpServer) {
     const userId = (socket as any).userId as string;
     console.log(`Socket connected: ${userId} (${socket.id})`);
 
+    // Typing events are frequent and ephemeral, so hydrate the actor once per
+    // connection instead of making every recipient fetch a profile (or doing a
+    // database lookup on every keystroke).
+    const { data: socketUser } = await supabaseAdmin
+      .from('users')
+      .select('display_name, avatar_url')
+      .eq('id', userId)
+      .maybeSingle();
+
     // Track online status
     if (!onlineUsers.has(userId)) {
       onlineUsers.set(userId, new Set());
@@ -119,8 +128,11 @@ export function setupSocketIO(httpServer: HttpServer) {
       if (room) {
         socket.to(room).emit('user_typing', {
           user_id: userId,
+          display_name: socketUser?.display_name || 'Someone',
+          avatar_url: socketUser?.avatar_url || null,
           channel_id: data.channel_id,
           dm_conversation_id: data.dm_conversation_id,
+          parent_message_id: data.parent_message_id,
         });
       }
     });
@@ -131,6 +143,7 @@ export function setupSocketIO(httpServer: HttpServer) {
           user_id: userId,
           channel_id: data.channel_id,
           dm_conversation_id: data.dm_conversation_id,
+          parent_message_id: data.parent_message_id,
         });
       }
     });

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
 import api from '../../../services/api';
-import { getSocket } from '../../../services/socket';
+import { connectSocket, subscribeToChannelRoom } from '../../../services/socket';
 import type { Message } from '@squadhub/shared';
 import MessageBubble, { DateSeparator, getActivityMeta } from './MessageBubble';
 import MessageComposer, { type MessageComposerHandle } from './MessageComposer';
@@ -12,6 +12,7 @@ import { useAuthStore } from '../../../stores/authStore';
 import { UNREAD_SUMMARY_QUERY_KEY } from '../../../hooks/useUnreadSummary';
 import { useIsOnline } from '../../../stores/presenceStore';
 import type { Notification } from '../InboxView';
+import TypingIndicator, { useTypingUsers } from './TypingIndicator';
 
 // Stable gradient for users without an avatar — same hash as MessageBubble.
 function hashGradient(id: string) {
@@ -149,6 +150,9 @@ export default function ChatPanel({
   const messageJumpTarget = useWorkspaceStore((s) => s.messageJumpTarget);
   const clearMessageJump = useWorkspaceStore((s) => s.clearMessageJump);
   const meId = useAuthStore((s) => s.user?.id);
+  const typingUsers = useTypingUsers(channelId, kind);
+  const [arrivingMessageIds, setArrivingMessageIds] = useState<Set<string>>(() => new Set());
+  const arrivalTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
   // "Message #design" / "Message Jane D" placeholder, like Slack.
   const channelName = useWorkspaceStore((s) =>
@@ -249,10 +253,8 @@ export default function ChatPanel({
 
   // Listen for real-time messages on the same channel/DM room.
   useEffect(() => {
-    const socket = getSocket();
-    if (!socket) return;
-
-    socket.emit('join_channel', channelId);
+    const socket = connectSocket();
+    const unsubscribeRoom = subscribeToChannelRoom(channelId);
 
     // new_message / thread_reply carry the whole row (with its sender), so drop
     // it straight into the cache instead of waiting on a refetch round-trip —
@@ -260,7 +262,23 @@ export default function ChatPanel({
     // by seconds. Still invalidate afterwards to backfill server-side enrichment
     // (reply_count, thread participants, mention hydration).
     const handleIncomingMessage = (message?: Message) => {
+      const belongsHere = !!message && (kind === 'dm'
+        ? message.dm_conversation_id === channelId
+        : message.channel_id === channelId);
+      if (!belongsHere) return;
       if (message?.id) {
+        const oldTimer = arrivalTimersRef.current.get(message.id);
+        if (oldTimer) clearTimeout(oldTimer);
+        setArrivingMessageIds((current) => new Set(current).add(message.id));
+        arrivalTimersRef.current.set(message.id, setTimeout(() => {
+          arrivalTimersRef.current.delete(message.id);
+          setArrivingMessageIds((current) => {
+            if (!current.has(message.id)) return current;
+            const next = new Set(current);
+            next.delete(message.id);
+            return next;
+          });
+        }, 650));
         queryClient.setQueryData<{ pages: { data?: Message[] }[]; pageParams: unknown[] }>(
           queryKey,
           (old) => {
@@ -298,7 +316,7 @@ export default function ChatPanel({
     socket.on('message_deleted', handleMessageMutated);
     socket.on('new_notification', handleNotification);
     return () => {
-      socket.emit('leave_channel', channelId);
+      unsubscribeRoom();
       socket.off('new_message', handleIncomingMessage);
       socket.off('new_reaction', handleMessageMutated);
       socket.off('thread_reply', handleIncomingMessage);
@@ -307,6 +325,11 @@ export default function ChatPanel({
       socket.off('new_notification', handleNotification);
     };
   }, [channelId, kind, queryClient, queryKey, clearConversationNotifications, markChatRead]);
+
+  useEffect(() => () => {
+    arrivalTimersRef.current.forEach(clearTimeout);
+    arrivalTimersRef.current.clear();
+  }, []);
 
   // On open: clear any notifications that piled up while the conversation was
   // closed. Skip the write when the cached inbox already shows nothing to clear.
@@ -553,10 +576,12 @@ export default function ChatPanel({
                 threadMeta={threadIndex.get(item.message!.id)}
                 onOpenThread={() => setActiveThread(item.message!.id)}
                 highlighted={highlightId === item.message!.id}
+                animateIn={arrivingMessageIds.has(item.message!.id)}
               />
             )
           )}
         </div>
+        <TypingIndicator users={typingUsers} />
         {/* Composer pinned to bottom */}
         <MessageComposer
           ref={composerRef}

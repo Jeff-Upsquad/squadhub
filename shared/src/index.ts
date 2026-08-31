@@ -1180,8 +1180,20 @@ export interface ServerToClientEvents {
   message_updated: (message: Message) => void;
   message_deleted: (data: { message_id: string; channel_id?: string; dm_conversation_id?: string }) => void;
   new_reaction: (reaction: Reaction & { message_id: string }) => void;
-  user_typing: (data: { user_id: string; channel_id?: string; dm_conversation_id?: string }) => void;
-  user_stop_typing: (data: { user_id: string; channel_id?: string; dm_conversation_id?: string }) => void;
+  user_typing: (data: {
+    user_id: string;
+    display_name?: string;
+    avatar_url?: string | null;
+    channel_id?: string;
+    dm_conversation_id?: string;
+    parent_message_id?: string;
+  }) => void;
+  user_stop_typing: (data: {
+    user_id: string;
+    channel_id?: string;
+    dm_conversation_id?: string;
+    parent_message_id?: string;
+  }) => void;
   user_online: (data: { user_id: string }) => void;
   user_offline: (data: { user_id: string }) => void;
   online_users: (data: { user_ids: string[] }) => void;
@@ -1205,8 +1217,8 @@ export interface ClientToServerEvents {
   join_channel: (channel_id: string) => void;
   leave_channel: (channel_id: string) => void;
   send_message: (data: { channel_id?: string; dm_conversation_id?: string; content: string; type: MessageType; file_url?: string }) => void;
-  typing: (data: { channel_id?: string; dm_conversation_id?: string }) => void;
-  stop_typing: (data: { channel_id?: string; dm_conversation_id?: string }) => void;
+  typing: (data: { channel_id?: string; dm_conversation_id?: string; parent_message_id?: string }) => void;
+  stop_typing: (data: { channel_id?: string; dm_conversation_id?: string; parent_message_id?: string }) => void;
   // A meeting detail view or in-chat poll card subscribes/unsubscribes to live updates.
   join_meeting: (meeting_event_id: string) => void;
   leave_meeting: (meeting_event_id: string) => void;

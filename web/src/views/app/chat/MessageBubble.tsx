@@ -245,11 +245,13 @@ export function ActivityRow({
   message,
   meta,
   highlighted,
+  animateIn,
 }: {
   message: Message;
   meta: CrmActivityMeta;
   /** Flash styling when a search result jumped here. */
   highlighted?: boolean;
+  animateIn?: boolean;
 }) {
   const time = useMemo(
     () => new Date(message.created_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }),
@@ -259,7 +261,7 @@ export function ActivityRow({
   const icon = ACTIVITY_ICON[variant] ?? ACTIVITY_ICON.comment;
 
   return (
-    <div className={`sqc-activity sqc-activity--${variant}${highlighted ? ' is-search-hit' : ''}`} data-message-id={message.id}>
+    <div className={`sqc-activity sqc-activity--${variant}${highlighted ? ' is-search-hit' : ''}${animateIn ? ' is-live-arrival' : ''}`} data-message-id={message.id}>
       <div className="sqc-activity__gutter">
         <span className="sqc-activity__icon">{icon}</span>
       </div>
@@ -840,20 +842,22 @@ interface Props {
   threadMeta?: ThreadMeta;
   /** Flash this row (a search result was jumped to). */
   highlighted?: boolean;
+  /** Animate only messages inserted by a live socket event. */
+  animateIn?: boolean;
 }
 
-export default function MessageBubble({ message, onOpenThread, inThread, grouped, threadMeta, highlighted }: Props) {
+export default function MessageBubble({ message, onOpenThread, inThread, grouped, threadMeta, highlighted, animateIn }: Props) {
   // CRM-mirrored activity rows render as system lines, not chat bubbles.
   // (Branch lives in this hook-free wrapper so ChatMessageBubble's hooks
   // always run unconditionally.)
   const activity = getActivityMeta(message);
   if (activity) {
-    return <ActivityRow message={message} meta={activity} highlighted={highlighted} />;
+    return <ActivityRow message={message} meta={activity} highlighted={highlighted} animateIn={animateIn} />;
   }
-  return <ChatMessageBubble {...{ message, onOpenThread, inThread, grouped, threadMeta, highlighted }} />;
+  return <ChatMessageBubble {...{ message, onOpenThread, inThread, grouped, threadMeta, highlighted, animateIn }} />;
 }
 
-function ChatMessageBubble({ message, onOpenThread, inThread, grouped, threadMeta, highlighted }: Props) {
+function ChatMessageBubble({ message, onOpenThread, inThread, grouped, threadMeta, highlighted, animateIn }: Props) {
   const queryClient = useQueryClient();
   const [showPicker, setShowPicker] = useState(false);
   const emojiBtnRef = useRef<HTMLButtonElement>(null);
@@ -984,7 +988,8 @@ function ChatMessageBubble({ message, onOpenThread, inThread, grouped, threadMet
     'sqc-msg' +
     (grouped ? ' is-grouped' : '') +
     (isMentioned ? ' is-mentioned' : '') +
-    (highlighted ? ' is-search-hit' : '');
+    (highlighted ? ' is-search-hit' : '') +
+    (animateIn ? ' is-live-arrival' : '');
 
   return (
     <div className={cls} data-message-id={message.id}>

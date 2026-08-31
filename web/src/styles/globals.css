@@ -6339,6 +6339,28 @@ textarea.td-input-shell {
 }
 .sqc-msg:hover { background: var(--sh-bg-hover); }
 .sqc-msg:hover .sqc-msg__hover { opacity: 1; pointer-events: auto; }
+
+/* Applied only to rows inserted from the live socket path. History loaded from
+   the API stays still, while a genuinely new message eases into the timeline
+   with a restrained lift and soft highlight. */
+.sqc-msg.is-live-arrival,
+.sqc-activity.is-live-arrival {
+  animation: sqc-message-arrive 520ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  transform-origin: 50% 100%;
+}
+@keyframes sqc-message-arrive {
+  0% {
+    opacity: 0;
+    transform: translateY(10px) scale(0.992);
+    background-color: color-mix(in srgb, var(--sh-link) 10%, transparent);
+  }
+  58% { opacity: 1; }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    background-color: transparent;
+  }
+}
 .sqc-msg.is-mentioned {
   background: linear-gradient(90deg, rgba(255,90,31,0.06), transparent 40%);
   border-left: 3px solid var(--sh-brand);
@@ -6735,6 +6757,81 @@ ol.sqc-list {
   padding: 0 16px 22px;
   flex-shrink: 0;
   background: var(--sh-bg);
+}
+
+/* Live typing presence sits directly above either the main composer or the
+   thread composer. The avatar stack answers “who”, while the bouncing bubble
+   gives the event a little life without competing with the messages. */
+.sqc-typing {
+  min-height: 30px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 2px 20px 5px;
+  color: var(--sh-text-2);
+  font-family: var(--sh-font);
+  animation: sqc-typing-enter 180ms ease-out both;
+}
+.sqc-thread-panel > .sqc-typing { padding-inline: 16px; }
+.sqc-typing__avatars { display: inline-flex; padding-left: 5px; }
+.sqc-typing__avatar {
+  width: 22px;
+  height: 22px;
+  margin-left: -5px;
+  border: 2px solid var(--sh-bg);
+  border-radius: 7px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  color: #fff;
+  font-size: 9px;
+  font-weight: 800;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.14);
+}
+.sqc-typing__avatar img { width: 100%; height: 100%; object-fit: cover; }
+.sqc-typing__bubble {
+  height: 22px;
+  padding: 0 7px;
+  border: 1px solid var(--sh-border-soft);
+  border-radius: 9px 9px 9px 3px;
+  background: var(--sh-bg-soft);
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+.sqc-typing__bubble i {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--sh-text-2);
+  animation: sqc-typing-dot 1.15s ease-in-out infinite;
+}
+.sqc-typing__bubble i:nth-child(2) { animation-delay: 140ms; }
+.sqc-typing__bubble i:nth-child(3) { animation-delay: 280ms; }
+.sqc-typing__label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11.5px;
+  font-weight: 600;
+}
+@keyframes sqc-typing-enter {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes sqc-typing-dot {
+  0%, 60%, 100% { opacity: 0.38; transform: translateY(0); }
+  30% { opacity: 1; transform: translateY(-3px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sqc-msg.is-live-arrival,
+  .sqc-activity.is-live-arrival,
+  .sqc-typing { animation: none; }
+  .sqc-typing__bubble i { animation: none; opacity: 0.72; }
 }
 /* Shown while a file is dragged over the conversation (see ChatPanel). */
 .sqc-drop-overlay {

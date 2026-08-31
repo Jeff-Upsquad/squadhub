@@ -8,6 +8,7 @@ import MessageComposer, { type MessageComposerHandle } from './MessageComposer';
 import { usePanelFileDrop } from '../pm/usePanelFileDrop';
 import { useWorkspaceStore, type ChatKind } from '../../../stores/workspaceStore';
 import { useAuthStore } from '../../../stores/authStore';
+import TypingIndicator, { useTypingUsers } from './TypingIndicator';
 
 interface Props {
   parentId: string;
@@ -27,6 +28,9 @@ export default function ThreadPanel({ parentId, channelId, kind, onClose }: Prop
   const channel = useWorkspaceStore((s) => s.channels.find((c) => c.id === channelId));
   const dm = useWorkspaceStore((s) => s.dmConversations.find((d) => d.id === channelId));
   const meId = useAuthStore((s) => s.user?.id);
+  const typingUsers = useTypingUsers(channelId, kind, parentId);
+  const [arrivingReplyIds, setArrivingReplyIds] = useState<Set<string>>(() => new Set());
+  const arrivalTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
   const dmOthers = (dm?.participants || []).filter((p) => p.id !== meId);
   const contextLabel =
     kind === 'dm'
@@ -50,6 +54,18 @@ export default function ThreadPanel({ parentId, channelId, kind, onClose }: Prop
     // deletes and reactions send partial payloads, so those just refetch.
     const handleReply = (message?: Message) => {
       if (message?.id && message.parent_message_id === parentId) {
+        const oldTimer = arrivalTimersRef.current.get(message.id);
+        if (oldTimer) clearTimeout(oldTimer);
+        setArrivingReplyIds((current) => new Set(current).add(message.id));
+        arrivalTimersRef.current.set(message.id, setTimeout(() => {
+          arrivalTimersRef.current.delete(message.id);
+          setArrivingReplyIds((current) => {
+            if (!current.has(message.id)) return current;
+            const next = new Set(current);
+            next.delete(message.id);
+            return next;
+          });
+        }, 650));
         queryClient.setQueryData<{ data?: { root: Message | null; replies: Message[] } }>(queryKey, (old) => {
           if (!old?.data) return old;
           if (old.data.replies?.some((m) => m.id === message.id)) return old;
@@ -73,6 +89,11 @@ export default function ThreadPanel({ parentId, channelId, kind, onClose }: Prop
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [parentId]);
+
+  useEffect(() => () => {
+    arrivalTimersRef.current.forEach(clearTimeout);
+    arrivalTimersRef.current.clear();
+  }, []);
 
   const root: Message | null = threadRes?.data?.root || null;
   const replies: Message[] = threadRes?.data?.replies || [];
@@ -170,10 +191,17 @@ export default function ThreadPanel({ parentId, channelId, kind, onClose }: Prop
           </>
         )}
         {replies.map((r) => (
-          <MessageBubble key={r.id} message={r} inThread highlighted={highlightId === r.id} />
+          <MessageBubble
+            key={r.id}
+            message={r}
+            inThread
+            highlighted={highlightId === r.id}
+            animateIn={arrivingReplyIds.has(r.id)}
+          />
         ))}
       </div>
 
+      <TypingIndicator users={typingUsers} />
       {/* Composer (posts with parent_message_id) */}
       <MessageComposer
         ref={composerRef}

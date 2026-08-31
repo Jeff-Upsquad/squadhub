@@ -196,11 +196,51 @@ const MessageComposer = forwardRef<MessageComposerHandle, Props>(function Messag
   const submitMessageRef = useRef<() => void>(() => {});
   const fileInputRef = useRef<HTMLInputElement>(null);
   const composerBoxRef = useRef<HTMLDivElement>(null);
+  const typingActiveRef = useRef(false);
+  const lastTypingEmitRef = useRef(0);
+  const typingIdleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const { upload, uploading, progress } = useUploadAttachment(kind, channelId);
   const openMeetingPanel = useMeetingPanelStore((s) => s.openMeetingPanel);
   const scheduleMutation = useScheduleMessage(kind, channelId);
   const idField = kind === 'dm' ? 'dm_conversation_id' : 'channel_id';
+  const typingContextRef = useRef<{
+    channel_id?: string;
+    dm_conversation_id?: string;
+    parent_message_id?: string;
+  }>({});
+  typingContextRef.current = {
+    [idField]: channelId,
+    ...(parentMessageId ? { parent_message_id: parentMessageId } : {}),
+  };
+
+  const stopTyping = (context = typingContextRef.current) => {
+    if (typingIdleTimerRef.current) clearTimeout(typingIdleTimerRef.current);
+    typingIdleTimerRef.current = null;
+    if (!typingActiveRef.current) return;
+    typingActiveRef.current = false;
+    lastTypingEmitRef.current = 0;
+    getSocket()?.emit('stop_typing', context);
+  };
+
+  const signalTyping = (hasDraft: boolean) => {
+    if (!hasDraft) {
+      stopTyping();
+      return;
+    }
+    const socket = getSocket();
+    if (!socket) return;
+    const now = Date.now();
+    // Refresh occasionally while typing, but don't send a socket packet for
+    // every keystroke. The receiver also has a stale-event safety timeout.
+    if (!typingActiveRef.current || now - lastTypingEmitRef.current > 1200) {
+      socket.emit('typing', typingContextRef.current);
+      typingActiveRef.current = true;
+      lastTypingEmitRef.current = now;
+    }
+    if (typingIdleTimerRef.current) clearTimeout(typingIdleTimerRef.current);
+    typingIdleTimerRef.current = setTimeout(() => stopTyping(), 2200);
+  };
 
   const effectivePlaceholder =
     placeholder ||
@@ -268,9 +308,7 @@ const MessageComposer = forwardRef<MessageComposerHandle, Props>(function Messag
     onUpdate: ({ editor }) => {
       setHasText(!editor.isEmpty);
       setEditorTick((t) => t + 1);
-      // Lightweight typing indicator
-      const socket = getSocket();
-      if (socket) socket.emit('typing', { [idField]: channelId });
+      signalTyping(!editor.isEmpty);
       // @-mention: track the active @token and drop mentions whose name was edited out.
       setMentionQuery(detectMentionQuery(editor));
       mentionsRef.current = reconcileMentions(editor.getText(), mentionsRef.current, resolveRef.current);
@@ -283,6 +321,7 @@ const MessageComposer = forwardRef<MessageComposerHandle, Props>(function Messag
     onBlur: () => {
       setFocused(false);
       setMentionQuery(null);
+      stopTyping();
     },
     // Recreate when the conversation (and so the placeholder) changes —
     // Placeholder is baked into the extension config at creation time.
@@ -295,6 +334,14 @@ const MessageComposer = forwardRef<MessageComposerHandle, Props>(function Messag
     mentionsRef.current = [];
     setMentionQuery(null);
   }, [channelId, parentMessageId, editor]);
+
+  // Stop the exact old conversation/thread when switching or unmounting. This
+  // cleanup captures its context rather than reading the next render's ref.
+  useEffect(() => {
+    const context = { ...typingContextRef.current };
+    return () => stopTyping(context);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [channelId, kind, parentMessageId]);
 
   // Debounced user search for the @-mention picker.
   useEffect(() => {
@@ -365,6 +412,7 @@ const MessageComposer = forwardRef<MessageComposerHandle, Props>(function Messag
       mentions,
       ...extra,
     });
+    stopTyping();
     editor?.commands.clearContent(true);
     setHasText(false);
     mentionsRef.current = [];
@@ -465,6 +513,7 @@ const MessageComposer = forwardRef<MessageComposerHandle, Props>(function Messag
         scheduled_at: isoUtc,
         parent_message_id: parentMessageId,
       });
+      stopTyping();
       editor?.commands.clearContent(true);
       setHasText(false);
       mentionsRef.current = [];
@@ -875,4 +924,3 @@ const MessageComposer = forwardRef<MessageComposerHandle, Props>(function Messag
 });
 
 export default MessageComposer;
-
