@@ -114,7 +114,10 @@ router.post(
           phone: body.phone,
           category_slug: body.category_slug,
         },
-        { strictAccessSync: true },
+        // Account + workspace membership are the assignment contract. Client
+        // folder reconciliation is best-effort because legacy cards may not
+        // yet map to a client (and must not strand the talent outside SquadHub).
+        { strictAccessSync: false },
       );
       res.json({
         success: true,
