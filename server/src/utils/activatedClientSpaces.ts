@@ -22,7 +22,7 @@ async function resolveActorAndWorkspace(
     .from('workspace_members')
     .select('user_id, workspace_id')
     .in('role', ['admin', 'super_admin'])
-    .order('created_at', { ascending: true })
+    .order('id', { ascending: true })
     .limit(1)
     .maybeSingle();
   if (preferred?.user_id && preferred.workspace_id) {
@@ -37,7 +37,7 @@ async function resolveActorAndWorkspace(
       .from('workspace_members')
       .select('user_id, workspace_id')
       .eq('user_id', fallbackUserId)
-      .order('created_at', { ascending: true })
+      .order('id', { ascending: true })
       .limit(1)
       .maybeSingle();
     if (talentMember?.user_id && talentMember.workspace_id) {
@@ -48,7 +48,7 @@ async function resolveActorAndWorkspace(
   const { data: fallback } = await supabaseAdmin
     .from('workspace_members')
     .select('user_id, workspace_id')
-    .order('created_at', { ascending: true })
+    .order('id', { ascending: true })
     .limit(1)
     .maybeSingle();
   if (!fallback?.user_id || !fallback.workspace_id) {
