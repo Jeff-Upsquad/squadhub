@@ -22,6 +22,33 @@ export type ActivatedClientSpaceResult = {
 async function resolveActorAndWorkspace(
   fallbackUserId?: string | null,
 ): Promise<{ actorId: string; workspaceId: string }> {
+  // The talent's sidebar only queries THEIR workspace. Picking a random
+  // admin first (there is a leftover "tag" workspace whose admin sorts
+  // first) created folders the partner could never see under Areas.
+  if (fallbackUserId) {
+    const { data: talentMember } = await supabaseAdmin
+      .from('workspace_members')
+      .select('user_id, workspace_id')
+      .eq('user_id', fallbackUserId)
+      .order('id', { ascending: true })
+      .limit(1)
+      .maybeSingle();
+    if (talentMember?.workspace_id) {
+      const { data: adminInWs } = await supabaseAdmin
+        .from('workspace_members')
+        .select('user_id, workspace_id')
+        .eq('workspace_id', talentMember.workspace_id)
+        .in('role', ['admin', 'super_admin'])
+        .order('id', { ascending: true })
+        .limit(1)
+        .maybeSingle();
+      return {
+        actorId: adminInWs?.user_id || fallbackUserId,
+        workspaceId: talentMember.workspace_id,
+      };
+    }
+  }
+
   const { data: preferred } = await supabaseAdmin
     .from('workspace_members')
     .select('user_id, workspace_id')
@@ -31,22 +58,6 @@ async function resolveActorAndWorkspace(
     .maybeSingle();
   if (preferred?.user_id && preferred.workspace_id) {
     return { actorId: preferred.user_id, workspaceId: preferred.workspace_id };
-  }
-
-  // Assignment-time provisioning has just guaranteed this talent's workspace
-  // membership. Use it as the deterministic owner when legacy workspaces have
-  // no admin membership available.
-  if (fallbackUserId) {
-    const { data: talentMember } = await supabaseAdmin
-      .from('workspace_members')
-      .select('user_id, workspace_id')
-      .eq('user_id', fallbackUserId)
-      .order('id', { ascending: true })
-      .limit(1)
-      .maybeSingle();
-    if (talentMember?.user_id && talentMember.workspace_id) {
-      return { actorId: talentMember.user_id, workspaceId: talentMember.workspace_id };
-    }
   }
 
   const { data: fallback } = await supabaseAdmin
@@ -103,9 +114,11 @@ async function ensureClientFolder(input: {
   actorId: string;
   workspaceId: string;
 }): Promise<{ id: string; spaceId: string }> {
+  const spaceId = await ensureClientSpacesHost(input.actorId, input.workspaceId);
   const { data: existing } = await supabaseAdmin
     .from('folders')
     .select('id, space_id')
+    .eq('space_id', spaceId)
     .eq('client_id', input.clientId)
     .eq('name', input.name)
     .eq('folder_type', 'client')
@@ -117,7 +130,6 @@ async function ensureClientFolder(input: {
     return { id: existing.id, spaceId: existing.space_id };
   }
 
-  const spaceId = await ensureClientSpacesHost(input.actorId, input.workspaceId);
   const { count } = await supabaseAdmin
     .from('folders')
     .select('*', { count: 'exact', head: true })
