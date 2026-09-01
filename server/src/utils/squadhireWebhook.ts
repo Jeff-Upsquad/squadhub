@@ -32,6 +32,9 @@ import { resolveHireBusinessUserIdForCardDelivery } from './clientExternalLinks'
  */
 
 const REQUEST_TIMEOUT_MS = 3_000;
+// Activation now includes idempotent partner-account provisioning on the
+// return leg, which can involve two Supabase projects and needs a wider budget.
+const ACTIVATION_REQUEST_TIMEOUT_MS = 15_000;
 const INLINE_ATTEMPTS = 3;
 const INLINE_BACKOFF_MS = [0, 2_000, 10_000];
 const MAX_SYNC_ATTEMPTS = 10;
@@ -1992,13 +1995,22 @@ export function startSelectionNotifySweeper(): NodeJS.Timeout {
 // Card activation: admin clicked "Finalize" on a selected card,
 // moving it to the Assigned bucket (selected_recipient_id set).
 // SquadHire stamps subscription_activated_at on its mirror card
-// so the talent's "My Clients" tab flips from Selected → Assigned.
+// so My Clients flips from Selected → Assigned, then calls back here to
+// provision an external talent's partner account and client access.
 // ============================================================
 
-function postActivationOnce(cardId: string): Promise<AttemptOutcome> {
+async function postActivationOnce(cardId: string): Promise<AttemptOutcome> {
   const baseUrl = config.squadhireWebhookUrl;
-  if (!baseUrl) return Promise.resolve({ delivered: false, error: 'squadhire_webhook_url_not_configured' });
-  if (!config.squadhireWebhookSecret) return Promise.resolve({ delivered: false, error: 'squadhire_webhook_secret_not_configured' });
+  if (!baseUrl) return { delivered: false, error: 'squadhire_webhook_url_not_configured' };
+  if (!config.squadhireWebhookSecret) return { delivered: false, error: 'squadhire_webhook_secret_not_configured' };
+
+  const { data: card, error: cardError } = await supabaseAdmin
+    .from('subscription_cards')
+    .select('selected_recipient_type, selected_recipient_id')
+    .eq('id', cardId)
+    .maybeSingle();
+  if (cardError) return { delivered: false, error: cardError.message.slice(0, 500) };
+  if (!card) return { delivered: true };
 
   // baseUrl already ends in /squadhub/cards (same as selection / talent-accepted).
   const url = baseUrl.endsWith('/')
@@ -2007,11 +2019,15 @@ function postActivationOnce(cardId: string): Promise<AttemptOutcome> {
   const body = {
     type: 'card_activation',
     card_id: cardId,
+    // Explicitly distinguish an external SquadHire talent from a native
+    // SquadHub partner. Profiles only provisions accounts for the former.
+    talent_user_id:
+      card.selected_recipient_type === 'talent' ? card.selected_recipient_id : undefined,
     activated_at: new Date().toISOString(),
   };
 
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  const timer = setTimeout(() => controller.abort(), ACTIVATION_REQUEST_TIMEOUT_MS);
   return fetch(url, {
     method: 'POST',
     headers: {
