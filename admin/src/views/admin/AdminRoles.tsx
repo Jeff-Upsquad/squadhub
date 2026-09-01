@@ -99,6 +99,11 @@ const PERMISSION_GROUPS: PermissionGroup[] = [
 ];
 
 const ALL_PERMISSION_KEYS = PERMISSION_GROUPS.flatMap((g) => g.permissions.map((p) => p.key));
+const MANAGER_LOCKED_PERMISSIONS = new Set([
+  'can_manage_roles',
+  'can_view_admin_panel',
+  'can_manage_workspace',
+]);
 
 const DEFAULT_PERMISSIONS: RolePermissions = {
   ...(Object.fromEntries(ALL_PERMISSION_KEYS.map((k) => [k, false])) as Record<string, boolean>),
@@ -108,14 +113,15 @@ const DEFAULT_PERMISSIONS: RolePermissions = {
 const PRESET_COLORS = ['#22c55e', '#a855f7', '#3b82f6', '#f59e0b', '#ef4444', '#06b6d4', '#ec4899', '#888888'];
 
 // ---- Toggle switch ----
-function Toggle({ checked, onChange }: { checked: boolean; onChange: () => void }) {
+function Toggle({ checked, onChange, disabled = false }: { checked: boolean; onChange: () => void; disabled?: boolean }) {
   return (
     <button
       type="button"
       onClick={onChange}
+      disabled={disabled}
       className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${
         checked ? 'bg-accent' : 'bg-well'
-      }`}
+      } disabled:cursor-not-allowed disabled:opacity-45`}
     >
       <span
         className={`absolute top-0.5 h-4 w-4 rounded-full bg-surface shadow-sm transition-transform ${
@@ -134,6 +140,7 @@ function PermissionGroupPanel({
   onSelectAll,
   onDeselectAll,
   onNumberChange,
+  lockedKeys = new Set<string>(),
 }: {
   group: PermissionGroup;
   permissions: RolePermissions;
@@ -141,10 +148,12 @@ function PermissionGroupPanel({
   onSelectAll: (keys: string[]) => void;
   onDeselectAll: (keys: string[]) => void;
   onNumberChange?: (key: string, value: number) => void;
+  lockedKeys?: Set<string>;
 }) {
   const keys = group.permissions.map((p) => p.key);
+  const editableKeys = keys.filter((key) => !lockedKeys.has(key));
   const enabledCount = keys.filter((k) => permissions[k]).length;
-  const allEnabled = enabledCount === keys.length;
+  const allEnabled = editableKeys.length > 0 && editableKeys.every((key) => permissions[key]);
   const isTimeLogs = group.id === 'time_logs';
   const canEditTime = permissions.can_edit_time_logs === true;
   const windowHours = typeof permissions.time_edit_window_hours === 'number' ? permissions.time_edit_window_hours : 0;
@@ -162,7 +171,8 @@ function PermissionGroupPanel({
         </div>
         <button
           type="button"
-          onClick={() => (allEnabled ? onDeselectAll(keys) : onSelectAll(keys))}
+          onClick={() => (allEnabled ? onDeselectAll(editableKeys) : onSelectAll(editableKeys))}
+          disabled={editableKeys.length === 0}
           className="font-[family-name:var(--font-mono)] text-[10px] font-medium uppercase tracking-[0.08em] text-accent transition hover:text-accent-strong"
         >
           {allEnabled ? 'Deselect All' : 'Select All'}
@@ -176,7 +186,11 @@ function PermissionGroupPanel({
               <p className="text-sm font-medium text-foreground">{perm.label}</p>
               <p className="mt-0.5 text-xs text-foreground-dim">{perm.description}</p>
             </div>
-            <Toggle checked={!!permissions[perm.key]} onChange={() => onToggle(perm.key)} />
+            <Toggle
+              checked={!!permissions[perm.key]}
+              onChange={() => onToggle(perm.key)}
+              disabled={lockedKeys.has(perm.key)}
+            />
           </div>
         ))}
         {isTimeLogs && (
@@ -337,7 +351,7 @@ export default function AdminRoles() {
       <div className="mb-6 flex items-center justify-between">
         <div>
           <h2 className="font-[family-name:var(--font-display)] text-2xl font-bold text-foreground">Roles</h2>
-          <p className="mt-1 text-sm text-foreground-muted">Manage roles and their permissions for this workspace.</p>
+          <p className="mt-1 text-sm text-foreground-muted">Hierarchy: Admin → Managers → Internal members → external roles.</p>
         </div>
         <button
           onClick={openCreate}
@@ -371,11 +385,12 @@ export default function AdminRoles() {
             <tbody>
               {roles.map((role) => {
                 const enabledPerms = ALL_PERMISSION_KEYS.filter((k) => role.permissions?.[k]);
+                const isProtectedAdmin = role.system_key === 'admin';
                 return (
                   <tr
                     key={role.id}
-                    onClick={() => openEdit(role)}
-                    className="cursor-pointer border-b border-divider transition hover:bg-canvas last:border-b-0"
+                    onClick={() => { if (!isProtectedAdmin) openEdit(role); }}
+                    className={`${isProtectedAdmin ? '' : 'cursor-pointer'} border-b border-divider transition hover:bg-canvas last:border-b-0`}
                   >
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2.5">
@@ -386,6 +401,9 @@ export default function AdminRoles() {
                         )}
                         {role.is_system && (
                           <span className="rounded-full bg-amber-50 px-2 py-0.5 font-[family-name:var(--font-mono)] text-[10px] text-amber-600">System</span>
+                        )}
+                        {isProtectedAdmin && (
+                          <span className="rounded-full bg-red-50 px-2 py-0.5 font-[family-name:var(--font-mono)] text-[10px] text-red-600">Top role</span>
                         )}
                       </div>
                     </td>
@@ -407,12 +425,16 @@ export default function AdminRoles() {
                     </td>
                     <td className="px-4 py-3 text-right">
                       <div className="flex items-center justify-end gap-2" onClick={(e) => e.stopPropagation()}>
-                        <button
-                          onClick={() => openEdit(role)}
-                          className="rounded-md border border-divider-strong bg-transparent px-2.5 py-1 text-xs text-foreground-muted hover:border-divider-strong hover:text-foreground"
-                        >
-                          Edit
-                        </button>
+                        {isProtectedAdmin ? (
+                          <span className="rounded-md border border-divider px-2.5 py-1 text-xs text-foreground-dim">Protected</span>
+                        ) : (
+                          <button
+                            onClick={() => openEdit(role)}
+                            className="rounded-md border border-divider-strong bg-transparent px-2.5 py-1 text-xs text-foreground-muted hover:border-divider-strong hover:text-foreground"
+                          >
+                            Edit
+                          </button>
+                        )}
                         {!role.is_default && !role.is_system && (
                           <button
                             onClick={() => handleDelete(role)}
@@ -529,6 +551,7 @@ export default function AdminRoles() {
                         onSelectAll={selectAll}
                         onDeselectAll={deselectAll}
                         onNumberChange={setPermissionNumber}
+                        lockedKeys={editingRole?.system_key === 'manager' ? MANAGER_LOCKED_PERMISSIONS : undefined}
                       />
                     ))}
                   </div>

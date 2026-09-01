@@ -53,27 +53,40 @@ router.get('/roles', async (_req: Request, res: Response) => {
     }
 
     // Get member counts per role
-    const { data: counts } = await supabaseAdmin
+    const { data: primaryMemberships } = await supabaseAdmin
       .from('workspace_members')
-      .select('role_id');
+      .select('id, role_id');
+    const { data: secondaryMemberships } = await supabaseAdmin
+      .from('workspace_member_secondary_roles')
+      .select('workspace_member_id, role_id');
 
-    const countMap: Record<string, number> = {};
-    (counts || []).forEach((m: any) => {
-      if (m.role_id) {
-        countMap[m.role_id] = (countMap[m.role_id] || 0) + 1;
-      }
+    const memberSets: Record<string, Set<string>> = {};
+    (primaryMemberships || []).forEach((m: any) => {
+      if (m.role_id) (memberSets[m.role_id] ||= new Set()).add(m.id);
+    });
+    (secondaryMemberships || []).forEach((m: any) => {
+      if (m.role_id) (memberSets[m.role_id] ||= new Set()).add(m.workspace_member_id);
     });
 
     const rolesWithCounts = (roles || []).map((role: any) => ({
       ...role,
-      member_count: countMap[role.id] || 0,
+      member_count: memberSets[role.id]?.size || 0,
     }));
 
-    // Sort: default roles first, then by created_at
+    // Protected hierarchy first: Admin > Managers > Internal/Member.
+    const systemRank: Record<string, number> = {
+      admin: 0,
+      manager: 1,
+      member: 2,
+      sales: 3,
+      user: 4,
+      guest: 5,
+    };
     rolesWithCounts.sort((a: any, b: any) => {
-      if (a.is_default && !b.is_default) return -1;
-      if (!a.is_default && b.is_default) return 1;
-      return 0;
+      const aRank = systemRank[a.system_key] ?? 10;
+      const bRank = systemRank[b.system_key] ?? 10;
+      if (aRank !== bRank) return aRank - bRank;
+      return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
     });
 
     res.json({ success: true, data: rolesWithCounts });
@@ -131,7 +144,7 @@ router.put('/roles/:id', async (req: Request, res: Response) => {
     if (body.name !== undefined) {
       const { data: existing } = await supabaseAdmin
         .from('roles')
-        .select('is_system, name')
+        .select('is_system, name, system_key')
         .eq('id', id)
         .single();
 
@@ -142,6 +155,29 @@ router.put('/roles/:id', async (req: Request, res: Response) => {
         });
         return;
       }
+    }
+
+    const { data: protectedRole } = await supabaseAdmin
+      .from('roles')
+      .select('system_key')
+      .eq('id', id)
+      .single();
+    if (protectedRole?.system_key === 'admin' && body.permissions !== undefined) {
+      res.status(400).json({
+        success: false,
+        error: 'Admin is the protected top role; its full-access permissions cannot be reduced',
+      });
+      return;
+    }
+    if (protectedRole?.system_key === 'manager' && body.permissions &&
+        (body.permissions.can_manage_roles === true ||
+         body.permissions.can_view_admin_panel === true ||
+         body.permissions.can_manage_workspace === true)) {
+      res.status(400).json({
+        success: false,
+        error: 'Managers must remain below Admin and cannot receive platform-administration permissions',
+      });
+      return;
     }
 
     const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };

@@ -941,7 +941,7 @@ export interface TaskComment {
 }
 
 // ---- Roles & Permissions ----
-export type SystemRoleKey = 'member' | 'user' | 'guest';
+export type SystemRoleKey = 'admin' | 'manager' | 'member' | 'user' | 'guest' | 'sales';
 
 export interface Role {
   id: string;

@@ -38,6 +38,7 @@ export function useTypingUsers(conversationId: string, kind: ChatKind, parentMes
   const expiryTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
   useEffect(() => {
+    if (!conversationId) return;
     const socket = connectSocket();
 
     const remove = (userId: string) => {

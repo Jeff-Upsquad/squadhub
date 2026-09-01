@@ -8,6 +8,12 @@ import { propagateEmailChange } from '../utils/propagateEmailChange';
 import { propagateUserDisplayName } from '../utils/propagateIdentityNames';
 import { notifySquadhireOfCardRecall } from '../utils/squadhireWebhook';
 import { applyTempPassword, PasswordResetError } from '../services/passwordReset';
+import {
+  demotePlatformAdmin,
+  getRoleSystemKey,
+  normalizeRolesForUserType,
+  promotePlatformAdmin,
+} from '../utils/platformRoles';
 import type { UserType } from '@squadhub/shared';
 
 const router = Router();
@@ -182,16 +188,13 @@ router.put('/users/:id/approve', async (req: Request, res: Response) => {
     const id = req.params.id as string;
     const roleId = req.body?.role_id || null;
 
-    // 1. Set status to active
-    const { data, error } = await supabaseAdmin
+    const { data: targetUser, error: targetError } = await supabaseAdmin
       .from('users')
-      .update({ status: 'active' })
+      .select('user_type')
       .eq('id', id)
-      .select()
       .single();
-
-    if (error) {
-      res.status(500).json({ success: false, error: error.message });
+    if (targetError || !targetUser) {
+      res.status(404).json({ success: false, error: 'User not found' });
       return;
     }
 
@@ -212,11 +215,6 @@ router.put('/users/:id/approve', async (req: Request, res: Response) => {
     // fall back to the system default role for this user's user_type.
     let assignRoleId = roleId;
     if (!assignRoleId) {
-      const { data: targetUser } = await supabaseAdmin
-        .from('users')
-        .select('user_type')
-        .eq('id', id)
-        .single();
       assignRoleId = await getDefaultRoleIdForUserType((targetUser?.user_type ?? 'internal') as UserType);
     }
 
@@ -225,17 +223,58 @@ router.put('/users/:id/approve', async (req: Request, res: Response) => {
       return;
     }
 
+    const selectedSystemKey = await getRoleSystemKey(assignRoleId);
+    if ((selectedSystemKey === 'admin' || selectedSystemKey === 'manager') && targetUser.user_type !== 'internal') {
+      res.status(400).json({ success: false, error: 'Admin and Managers roles can only be assigned to Internal users' });
+      return;
+    }
+
+    // Set status only after role validation so a rejected Admin/Managers
+    // assignment cannot partially activate an external account.
+    const { data, error } = await supabaseAdmin
+      .from('users')
+      .update({ status: 'active' })
+      .eq('id', id)
+      .select()
+      .single();
+    if (error) {
+      res.status(500).json({ success: false, error: error.message });
+      return;
+    }
+
     // 3. Add user as member of the workspace (idempotent — re-approval is safe)
     const { error: memberError } = await supabaseAdmin
       .from('workspace_members')
       .upsert(
-        { workspace_id: workspace.id, user_id: id, role: 'member', role_id: assignRoleId },
+        {
+          workspace_id: workspace.id,
+          user_id: id,
+          role: selectedSystemKey === 'admin' ? 'admin' : 'member',
+          role_id: assignRoleId,
+        },
         { onConflict: 'workspace_id,user_id' }
       );
 
     if (memberError) {
       res.status(500).json({ success: false, error: `Failed to add user to workspace: ${memberError.message}` });
       return;
+    }
+
+    if (selectedSystemKey === 'admin') {
+      const { error: adminError } = await supabaseAdmin
+        .from('users')
+        .update({ is_admin: true })
+        .eq('id', id);
+      if (adminError) {
+        const fallbackRoleId = await getDefaultRoleIdForUserType('internal');
+        await supabaseAdmin
+          .from('workspace_members')
+          .update({ role: 'member', role_id: fallbackRoleId })
+          .eq('workspace_id', workspace.id)
+          .eq('user_id', id);
+        res.status(500).json({ success: false, error: `Failed to grant Admin access: ${adminError.message}` });
+        return;
+      }
     }
 
     res.json({ success: true, data });
@@ -342,6 +381,40 @@ router.put('/users/:id/custom-role', async (req: Request, res: Response) => {
       return;
     }
 
+    const { data: targetUser } = await supabaseAdmin
+      .from('users')
+      .select('is_admin, user_type')
+      .eq('id', id)
+      .single();
+    const selectedSystemKey = role_id ? await getRoleSystemKey(role_id) : null;
+    if (selectedSystemKey === 'admin' && !targetUser?.is_admin) {
+      res.status(400).json({ success: false, error: 'Use “Make Admin” to assign the protected Admin role' });
+      return;
+    }
+    if (targetUser?.is_admin && role_id !== undefined && selectedSystemKey !== 'admin') {
+      res.status(400).json({ success: false, error: 'Remove Admin access before changing this user’s primary role' });
+      return;
+    }
+    if ((selectedSystemKey === 'admin' || selectedSystemKey === 'manager') && targetUser?.user_type !== 'internal') {
+      res.status(400).json({ success: false, error: 'Admin and Managers roles can only be assigned to Internal users' });
+      return;
+    }
+    if (secondary_role_ids?.length) {
+      const { data: secondarySystemRoles } = await supabaseAdmin
+        .from('roles')
+        .select('id, system_key')
+        .in('id', secondary_role_ids);
+      if ((secondarySystemRoles || []).some((role: any) => role.system_key === 'admin')) {
+        res.status(400).json({ success: false, error: 'Admin is a protected primary role and cannot be assigned as a secondary role' });
+        return;
+      }
+      if (targetUser?.user_type !== 'internal' &&
+          (secondarySystemRoles || []).some((role: any) => role.system_key === 'manager')) {
+        res.status(400).json({ success: false, error: 'Managers can only be assigned to Internal users' });
+        return;
+      }
+    }
+
     const { data: workspace } = await supabaseAdmin
       .from('workspaces')
       .select('id')
@@ -407,7 +480,17 @@ router.put('/users/:id/custom-role', async (req: Request, res: Response) => {
         return;
       }
 
-      const rows = secondary_role_ids
+      const protectedSecondaryIds = new Set(secondary_role_ids);
+      if (targetUser?.is_admin) {
+        const { data: backup } = await supabaseAdmin
+          .from('platform_admin_role_backups')
+          .select('previous_role_id')
+          .eq('workspace_member_id', member.id)
+          .maybeSingle();
+        if (backup?.previous_role_id) protectedSecondaryIds.add(backup.previous_role_id as string);
+      }
+
+      const rows = Array.from(protectedSecondaryIds)
         .filter((rid) => rid !== effectivePrimary)
         .map((rid) => ({ workspace_member_id: member.id, role_id: rid }));
 
@@ -483,17 +566,11 @@ router.put('/users/:id/role', async (req: Request, res: Response) => {
       }
     }
 
-    const { data, error } = await supabaseAdmin
-      .from('users')
-      .update({ is_admin: body.is_admin })
-      .eq('id', id)
-      .select()
-      .single();
+    if (body.is_admin) await promotePlatformAdmin(id);
+    else await demotePlatformAdmin(id);
 
-    if (error) {
-      res.status(500).json({ success: false, error: error.message });
-      return;
-    }
+    const { data, error } = await supabaseAdmin.from('users').select('*').eq('id', id).single();
+    if (error) throw new Error(error.message);
 
     res.json({ success: true, data });
   } catch (err) {
@@ -521,10 +598,17 @@ router.put('/users/:id/user-type', async (req: Request, res: Response) => {
       return;
     }
 
-    // is_admin is only valid for 'internal' users (see PUT /role above).
-    // Mirror /ban and /suspend: when the new type can't hold admin, clear is_admin.
+    const { data: currentUser } = await supabaseAdmin
+      .from('users')
+      .select('is_admin')
+      .eq('id', id)
+      .single();
+    if (body.user_type !== 'internal' && currentUser?.is_admin) {
+      await demotePlatformAdmin(id);
+    }
+    await normalizeRolesForUserType(id, body.user_type as UserType);
+
     const updates: Record<string, unknown> = { user_type: body.user_type };
-    if (body.user_type !== 'internal') updates.is_admin = false;
 
     const { data, error } = await supabaseAdmin
       .from('users')
@@ -570,6 +654,8 @@ router.put('/users/:id/suspend', async (req: Request, res: Response) => {
       status: body.suspended ? 'suspended' : 'active',
     };
     if (body.suspended) {
+      const { data: target } = await supabaseAdmin.from('users').select('is_admin').eq('id', id).single();
+      if (target?.is_admin) await demotePlatformAdmin(id);
       updates.is_admin = false;
     }
 
@@ -628,6 +714,8 @@ router.put('/users/:id/ban', async (req: Request, res: Response) => {
       status: body.banned ? 'banned' : 'active',
     };
     if (body.banned) {
+      const { data: target } = await supabaseAdmin.from('users').select('is_admin').eq('id', id).single();
+      if (target?.is_admin) await demotePlatformAdmin(id);
       updates.is_admin = false;
     }
     const { data, error } = await supabaseAdmin

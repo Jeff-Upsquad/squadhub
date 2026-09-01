@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import api from '../../../services/api';
-import { getSocket } from '../../../services/socket';
+import { connectSocket, subscribeToChannelRoom } from '../../../services/socket';
 import MessageComposer from '../chat/MessageComposer';
 import ImageLightbox from '../chat/ImageLightbox';
+import TypingIndicator, { useTypingUsers } from '../chat/TypingIndicator';
 import type { Notification, ChatJump } from '../InboxView';
 
 function initials(name?: string | null) {
@@ -71,10 +72,10 @@ function ImageAttachment({ src, alt }: { src: string; alt: string }) {
   );
 }
 
-function MessageRowView({ m, dim }: { m: MessageRow; dim?: boolean }) {
+function MessageRowView({ m, dim, animateIn }: { m: MessageRow; dim?: boolean; animateIn?: boolean }) {
   const name = m.sender?.display_name || 'Unknown';
   return (
-    <div className="th-msg" style={{ opacity: dim ? 0.75 : 1 }}>
+    <div className={`th-msg${animateIn ? ' is-live-arrival' : ''}`} style={{ opacity: dim ? 0.75 : 1 }}>
       <div
         className="ava"
         style={{
@@ -125,18 +126,34 @@ export default function InboxMessageDetail({
 
   const rootId = data?.root?.id ?? null;
   const convId = data?.root?.channel_id || data?.root?.dm_conversation_id || null;
+  const kind = data?.root?.channel_id ? 'channel' : 'dm';
+  const typingUsers = useTypingUsers(convId || '', kind, rootId || undefined);
+  const [arrivingReplyIds, setArrivingReplyIds] = useState<Set<string>>(() => new Set());
+  const arrivalTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
   // Live replies while the detail pane is open — same wiring as ThreadPanel,
   // scoped to this thread's cache key. The inbox detail renders standalone
   // (no ChatPanel mounted to join rooms for it), so it joins the conversation
   // room itself once the fetch resolves the channel/DM id.
   useEffect(() => {
-    const socket = getSocket();
-    if (!socket || !convId) return;
-    socket.emit('join_channel', convId);
+    if (!convId) return;
+    const socket = connectSocket();
+    const unsubscribeRoom = subscribeToChannelRoom(convId);
 
     const handleReply = (message?: { id?: string; parent_message_id?: string | null }) => {
       if (message?.id && message.parent_message_id === rootId) {
+        const oldTimer = arrivalTimersRef.current.get(message.id);
+        if (oldTimer) clearTimeout(oldTimer);
+        setArrivingReplyIds((current) => new Set(current).add(message.id!));
+        arrivalTimersRef.current.set(message.id, setTimeout(() => {
+          arrivalTimersRef.current.delete(message.id!);
+          setArrivingReplyIds((current) => {
+            if (!current.has(message.id!)) return current;
+            const next = new Set(current);
+            next.delete(message.id!);
+            return next;
+          });
+        }, 650));
         queryClient.setQueryData<ThreadResponse>(['message-thread', messageId], (old) => {
           if (!old) return old;
           if (old.replies?.some((m) => m.id === message.id)) return old;
@@ -155,7 +172,7 @@ export default function InboxMessageDetail({
     socket.on('message_updated', handleMutated);
     socket.on('message_deleted', handleMutated);
     return () => {
-      socket.emit('leave_channel', convId);
+      unsubscribeRoom();
       socket.off('new_message', handleReply);
       socket.off('thread_reply', handleReply);
       socket.off('new_reaction', handleMutated);
@@ -163,6 +180,11 @@ export default function InboxMessageDetail({
       socket.off('message_deleted', handleMutated);
     };
   }, [convId, rootId, messageId, queryClient]);
+
+  useEffect(() => () => {
+    arrivalTimersRef.current.forEach(clearTimeout);
+    arrivalTimersRef.current.clear();
+  }, []);
 
   // After the chat composer posts a reply: refresh the thread and treat the
   // conversation as read — replying is deliberate, so its unread inbox rows
@@ -262,18 +284,24 @@ export default function InboxMessageDetail({
               <span>{replies.length} {replies.length === 1 ? 'reply' : 'replies'}</span>
             </div>
             {replies.map((r) => (
-              <MessageRowView key={r.id} m={r} dim={r.id !== messageId} />
+              <MessageRowView
+                key={r.id}
+                m={r}
+                dim={r.id !== messageId}
+                animateIn={arrivingReplyIds.has(r.id)}
+              />
             ))}
           </>
         )}
       </div>
 
+      <TypingIndicator users={typingUsers} />
       {/* Same composer as normal chat (rich text, attachments, emoji, voice,
           mentions) — posts into this thread via parentMessageId. */}
       <div className="th-compose th-compose--chat">
         <MessageComposer
           channelId={convId}
-          kind={root.channel_id ? 'channel' : 'dm'}
+          kind={kind}
           parentMessageId={root.id}
           placeholder="Reply…"
           onSend={handleSent}

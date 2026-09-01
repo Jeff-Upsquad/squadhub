@@ -17,6 +17,7 @@ import { supabaseAdmin } from '../supabase';
 import { getDefaultRoleIdForUserType } from './defaultRole';
 import { grantClientUserAccess } from './ensureClientPortalAccess';
 import type { UserType } from '@squadhub/shared';
+import { getRoleSystemKey } from './platformRoles';
 
 export interface PendingInvitation {
   id: string;
@@ -57,12 +58,45 @@ export async function applyAcceptedInvitation(opts: {
       roleId = await getDefaultRoleIdForUserType(userType);
     }
 
-    await supabaseAdmin.from('workspace_members').insert({
-      workspace_id: workspace.id,
-      user_id: userId,
-      role: 'member',
-      role_id: roleId,
-    });
+    let selectedSystemKey = await getRoleSystemKey(roleId);
+
+    // Invitations created before the hierarchy migration may not have gone
+    // through today's validation. Never let one attach an Internal-only role
+    // to an external account when it is eventually accepted.
+    if (userType !== 'internal' && (selectedSystemKey === 'admin' || selectedSystemKey === 'manager')) {
+      console.warn(
+        `Replacing legacy ${selectedSystemKey} invitation role for external user ${userId}`,
+      );
+      roleId = await getDefaultRoleIdForUserType(userType);
+      selectedSystemKey = await getRoleSystemKey(roleId);
+    }
+
+    let canCreateMembership = true;
+    if (selectedSystemKey === 'admin') {
+      const { error: adminError } = await supabaseAdmin
+        .from('users')
+        .update({ is_admin: true })
+        .eq('id', userId);
+      if (adminError) {
+        console.error('Failed to grant invited Admin access:', adminError);
+        canCreateMembership = false;
+      }
+    }
+
+    if (canCreateMembership) {
+      const { error: memberError } = await supabaseAdmin.from('workspace_members').insert({
+        workspace_id: workspace.id,
+        user_id: userId,
+        role: selectedSystemKey === 'admin' ? 'admin' : 'member',
+        role_id: roleId,
+      });
+      if (memberError) {
+        console.error('Failed to add invited user to workspace:', memberError);
+        if (selectedSystemKey === 'admin') {
+          await supabaseAdmin.from('users').update({ is_admin: false }).eq('id', userId);
+        }
+      }
+    }
   }
 
   // Share the daily check-in mini app by default, picking the variant that

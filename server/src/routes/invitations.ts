@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { requireAuth } from '../middleware/auth';
 import { requireAdmin } from '../middleware/admin';
 import { supabaseAdmin } from '../supabase';
+import { getRoleSystemKey } from '../utils/platformRoles';
 
 const router = Router();
 
@@ -137,6 +138,12 @@ router.post('/', async (req: Request, res: Response) => {
         .eq('is_default', true)
         .single();
       roleId = defaultRole?.id || null;
+    }
+
+    const selectedSystemKey = await getRoleSystemKey(roleId);
+    if ((selectedSystemKey === 'admin' || selectedSystemKey === 'manager') && body.user_type !== 'internal') {
+      res.status(400).json({ success: false, error: 'Admin and Managers roles can only be assigned to Internal users' });
+      return;
     }
 
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();

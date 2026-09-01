@@ -234,7 +234,22 @@ function EditUserSlider({
               <label className="mb-1.5 block text-xs font-medium text-foreground-muted">User type</label>
               <select
                 value={userType}
-                onChange={(e) => setUserType(e.target.value)}
+                onChange={(e) => {
+                  const nextType = e.target.value;
+                  setUserType(nextType);
+                  if (nextType !== 'internal') {
+                    const selectedRole = roles.find((role) => role.id === roleId);
+                    if (selectedRole?.system_key === 'admin' || selectedRole?.system_key === 'manager') {
+                      const fallbackKey = nextType === 'client_staff' ? 'guest' : 'user';
+                      const fallbackRole = roles.find((role) => role.system_key === fallbackKey);
+                      setRoleId(fallbackRole?.id || '');
+                      setSecondaryRoleIds((ids) => ids.filter((id) => {
+                        const role = roles.find((candidate) => candidate.id === id);
+                        return role?.system_key !== 'admin' && role?.system_key !== 'manager';
+                      }));
+                    }
+                  }
+                }}
                 className="w-full rounded-md border border-divider-strong bg-surface px-3 py-2.5 text-sm text-foreground outline-none transition focus:border-accent focus:ring-1 focus:ring-accent"
               >
                 <option value="internal">Internal</option>
@@ -258,15 +273,18 @@ function EditUserSlider({
               <label className="mb-1.5 block text-xs font-medium text-foreground-muted">Primary role</label>
               {roles.length > 0 ? (
                 <div className="space-y-1.5">
-                  {roles.map((role) => (
+                  {roles
+                    .filter((role) => userType === 'internal' || (role.system_key !== 'admin' && role.system_key !== 'manager'))
+                    .map((role) => (
                     <button
                       key={role.id}
                       type="button"
                       onClick={() => handleSetPrimary(role.id)}
+                      disabled={user.is_admin && role.system_key !== 'admin'}
                       className={`flex w-full items-center gap-3 rounded-md border px-3 py-2.5 text-left text-sm transition ${
                         roleId === role.id
                           ? 'border-accent bg-surface-alt text-foreground'
-                          : 'border-divider bg-surface text-foreground-muted hover:border-divider-strong hover:text-foreground'
+                          : 'border-divider bg-surface text-foreground-muted hover:border-divider-strong hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50'
                       }`}
                     >
                       <span
@@ -301,6 +319,8 @@ function EditUserSlider({
                 <div className="flex flex-wrap gap-1.5">
                   {roles
                     .filter((r) => r.id !== roleId)
+                    .filter((r) => userType === 'internal' || (r.system_key !== 'admin' && r.system_key !== 'manager'))
+                    .filter((r) => r.system_key !== 'admin')
                     .map((role) => {
                       const selected = secondaryRoleIds.includes(role.id);
                       return (

@@ -143,7 +143,7 @@ export default function AdminInvitations() {
             <label className="mb-1.5 block text-xs font-medium text-foreground-muted">User Type</label>
             <select
               value={userType}
-              onChange={(e) => { setUserType(e.target.value as UserType); setClientId(''); }}
+              onChange={(e) => { setUserType(e.target.value as UserType); setRoleId(''); setClientId(''); }}
               className="w-full rounded-md border border-divider-strong bg-surface px-3 py-2 text-sm text-foreground outline-none focus:border-accent"
             >
               <option value="internal">Internal</option>
@@ -161,7 +161,9 @@ export default function AdminInvitations() {
               className="w-full rounded-md border border-divider-strong bg-surface px-3 py-2 text-sm text-foreground outline-none focus:border-accent"
             >
               <option value="">Default Role</option>
-              {roles.map((role) => (
+              {roles
+                .filter((role) => userType === 'internal' || (role.system_key !== 'admin' && role.system_key !== 'manager'))
+                .map((role) => (
                 <option key={role.id} value={role.id}>
                   {role.name}
                 </option>

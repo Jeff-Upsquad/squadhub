@@ -102,7 +102,9 @@ export default function AdminApprovals() {
                       }
                       className="rounded-md border border-divider-strong bg-surface px-2 py-1.5 text-xs text-foreground outline-none focus:border-accent"
                     >
-                      {roles.map((role) => (
+                      {roles
+                        .filter((role) => user.user_type === 'internal' || (role.system_key !== 'admin' && role.system_key !== 'manager'))
+                        .map((role) => (
                         <option key={role.id} value={role.id}>
                           {role.name}
                         </option>
