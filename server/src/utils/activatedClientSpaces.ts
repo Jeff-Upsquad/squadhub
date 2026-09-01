@@ -15,7 +15,9 @@ export type ActivatedClientSpaceResult = {
   linkedFolderId: string | null;
 };
 
-async function resolveActorAndWorkspace(): Promise<{ actorId: string; workspaceId: string }> {
+async function resolveActorAndWorkspace(
+  fallbackUserId?: string | null,
+): Promise<{ actorId: string; workspaceId: string }> {
   const { data: preferred } = await supabaseAdmin
     .from('workspace_members')
     .select('user_id, workspace_id')
@@ -25,6 +27,22 @@ async function resolveActorAndWorkspace(): Promise<{ actorId: string; workspaceI
     .maybeSingle();
   if (preferred?.user_id && preferred.workspace_id) {
     return { actorId: preferred.user_id, workspaceId: preferred.workspace_id };
+  }
+
+  // Assignment-time provisioning has just guaranteed this talent's workspace
+  // membership. Use it as the deterministic owner when legacy workspaces have
+  // no admin membership available.
+  if (fallbackUserId) {
+    const { data: talentMember } = await supabaseAdmin
+      .from('workspace_members')
+      .select('user_id, workspace_id')
+      .eq('user_id', fallbackUserId)
+      .order('created_at', { ascending: true })
+      .limit(1)
+      .maybeSingle();
+    if (talentMember?.user_id && talentMember.workspace_id) {
+      return { actorId: talentMember.user_id, workspaceId: talentMember.workspace_id };
+    }
   }
 
   const { data: fallback } = await supabaseAdmin
@@ -293,7 +311,7 @@ export async function provisionActivatedClientSpaces(input: {
     .maybeSingle();
   if (!client) throw new Error('Activated card client was not found');
 
-  const { actorId, workspaceId } = await resolveActorAndWorkspace();
+  const { actorId, workspaceId } = await resolveActorAndWorkspace(input.talentSquadhubUserId);
   const brandName = String(card.brand_name || client.business_name || card.customer_company || 'Client').trim();
   const clientFolder = await ensureClientFolder({ clientId, name: brandName, actorId, workspaceId });
 
