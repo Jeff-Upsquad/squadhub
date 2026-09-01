@@ -1,10 +1,14 @@
 import { supabaseAdmin } from '../supabase';
 import {
+  brandFolderName,
+  templateListRows,
   templateSlugsForServiceType,
   templateSlugsForSubscriptionSlug,
 } from './activatedClientSpaceTypes';
 
 export {
+  brandFolderName,
+  templateListRows,
   templateSlugsForServiceType,
   templateSlugsForSubscriptionSlug,
 } from './activatedClientSpaceTypes';
@@ -151,50 +155,60 @@ async function ensureTemplateFolder(input: {
     .is('deleted_at', null)
     .limit(1)
     .maybeSingle();
-  if (existing?.id) return existing.id;
-
-  const { count } = await supabaseAdmin
-    .from('folders')
-    .select('*', { count: 'exact', head: true })
-    .eq('parent_folder_id', input.clientFolderId)
-    .is('deleted_at', null);
-  const { data: folder, error } = await supabaseAdmin
-    .from('folders')
-    .insert({
-      space_id: input.spaceId,
-      name: input.template.name,
-      parent_folder_id: input.clientFolderId,
-      client_id: input.clientId,
-      client_space_template_id: input.template.id,
-      client_space_template_version: input.template.version,
-      is_private: true,
-      created_by: input.actorId,
-      position: count ?? 0,
-    })
-    .select('id')
-    .single();
-  if (error || !folder) throw new Error(error?.message || `Failed to create ${input.template.name}`);
-
-  const templateLists = (input.template.template?.lists ?? []) as Array<{
-    name: string;
-    position?: number;
-    default_view?: string;
-  }>;
-  if (templateLists.length > 0) {
-    const { error: listError } = await supabaseAdmin.from('lists').insert(
-      templateLists.map((list) => ({
+  const folderId = existing?.id ?? await (async () => {
+    const { count } = await supabaseAdmin
+      .from('folders')
+      .select('*', { count: 'exact', head: true })
+      .eq('parent_folder_id', input.clientFolderId)
+      .is('deleted_at', null);
+    const { data: folder, error } = await supabaseAdmin
+      .from('folders')
+      .insert({
         space_id: input.spaceId,
-        folder_id: folder.id,
-        name: list.name,
-        position: list.position ?? 0,
-        default_view: list.default_view ?? 'list',
+        name: input.template.name,
+        parent_folder_id: input.clientFolderId,
+        client_id: input.clientId,
+        client_space_template_id: input.template.id,
+        client_space_template_version: input.template.version,
         is_private: true,
         created_by: input.actorId,
-      })),
-    );
-    if (listError) throw new Error(listError.message);
-  }
-  return folder.id;
+        position: count ?? 0,
+      })
+      .select('id')
+      .single();
+    if (error || !folder) throw new Error(error?.message || `Failed to create ${input.template.name}`);
+    return folder.id as string;
+  })();
+
+  await ensureTemplateLists({
+    spaceId: input.spaceId,
+    folderId,
+    actorId: input.actorId,
+    lists: (input.template.template?.lists ?? []) as Array<{ name: string; position?: number }>,
+  });
+  return folderId;
+}
+
+async function ensureTemplateLists(input: {
+  spaceId: string;
+  folderId: string;
+  actorId: string;
+  lists: Array<{ name: string; position?: number }>;
+}): Promise<void> {
+  const rows = templateListRows(input);
+  if (rows.length === 0) return;
+
+  const { data: existing } = await supabaseAdmin
+    .from('lists')
+    .select('name')
+    .eq('folder_id', input.folderId)
+    .is('deleted_at', null);
+  const have = new Set((existing ?? []).map((row: { name: string }) => row.name.toLowerCase()));
+  const missing = rows.filter((row) => !have.has(row.name.toLowerCase()));
+  if (missing.length === 0) return;
+
+  const { error } = await supabaseAdmin.from('lists').insert(missing);
+  if (error) throw new Error(error.message);
 }
 
 async function grantFolders(userIds: string[], folderIds: string[], actorId: string): Promise<void> {
@@ -218,6 +232,8 @@ async function grantFolders(userIds: string[], folderIds: string[], actorId: str
 
 async function resolveClientIdForCard(card: any, supplied?: string | null): Promise<string | null> {
   if (supplied) return supplied;
+
+  let submission: { id: string; email: string | null; business_name: string | null } | null = null;
   if (card.submission_subscription_id) {
     const { data: staged } = await supabaseAdmin
       .from('client_submission_subscriptions')
@@ -225,23 +241,44 @@ async function resolveClientIdForCard(card: any, supplied?: string | null): Prom
       .eq('id', card.submission_subscription_id)
       .maybeSingle();
     if (staged?.submission_id) {
-      const { data: client } = await supabaseAdmin
+      const { data: bySubmission } = await supabaseAdmin
         .from('clients')
         .select('id')
         .eq('submission_id', staged.submission_id)
         .maybeSingle();
-      if (client?.id) return client.id;
+      if (bySubmission?.id) return bySubmission.id;
+
+      const { data: foundSubmission } = await supabaseAdmin
+        .from('client_submissions')
+        .select('id, email, business_name')
+        .eq('id', staged.submission_id)
+        .maybeSingle();
+      submission = foundSubmission ?? null;
     }
   }
-  if (card.customer_email) {
+
+  const email = String(card.customer_email || submission?.email || '').trim();
+  if (email) {
     const { data: client } = await supabaseAdmin
       .from('clients')
       .select('id')
-      .ilike('email', card.customer_email)
+      .ilike('email', email)
       .limit(1)
       .maybeSingle();
     if (client?.id) return client.id;
   }
+
+  const company = String(card.customer_company || submission?.business_name || '').trim();
+  if (company) {
+    const { data: client } = await supabaseAdmin
+      .from('clients')
+      .select('id')
+      .ilike('business_name', company)
+      .limit(1)
+      .maybeSingle();
+    if (client?.id) return client.id;
+  }
+
   return null;
 }
 
@@ -293,7 +330,7 @@ export async function provisionActivatedClientSpaces(input: {
 }): Promise<ActivatedClientSpaceResult | null> {
   const { data: card, error: cardError } = await supabaseAdmin
     .from('subscription_cards')
-    .select('id, service_type, brand_name, customer_company, customer_email, submission_subscription_id, selected_recipient_type, selected_recipient_id, linked_folder_id')
+    .select('id, service_type, brand_name, customer_name, customer_company, customer_email, submission_subscription_id, selected_recipient_type, selected_recipient_id, linked_folder_id')
     .eq('id', input.cardId)
     .maybeSingle();
   if (cardError) throw new Error(cardError.message);
@@ -312,7 +349,7 @@ export async function provisionActivatedClientSpaces(input: {
   if (!client) throw new Error('Activated card client was not found');
 
   const { actorId, workspaceId } = await resolveActorAndWorkspace(input.talentSquadhubUserId);
-  const brandName = String(card.brand_name || client.business_name || card.customer_company || 'Client').trim();
+  const brandName = brandFolderName(card, client);
   const clientFolder = await ensureClientFolder({ clientId, name: brandName, actorId, workspaceId });
 
   const { data: templates, error: templateError } = await supabaseAdmin
