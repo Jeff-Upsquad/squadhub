@@ -62,6 +62,44 @@ async function resolveRoleId(categorySlug: string | null): Promise<string | null
   return getDefaultRoleIdForUserType('partner');
 }
 
+/** Ensure the partner is a member of the main workspace. Existing roles win. */
+async function ensurePartnerWorkspaceMembership(
+  userId: string,
+  categorySlug: string | null,
+): Promise<void> {
+  const { data: workspace, error: workspaceError } = await supabaseAdmin
+    .from('workspaces')
+    .select('id')
+    .limit(1)
+    .single();
+  if (workspaceError || !workspace) {
+    throw new SquadhireSsoError(500, 'Could not add your account to the SquadHub workspace.');
+  }
+
+  const { data: existing, error: existingError } = await supabaseAdmin
+    .from('workspace_members')
+    .select('id')
+    .eq('workspace_id', workspace.id)
+    .eq('user_id', userId)
+    .maybeSingle();
+  if (existingError) {
+    throw new SquadhireSsoError(500, 'Could not check your SquadHub workspace access.');
+  }
+  if (existing) return;
+
+  const roleId = await resolveRoleId(categorySlug);
+  const { error: memberError } = await supabaseAdmin.from('workspace_members').insert({
+    workspace_id: workspace.id,
+    user_id: userId,
+    role: 'member',
+    role_id: roleId,
+  });
+  if (memberError) {
+    console.error('[squadhire-talent-sso] workspace member insert failed:', memberError.message);
+    throw new SquadhireSsoError(500, 'Could not add your account to the SquadHub workspace.');
+  }
+}
+
 /** Create the partner account the talent's assigned card entitles them to. */
 async function provisionPartner(identity: SquadhireTalentSsoIdentity): Promise<string> {
   const displayName = identity.name || identity.email.split('@')[0];
@@ -90,28 +128,14 @@ async function provisionPartner(identity: SquadhireTalentSsoIdentity): Promise<s
   });
   if (dbError) {
     console.error('[squadhire-talent-sso] user row insert failed:', dbError.message);
+    // Avoid leaving an auth-only account that an idempotent retry cannot repair.
+    await supabaseAdmin.auth.admin.deleteUser(userId).catch(() => undefined);
+    throw new SquadhireSsoError(500, 'Could not set up your SquadHub account. Please try again.');
   }
 
   // Workspace membership with the craft role — without this they sign in to an
   // empty app. Same wiring applyAcceptedInvitation does for invited signups.
-  const { data: workspace } = await supabaseAdmin
-    .from('workspaces')
-    .select('id')
-    .limit(1)
-    .single();
-
-  if (workspace) {
-    const roleId = await resolveRoleId(identity.category_slug);
-    const { error: memberError } = await supabaseAdmin.from('workspace_members').insert({
-      workspace_id: workspace.id,
-      user_id: userId,
-      role: 'member',
-      role_id: roleId,
-    });
-    if (memberError) {
-      console.error('[squadhire-talent-sso] workspace member insert failed:', memberError.message);
-    }
-  }
+  await ensurePartnerWorkspaceMembership(userId, identity.category_slug);
 
   console.log(
     `[squadhire-talent-sso] provisioned partner account for ${identity.email} (${identity.category_slug ?? 'no category'})`,
@@ -119,18 +143,33 @@ async function provisionPartner(identity: SquadhireTalentSsoIdentity): Promise<s
   return userId;
 }
 
-export async function startSquadhireTalentSession(
+export interface SquadhireTalentProvisionResult {
+  user: Record<string, unknown>;
+  created: boolean;
+}
+
+/**
+ * Idempotently create or repair the partner account an assigned talent needs.
+ * Assignment-time callers use strict access sync so webhook retries repair any
+ * client-space failure; interactive SSO keeps the historic best-effort sync so
+ * an unrelated space configuration problem never blocks sign-in.
+ */
+export async function ensureSquadhireTalentProvisioned(
   identity: SquadhireTalentSsoIdentity,
-): Promise<SquadhireSsoSession> {
-  const { data: existing } = await supabaseAdmin
+  options: { strictAccessSync?: boolean } = {},
+): Promise<SquadhireTalentProvisionResult> {
+  const { data: existing, error: existingError } = await supabaseAdmin
     .from('users')
     .select('*')
     .ilike('email', identity.email)
     .maybeSingle();
+  if (existingError) {
+    throw new SquadhireSsoError(500, 'Could not check your SquadHub account. Please try again.');
+  }
 
+  let user: Record<string, unknown>;
+  let created = false;
   if (existing?.id) {
-    // An email already spoken for by a client or internal account is never
-    // opened this way — same rule the business flow applies in reverse.
     if (!PARTNER_USER_TYPES.has(existing.user_type)) {
       throw new SquadhireSsoError(
         403,
@@ -138,31 +177,39 @@ export async function startSquadhireTalentSession(
       );
     }
     assertSignInAllowed(existing.status);
-
-    await syncTalentActivatedClientSpaces({
-      talentUserId: identity.talent_user_id,
-      squadhubUserId: existing.id,
-    }).catch((err) => console.error('[squadhire-talent-sso] space access sync failed:', err));
-
-    const tokens = await mintSession(identity.email);
-    return { user: existing, ...tokens };
+    await ensurePartnerWorkspaceMembership(existing.id, identity.category_slug);
+    user = existing;
+  } else {
+    const userId = await provisionPartner(identity);
+    const { data: profile, error: profileError } = await supabaseAdmin
+      .from('users')
+      .select('*')
+      .eq('id', userId)
+      .maybeSingle();
+    if (profileError || !profile) {
+      throw new SquadhireSsoError(500, 'Could not finish setting up your SquadHub account.');
+    }
+    user = profile;
+    created = true;
   }
 
-  const userId = await provisionPartner(identity);
-  await syncTalentActivatedClientSpaces({
+  const syncAccess = syncTalentActivatedClientSpaces({
     talentUserId: identity.talent_user_id,
-    squadhubUserId: userId,
-  }).catch((err) => console.error('[squadhire-talent-sso] space access sync failed:', err));
+    squadhubUserId: String(user.id),
+  });
+  if (options.strictAccessSync) {
+    await syncAccess;
+  } else {
+    await syncAccess.catch((err) => console.error('[squadhire-talent-sso] space access sync failed:', err));
+  }
+
+  return { user, created };
+}
+
+export async function startSquadhireTalentSession(
+  identity: SquadhireTalentSsoIdentity,
+): Promise<SquadhireSsoSession> {
+  const provisioned = await ensureSquadhireTalentProvisioned(identity);
   const tokens = await mintSession(identity.email);
-
-  const { data: profile } = await supabaseAdmin
-    .from('users')
-    .select('*')
-    .eq('id', userId)
-    .maybeSingle();
-
-  return {
-    user: profile ?? { id: userId, email: identity.email },
-    ...tokens,
-  };
+  return { user: provisioned.user, ...tokens };
 }

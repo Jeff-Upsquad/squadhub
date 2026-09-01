@@ -6,6 +6,8 @@ import { supabaseAdmin } from '../../supabase';
 import { logCardEvent } from '../../utils/cardEvents';
 import { endActiveAssignmentTermsForCard } from '../../utils/assignmentTerms';
 import { lockAcceptedBidPrice } from '../../utils/lockAcceptedBidPrice';
+import { ensureSquadhireTalentProvisioned } from '../../utils/squadhireTalentSession';
+import { SquadhireSsoError } from '../../utils/squadhireSsoShared';
 
 /**
  * Inbound callbacks from SquadHire.
@@ -61,6 +63,77 @@ const cardResponseSchema = z
     responded_at: z.string().datetime(),
   })
   .strict();
+
+const talentProvisionSchema = z
+  .object({
+    card_id: z.string().uuid(),
+    talent_user_id: z.string().uuid(),
+    email: z.string().email(),
+    name: z.string().nullable(),
+    phone: z.string().nullable(),
+    category_slug: z.string().min(1).nullable(),
+  })
+  .strict();
+
+// Assignment-time partner provisioning. The signed caller supplies identity,
+// but the local assigned card is the entitlement: a valid signature alone can
+// never create a partner who is not actually assigned on this SquadHub card.
+router.post(
+  '/talent/provision',
+  verifySquadhireCallbackSecret,
+  async (req: Request, res: Response) => {
+    try {
+      const body = talentProvisionSchema.parse(req.body);
+      const { data: card, error: cardError } = await supabaseAdmin
+        .from('subscription_cards')
+        .select('id, state, selected_recipient_type, selected_recipient_id')
+        .eq('id', body.card_id)
+        .maybeSingle();
+      if (cardError) {
+        res.status(500).json({ success: false, error: cardError.message });
+        return;
+      }
+      if (!card) {
+        res.status(404).json({ success: false, error: 'Assigned card not found' });
+        return;
+      }
+      if (
+        card.state !== 'assigned' ||
+        card.selected_recipient_type !== 'talent' ||
+        card.selected_recipient_id !== body.talent_user_id
+      ) {
+        res.status(409).json({ success: false, error: 'Talent is not assigned to this card' });
+        return;
+      }
+
+      const result = await ensureSquadhireTalentProvisioned(
+        {
+          talent_user_id: body.talent_user_id,
+          email: body.email.trim().toLowerCase(),
+          name: body.name,
+          phone: body.phone,
+          category_slug: body.category_slug,
+        },
+        { strictAccessSync: true },
+      );
+      res.json({
+        success: true,
+        data: { user_id: String(result.user.id), created: result.created },
+      });
+    } catch (err: any) {
+      if (err instanceof z.ZodError) {
+        res.status(400).json({ success: false, error: err.errors[0].message });
+        return;
+      }
+      if (err instanceof SquadhireSsoError) {
+        res.status(err.status).json({ success: false, error: err.message });
+        return;
+      }
+      console.error('[squadhire-callback talent/provision] error:', err);
+      res.status(500).json({ success: false, error: err?.message || 'Internal server error' });
+    }
+  },
+);
 
 router.post(
   '/card-responses',
