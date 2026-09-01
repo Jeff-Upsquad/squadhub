@@ -46,6 +46,17 @@ export const MIcon = {
       <path d="M5.9 5.6A2 2 0 0 1 7.8 4.1h8.4a2 2 0 0 1 1.9 1.5l1.9 7.8V18a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-4.6zm.35 6.55h2.1a1.5 1.5 0 0 1 1.45 1.1 2.35 2.35 0 0 0 4.5 0 1.5 1.5 0 0 1 1.45-1.1h2.1L16.1 6.4H7.9z" />
     </svg>
   ),
+  discoverOutline: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="8.4" />
+      <path d="m14.8 9.2-1.7 3.9-3.9 1.7 1.7-3.9z" />
+    </svg>
+  ),
+  discover: (
+    <svg viewBox="0 0 24 24" fill="currentColor">
+      <path fillRule="evenodd" d="M12 2.8a9.2 9.2 0 1 0 0 18.4 9.2 9.2 0 0 0 0-18.4Zm3.62 5.58a.85.85 0 0 1 0 .84l-1.76 4.08a1 1 0 0 1-.52.52l-4.08 1.76a.85.85 0 0 1-1.12-1.12l1.76-4.08a1 1 0 0 1 .52-.52l4.08-1.76a.85.85 0 0 1 1.12.28Zm-3.08 3.08-1.2.52-.52 1.2 1.2-.52.52-1.2Z" clipRule="evenodd" />
+    </svg>
+  ),
   moreOutline: (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round">
       <path d="M6 12h.01M12 12h.01M18 12h.01" />
@@ -129,6 +140,16 @@ export const MIcon = {
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
       <path d="M4.6 15s1-1 4-1 5 2 8 2 3.8-1 3.8-1V3.4s-1 1-3.8 1-5-2-8-2-4 1-4 1z" />
       <path d="M4.6 21.4V15" />
+    </svg>
+  ),
+  star: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+      <path d="m12 3.2 2.65 5.36 5.92.86-4.28 4.17 1.01 5.9L12 16.7l-5.3 2.79 1.01-5.9-4.28-4.17 5.92-.86z" />
+    </svg>
+  ),
+  bookmark: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+      <path d="M6.2 4.7A1.7 1.7 0 0 1 7.9 3h8.2a1.7 1.7 0 0 1 1.7 1.7v16l-5.8-3.8-5.8 3.8z" />
     </svg>
   ),
   folder: (

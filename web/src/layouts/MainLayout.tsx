@@ -1130,8 +1130,9 @@ export default function MainLayout() {
   // ---- Mobile browser view ------------------------------------------------
   // Below the md breakpoint the desktop chrome (icon rail + module sidebar +
   // tab strip) is replaced wholesale by the phone shell, which mirrors the
-  // SquadHub Business Android app: carbon header, white sheet, 4-tab bottom
-  // bar. It hosts the *same* panes via renderPane, so features stay in one
+  // SquadHub Android apps: carbon header, white sheet, and role-specific bottom
+  // navigation (five tabs for partners, four for clients). It hosts the *same*
+  // panes via renderPane, so features stay in one
   // place. Global overlays stay mounted as siblings — they're position:fixed
   // and several (task detail, toasts, tips) must float above the shell.
   if (isMobile) {

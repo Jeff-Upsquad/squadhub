@@ -55,7 +55,7 @@ export default function MobileHome({
 
 /**
  * The grouped space cards. Client Home is nothing but this; the partner Home
- * puts it under its briefing, so it lives here rather than inline.
+ * puts it under its Focus/Favorites cards, so it lives here rather than inline.
  */
 export function MobileSpaceGroups({
   groups,

@@ -2643,6 +2643,292 @@
   text-overflow: ellipsis;
 }
 
+/* ── Redesigned Partner Home ────────────────────────────────────────── */
+.msh .mph-home { padding: 8px 0 96px; }
+.msh .mph-launch-grid {
+  display: grid;
+  gap: 10px;
+  padding: 8px var(--m-gutter) 6px;
+}
+.msh .mph-launch-card {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 82px;
+  padding: 14px;
+  border: 1px solid var(--m-hair);
+  border-radius: 20px;
+  background: var(--m-surface);
+  color: var(--m-ink);
+  text-align: left;
+  cursor: pointer;
+  box-shadow: 0 8px 24px color-mix(in srgb, var(--m-brand-deep) 6%, transparent);
+  transition: transform 0.14s cubic-bezier(0.22, 1, 0.36, 1), border-color 0.14s ease;
+}
+.msh .mph-launch-card:active { transform: scale(0.98); }
+.msh .mph-launch-card[data-tone='focus'] {
+  background: linear-gradient(135deg, color-mix(in srgb, var(--m-accent-soft) 72%, var(--m-surface)), var(--m-surface) 72%);
+  border-color: color-mix(in srgb, var(--m-accent) 24%, var(--m-hair));
+}
+.msh .mph-launch-icon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  background: var(--m-surface-alt);
+  color: var(--m-ink-2);
+}
+.msh .mph-launch-card[data-tone='focus'] .mph-launch-icon {
+  background: var(--m-accent);
+  color: var(--m-on-accent);
+}
+.msh .mph-launch-icon svg { width: 22px; height: 22px; }
+.msh .mph-launch-copy { flex: 1 1 auto; min-width: 0; }
+.msh .mph-launch-copy b {
+  display: block;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: -0.2px;
+}
+.msh .mph-launch-copy span {
+  display: block;
+  margin-top: 3px;
+  font-size: 12.5px;
+  line-height: 1.35;
+  color: var(--m-ink-3);
+}
+.msh .mph-launch-count {
+  flex: none;
+  display: grid;
+  place-items: center;
+  min-width: 30px;
+  height: 30px;
+  padding: 0 8px;
+  border-radius: var(--m-r-pill);
+  background: var(--m-surface-alt);
+  color: var(--m-ink-2);
+  font-size: 13px;
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+}
+.msh .mph-launch-card[data-tone='focus'] .mph-launch-count {
+  background: color-mix(in srgb, var(--m-accent) 12%, var(--m-surface));
+  color: var(--m-accent);
+}
+.msh .mph-launch-chev { flex: none; display: grid; color: var(--m-ink-4); }
+.msh .mph-launch-chev svg { width: 18px; height: 18px; }
+
+/* Modal sheet lives above both the page and bottom navigation. */
+.msh .mph-sheet-layer { position: fixed; inset: 0; z-index: 80; }
+.msh .mph-sheet-scrim {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: var(--m-scrim);
+  backdrop-filter: blur(2px);
+  animation: msh-fade 0.2s ease both;
+}
+.msh .mph-bottom-sheet {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  display: flex;
+  flex-direction: column;
+  max-height: min(76dvh, 680px);
+  padding-bottom: var(--m-safe-bottom);
+  border-radius: 26px 26px 0 0;
+  background: var(--m-elevated);
+  color: var(--m-ink);
+  box-shadow: 0 -18px 60px rgba(0, 0, 0, 0.2);
+  animation: mph-sheet-up 0.3s cubic-bezier(0.22, 1, 0.36, 1) both;
+  overflow: hidden;
+}
+@keyframes mph-sheet-up {
+  from { opacity: 0.5; transform: translateY(100%); }
+  to { opacity: 1; transform: none; }
+}
+.msh .mph-sheet-handle {
+  flex: none;
+  width: 38px;
+  height: 4px;
+  margin: 9px auto 2px;
+  border-radius: var(--m-r-pill);
+  background: var(--m-hair-2);
+}
+.msh .mph-sheet-head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px 16px;
+  border-bottom: 1px solid var(--m-hair-3);
+}
+.msh .mph-sheet-head-icon,
+.msh .mph-favorite-icon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 13px;
+  background: var(--m-accent-soft);
+  color: var(--m-accent);
+}
+.msh .mph-sheet-head-icon svg { width: 21px; height: 21px; }
+.msh .mph-sheet-head > span:nth-child(2) { flex: 1 1 auto; min-width: 0; }
+.msh .mph-sheet-head h2 {
+  margin: 0;
+  font-size: 19px;
+  font-weight: 750;
+  letter-spacing: -0.35px;
+}
+.msh .mph-sheet-head p {
+  margin: 2px 0 0;
+  font-size: 12.5px;
+  color: var(--m-ink-3);
+}
+.msh .mph-sheet-close {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--m-surface-alt);
+  color: var(--m-ink-2);
+  cursor: pointer;
+}
+.msh .mph-sheet-close svg { width: 18px; height: 18px; }
+.msh .mph-sheet-list {
+  min-height: 160px;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  padding: 6px 0 12px;
+}
+.msh .mph-sheet-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 62px;
+  padding: 10px 18px;
+  border: 0;
+  background: transparent;
+  color: var(--m-ink);
+  text-align: left;
+  cursor: pointer;
+}
+.msh .mph-sheet-row + .mph-sheet-row { border-top: 1px solid var(--m-hair-3); }
+.msh .mph-sheet-row:active { background: var(--m-hair-3); }
+.msh .mph-sheet-row-body { flex: 1 1 auto; min-width: 0; }
+.msh .mph-sheet-row-body b {
+  display: block;
+  font-size: 14.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.msh .mph-sheet-row-body span {
+  display: block;
+  margin-top: 3px;
+  font-size: 12px;
+  color: var(--m-ink-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.msh .mph-favorite-icon { width: 36px; height: 36px; background: var(--m-surface-alt); color: var(--m-ink-3); }
+.msh .mph-favorite-icon svg { width: 18px; height: 18px; }
+.msh .mph-sheet-empty {
+  display: flex;
+  min-height: 190px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 30px 24px;
+  text-align: center;
+}
+.msh .mph-sheet-empty > span {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  margin-bottom: 12px;
+  border-radius: 14px;
+  background: var(--m-surface-alt);
+  color: var(--m-ink-4);
+}
+.msh .mph-sheet-empty svg { width: 21px; height: 21px; }
+.msh .mph-sheet-empty b { font-size: 15px; font-weight: 650; }
+.msh .mph-sheet-empty p { max-width: 32ch; margin: 5px 0 0; color: var(--m-ink-3); font-size: 13px; line-height: 1.45; }
+
+/* ── Discover tab ───────────────────────────────────────────────────── */
+.msh .mdiscover {
+  min-height: 100%;
+  padding: calc(var(--m-safe-top) + 28px) var(--m-gutter) 96px;
+  background:
+    radial-gradient(circle at 85% 3%, color-mix(in srgb, var(--m-accent) 15%, transparent), transparent 32%),
+    var(--m-surface);
+}
+.msh .mdiscover-banner {
+  position: relative;
+  overflow: hidden;
+  padding: 28px 24px 30px;
+  border: 1px solid color-mix(in srgb, var(--m-accent) 22%, var(--m-hair));
+  border-radius: 26px;
+  background: linear-gradient(145deg, color-mix(in srgb, var(--m-accent-soft) 82%, var(--m-surface)), var(--m-surface));
+  box-shadow: 0 16px 42px color-mix(in srgb, var(--m-brand-deep) 8%, transparent);
+}
+.msh .mdiscover-icon {
+  display: grid;
+  place-items: center;
+  width: 50px;
+  height: 50px;
+  margin-bottom: 28px;
+  border-radius: 16px;
+  background: var(--m-accent);
+  color: var(--m-on-accent);
+  box-shadow: 0 10px 28px color-mix(in srgb, var(--m-accent) 35%, transparent);
+}
+.msh .mdiscover-icon svg { width: 25px; height: 25px; }
+.msh .mdiscover-kicker {
+  display: inline-flex;
+  padding: 6px 9px;
+  border-radius: var(--m-r-pill);
+  background: var(--m-accent-soft);
+  color: var(--m-accent);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 1.1px;
+  text-transform: uppercase;
+}
+.msh .mdiscover-banner h1 {
+  max-width: 12ch;
+  margin: 14px 0 10px;
+  color: var(--m-ink);
+  font-family: 'Plus Jakarta Sans', 'Inter', sans-serif;
+  font-size: 29px;
+  line-height: 1.08;
+  font-weight: 750;
+  letter-spacing: -0.8px;
+}
+.msh .mdiscover-banner p {
+  max-width: 36ch;
+  margin: 0;
+  color: var(--m-ink-3);
+  font-size: 14px;
+  line-height: 1.55;
+}
+
 /* ════════════════════════════════════════════════════════════════════════
    MOBILE LOGIN — LoginScreen.kt: carbon hero + white sheet pulled over it.
    Lives outside .msh because auth pages aren't inside the app shell.

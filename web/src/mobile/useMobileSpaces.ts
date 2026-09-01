@@ -9,8 +9,10 @@
  *
  * Where they come from depends on who's looking, mirroring the desktop
  * SpaceTree: clients and partners own no areas, so their spaces arrive as
- * shared roots (`/pm/shared-tree`) grouped under each client folder; internal
- * users get workspace roots plus their own areas.
+ * shared roots (`/pm/shared-tree`); internal users get workspace roots plus
+ * their own areas. Partner roots are flattened into the product language used
+ * on Home: assigned client folders are Workspaces and their shared children
+ * are Areas.
  */
 
 import { useMemo } from 'react';
@@ -58,7 +60,32 @@ export function useMobileSpaces(workspaceId: string | undefined): {
   const groups = useMemo<SpaceGroup[]>(() => {
     const out: SpaceGroup[] = [];
 
-    if (shared) {
+    if (isPartner) {
+      const clientFolders = tree?.clientFolders ?? [];
+      out.push({
+        key: 'workspaces',
+        heading: 'Workspaces',
+        emptyHint: 'No client workspaces have been assigned yet.',
+        cards: clientFolders.map(clientWorkspaceCard),
+      });
+
+      const areas = [
+        ...clientFolders.flatMap((cf) =>
+          (cf.childSpaces ?? []).map((s) => folderCard(s, cf.name)),
+        ),
+        ...(tree?.folders ?? []).map((f) => folderCard(f)),
+        ...(tree?.lists ?? []).map((l) => listCard(l)),
+      ];
+      out.push({
+        key: 'areas',
+        heading: 'Areas',
+        emptyHint: 'No areas have been shared yet.',
+        cards: areas,
+      });
+      return out;
+    }
+
+    if (isClient) {
       for (const cf of tree?.clientFolders ?? []) {
         out.push({
           key: `client-${cf.id}`,
@@ -82,7 +109,7 @@ export function useMobileSpaces(workspaceId: string | undefined): {
       out.push({ key: 'areas', heading: 'Areas', cards: spaces.map(spaceCard) });
     }
     return out;
-  }, [shared, tree, wsRoots, spaces]);
+  }, [isPartner, isClient, tree, wsRoots, spaces]);
 
   return {
     groups,
@@ -113,6 +140,17 @@ function folderCard(f: Folder, clientName?: string): SpaceCard {
     target: isTemplate
       ? { kind: 'design', id: f.id, spaceId: f.space_id, title: f.name }
       : { kind: 'folder', id: f.id, spaceId: f.space_id, title: f.name },
+  };
+}
+
+function clientWorkspaceCard(f: Folder & { childSpaces?: Folder[] }): SpaceCard {
+  const areaCount = f.childSpaces?.length ?? 0;
+  return {
+    id: f.id,
+    title: f.name,
+    subtitle: areaCount === 1 ? '1 area' : `${areaCount} areas`,
+    icon: 'space',
+    target: { kind: 'folder', id: f.id, spaceId: f.space_id, title: f.name },
   };
 }
 

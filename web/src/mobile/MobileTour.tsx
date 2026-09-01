@@ -7,7 +7,7 @@
  * icon rail, the module sidebar, the tab strip) — none of which exist here, so
  * they're suppressed on mobile and this runs instead. It's a fixed, local tour:
  * four coachmarks introducing the bottom bar, the Home the user actually got
- * (spaces for clients, the briefing for partners), creating a task, and chat.
+ * (spaces for clients, Focus/Favorites for partners), creating a task, and chat.
  *
  * It shows once per user per device (localStorage) and only on the Home tab,
  * where all four anchors are on screen.
@@ -27,11 +27,11 @@ type Step = {
   bullets?: [string, string][];
 };
 
-type Audience = 'client' | 'partner';
+type Audience = 'client' | 'partner' | 'internal';
 
 /**
  * Two scripts, because the two Homes answer different questions. Clients are
- * introduced to their spaces; partners and internal staff to their briefing.
+ * introduced to their spaces; partners and internal staff to their work cards.
  * Steps 1 and 4 differ only in wording — same anchors, same shape.
  */
 const STEPS: Record<Audience, Step[]> = {
@@ -69,20 +69,21 @@ const STEPS: Record<Audience, Step[]> = {
   partner: [
     {
       anchor: 'tabbar',
-      title: 'Start with the four tabs',
+      title: 'Start with the five tabs',
       body: 'Everything on your phone lives behind one of these:',
       bullets: [
-        ['Home', "today's briefing and your workspace"],
+        ['Home', 'your focus list, favorites, workspaces and areas'],
         ['Chat', 'channels and direct messages'],
         ['Inbox', 'what needs your attention; the red dot is unread'],
+        ['Discover', 'new partner opportunities and resources, coming soon'],
         ['More', 'my tasks, day planner, calendar, apps and your account'],
       ],
     },
     {
-      anchor: 'briefing',
-      title: "Your day, up top",
+      anchor: 'home-cards',
+      title: 'Keep important work close',
       body:
-        "The big tile is what's scheduled for today, with Overdue and New beside it — New is work assigned to you that you haven't looked at yet.\n\nTap any tile to open My Tasks. Below them, My Home, Meetings and Check-in are one tap away.",
+        'Tap Focus to slide up the tasks you have starred. Favorites works the same way for saved workspaces, areas, lists, and channels.\n\nYour assigned client workspaces and their areas sit directly underneath.',
     },
     {
       anchor: 'fab',
@@ -95,6 +96,37 @@ const STEPS: Record<Audience, Step[]> = {
       title: 'Channels and DMs',
       body:
         'Chat holds the channels you belong to and your direct messages.\n\nChannels linked to a space or list are shared with everyone on that work. A DM is a private thread with partners and Squad Managers on the same work. Tap New message to start one, and Support reaches the SquadHub team.',
+    },
+  ],
+  internal: [
+    {
+      anchor: 'tabbar',
+      title: 'Start with the four tabs',
+      body: 'Everything on your phone lives behind one of these:',
+      bullets: [
+        ['Home', 'your focus list, favorites and workspace'],
+        ['Chat', 'channels and direct messages'],
+        ['Inbox', 'what needs your attention; the red dot is unread'],
+        ['More', 'my tasks, day planner, calendar, apps and your account'],
+      ],
+    },
+    {
+      anchor: 'home-cards',
+      title: 'Keep important work close',
+      body:
+        'Tap Focus to slide up the tasks you have starred. Favorites works the same way for saved workspaces, areas, lists, and channels.\n\nYour workspaces and areas sit directly underneath.',
+    },
+    {
+      anchor: 'fab',
+      title: 'Create a task',
+      body:
+        'Give it a name, choose the list it belongs in, then set assignee, priority and dates from the chips.\n\nOpen a space or list first and the + is already pointed at it, so you can skip the picker.',
+    },
+    {
+      anchor: 'chat-tab',
+      title: 'Channels and DMs',
+      body:
+        'Chat holds the channels you belong to and your direct messages.\n\nTap New message to start one, and Support reaches the SquadHub team.',
     },
   ],
 };

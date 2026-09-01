@@ -6,9 +6,10 @@
  * This is a port of the SquadHub **Business Android app**'s navigation shell
  * (`ui/tabs/MainTabs.kt` + `ui/components/SlackKit.kt`) onto the web app:
  *
- *   carbon header  →  white sheet (rounded top)  →  flat 4-tab bottom bar
- *   Home · Chat · Inbox · More, an accent indicator pill, red count badges,
- *   a carbon FAB on Home, and a left account drawer behind the avatar.
+ *   carbon header  →  white sheet (rounded top)  →  flat bottom bar, an
+ *   accent indicator pill, red count badges, a carbon FAB on Home, and a left
+ *   account drawer behind the avatar. Partner roles also get Discover between
+ *   Inbox and More; the Business app keeps its existing four tabs.
  *
  * It does NOT fork the app's features. Tab roots are phone-shaped surfaces
  * (spaces-first Home, a conversation list, the More menu); everything the
@@ -21,27 +22,34 @@
  */
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
-import type { Channel, DmConversation, User } from '@squadhub/shared';
+import type { Channel, DmConversation, Favorite, User } from '@squadhub/shared';
 import type { ActiveSection, HomeView } from '../layouts/MainLayout';
 import { launchApp, type AppDef } from '../config/apps';
-import { useIsClient } from '../hooks/useUserType';
+import { useIsClient, useIsPartner } from '../hooks/useUserType';
 import { usePMStore } from '../stores/pmStore';
 import MobileHome, { applyOpenTarget } from './MobileHome';
-import MobilePartnerHome, { type PartnerAction } from './MobilePartnerHome';
+import MobilePartnerHome from './MobilePartnerHome';
 import MobileChat from './MobileChat';
+import MobileDiscover from './MobileDiscover';
 import MobileMore, { MobileSettings, type MoreTarget } from './MobileMore';
 import MobileCreateSheet from './MobileCreateSheet';
 import MobileTour, { hasSeenMobileTour } from './MobileTour';
 import { MAvatar, MIcon, MRow } from './MobileKit';
 import type { OpenTarget } from './useMobileSpaces';
 
-type MTab = 'home' | 'chat' | 'inbox' | 'more';
+type MTab = 'home' | 'chat' | 'inbox' | 'discover' | 'more';
 
-const TABS: { key: MTab; label: string; outline: ReactNode; filled: ReactNode }[] = [
+const BUSINESS_TABS: { key: MTab; label: string; outline: ReactNode; filled: ReactNode }[] = [
   { key: 'home', label: 'Home', outline: MIcon.homeOutline, filled: MIcon.home },
   { key: 'chat', label: 'Chat', outline: MIcon.chatOutline, filled: MIcon.chat },
   { key: 'inbox', label: 'Inbox', outline: MIcon.inboxOutline, filled: MIcon.inbox },
   { key: 'more', label: 'More', outline: MIcon.moreOutline, filled: MIcon.more },
+];
+
+const PARTNER_TABS: typeof BUSINESS_TABS = [
+  ...BUSINESS_TABS.slice(0, 3),
+  { key: 'discover', label: 'Discover', outline: MIcon.discoverOutline, filled: MIcon.discover },
+  BUSINESS_TABS[3],
 ];
 
 /** Tabs that draw the carbon header behind the status bar (PURPLE_ROUTES). */
@@ -89,9 +97,13 @@ export default function MobileShell({
   floating,
 }: MobileShellProps) {
   // Business app UI (spaces-first Home) for client AND client_staff. Partner
-  // app UI (briefing Home) for everyone else — internal, partner, partner_employee.
-  // Both Android apps share the same four tabs and SlackKit chrome.
+  // app UI (Focus/Favorites Home) for everyone else — internal, partner,
+  // partner_employee.
+  // Partner roles use the redesigned five-tab shell; the Business app keeps
+  // its established four-tab navigation.
   const isClient = useIsClient();
+  const isPartner = useIsPartner();
+  const tabs = isPartner ? PARTNER_TABS : BUSINESS_TABS;
 
   const [tab, setTab] = useState<MTab>('home');
   const [chatQuery, setChatQuery] = useState('');
@@ -231,25 +243,22 @@ export default function MobileShell({
   // Inline "+" on a Home card — the sheet opens already pointed at that space.
   const createIn = (t: OpenTarget) => setCreating({ preset: t });
 
-  // Partner Home's briefing tiles and action chips. Each opens the web surface
-  // that answers the same question the Android screen does. Screens that paint
-  // the app's own large header run bare (back-only app bar).
-  const openPartnerAction = (a: PartnerAction) => {
-    const buckets = { today: 'Today', overdue: 'Overdue', tomorrow: 'Tomorrow', all: 'All tasks' } as const;
-    if (a in buckets) {
-      usePMStore.getState().setActiveDashboardTab(a as keyof typeof buckets);
-      setActiveSection('home');
-      setHomeView('my-tasks');
-      openSection(buckets[a as keyof typeof buckets], null, true);
+  const openPartnerFavorite = (favorite: Favorite) => {
+    const title = favorite.item_name || 'Favorite';
+    if (favorite.item_type === 'channel') {
+      openConversation(favorite.item_id, 'channel', title);
       return;
     }
-    if (a === 'my-tasks') usePMStore.getState().setActiveDashboardTab(null);
-    const view: HomeView = a === 'my-home' ? 'hub' : a === 'meetings' ? 'meetings' : a === 'checkin' ? 'checkin' : 'my-tasks';
-    const title = a === 'my-home' ? 'My Home' : a === 'meetings' ? 'Meetings' : a === 'checkin' ? 'Daily Check-In' : 'My Tasks';
-    const bare = a !== 'my-home';
-    setActiveSection('home');
-    setHomeView(view);
-    openSection(title, null, bare);
+    if (favorite.item_type === 'space') {
+      openTarget({ kind: 'space', id: favorite.item_id, title });
+      return;
+    }
+    if (!favorite.space_id) return;
+    if (favorite.item_type === 'folder') {
+      openTarget({ kind: 'folder', id: favorite.item_id, spaceId: favorite.space_id, title });
+      return;
+    }
+    openTarget({ kind: 'list', id: favorite.item_id, spaceId: favorite.space_id, title });
   };
 
   // ---- Chrome decisions ------------------------------------------------
@@ -360,7 +369,7 @@ export default function MobileShell({
                   workspaceId={workspaceId}
                   onOpen={openTarget}
                   onCreateIn={createIn}
-                  onAction={openPartnerAction}
+                  onOpenFavorite={openPartnerFavorite}
                 />
               )
             ) : tab === 'chat' ? (
@@ -374,6 +383,8 @@ export default function MobileShell({
                 onOpenChannel={(id, t) => openConversation(id, 'channel', t)}
                 onOpenDm={(id, t) => openConversation(id, 'dm', t)}
               />
+            ) : tab === 'discover' ? (
+              <MobileDiscover />
             ) : (
               <MobileMore
                 onOpen={openMore}
@@ -404,7 +415,7 @@ export default function MobileShell({
       {!onSection && (
         <nav className="msh-tabbar" data-tour="tabbar">
           <div className="msh-tabbar-row">
-            {TABS.map((t) => {
+            {tabs.map((t) => {
               const on = tab === t.key;
               const badge = t.key === 'inbox' ? inboxUnread : t.key === 'chat' ? supportUnread : 0;
               return (
@@ -444,12 +455,12 @@ export default function MobileShell({
         />
       )}
 
-      {/* Only on the Home tab, where all four anchors are on screen, and never
+      {/* Only on the Home tab, where the tour anchors are on screen, and never
           over the create sheet. */}
       {tourOpen && !onSection && tab === 'home' && !creating && (
         <MobileTour
           userId={user?.id}
-          audience={isClient ? 'client' : 'partner'}
+          audience={isClient ? 'client' : isPartner ? 'partner' : 'internal'}
           onDone={() => setTourOpen(false)}
         />
       )}
