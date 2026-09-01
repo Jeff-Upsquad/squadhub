@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({
   from: vi.fn(),
   createUser: vi.fn(),
+  listUsers: vi.fn(),
   deleteUser: vi.fn(),
   syncSpaces: vi.fn(),
   defaultRole: vi.fn(),
@@ -11,7 +12,11 @@ const mocks = vi.hoisted(() => ({
 vi.mock('../supabase', () => ({
   supabaseAdmin: {
     from: mocks.from,
-    auth: { admin: { createUser: mocks.createUser, deleteUser: mocks.deleteUser } },
+    auth: { admin: {
+      createUser: mocks.createUser,
+      listUsers: mocks.listUsers,
+      deleteUser: mocks.deleteUser,
+    } },
   },
   supabase: {},
   supabaseAuth: {},
@@ -84,6 +89,7 @@ describe('assignment-time SquadHire talent provisioning', () => {
       error: null,
     });
     mocks.deleteUser.mockResolvedValue({ data: {}, error: null });
+    mocks.listUsers.mockResolvedValue({ data: { users: [] }, error: null });
     mocks.defaultRole.mockResolvedValue('role-partner');
     mocks.syncSpaces.mockResolvedValue(undefined);
   });
@@ -121,6 +127,25 @@ describe('assignment-time SquadHire talent provisioning', () => {
     expect(mocks.createUser).not.toHaveBeenCalled();
     expect(state.member).toMatchObject({ user_id: 'partner-1' });
     expect(mocks.syncSpaces).toHaveBeenCalledOnce();
+  });
+
+  it('repairs a legacy auth-only talent instead of failing on duplicate email', async () => {
+    const state: TestState = { user: null, member: null };
+    installDb(state);
+    mocks.createUser.mockResolvedValue({
+      data: { user: null },
+      error: { message: 'A user with this email address has already been registered' },
+    });
+    mocks.listUsers.mockResolvedValue({
+      data: { users: [{ id: 'orphan-auth-1', email: identity.email }] },
+      error: null,
+    });
+
+    const result = await ensureSquadhireTalentProvisioned(identity, { strictAccessSync: true });
+
+    expect(result.created).toBe(true);
+    expect(result.user).toMatchObject({ id: 'orphan-auth-1', user_type: 'partner' });
+    expect(mocks.deleteUser).not.toHaveBeenCalled();
   });
 
   it('refuses to convert an existing non-partner account', async () => {

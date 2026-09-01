@@ -111,12 +111,30 @@ async function provisionPartner(identity: SquadhireTalentSsoIdentity): Promise<s
     user_metadata: { display_name: displayName, squadhire_password_pending: true },
   });
 
-  if (authError || !authData?.user) {
-    console.error('[squadhire-talent-sso] createUser failed:', authError?.message);
-    throw new SquadhireSsoError(500, 'Could not set up your SquadHub account. Please try again.');
+  let authUser = authData?.user ?? null;
+  let createdAuthUser = Boolean(authUser);
+  if (!authUser && authError) {
+    // Legacy SSO attempts could leave an auth.users record without its public
+    // users twin. Adopt that record so assignment retries repair the account
+    // instead of failing forever on Auth's duplicate-email guard.
+    const { data: listed, error: listError } = await supabaseAdmin.auth.admin.listUsers({
+      page: 1,
+      perPage: 1000,
+    });
+    authUser = listed?.users.find(
+      (candidate) => candidate.email?.toLowerCase() === identity.email.toLowerCase(),
+    ) ?? null;
+    createdAuthUser = false;
+    if (listError || !authUser) {
+      console.error('[squadhire-talent-sso] createUser failed:', authError.message);
+      throw new SquadhireSsoError(500, 'Could not set up your SquadHub account. Please try again.');
+    }
   }
 
-  const userId = authData.user.id;
+  if (!authUser) {
+    throw new SquadhireSsoError(500, 'Could not set up your SquadHub account. Please try again.');
+  }
+  const userId = authUser.id;
 
   const { error: dbError } = await supabaseAdmin.from('users').insert({
     id: userId,
@@ -128,8 +146,11 @@ async function provisionPartner(identity: SquadhireTalentSsoIdentity): Promise<s
   });
   if (dbError) {
     console.error('[squadhire-talent-sso] user row insert failed:', dbError.message);
-    // Avoid leaving an auth-only account that an idempotent retry cannot repair.
-    await supabaseAdmin.auth.admin.deleteUser(userId).catch(() => undefined);
+    // Only undo auth state created by this attempt. A pre-existing auth-only
+    // user may own sessions or credentials and must never be deleted.
+    if (createdAuthUser) {
+      await supabaseAdmin.auth.admin.deleteUser(userId).catch(() => undefined);
+    }
     throw new SquadhireSsoError(500, 'Could not set up your SquadHub account. Please try again.');
   }
 
