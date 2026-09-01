@@ -1,4 +1,5 @@
 import { supabaseAdmin } from '../supabase';
+import { generateCardCode } from './cardCode';
 import {
   brandFolderName,
   templateListRows,
@@ -342,7 +343,7 @@ export async function provisionActivatedClientSpaces(input: {
 }): Promise<ActivatedClientSpaceResult | null> {
   const { data: card, error: cardError } = await supabaseAdmin
     .from('subscription_cards')
-    .select('id, service_type, brand_name, customer_name, customer_company, customer_email, submission_subscription_id, selected_recipient_type, selected_recipient_id, linked_folder_id')
+    .select('id, service_type, brand_name, customer_name, customer_company, customer_email, submission_subscription_id, selected_recipient_type, selected_recipient_id, linked_folder_id, card_code')
     .eq('id', input.cardId)
     .maybeSingle();
   if (cardError) throw new Error(cardError.message);
@@ -388,11 +389,20 @@ export async function provisionActivatedClientSpaces(input: {
   let linkedFolderId = card.linked_folder_id as string | null;
   if (!linkedFolderId && childFolderIds[0]) {
     linkedFolderId = childFolderIds[0];
+  }
+  const cardPatch: Record<string, unknown> = {};
+  if (!card.linked_folder_id && linkedFolderId) {
+    cardPatch.linked_folder_id = linkedFolderId;
+    cardPatch.linked_at = new Date().toISOString();
+  }
+  if (!card.card_code) {
+    cardPatch.card_code = await generateCardCode();
+  }
+  if (Object.keys(cardPatch).length > 0) {
     const { error: linkError } = await supabaseAdmin
       .from('subscription_cards')
-      .update({ linked_folder_id: linkedFolderId, linked_at: new Date().toISOString() })
-      .eq('id', input.cardId)
-      .is('linked_folder_id', null);
+      .update(cardPatch)
+      .eq('id', input.cardId);
     if (linkError) throw new Error(linkError.message);
   }
 

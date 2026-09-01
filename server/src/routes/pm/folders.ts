@@ -682,10 +682,16 @@ router.get('/folders/:id/link-status', async (req: Request, res: Response) => {
       workspaceId = space?.workspace_id || null;
     }
 
+    // Two assigned cards can share one client space (same client, two
+    // subscriptions). maybeSingle() 500s on that and the UI shows "No card
+    // linked" even though linked_folder_id is set.
     const { data: card } = await supabaseAdmin
       .from('subscription_cards')
       .select('card_code, linked_at, billing_start_date')
       .eq('linked_folder_id', folderId)
+      .is('deleted_at', null)
+      .order('linked_at', { ascending: false })
+      .limit(1)
       .maybeSingle();
 
     // Period-aware committed hours: follows the card's assignment-term timeline,
