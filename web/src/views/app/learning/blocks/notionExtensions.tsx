@@ -11,6 +11,24 @@ import Highlight from '@tiptap/extension-highlight';
 import { TaskList } from '@tiptap/extension-task-list';
 import { TaskItem } from '@tiptap/extension-task-item';
 import Suggestion from '@tiptap/suggestion';
+import { getFreshAccessToken } from '../../../../services/api';
+import { useAuthStore } from '../../../../stores/authStore';
+
+const CLIPS_ORIGIN = (process.env.NEXT_PUBLIC_CLIPS_URL ||
+  (process.env.NODE_ENV === 'production' ? 'https://clips.squadhub.in' : 'http://localhost:3200'));
+
+function clipEmbedSrc(rawUrl: string): { src: string; gated: boolean } | null {
+  let u: URL;
+  try { u = new URL(rawUrl); } catch { return null; }
+  const isClipsHost =
+    u.hostname === 'clips.squadhub.in' ||
+    ((u.hostname === 'localhost' || u.hostname === '127.0.0.1') && u.port === '3200');
+  if (!isClipsHost) return null;
+  const lms = u.pathname.match(/^\/(?:share|embed)\/lms\/([A-Za-z0-9_-]+)\/?$/);
+  if (lms) return { src: `${u.origin}/embed/lms/${lms[1]}`, gated: true };
+  const m = u.pathname.match(/^\/(?:share|embed)\/([A-Za-z0-9_-]+)\/?$/);
+  return m ? { src: `${u.origin}/embed/${m[1]}`, gated: false } : null;
+}
 
 /* ---- Video / rich embed node (YouTube, Vimeo, Loom, …) ---- */
 export const Embed = Node.create({
@@ -49,11 +67,40 @@ export const Embed = Node.create({
       dom.contentEditable = 'false';
       dom.setAttribute('data-embed', '');
       const iframe = document.createElement('iframe');
-      if (node.attrs.src) iframe.src = node.attrs.src;
+      const rawSrc = (node.attrs.src as string) || '';
+      const clip = rawSrc ? clipEmbedSrc(rawSrc) : null;
+      if (clip) {
+        iframe.src = clip.src;
+      } else if (rawSrc) {
+        iframe.src = rawSrc;
+      }
       iframe.setAttribute('allowfullscreen', 'true');
-      iframe.setAttribute('allow', 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture');
+      iframe.setAttribute('allow', 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen');
+
+      let cleanup: (() => void) | null = null;
+      if (clip) {
+        const sendAuth = async () => {
+          const token = await getFreshAccessToken();
+          const { user } = useAuthStore.getState();
+          if (!token || !user || !iframe.contentWindow) return;
+          iframe.contentWindow.postMessage(
+            { type: 'squadclips:auth', accessToken: token, user: { id: user.id, email: user.email, display_name: user.display_name, avatar_url: user.avatar_url } },
+            CLIPS_ORIGIN,
+          );
+        };
+        const onMessage = (e: MessageEvent) => {
+          if (e.origin !== CLIPS_ORIGIN || e.source !== iframe.contentWindow) return;
+          if (e.data?.type === 'squadclips:ready' || e.data?.type === 'squadclips:request-token') {
+            void sendAuth();
+          }
+        };
+        window.addEventListener('message', onMessage);
+        iframe.addEventListener('load', () => { if (clip.gated) void sendAuth(); });
+        cleanup = () => window.removeEventListener('message', onMessage);
+      }
+
       dom.appendChild(iframe);
-      return { dom };
+      return { dom, destroy: () => cleanup?.() };
     };
   },
 });
