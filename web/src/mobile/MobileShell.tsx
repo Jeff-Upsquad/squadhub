@@ -281,10 +281,47 @@ export default function MobileShell({
   // Home always offers create; inside a space/list the + files straight into it.
   const fabTarget = onSection ? section.target : null;
   const showFab = onSection ? !!fabTarget : tab === 'home';
+  // Discover renders the tab bar at the top instead of the bottom.
+  const topNav = tab === 'discover' && !onSection;
+
+  const tabBar = !onSection && (
+    <nav className={`msh-tabbar${topNav ? ' msh-tabbar--top' : ''}`} data-tour="tabbar">
+      <div className="msh-tabbar-row">
+        {tabs.map((t) => {
+          const on = tab === t.key;
+          const badge = t.key === 'inbox' ? inboxUnread : t.key === 'chat' ? supportUnread : t.key === 'discover' ? discoverUnread : 0;
+          return (
+            <button
+              key={t.key}
+              type="button"
+              className="msh-tab"
+              data-on={on ? 'true' : undefined}
+              aria-current={on ? 'page' : undefined}
+              aria-label={badge > 0 ? `${t.label}, ${badge} unread` : t.label}
+              data-tour={t.key === 'chat' ? 'chat-tab' : undefined}
+              onClick={() => selectTab(t.key)}
+            >
+              <span className="msh-tab-ic">
+                {on ? t.filled : t.outline}
+                {badge > 0 && (
+                  <span className="msh-badge" aria-hidden>
+                    {badge > 99 ? '99+' : badge}
+                  </span>
+                )}
+              </span>
+              <span className="msh-tab-lb">{t.label}</span>
+            </button>
+          );
+        })}
+      </div>
+    </nav>
+  );
 
   return (
     <div className="msh" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
-      {carbonHeader && (
+      {topNav && tabBar}
+
+      {carbonHeader && !topNav && (
         <header className="msh-header">
           {tab === 'chat' ? (
             <>
@@ -421,38 +458,7 @@ export default function MobileShell({
         )}
       </div>
 
-      {!onSection && (
-        <nav className="msh-tabbar" data-tour="tabbar">
-          <div className="msh-tabbar-row">
-            {tabs.map((t) => {
-              const on = tab === t.key;
-              const badge = t.key === 'inbox' ? inboxUnread : t.key === 'chat' ? supportUnread : t.key === 'discover' ? discoverUnread : 0;
-              return (
-                <button
-                  key={t.key}
-                  type="button"
-                  className="msh-tab"
-                  data-on={on ? 'true' : undefined}
-                  aria-current={on ? 'page' : undefined}
-                  aria-label={badge > 0 ? `${t.label}, ${badge} unread` : t.label}
-                  data-tour={t.key === 'chat' ? 'chat-tab' : undefined}
-                  onClick={() => selectTab(t.key)}
-                >
-                  <span className="msh-tab-ic">
-                    {on ? t.filled : t.outline}
-                    {badge > 0 && (
-                      <span className="msh-badge" aria-hidden>
-                        {badge > 99 ? '99+' : badge}
-                      </span>
-                    )}
-                  </span>
-                  <span className="msh-tab-lb">{t.label}</span>
-                </button>
-              );
-            })}
-          </div>
-        </nav>
-      )}
+      {!topNav && tabBar}
 
       {floating && <div className="msh-floating">{floating}</div>}
 
