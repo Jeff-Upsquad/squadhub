@@ -10,6 +10,13 @@ export interface SquadhireBusinessIdentity {
   company_name: string | null;
 }
 
+export interface SquadhireTalentIdentity {
+  talent_user_id: string;
+  email: string;
+  phone: string | null;
+  name: string | null;
+}
+
 /**
  * Ask SquadHire whether this email + password really is a business user's
  * SquadHire login.
@@ -75,6 +82,55 @@ export async function verifySquadhireBusinessCredentials(input: {
     };
   } catch (err: any) {
     console.error('[squadhire-credentials] fetch failed:', err?.message);
+    return null;
+  }
+}
+
+/** Verify an assigned talent's SquadHire password without exposing a session. */
+export async function verifySquadhireTalentCredentials(input: {
+  email: string;
+  password: string;
+}): Promise<SquadhireTalentIdentity | null> {
+  const email = (input.email || '').trim();
+  if (!email || !input.password) return null;
+
+  const base = config.squadhireWebhookUrl;
+  if (!base || !config.squadhireWebhookSecret) return null;
+
+  try {
+    const url = new URL(base);
+    url.pathname = '/api/integrations/squadhub/talent/verify-credentials';
+    url.search = '';
+
+    const res = await fetch(url.toString(), {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-SquadHub-Signature': config.squadhireWebhookSecret,
+      },
+      body: JSON.stringify({ email, password: input.password }),
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+    });
+    if (!res.ok) {
+      console.error(`[squadhire-credentials] talent verification responded ${res.status}`);
+      return null;
+    }
+
+    const payload = (await res.json()) as {
+      success?: boolean;
+      data?: ({ valid?: boolean } & Partial<SquadhireTalentIdentity>) | null;
+    };
+    const data = payload?.data;
+    if (!data?.valid || !data.talent_user_id || !data.email) return null;
+
+    return {
+      talent_user_id: data.talent_user_id,
+      email: data.email,
+      phone: data.phone ?? null,
+      name: data.name ?? null,
+    };
+  } catch (err: any) {
+    console.error('[squadhire-credentials] talent verification failed:', err?.message);
     return null;
   }
 }

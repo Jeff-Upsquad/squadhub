@@ -1,5 +1,5 @@
 /**
- * First-login credential seeding for SquadHire business users.
+ * First-login credential seeding for SquadHire business users and talents.
  *
  * When a card is assigned, SquadHub already creates a pending `client`
  * invitation for the business's email (see ensureClientPortalAccess). Normally
@@ -34,7 +34,10 @@
  */
 
 import { supabaseAdmin } from '../supabase';
-import { verifySquadhireBusinessCredentials } from './squadhireCredentials';
+import {
+  verifySquadhireBusinessCredentials,
+  verifySquadhireTalentCredentials,
+} from './squadhireCredentials';
 import {
   applyAcceptedInvitation,
   INVITATION_COLUMNS,
@@ -42,8 +45,9 @@ import {
 } from './applyInvitation';
 import type { UserType } from '@squadhub/shared';
 
-/** User types eligible for credential seeding — business/client logins only. */
-const SEEDABLE_USER_TYPES = new Set(['client', 'client_staff']);
+const CLIENT_USER_TYPES = new Set(['client', 'client_staff']);
+const TALENT_USER_TYPES = new Set(['partner', 'partner_employee']);
+const SEEDABLE_USER_TYPES = new Set([...CLIENT_USER_TYPES, ...TALENT_USER_TYPES]);
 
 /**
  * @returns true when the caller should retry signInWithPassword — either we
@@ -162,8 +166,8 @@ export async function seedSquadhireClientLogin(input: {
  * Adopt the SquadHire password for an account that was provisioned over the
  * auto-login link and has never had a password of its own.
  *
- * Same bar as seeding a brand-new account: the account must be a client-side
- * one, must still be flagged `squadhire_password_pending`, and SquadHire must
+ * Same bar as seeding a brand-new account: the account must be a SquadHire-
+ * linked client or partner, must still be flagged `squadhire_password_pending`, and SquadHire must
  * confirm the typed password belongs to this exact email. Any other existing
  * account gets a plain false — a failed login there is simply a wrong password.
  */
@@ -179,10 +183,15 @@ async function adoptSquadhirePassword(input: {
   const metadata = authUser?.user?.user_metadata ?? {};
   if (metadata.squadhire_password_pending !== true) return false;
 
-  const identity = await verifySquadhireBusinessCredentials({
-    email: input.email,
-    password: input.password,
-  });
+  const identity = TALENT_USER_TYPES.has(input.userType)
+    ? await verifySquadhireTalentCredentials({
+        email: input.email,
+        password: input.password,
+      })
+    : await verifySquadhireBusinessCredentials({
+        email: input.email,
+        password: input.password,
+      });
   if (!identity) return false;
 
   const { error } = await supabaseAdmin.auth.admin.updateUserById(input.userId, {

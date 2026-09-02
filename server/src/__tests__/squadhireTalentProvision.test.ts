@@ -4,6 +4,8 @@ const mocks = vi.hoisted(() => ({
   from: vi.fn(),
   createUser: vi.fn(),
   listUsers: vi.fn(),
+  getUserById: vi.fn(),
+  updateUserById: vi.fn(),
   deleteUser: vi.fn(),
   syncSpaces: vi.fn(),
   defaultRole: vi.fn(),
@@ -15,6 +17,8 @@ vi.mock('../supabase', () => ({
     auth: { admin: {
       createUser: mocks.createUser,
       listUsers: mocks.listUsers,
+      getUserById: mocks.getUserById,
+      updateUserById: mocks.updateUserById,
       deleteUser: mocks.deleteUser,
     } },
   },
@@ -90,6 +94,11 @@ describe('assignment-time SquadHire talent provisioning', () => {
     });
     mocks.deleteUser.mockResolvedValue({ data: {}, error: null });
     mocks.listUsers.mockResolvedValue({ data: { users: [] }, error: null });
+    mocks.getUserById.mockResolvedValue({
+      data: { user: { id: 'partner-1', user_metadata: { squadhire_password_pending: true } } },
+      error: null,
+    });
+    mocks.updateUserById.mockResolvedValue({ data: { user: {} }, error: null });
     mocks.defaultRole.mockResolvedValue('role-partner');
     mocks.syncSpaces.mockResolvedValue(undefined);
   });
@@ -129,6 +138,24 @@ describe('assignment-time SquadHire talent provisioning', () => {
     expect(mocks.syncSpaces).toHaveBeenCalledOnce();
   });
 
+  it('marks a legacy partner for first-login SquadHire password adoption', async () => {
+    const state: TestState = {
+      user: { id: 'partner-1', email: identity.email, user_type: 'partner', status: 'active' },
+      member: { id: 'member-1', user_id: 'partner-1' },
+    };
+    installDb(state);
+    mocks.getUserById.mockResolvedValue({
+      data: { user: { id: 'partner-1', user_metadata: { email_verified: true } } },
+      error: null,
+    });
+
+    await ensureSquadhireTalentProvisioned(identity);
+
+    expect(mocks.updateUserById).toHaveBeenCalledWith('partner-1', {
+      user_metadata: { email_verified: true, squadhire_password_pending: true },
+    });
+  });
+
   it('repairs a legacy auth-only talent instead of failing on duplicate email', async () => {
     const state: TestState = { user: null, member: null };
     installDb(state);
@@ -140,11 +167,18 @@ describe('assignment-time SquadHire talent provisioning', () => {
       data: { users: [{ id: 'orphan-auth-1', email: identity.email }] },
       error: null,
     });
+    mocks.getUserById.mockResolvedValue({
+      data: { user: { id: 'orphan-auth-1', user_metadata: {} } },
+      error: null,
+    });
 
     const result = await ensureSquadhireTalentProvisioned(identity, { strictAccessSync: true });
 
     expect(result.created).toBe(true);
     expect(result.user).toMatchObject({ id: 'orphan-auth-1', user_type: 'partner' });
+    expect(mocks.updateUserById).toHaveBeenCalledWith('orphan-auth-1', {
+      user_metadata: { squadhire_password_pending: true },
+    });
     expect(mocks.deleteUser).not.toHaveBeenCalled();
   });
 

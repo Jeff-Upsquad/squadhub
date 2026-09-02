@@ -100,6 +100,26 @@ async function ensurePartnerWorkspaceMembership(
   }
 }
 
+/**
+ * Legacy auth-only partners predate the first-login adoption marker. Add it
+ * once without re-arming accounts that have already adopted a password.
+ */
+async function ensurePasswordAdoptionPending(userId: string): Promise<void> {
+  const { data, error } = await supabaseAdmin.auth.admin.getUserById(userId);
+  if (error || !data.user) {
+    throw new SquadhireSsoError(500, 'Could not prepare your SquadHub login. Please try again.');
+  }
+  const metadata = data.user.user_metadata ?? {};
+  if (Object.prototype.hasOwnProperty.call(metadata, 'squadhire_password_pending')) return;
+
+  const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(userId, {
+    user_metadata: { ...metadata, squadhire_password_pending: true },
+  });
+  if (updateError) {
+    throw new SquadhireSsoError(500, 'Could not prepare your SquadHub login. Please try again.');
+  }
+}
+
 /** Create the partner account the talent's assigned card entitles them to. */
 async function provisionPartner(identity: SquadhireTalentSsoIdentity): Promise<string> {
   const displayName = identity.name || identity.email.split('@')[0];
@@ -135,6 +155,9 @@ async function provisionPartner(identity: SquadhireTalentSsoIdentity): Promise<s
     throw new SquadhireSsoError(500, 'Could not set up your SquadHub account. Please try again.');
   }
   const userId = authUser.id;
+  if (!createdAuthUser) {
+    await ensurePasswordAdoptionPending(userId);
+  }
 
   const { error: dbError } = await supabaseAdmin.from('users').insert({
     id: userId,
@@ -198,6 +221,7 @@ export async function ensureSquadhireTalentProvisioned(
       );
     }
     assertSignInAllowed(existing.status);
+    await ensurePasswordAdoptionPending(existing.id);
     await ensurePartnerWorkspaceMembership(existing.id, identity.category_slug);
     user = existing;
   } else {
