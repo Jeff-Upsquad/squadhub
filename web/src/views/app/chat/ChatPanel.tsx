@@ -118,6 +118,13 @@ function notifMatchesConversation(
     : n.metadata?.channel_id === channelId;
 }
 
+// A mounted chat is not necessarily being viewed: browsers keep the active
+// channel mounted while its tab or window is in the background. Only advance
+// read state when the user can actually see and interact with the conversation.
+function isConversationActivelyViewed(): boolean {
+  return document.visibilityState === 'visible' && document.hasFocus();
+}
+
 // ---- Format date for separator ----
 function formatDateLabel(dateStr: string): string {
   const date = new Date(dateStr);
@@ -296,17 +303,24 @@ export default function ChatPanel({
       }
       queryClient.invalidateQueries({ queryKey });
       // A message arriving in the conversation already on screen is read on
-      // sight — keep the mobile app's read mark current.
-      markChatRead();
+      // sight — but a background tab merely has the conversation mounted and
+      // must retain its unread state until the user returns.
+      if (isConversationActivelyViewed()) markChatRead();
     };
     // Edits/deletes/reactions send partial payloads, so reconcile via refetch.
     const handleMessageMutated = () => {
       queryClient.invalidateQueries({ queryKey });
     };
-    // A notification that lands for the conversation already on screen has, by
-    // definition, already been read — clear it without making the user leave.
+    // Clear a matching notification only while the conversation is genuinely
+    // visible. A background tab may still have this ChatPanel mounted and must
+    // not silently consume the alert.
     const handleNotification = (n: { metadata?: Record<string, unknown> | null }) => {
-      if (notifMatchesConversation(n, channelId, kind)) clearConversationNotifications();
+      if (
+        notifMatchesConversation(n, channelId, kind) &&
+        isConversationActivelyViewed()
+      ) {
+        clearConversationNotifications();
+      }
     };
 
     socket.on('new_message', handleIncomingMessage);
@@ -331,16 +345,41 @@ export default function ChatPanel({
     arrivalTimersRef.current.clear();
   }, []);
 
-  // On open: clear any notifications that piled up while the conversation was
-  // closed. Skip the write when the cached inbox already shows nothing to clear.
+  // Clear accumulated read state when this conversation becomes the active,
+  // visible browser view. Listening for both focus and visibility covers
+  // switching back from another window, another tab, and an installed PWA.
   useEffect(() => {
     if (!channelId) return;
-    // Advance the chat read mark for the mobile app on every open — even when
-    // there are no inbox notifications to clear (the guard below can skip those).
-    markChatRead();
-    const cached = queryClient.getQueryData<Notification[]>(['notifications', 'list']);
-    if (cached && !cached.some((n) => !n.is_read && notifMatchesConversation(n, channelId, kind))) return;
-    clearConversationNotifications();
+
+    let frame: number | null = null;
+    const syncVisibleConversation = () => {
+      if (frame !== null) window.cancelAnimationFrame(frame);
+      frame = window.requestAnimationFrame(() => {
+        frame = null;
+        if (!isConversationActivelyViewed()) return;
+
+        // Advance the chat read mark on every genuine view — even when there
+        // are no inbox notifications to clear.
+        markChatRead();
+        const cached = queryClient.getQueryData<Notification[]>(['notifications', 'list']);
+        if (
+          cached &&
+          !cached.some((n) => !n.is_read && notifMatchesConversation(n, channelId, kind))
+        ) {
+          return;
+        }
+        clearConversationNotifications();
+      });
+    };
+
+    syncVisibleConversation();
+    window.addEventListener('focus', syncVisibleConversation);
+    document.addEventListener('visibilitychange', syncVisibleConversation);
+    return () => {
+      if (frame !== null) window.cancelAnimationFrame(frame);
+      window.removeEventListener('focus', syncVisibleConversation);
+      document.removeEventListener('visibilitychange', syncVisibleConversation);
+    };
   }, [channelId, kind, queryClient, clearConversationNotifications, markChatRead]);
 
   // Each page is oldest-first, but pages arrive newest-batch-first (page 0 is the
