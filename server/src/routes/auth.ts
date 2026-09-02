@@ -17,6 +17,7 @@ import { rateLimit } from '../utils/rateLimit';
 import * as passwordReset from '../services/passwordReset';
 import type { UserType } from '@squadhub/shared';
 import { propagateIdentityNames } from '../utils/propagateIdentityNames';
+import { mobileAppForUserType } from '../utils/mobileAppAccess';
 
 const router = Router();
 
@@ -31,6 +32,9 @@ const registerSchema = z.object({
 const loginSchema = z.object({
   email: z.string().email(),
   password: z.string().min(1),
+  // Optional for backward compatibility with web, desktop, and older mobile
+  // releases. Current native apps always identify their intended audience.
+  client_app: z.enum(['internal', 'partner', 'business']).optional(),
 });
 
 const refreshSchema = z.object({
@@ -263,6 +267,19 @@ router.post('/login', async (req: Request, res: Response) => {
     if (profile?.status === 'suspended') {
       res.status(403).json({ success: false, error: 'Your account has been suspended.' });
       return;
+    }
+
+    if (body.client_app && profile?.user_type) {
+      const correctApp = mobileAppForUserType(profile.user_type as UserType);
+      if (correctApp.key !== body.client_app) {
+        res.status(403).json({
+          success: false,
+          code: 'WRONG_APP',
+          error: `This account is associated with ${correctApp.name}. Download the correct app to continue.`,
+          correct_app: correctApp,
+        });
+        return;
+      }
     }
 
     res.json({
