@@ -6,6 +6,7 @@ import { supabaseAdmin } from '../supabase';
 import { hydrateStagedSubscriptions } from '../utils/stagedSubscriptions';
 import { sharePartnerWithCardClient } from '../utils/sharePartnerWithClient';
 import { logCardEvent } from '../utils/cardEvents';
+import { notifySquadhireOfTalentAcceptance } from '../utils/squadhireWebhook';
 import { PARTNER_USER_TYPES } from '@squadhub/shared';
 
 const router = Router();
@@ -47,15 +48,46 @@ router.get('/', async (req: Request, res: Response) => {
       return;
     }
 
-    const cardIds = Array.from(new Set((recipients || []).map((r: any) => r.card_id)));
+    // Talents provisioned into SquadHub become partner users, while the card
+    // responses they made in SquadHire remain in the external-recipient table.
+    // Join those rows by the verified account email so Discover becomes the
+    // one request inbox for both native partners and migrated SquadHire talent.
+    // `notified_at` keeps soft-published/queued matches private until broadcast;
+    // responded rows remain visible even on old data that predates that column.
+    let externalRecipients: any[] = [];
+    if (req.userEmail) {
+      let externalQuery = supabaseAdmin
+        .from('subscription_card_external_recipients')
+        .select('*')
+        .eq('email', req.userEmail.trim().toLowerCase())
+        .is('archived_at', null)
+        .or('notified_at.not.is.null,status.neq.pending')
+        .order('created_at', { ascending: false });
+      if (statusFilter) externalQuery = externalQuery.eq('status', statusFilter);
+      const { data: external, error: externalError } = await externalQuery;
+      if (externalError) {
+        console.error('List external partner opportunities error:', externalError.message);
+      } else {
+        externalRecipients = (external || []).map((row: any) => ({
+          ...row,
+          partner_id: req.userId!,
+          source: 'squadhire',
+        }));
+      }
+    }
+
+    const combinedRecipients = [...(recipients || []), ...externalRecipients];
+    const cardIds = Array.from(new Set(combinedRecipients.map((r: any) => r.card_id)));
     if (cardIds.length === 0) {
       res.json({ success: true, data: [] });
       return;
     }
 
-    // Include published cards AND recalled/cancelled cards (state='closed'
-    // with recalled_at or cancelled_at set) so accepted partners keep
-    // seeing their opportunity with the "Recalled" or "Cancelled" tag.
+    // Include published cards, live assigned cards, AND recalled/cancelled
+    // cards (state='closed' with recalled_at or cancelled_at set). Discover is
+    // also the partner's request history: dropping a card the moment a talent
+    // is selected made an accepted subscription/assignment appear to vanish
+    // precisely when it became active.
     // Archived cards are always excluded — archive is a hard hide from
     // partner feeds.
     const { data: cards, error: cardsErr } = await supabaseAdmin
@@ -63,7 +95,7 @@ router.get('/', async (req: Request, res: Response) => {
       .select('*')
       .in('id', cardIds)
       .is('archived_at', null)
-      .or('state.eq.published,recalled_at.not.is.null,cancelled_at.not.is.null');
+      .or('state.in.(published,assigned),recalled_at.not.is.null,cancelled_at.not.is.null');
     if (cardsErr) {
       res.status(500).json({ success: false, error: cardsErr.message });
       return;
@@ -215,7 +247,7 @@ router.get('/', async (req: Request, res: Response) => {
       };
     });
 
-    const result = (recipients || [])
+    const result = combinedRecipients
       .filter((r: any) => cardById[r.card_id])
       .map((r: any) => ({
         ...r,
@@ -259,12 +291,33 @@ async function respond(
       res.status(500).json({ success: false, error: selErr.message });
       return;
     }
-    if (!existing) {
+    let recipient: any = existing;
+    let recipientTable: 'subscription_card_recipients' | 'subscription_card_external_recipients' = 'subscription_card_recipients';
+    if (!recipient && req.userEmail) {
+      const { data: external, error: externalError } = await supabaseAdmin
+        .from('subscription_card_external_recipients')
+        .select('*')
+        .eq('id', req.params.recipient_id)
+        .eq('email', req.userEmail.trim().toLowerCase())
+        .is('archived_at', null)
+        .maybeSingle();
+      if (externalError) {
+        res.status(500).json({ success: false, error: externalError.message });
+        return;
+      }
+      recipient = external;
+      recipientTable = 'subscription_card_external_recipients';
+    }
+    if (!recipient) {
       res.status(404).json({ success: false, error: 'Opportunity not found' });
       return;
     }
     // Staged-but-not-broadcast rows aren't real opportunities yet.
-    if (!existing.broadcast_at) {
+    if (recipientTable === 'subscription_card_recipients' && !recipient.broadcast_at) {
+      res.status(404).json({ success: false, error: 'Opportunity not found' });
+      return;
+    }
+    if (recipientTable === 'subscription_card_external_recipients' && recipient.status === 'pending' && !recipient.notified_at) {
       res.status(404).json({ success: false, error: 'Opportunity not found' });
       return;
     }
@@ -272,7 +325,7 @@ async function respond(
     const { data: card } = await supabaseAdmin
       .from('subscription_cards')
       .select('state')
-      .eq('id', existing.card_id)
+      .eq('id', recipient.card_id)
       .maybeSingle();
     if (!card || card.state !== 'published') {
       res.status(409).json({ success: false, error: 'This card is no longer available' });
@@ -280,10 +333,9 @@ async function respond(
     }
 
     const { data: updated, error: updErr } = await supabaseAdmin
-      .from('subscription_card_recipients')
+      .from(recipientTable)
       .update({ status: newStatus, responded_at: new Date().toISOString() })
       .eq('id', req.params.recipient_id)
-      .eq('partner_id', req.userId!)
       .select('*')
       .single();
     if (updErr) {
@@ -298,16 +350,28 @@ async function respond(
     // "auto-accept partner-employee" flow so the visibility behaviour stays
     // identical across both entry points.
     if (newStatus === 'accepted') {
-      await sharePartnerWithCardClient(req.userId!, existing.card_id);
+      await sharePartnerWithCardClient(req.userId!, recipient.card_id);
+      if (recipientTable === 'subscription_card_external_recipients' && recipient.external_user_id) {
+        // Mirrors the legacy app acceptance into SquadHire. The existing
+        // retry-tracked webhook keeps the two surfaces convergent during the
+        // migration period.
+        notifySquadhireOfTalentAcceptance(
+          recipient.card_id,
+          recipient.external_user_id,
+          recipient.id,
+        ).catch((err) => console.error('Discover acceptance mirror failed:', err));
+      }
     }
 
     await logCardEvent({
-      cardId: existing.card_id,
+      cardId: recipient.card_id,
       eventType: newStatus === 'accepted' ? 'recipient_accepted' : 'recipient_declined',
-      actorId: req.userId ?? null,
-      actorType: 'partner',
+      actorId: recipientTable === 'subscription_card_external_recipients'
+        ? recipient.external_user_id ?? null
+        : req.userId ?? null,
+      actorType: recipientTable === 'subscription_card_external_recipients' ? 'talent' : 'partner',
       actorLabel: (req as any).userName ?? null,
-      metadata: { channel: 'partner' },
+      metadata: { channel: 'partner-discover' },
     });
 
     res.json({ success: true, data: updated });

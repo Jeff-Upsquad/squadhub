@@ -22,6 +22,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import type { Channel, DmConversation, Favorite, User } from '@squadhub/shared';
 import type { ActiveSection, HomeView } from '../layouts/MainLayout';
 import { launchApp, type AppDef } from '../config/apps';
@@ -36,6 +37,7 @@ import MobileCreateSheet from './MobileCreateSheet';
 import MobileTour, { hasSeenMobileTour } from './MobileTour';
 import { MAvatar, MIcon, MRow } from './MobileKit';
 import type { OpenTarget } from './useMobileSpaces';
+import api from '../services/api';
 
 type MTab = 'home' | 'chat' | 'inbox' | 'discover' | 'more';
 
@@ -104,6 +106,13 @@ export default function MobileShell({
   const isClient = useIsClient();
   const isPartner = useIsPartner();
   const tabs = isPartner ? PARTNER_TABS : BUSINESS_TABS;
+  const { data: discoverPendingData } = useQuery({
+    queryKey: ['partner-opportunities-pending'],
+    queryFn: () => api.get('/partner/opportunities?status=pending').then((r) => r.data),
+    enabled: isPartner,
+    refetchInterval: 30_000,
+  });
+  const discoverUnread = Array.isArray(discoverPendingData?.data) ? discoverPendingData.data.length : 0;
 
   const [tab, setTab] = useState<MTab>('home');
   const [chatQuery, setChatQuery] = useState('');
@@ -417,7 +426,7 @@ export default function MobileShell({
           <div className="msh-tabbar-row">
             {tabs.map((t) => {
               const on = tab === t.key;
-              const badge = t.key === 'inbox' ? inboxUnread : t.key === 'chat' ? supportUnread : 0;
+              const badge = t.key === 'inbox' ? inboxUnread : t.key === 'chat' ? supportUnread : t.key === 'discover' ? discoverUnread : 0;
               return (
                 <button
                   key={t.key}

@@ -2874,60 +2874,235 @@
 /* ── Discover tab ───────────────────────────────────────────────────── */
 .msh .mdiscover {
   min-height: 100%;
-  padding: calc(var(--m-safe-top) + 28px) var(--m-gutter) 96px;
+  padding: calc(var(--m-safe-top) + 18px) var(--m-gutter) 96px;
   background:
-    radial-gradient(circle at 85% 3%, color-mix(in srgb, var(--m-accent) 15%, transparent), transparent 32%),
+    radial-gradient(circle at 92% 0%, color-mix(in srgb, var(--m-accent) 13%, transparent), transparent 28%),
     var(--m-surface);
 }
-.msh .mdiscover-banner {
-  position: relative;
-  overflow: hidden;
-  padding: 28px 24px 30px;
-  border: 1px solid color-mix(in srgb, var(--m-accent) 22%, var(--m-hair));
-  border-radius: 26px;
-  background: linear-gradient(145deg, color-mix(in srgb, var(--m-accent-soft) 82%, var(--m-surface)), var(--m-surface));
-  box-shadow: 0 16px 42px color-mix(in srgb, var(--m-brand-deep) 8%, transparent);
-}
-.msh .mdiscover-icon {
-  display: grid;
-  place-items: center;
-  width: 50px;
-  height: 50px;
-  margin-bottom: 28px;
-  border-radius: 16px;
-  background: var(--m-accent);
-  color: var(--m-on-accent);
-  box-shadow: 0 10px 28px color-mix(in srgb, var(--m-accent) 35%, transparent);
-}
-.msh .mdiscover-icon svg { width: 25px; height: 25px; }
-.msh .mdiscover-kicker {
-  display: inline-flex;
-  padding: 6px 9px;
-  border-radius: var(--m-r-pill);
-  background: var(--m-accent-soft);
+.msh .mdiscover-head { padding: 6px 2px 18px; }
+.msh .mdiscover-eyebrow {
   color: var(--m-accent);
   font-size: 10px;
   font-weight: 800;
   letter-spacing: 1.1px;
   text-transform: uppercase;
 }
-.msh .mdiscover-banner h1 {
-  max-width: 12ch;
-  margin: 14px 0 10px;
+.msh .mdiscover-title-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  margin-top: 8px;
+}
+.msh .mdiscover-title-row h1 {
+  margin: 0;
   color: var(--m-ink);
   font-family: 'Plus Jakarta Sans', 'Inter', sans-serif;
-  font-size: 29px;
-  line-height: 1.08;
-  font-weight: 750;
-  letter-spacing: -0.8px;
+  font-size: 30px;
+  line-height: 1.1;
+  font-weight: 780;
+  letter-spacing: -0.85px;
 }
-.msh .mdiscover-banner p {
-  max-width: 36ch;
-  margin: 0;
+.msh .mdiscover-title-row p {
+  max-width: 30ch;
+  margin: 5px 0 0;
   color: var(--m-ink-3);
-  font-size: 14px;
-  line-height: 1.55;
+  font-size: 13px;
+  line-height: 1.45;
 }
+.msh .mdiscover-title-icon {
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  flex: none;
+  border-radius: 15px;
+  background: var(--m-accent);
+  color: var(--m-on-accent);
+  box-shadow: 0 10px 24px color-mix(in srgb, var(--m-accent) 25%, transparent);
+}
+.msh .mdiscover-title-icon svg { width: 23px; height: 23px; }
+.msh .mdiscover-tabs {
+  display: flex;
+  gap: 7px;
+  margin: 0 calc(var(--m-gutter) * -1);
+  padding: 0 var(--m-gutter) 13px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.msh .mdiscover-tabs::-webkit-scrollbar { display: none; }
+.msh .mdiscover-tabs button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+  min-height: 36px;
+  padding: 8px 12px;
+  border: 1px solid var(--m-hair);
+  border-radius: var(--m-r-pill);
+  background: var(--m-surface);
+  color: var(--m-ink-3);
+  font-size: 12px;
+  font-weight: 650;
+}
+.msh .mdiscover-tabs button[data-on] {
+  border-color: var(--m-ink);
+  background: var(--m-ink);
+  color: var(--m-surface);
+}
+.msh .mdiscover-tabs button > span {
+  display: grid;
+  min-width: 18px;
+  height: 18px;
+  place-items: center;
+  padding: 0 4px;
+  border-radius: 9px;
+  background: var(--m-hair-3);
+  color: var(--m-ink);
+  font-size: 9px;
+  font-weight: 800;
+}
+.msh .mdiscover-tabs button[data-on] > span { background: var(--m-accent); color: var(--m-on-accent); }
+.msh .mdiscover-section { padding-top: 9px; }
+.msh .mdiscover-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.msh .mdiscover-section-head h2 {
+  margin: 0;
+  color: var(--m-ink);
+  font-size: 16px;
+  font-weight: 720;
+  letter-spacing: -0.2px;
+}
+.msh .mdiscover-section-head p { margin: 3px 0 0; color: var(--m-ink-4); font-size: 11.5px; }
+.msh .mdiscover-refresh {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  flex: none;
+  place-items: center;
+  border: 1px solid var(--m-hair);
+  border-radius: 11px;
+  background: var(--m-surface);
+  color: var(--m-ink-3);
+  font-size: 20px;
+}
+.msh .mdiscover-list { display: grid; gap: 10px; }
+.msh .mdiscover-card {
+  display: flex;
+  width: 100%;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--m-hair);
+  border-radius: 16px;
+  background: var(--m-elevated, var(--m-surface));
+  color: var(--m-ink);
+  text-align: left;
+  box-shadow: 0 2px 10px color-mix(in srgb, var(--m-ink) 4%, transparent);
+}
+.msh .mdiscover-card-icon {
+  display: grid;
+  width: 40px;
+  height: 40px;
+  flex: none;
+  place-items: center;
+  border-radius: 12px;
+  background: var(--m-accent-soft);
+  color: var(--m-accent);
+}
+.msh .mdiscover-card[data-type='assignment'] .mdiscover-card-icon { background: color-mix(in srgb, #dbeafe 76%, var(--m-surface)); color: #2563eb; }
+.msh .mdiscover-card[data-type='hiring'] .mdiscover-card-icon { background: color-mix(in srgb, #f3e8ff 76%, var(--m-surface)); color: #9333ea; }
+.msh .mdiscover-card-icon svg { width: 20px; height: 20px; }
+.msh .mdiscover-card-icon[data-large] { width: 44px; height: 44px; border-radius: 14px; }
+.msh .mdiscover-card-copy { display: block; min-width: 0; flex: 1; }
+.msh .mdiscover-card-topline { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.msh .mdiscover-type {
+  color: var(--m-ink-4);
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: .7px;
+  text-transform: uppercase;
+}
+.msh .mdiscover-status {
+  display: inline-flex;
+  padding: 3px 7px;
+  border-radius: var(--m-r-pill);
+  background: var(--m-hair-3);
+  color: var(--m-ink-3);
+  font-size: 9.5px;
+  font-weight: 750;
+}
+.msh .mdiscover-status[data-status='pending'] { background: var(--m-accent-soft); color: var(--m-accent); }
+.msh .mdiscover-status[data-status='accepted'], .msh .mdiscover-status[data-status='active'] { background: #e9f5ee; color: #1f7a47; }
+.msh .mdiscover-status[data-status='rejected'], .msh .mdiscover-status[data-status='cancelled'] { background: #fbeaea; color: #9b2c2c; }
+.msh .mdiscover-status[data-status='paused'], .msh .mdiscover-status[data-status='recalled'] { background: #fff2d9; color: #8a6300; }
+.msh .mdiscover-card-copy > b { display: block; margin-top: 4px; overflow: hidden; font-size: 14px; font-weight: 680; text-overflow: ellipsis; white-space: nowrap; }
+.msh .mdiscover-card-copy > small { display: block; margin-top: 2px; overflow: hidden; color: var(--m-ink-3); font-size: 11.5px; text-overflow: ellipsis; white-space: nowrap; }
+.msh .mdiscover-card-foot { display: flex; justify-content: space-between; gap: 8px; margin-top: 9px; color: var(--m-ink-2); font-size: 11px; font-weight: 650; }
+.msh .mdiscover-card-foot em { color: var(--m-ink-4); font-style: normal; font-weight: 500; }
+.msh .mdiscover-chevron { align-self: center; color: var(--m-ink-4); }
+.msh .mdiscover-chevron svg { width: 16px; height: 16px; }
+.msh .mdiscover-empty {
+  display: flex;
+  min-height: 250px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 28px;
+  border: 1px dashed var(--m-hair-2);
+  border-radius: 18px;
+  text-align: center;
+}
+.msh .mdiscover-empty > span { display: grid; width: 46px; height: 46px; place-items: center; margin-bottom: 12px; border-radius: 14px; background: var(--m-surface-alt); color: var(--m-ink-4); }
+.msh .mdiscover-empty svg { width: 22px; height: 22px; }
+.msh .mdiscover-empty b { font-size: 15px; }
+.msh .mdiscover-empty p { max-width: 30ch; margin: 5px 0 0; color: var(--m-ink-3); font-size: 12.5px; line-height: 1.5; }
+.msh .mdiscover-empty button { margin-top: 13px; padding: 8px 13px; border-radius: 10px; background: var(--m-ink); color: var(--m-surface); font-size: 12px; font-weight: 650; }
+.msh .mdiscover-skeletons { display: grid; gap: 10px; }
+.msh .mdiscover-skeletons i { height: 112px; border-radius: 16px; background: linear-gradient(90deg, var(--m-hair-3), var(--m-surface-alt), var(--m-hair-3)); background-size: 200% 100%; animation: msh-shimmer 1.35s infinite; }
+.msh .mdiscover-sheet-layer { position: fixed; z-index: 420; inset: 0; display: flex; align-items: flex-end; }
+.msh .mdiscover-sheet-scrim { position: absolute; inset: 0; border: 0; background: rgba(0,0,0,.48); }
+.msh .mdiscover-sheet {
+  position: relative;
+  display: flex;
+  width: 100%;
+  max-height: 88dvh;
+  flex-direction: column;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  border-radius: 24px 24px 0 0;
+  background: var(--m-surface);
+  box-shadow: 0 -18px 60px rgba(0,0,0,.2);
+  animation: msh-sheet-up 220ms ease-out;
+}
+.msh .mdiscover-sheet-handle { width: 38px; height: 4px; margin: 9px auto 5px; border-radius: 2px; background: var(--m-hair-2); }
+.msh .mdiscover-sheet > header { display: flex; align-items: center; gap: 12px; padding: 12px 18px 15px; border-bottom: 1px solid var(--m-hair-3); }
+.msh .mdiscover-sheet > header > div { min-width: 0; flex: 1; }
+.msh .mdiscover-sheet > header h2 { margin: 3px 0 0; overflow: hidden; color: var(--m-ink); font-size: 17px; font-weight: 720; text-overflow: ellipsis; white-space: nowrap; }
+.msh .mdiscover-sheet > header > button { display: grid; width: 34px; height: 34px; place-items: center; border-radius: 11px; background: var(--m-surface-alt); color: var(--m-ink-3); }
+.msh .mdiscover-sheet > header > button svg { width: 17px; height: 17px; }
+.msh .mdiscover-sheet-scroll { overflow-y: auto; padding: 16px 18px 22px; }
+.msh .mdiscover-sheet-summary { display: flex; align-items: center; gap: 9px; color: var(--m-ink-3); font-size: 12px; }
+.msh .mdiscover-details { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; margin: 16px 0 0; overflow: hidden; border: 1px solid var(--m-hair); border-radius: 14px; background: var(--m-hair); }
+.msh .mdiscover-details > div { min-width: 0; padding: 12px; background: var(--m-surface); }
+.msh .mdiscover-details dt { color: var(--m-ink-4); font-size: 10px; font-weight: 650; }
+.msh .mdiscover-details dd { margin: 4px 0 0; color: var(--m-ink); font-size: 12px; font-weight: 650; line-height: 1.35; }
+.msh .mdiscover-brief { margin-top: 18px; }
+.msh .mdiscover-brief h3 { margin: 0 0 7px; color: var(--m-ink); font-size: 12px; font-weight: 750; }
+.msh .mdiscover-brief p { margin: 0; padding: 13px; border-radius: 13px; background: var(--m-surface-alt); color: var(--m-ink-2); font-size: 12.5px; line-height: 1.55; white-space: pre-wrap; }
+.msh .mdiscover-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.msh .mdiscover-chips span { padding: 6px 9px; border-radius: var(--m-r-pill); background: var(--m-accent-soft); color: var(--m-accent); font-size: 10.5px; font-weight: 650; }
+.msh .mdiscover-error { margin: 15px 0 0; padding: 10px; border-radius: 10px; background: #fbeaea; color: #9b2c2c; font-size: 12px; }
+.msh .mdiscover-sheet > footer { display: flex; gap: 10px; padding: 13px 18px; border-top: 1px solid var(--m-hair); background: var(--m-surface); }
+.msh .mdiscover-sheet > footer button { min-height: 44px; border-radius: 12px; font-size: 13px; font-weight: 700; }
+.msh .mdiscover-decline { width: 34%; border: 1px solid var(--m-hair-2); background: var(--m-surface); color: var(--m-ink-2); }
+.msh .mdiscover-accept { flex: 1; background: var(--m-ink); color: var(--m-surface); }
+.msh .mdiscover-sheet > footer button:disabled { opacity: .55; }
+@keyframes msh-sheet-up { from { transform: translateY(24px); opacity: .7; } to { transform: translateY(0); opacity: 1; } }
 
 /* ════════════════════════════════════════════════════════════════════════
    MOBILE LOGIN — LoginScreen.kt: carbon hero + white sheet pulled over it.
