@@ -11,6 +11,7 @@ import ShareModal from '../../components/lms/ShareModal';
 import SendTaskModal from '../../components/lms/SendTaskModal';
 import TaskSendsPanel from '../../components/lms/TaskSendsPanel';
 import CommentsPanel from '../../components/lms/CommentsPanel';
+import SopEnforcementEditor from '../../components/lms/SopEnforcementEditor';
 
 interface Props {
   itemId: string;
@@ -342,6 +343,10 @@ export default function AdminLmsItemEditor({ itemId }: Props) {
           <Section title="Tasks sent" hint="Content sent as a task. Track who has completed it; resend to reopen, or unsend to remove.">
             <TaskSendsPanel itemId={item.id} />
           </Section>
+
+          {isSop && (
+            <SopEnforcementEditor itemId={item.id} lessons={item.lessons as any} />
+          )}
 
           <Section title="Comments" hint="Staff-only review notes. Visible to people with Commenter access or higher — not learners.">
             <CommentsPanel itemId={item.id} />

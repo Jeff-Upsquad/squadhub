@@ -16,6 +16,8 @@ import NoAssigneeCompleteDialog from './NoAssigneeCompleteDialog';
 import IncompleteItemsDialog from './IncompleteItemsDialog';
 import DatePicker from './DatePicker';
 import PriorityPicker, { PRIORITY_META } from './PriorityPicker';
+import SopBreachReportModal from '../../../components/sop/SopBreachReportModal';
+import SopFlagDetailModal from '../../../components/sop/SopFlagDetailModal';
 
 function fmtClock(seconds: number): string {
   const h = Math.floor(seconds / 3600);
@@ -97,6 +99,10 @@ export default function TaskRow({
   // Completion gate — set when a check-off is blocked because the task still
   // has open subtasks / unchecked checklist items. Blocking: no complete-anyway.
   const [incompletePrompt, setIncompletePrompt] = useState<{ rect: DOMRect; subtasks: number; checklist: number } | null>(null);
+  const [moreOpen, setMoreOpen] = useState(false);
+  const [showReport, setShowReport] = useState(false);
+  const [flagDetail, setFlagDetail] = useState<any>(null);
+  const [moreAnchor, setMoreAnchor] = useState<DOMRect | null>(null);
   const currentUser = useAuthStore((s) => s.user);
   const qc = useQueryClient();
 
@@ -503,11 +509,11 @@ export default function TaskRow({
         </div>
 
         {/* More button (6th column) */}
-        <div className="lv-cell--more">
+        <div className="lv-cell--more relative">
           <button
             type="button"
             className="lv-more-btn"
-            onClick={(e) => e.stopPropagation()}
+            onClick={(e) => { e.stopPropagation(); setMoreAnchor((e.currentTarget as HTMLElement).getBoundingClientRect()); setMoreOpen((v) => !v); }}
             aria-label="More actions"
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
@@ -516,6 +522,20 @@ export default function TaskRow({
               <circle cx="5" cy="12" r="1" />
             </svg>
           </button>
+          {moreOpen && (
+            <>
+              <div className="fixed inset-0 z-10" onClick={() => setMoreOpen(false)} />
+              <div className="absolute right-0 top-full z-20 mt-1 w-48 overflow-hidden rounded-lg border bg-[var(--surface)] shadow-lg" style={{ borderColor: 'var(--sh-hair)' }}>
+                <button
+                  onClick={() => { setMoreOpen(false); setShowReport(true); }}
+                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-[12.5px] text-[var(--sh-ink)] hover:bg-[var(--sh-hair-3)]"
+                >
+                  <span className="text-[11px]">🚩</span> Report SOP breach
+                </button>
+                <div className="border-t border-[var(--sh-hair)] px-3 py-1 text-[10px] text-[var(--sh-ink-3)]">Task: {task.title.slice(0, 30)}</div>
+              </div>
+            </>
+          )}
         </div>
       </div>
 
@@ -619,6 +639,18 @@ export default function TaskRow({
           onClose={() => setDueDateAnchor(null)}
         />
       )}
+
+      {showReport && (
+        <SopBreachReportModal
+          targetUserId={assignees[0]?.id || (task as any).created_by || currentUser?.id || ''}
+          targetUserName={assignees[0]?.display_name || assignees[0]?.email || 'assignee'}
+          sourceKind="task"
+          sourceId={task.id}
+          onClose={() => setShowReport(false)}
+          onReported={(detail) => setFlagDetail(detail)}
+        />
+      )}
+      {flagDetail && <SopFlagDetailModal detail={flagDetail} onClose={() => setFlagDetail(null)} />}
     </>
   );
 }

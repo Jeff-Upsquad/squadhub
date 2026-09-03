@@ -985,6 +985,75 @@ export interface RolePermissions {
   [key: string]: boolean | number;
 }
 
+// ---- SOP Breach Enforcement ----
+export type SopSeverity = 'low' | 'medium' | 'high';
+export type SopWindowUnit = 'minute' | 'hour' | 'day' | 'week' | 'month';
+
+export interface SopEnforcementRule {
+  id: string;
+  item_id: string;
+  lesson_id: string | null;
+  severity: SopSeverity;
+  window_value: number;
+  window_unit: SopWindowUnit;
+  flag_threshold: number;
+  strike_points: number;
+  is_active: boolean;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+  // joined
+  item_title?: string;
+  lesson_title?: string | null;
+}
+
+export interface SopFlag {
+  id: string;
+  rule_id: string;
+  user_id: string;
+  reporter_id: string;
+  item_id: string;
+  lesson_id: string | null;
+  source_kind: 'task' | 'message' | 'manual' | null;
+  source_id: string | null;
+  reason: string | null;
+  created_at: string;
+  // joined
+  reporter?: Pick<User, 'id' | 'display_name' | 'avatar_url'>;
+  user?: Pick<User, 'id' | 'display_name' | 'avatar_url' | 'email'>;
+  rule?: SopEnforcementRule;
+  item?: { id: string; title: string; slug: string };
+  lesson?: { id: string; title: string } | null;
+}
+
+export interface SopStrike {
+  id: string;
+  rule_id: string;
+  user_id: string;
+  points: number;
+  flag_count: number;
+  window_value: number;
+  window_unit: SopWindowUnit;
+  severity: SopSeverity;
+  flag_ids: string[];
+  created_at: string;
+  // joined
+  user?: Pick<User, 'id' | 'display_name' | 'avatar_url' | 'email'>;
+  rule?: SopEnforcementRule;
+  item?: { id: string; title: string; slug: string };
+  lesson?: { id: string; title: string } | null;
+}
+
+export interface SopBreachSummary {
+  flags: number; // flags within current window
+  window_value: number;
+  window_unit: SopWindowUnit;
+  threshold: number;
+  severity: SopSeverity;
+  strike_points: number;
+  recent_flags: SopFlag[];
+}
+
 // ---- Notifications ----
 export type NotificationType =
   | 'announcement'
@@ -1008,7 +1077,9 @@ export type NotificationType =
   | 'lms_review_decided'
   | 'lms_comment'
   | 'support_ticket_reply'
-  | 'support_ticket_assigned';
+  | 'support_ticket_assigned'
+  | 'sop_flag'
+  | 'sop_strike';
 
 export interface Notification {
   id: string;

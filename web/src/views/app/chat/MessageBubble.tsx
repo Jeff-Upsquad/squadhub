@@ -9,6 +9,8 @@ import ImageLightbox from './ImageLightbox';
 import LinkUnfurlCard from './LinkUnfurlCard';
 import MeetingPollCard from './MeetingPollCard';
 import { URL_PATTERN, URL_TEST, splitTrailingPunct, toHref } from '../../../lib/urlPattern';
+import SopBreachReportModal from '../../../components/sop/SopBreachReportModal';
+import SopFlagDetailModal from '../../../components/sop/SopFlagDetailModal';
 
 // ---- Markdown rendering ----
 // Supports the formatting available in the composer toolbar:
@@ -416,6 +418,7 @@ function MessageActionMenu({
   onEdit,
   onDelete,
   onHistory,
+  onReport,
   onClose,
   anchor,
 }: {
@@ -425,6 +428,7 @@ function MessageActionMenu({
   onEdit: () => void;
   onDelete: () => void;
   onHistory: () => void;
+  onReport: () => void;
   onClose: () => void;
   anchor: { top: number; bottom: number; left: number; right: number } | null;
 }) {
@@ -478,6 +482,10 @@ function MessageActionMenu({
             Delete
           </button>
         )}
+        <div className="my-1 border-t border-[var(--sh-hair)]" />
+        <button type="button" className="sqc-msg__menu-item text-red-600" onClick={onReport} role="menuitem">
+          🚩 Report SOP breach
+        </button>
       </div>
     </>,
     document.body,
@@ -912,7 +920,10 @@ function ChatMessageBubble({ message, onOpenThread, inThread, grouped, threadMet
   const canEdit = isOwn && message.type === 'text' && withinWindow;
   const canDelete = isOwn && withinWindow;
   const canViewHistory = isAdmin;
-  const showMore = canEdit || canDelete || canViewHistory;
+  // SOP report is always available — anyone can flag anyone else's chat breach.
+  const showMore = true;
+  const [showReport, setShowReport] = useState(false);
+  const [flagDetail, setFlagDetail] = useState<any>(null);
 
   const saveEdit = async () => {
     const content = draft.trim();
@@ -1018,11 +1029,26 @@ function ChatMessageBubble({ message, onOpenThread, inThread, grouped, threadMet
             setHistoryOpen(true);
             setMenuOpen(false);
           }}
+          onReport={() => {
+            setMenuOpen(false);
+            setShowReport(true);
+          }}
           onClose={() => setMenuOpen(false)}
           anchor={menuAnchor}
         />
       )}
       {historyOpen && <EditHistoryModal messageId={message.id} onClose={() => setHistoryOpen(false)} />}
+      {showReport && (
+        <SopBreachReportModal
+          targetUserId={message.sender_id}
+          targetUserName={sender?.display_name || sender?.email || 'sender'}
+          sourceKind="message"
+          sourceId={message.id}
+          onClose={() => setShowReport(false)}
+          onReported={(detail) => setFlagDetail(detail)}
+        />
+      )}
+      {flagDetail && <SopFlagDetailModal detail={flagDetail} onClose={() => setFlagDetail(null)} />}
       {showPicker && (
         <EmojiPickerPopover
           anchor={pickerAnchor}

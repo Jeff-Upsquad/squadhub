@@ -36,6 +36,8 @@ import TaskAttachments, { type TaskAttachmentsHandle } from './TaskAttachments';
 import { useTaskAttachments, useDeleteTaskAttachment } from '../../../hooks/useTaskAttachments';
 import { usePanelFileDrop } from './usePanelFileDrop';
 import { linkifyText } from '../../../lib/linkify';
+import SopBreachReportModal from '../../../components/sop/SopBreachReportModal';
+import SopFlagDetailModal from '../../../components/sop/SopFlagDetailModal';
 import WorkBlockSections from './WorkBlockSections';
 import {
   useStartWorkBlockRun,
@@ -442,6 +444,8 @@ export default function TaskDetailPanel({
   // Completion gate — set when a check-off is blocked because the task still
   // has open subtasks / unchecked checklist items. Blocking: no complete-anyway.
   const [incompletePrompt, setIncompletePrompt] = useState<{ rect: DOMRect; subtasks: number; checklist: number; subtaskId?: string } | null>(null);
+  const [showReport, setShowReport] = useState(false);
+  const [flagDetail, setFlagDetail] = useState<any>(null);
 
   useEffect(() => {
     if (!effectiveTaskId) { setMounted(false); return undefined; }
@@ -927,6 +931,8 @@ export default function TaskDetailPanel({
                       {canEdit && (
                         <button onClick={() => { handleDelete(); setMoreMenuOpen(false); }} className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm" style={{ color: 'oklch(0.55 0.18 25)' }}>Delete task</button>
                       )}
+                      <div className="border-t border-[var(--sh-hair)]" />
+                      <button onClick={() => { setMoreMenuOpen(false); setShowReport(true); }} className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50">🚩 Report SOP breach</button>
                     </div>
                   </>
                 )}
@@ -1138,6 +1144,8 @@ export default function TaskDetailPanel({
                       Delete task
                     </button>
                   )}
+                  <div className="border-t border-[var(--sh-hair)]" />
+                  <button onClick={() => { setMoreMenuOpen(false); setShowReport(true); }} className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50">🚩 Report SOP breach</button>
                 </div>
               </>
             )}
@@ -2463,6 +2471,18 @@ export default function TaskDetailPanel({
           onCancel={() => setPendingEmergency(false)}
         />
       )}
+
+      {showReport && task && (
+        <SopBreachReportModal
+          targetUserId={assignees[0]?.id || (task as any).created_by || currentUser?.id || ''}
+          targetUserName={assignees[0]?.display_name || assignees[0]?.email || 'assignee'}
+          sourceKind="task"
+          sourceId={task.id}
+          onClose={() => setShowReport(false)}
+          onReported={(detail) => setFlagDetail(detail)}
+        />
+      )}
+      {flagDetail && <SopFlagDetailModal detail={flagDetail} onClose={() => setFlagDetail(null)} />}
     </div>
   );
 }
