@@ -1,297 +1,297 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { SubscriptionCard, SubscriptionCardRecipient } from '@squadhub/shared';
+import { useQuery } from '@tanstack/react-query';
 import api from '../services/api';
 import { MIcon } from './MobileKit';
 
-type DiscoverTab = 'new' | 'subscription' | 'assignment' | 'hiring';
-type OpportunityCard = SubscriptionCard & {
-  selected_recipient_id?: string | null;
-  paused_at?: string | null;
-  cancelled_at?: string | null;
-  requirement_note?: string | null;
+type View = { level: 'categories' } | { level: 'profiles'; category: Category };
+
+interface Category {
+  id: string;
+  name: string;
+  slug: string;
+  description?: string;
+  icon_url?: string;
+}
+
+interface Profile {
+  id: string;
+  talent_user?: { full_name?: string; profile_photo_url?: string; current_location?: string };
+  field_data?: Record<string, any>;
+  category_id?: string;
+  status?: string;
+}
+
+interface DiscoverResponse {
+  profiles: Profile[];
+  total: number;
+  page: number;
+  per_page: number;
+}
+
+const SORT_OPTIONS = [
+  { value: 'newest', label: 'Newest First' },
+  { value: 'experience_high', label: 'Experience: High to Low' },
+  { value: 'experience_low', label: 'Experience: Low to High' },
+  { value: 'salary_low', label: 'Salary: Low to High' },
+  { value: 'salary_high', label: 'Salary: High to Low' },
+] as const;
+
+const CATEGORY_ICONS: Record<string, string> = {
+  accountant: '📊',
+  'video-editor': '🎬',
+  designer: '🎨',
+  writer: '✍️',
+  developer: '💻',
+  marketing: '📈',
+  hr: '👥',
+  legal: '⚖️',
+  finance: '💰',
 };
 
-const TABS: Array<{ key: DiscoverTab; label: string }> = [
-  { key: 'new', label: 'New' },
-  { key: 'subscription', label: 'Subscriptions' },
-  { key: 'assignment', label: 'Assignments' },
-  { key: 'hiring', label: 'Jobs' },
-];
-
 export default function MobileDiscover() {
-  const queryClient = useQueryClient();
-  const [tab, setTab] = useState<DiscoverTab>('new');
-  const [selected, setSelected] = useState<SubscriptionCardRecipient | null>(null);
+  const [view, setView] = useState<View>({ level: 'categories' });
+  const [search, setSearch] = useState('');
+  const [searchInput, setSearchInput] = useState('');
+  const [sortBy, setSortBy] = useState<string>('newest');
+  const [page, setPage] = useState(1);
+  const [selectedProfile, setSelectedProfile] = useState<Profile | null>(null);
 
-  const query = useQuery({
-    queryKey: ['partner-opportunities-discover'],
-    queryFn: async () => {
-      const responses = await Promise.all(
-        ['pending', 'accepted', 'rejected'].map((status) =>
-          api.get(`/partner/opportunities?status=${status}`).then((r) => r.data?.data || []),
-        ),
-      );
-      return responses.flat() as SubscriptionCardRecipient[];
-    },
-    staleTime: 20_000,
+  const categoriesQuery = useQuery({
+    queryKey: ['discover-categories'],
+    queryFn: () => api.get('/partner/discover/categories').then((r) => r.data?.categories ?? r.data ?? []),
+    staleTime: 300_000,
   });
 
-  const all = query.data || [];
-  const visible = useMemo(() => {
-    if (tab === 'new') return all.filter((item) => item.status === 'pending');
-    return all.filter((item) => (item.card?.card_type || 'subscription') === tab);
-  }, [all, tab]);
+  const categories: Category[] = useMemo(() => {
+    const data = categoriesQuery.data;
+    if (Array.isArray(data)) return data;
+    if (data?.categories) return data.categories;
+    return [];
+  }, [categoriesQuery.data]);
 
-  const counts = useMemo(() => ({
-    new: all.filter((item) => item.status === 'pending').length,
-    subscription: all.filter((item) => (item.card?.card_type || 'subscription') === 'subscription').length,
-    assignment: all.filter((item) => item.card?.card_type === 'assignment').length,
-    hiring: all.filter((item) => item.card?.card_type === 'hiring').length,
-  }), [all]);
-
-  const respond = useMutation({
-    mutationFn: ({ id, action }: { id: string; action: 'accept' | 'reject' }) =>
-      api.post(`/partner/opportunities/${id}/${action}`),
-    onSuccess: async () => {
-      setSelected(null);
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['partner-opportunities-discover'] }),
-        queryClient.invalidateQueries({ queryKey: ['partner-opportunities'] }),
-        queryClient.invalidateQueries({ queryKey: ['partner-opportunities-pending'] }),
-      ]);
+  const profilesQuery = useQuery({
+    queryKey: ['discover-profiles', view.level === 'profiles' ? view.category.slug : null, search, sortBy, page],
+    queryFn: () => {
+      if (view.level !== 'profiles') return Promise.resolve(null);
+      const params = new URLSearchParams();
+      if (search) params.set('search', search);
+      if (sortBy) params.set('sort_by', sortBy);
+      if (page > 1) params.set('page', String(page));
+      const qs = params.toString();
+      return api.get(`/partner/discover/${view.category.slug}${qs ? `?${qs}` : ''}`).then((r) => r.data);
     },
+    enabled: view.level === 'profiles',
+    staleTime: 30_000,
   });
+
+  const profiles: Profile[] = profilesQuery.data?.profiles ?? [];
+  const total: number = profilesQuery.data?.total ?? 0;
+  const totalPages = Math.ceil(total / (profilesQuery.data?.per_page ?? 20));
+
+  const handleSearch = (e: React.FormEvent) => {
+    e.preventDefault();
+    setSearch(searchInput);
+    setPage(1);
+  };
+
+  const selectCategory = (cat: Category) => {
+    setView({ level: 'profiles', category: cat });
+    setSearch('');
+    setSearchInput('');
+    setSortBy('newest');
+    setPage(1);
+  };
+
+  const goBack = () => {
+    setView({ level: 'categories' });
+    setSelectedProfile(null);
+  };
+
+  // Profile detail — full screen
+  if (selectedProfile) {
+    return <ProfileDetail profile={selectedProfile} onBack={() => setSelectedProfile(null)} />;
+  }
 
   return (
     <div className="mdiscover">
-      <header className="mdiscover-head">
-        <span className="mdiscover-eyebrow">Work marketplace</span>
-        <div className="mdiscover-title-row">
-          <div>
-            <h1>Discover</h1>
-            <p>Review new work and keep track of every request.</p>
+      {view.level === 'categories' ? (
+        <>
+          <header className="mdiscover-head">
+            <span className="mdiscover-eyebrow">Talent marketplace</span>
+            <div className="mdiscover-title-row">
+              <div>
+                <h1>Discover</h1>
+                <p>Browse talent by job category</p>
+              </div>
+              <span className="mdiscover-title-icon">{MIcon.discover}</span>
+            </div>
+          </header>
+
+          {categoriesQuery.isLoading ? (
+            <div className="mdiscover-skeletons"><i /><i /><i /><i /><i /><i /></div>
+          ) : categories.length === 0 ? (
+            <div className="mdiscover-empty">
+              <span>{MIcon.inboxOutline}</span>
+              <b>No categories available</b>
+              <p>Check back soon for new talent categories.</p>
+            </div>
+          ) : (
+            <div className="mdiscover-categories">
+              {categories.map((cat) => (
+                <button
+                  key={cat.id}
+                  type="button"
+                  className="mdiscover-category"
+                  onClick={() => selectCategory(cat)}
+                >
+                  <span className="mdiscover-category-icon">
+                    {CATEGORY_ICONS[cat.slug] || '📋'}
+                  </span>
+                  <span className="mdiscover-category-copy">
+                    <b>{cat.name}</b>
+                    {cat.description && <small>{cat.description}</small>}
+                  </span>
+                  <span className="mdiscover-chevron">{MIcon.chevron}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </>
+      ) : (
+        <>
+          <header className="mdiscover-head">
+            <button type="button" className="mdiscover-back" onClick={goBack}>
+              {MIcon.back}
+            </button>
+            <div className="mdiscover-title-row">
+              <div>
+                <span className="mdiscover-eyebrow">
+                  <span className="mdiscover-breadcrumb" onClick={goBack}>Discover</span>
+                  {' / '}
+                  <span>{view.category.name}</span>
+                </span>
+                <h1>{view.category.name}</h1>
+                <p>{total} approved profile{total !== 1 ? 's' : ''}</p>
+              </div>
+            </div>
+          </header>
+
+          <div className="mdiscover-search-bar">
+            <form onSubmit={handleSearch} className="mdiscover-search-form">
+              <div className="mdiscover-search-field">
+                <span>{MIcon.search}</span>
+                <input
+                  type="text"
+                  placeholder="Search by name, skills, location…"
+                  value={searchInput}
+                  onChange={(e) => setSearchInput(e.target.value)}
+                />
+              </div>
+              <button type="submit" className="mdiscover-search-btn">Search</button>
+            </form>
+            <select
+              className="mdiscover-sort"
+              value={sortBy}
+              onChange={(e) => { setSortBy(e.target.value); setPage(1); }}
+            >
+              {SORT_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
           </div>
-          <span className="mdiscover-title-icon">{MIcon.discover}</span>
-        </div>
-      </header>
 
-      <div className="mdiscover-tabs" role="tablist" aria-label="Opportunity type">
-        {TABS.map((item) => (
-          <button
-            key={item.key}
-            type="button"
-            role="tab"
-            aria-selected={tab === item.key}
-            data-on={tab === item.key ? 'true' : undefined}
-            onClick={() => setTab(item.key)}
-          >
-            {item.label}
-            {counts[item.key] > 0 && <span>{counts[item.key]}</span>}
-          </button>
-        ))}
-      </div>
-
-      <section className="mdiscover-section" aria-live="polite">
-        <div className="mdiscover-section-head">
-          <div>
-            <h2>{tabTitle(tab)}</h2>
-            <p>{tabDescription(tab)}</p>
-          </div>
-          <button type="button" className="mdiscover-refresh" onClick={() => query.refetch()} aria-label="Refresh requests">↻</button>
-        </div>
-
-        {query.isLoading ? (
-          <div className="mdiscover-skeletons" aria-label="Loading requests"><i /><i /><i /></div>
-        ) : query.isError ? (
-          <DiscoverEmpty title="Couldn’t load requests" body="Check your connection and try again." action="Try again" onAction={() => query.refetch()} />
-        ) : visible.length === 0 ? (
-          <DiscoverEmpty
-            title={tab === 'new' ? 'You’re all caught up' : `No ${tabLabel(tab).toLowerCase()} yet`}
-            body={tab === 'new' ? 'New subscription, assignment, and job requests will land here.' : 'When a matching request is shared with you, it will appear here.'}
-          />
-        ) : (
-          <div className="mdiscover-list">
-            {visible.map((item) => <RequestCard key={item.id} recipient={item} onClick={() => setSelected(item)} />)}
-          </div>
-        )}
-      </section>
-
-      {selected && (
-        <RequestSheet
-          recipient={selected}
-          busy={respond.isPending}
-          error={(respond.error as any)?.response?.data?.error || (respond.isError ? 'We couldn’t save your response.' : null)}
-          onClose={() => setSelected(null)}
-          onRespond={(action) => respond.mutate({ id: selected.id, action })}
-        />
+          {profilesQuery.isLoading ? (
+            <div className="mdiscover-skeletons"><i /><i /><i /></div>
+          ) : profiles.length === 0 ? (
+            <div className="mdiscover-empty">
+              <span>{MIcon.inboxOutline}</span>
+              <b>No profiles found</b>
+              <p>Try adjusting your search or filters.</p>
+            </div>
+          ) : (
+            <>
+              <div className="mdiscover-list">
+                {profiles.map((p) => (
+                  <ProfileCard key={p.id} profile={p} onClick={() => setSelectedProfile(p)} />
+                ))}
+              </div>
+              {totalPages > 1 && (
+                <div className="mdiscover-pagination">
+                  <button type="button" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>Previous</button>
+                  <span>Page {page} of {totalPages}</span>
+                  <button type="button" disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)}>Next</button>
+                </div>
+              )}
+            </>
+          )}
+        </>
       )}
     </div>
   );
 }
 
-function RequestCard({ recipient, onClick }: { recipient: SubscriptionCardRecipient; onClick: () => void }) {
-  const card = recipient.card as OpportunityCard | undefined;
-  if (!card) return null;
-  const type = card.card_type || 'subscription';
-  const meta = requestMeta(card);
+function ProfileCard({ profile, onClick }: { profile: Profile; onClick: () => void }) {
+  const name = profile.talent_user?.full_name ?? 'Talent';
+  const fd = profile.field_data ?? {};
+  const experience = fd.years_experience;
+  const salary = fd.expected_salary;
+  const typeOfWork = fd.type_of_work ? String(fd.type_of_work).replace(/_/g, ' ') : null;
+  const skills = (fd.accounting_software as string[] | undefined)?.slice(0, 4);
+
   return (
-    <button type="button" className="mdiscover-card" data-type={type} onClick={onClick}>
-      <span className="mdiscover-card-icon">{typeIcon(type)}</span>
+    <button type="button" className="mdiscover-card" onClick={onClick}>
+      <span className="mdiscover-card-icon">{MIcon.profile}</span>
       <span className="mdiscover-card-copy">
-        <span className="mdiscover-card-topline">
-          <span className="mdiscover-type">{tabLabel(type as DiscoverTab)}</span>
-          <StatusPill recipient={recipient} />
+        <b>{name}</b>
+        <span className="mdiscover-card-meta">
+          {experience != null && <span>{experience} yrs exp</span>}
+          {salary != null && <span>₹{Number(salary).toLocaleString('en-IN')}/mo</span>}
+          {typeOfWork && <span>{typeOfWork}</span>}
         </span>
-        <b>{requestTitle(card)}</b>
-        {meta && <small>{meta}</small>}
-        <span className="mdiscover-card-foot">
-          {priceLabel(card) || 'Open brief'}
-          <em>{relativeDate(card.published_at || recipient.created_at)}</em>
-        </span>
+        {skills && skills.length > 0 && (
+          <span className="mdiscover-chips">
+            {skills.map((s) => <span key={s}>{s.replace(/_/g, ' ')}</span>)}
+          </span>
+        )}
       </span>
       <span className="mdiscover-chevron">{MIcon.chevron}</span>
     </button>
   );
 }
 
-function RequestSheet({ recipient, busy, error, onClose, onRespond }: {
-  recipient: SubscriptionCardRecipient;
-  busy: boolean;
-  error: string | null;
-  onClose: () => void;
-  onRespond: (action: 'accept' | 'reject') => void;
-}) {
-  const card = recipient.card as OpportunityCard;
-  const type = card.card_type || 'subscription';
-  const details = [
-    ['Engagement', tabLabel(type as DiscoverTab)],
-    ['Plan / level', planLabel(card)],
-    ['Budget', priceLabel(card)],
-    ['Working days', card.working_days?.join(', ')],
-    ['Languages', card.target_languages?.join(', ')],
-    ['Experience', card.min_experience_years ? `${card.min_experience_years}+ years` : null],
-    ['Timeline', card.assignment_details?.duration],
-    ['Start date', formatDate(card.assignment_details?.start_date)],
-    ['Deadline', formatDate(card.assignment_details?.deadline)],
-  ].filter((row): row is string[] => Boolean(row[1]));
+function ProfileDetail({ profile, onBack }: { profile: Profile; onBack: () => void }) {
+  const name = profile.talent_user?.full_name ?? 'Talent';
+  const location = profile.talent_user?.current_location;
+  const fd = profile.field_data ?? {};
+
+  const details = Object.entries(fd)
+    .filter(([k, v]) => v != null && v !== '' && k !== 'accounting_software' && k !== 'type_of_work')
+    .map(([k, v]) => ({
+      label: k.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()),
+      value: Array.isArray(v) ? v.join(', ') : String(v),
+    }));
 
   return (
-    <div className="mdiscover-sheet-layer" role="presentation">
-      <button type="button" className="mdiscover-sheet-scrim" aria-label="Close request" onClick={onClose} />
-      <article className="mdiscover-sheet" role="dialog" aria-modal="true" aria-labelledby="request-title">
-        <div className="mdiscover-sheet-handle" />
-        <header>
-          <span className="mdiscover-card-icon" data-large>{typeIcon(type)}</span>
+    <div className="mdiscover">
+      <header className="mdiscover-head">
+        <button type="button" className="mdiscover-back" onClick={onBack}>
+          {MIcon.back}
+        </button>
+        <div className="mdiscover-title-row">
           <div>
-            <span className="mdiscover-type">{tabLabel(type as DiscoverTab)}</span>
-            <h2 id="request-title">{requestTitle(card)}</h2>
+            <h1>{name}</h1>
+            {location && <p>{location}</p>}
           </div>
-          <button type="button" onClick={onClose} aria-label="Close">{MIcon.close}</button>
-        </header>
-
-        <div className="mdiscover-sheet-scroll">
-          <div className="mdiscover-sheet-summary">
-            <StatusPill recipient={recipient} />
-            <span>{card.submission?.business_name || card.brand_name || 'SquadHub client'}</span>
-          </div>
-          {details.length > 0 && (
-            <dl className="mdiscover-details">
-              {details.map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}
-            </dl>
-          )}
-          {(card.requirement_note || card.notes) && (
-            <section className="mdiscover-brief"><h3>Work brief</h3><p>{card.requirement_note || card.notes}</p></section>
-          )}
-          {card.additional_requirements && Object.keys(card.additional_requirements).length > 0 && (
-            <section className="mdiscover-brief">
-              <h3>Preferred skills & tools</h3>
-              <div className="mdiscover-chips">
-                {Object.values(card.additional_requirements).flat().map((label) => <span key={label}>{label}</span>)}
-              </div>
-            </section>
-          )}
-          {error && <p className="mdiscover-error">{error}</p>}
         </div>
+      </header>
 
-        {recipient.status === 'pending' && (
-          <footer>
-            <button type="button" disabled={busy} className="mdiscover-decline" onClick={() => onRespond('reject')}>Decline</button>
-            <button type="button" disabled={busy} className="mdiscover-accept" onClick={() => onRespond('accept')}>
-              {busy ? 'Saving…' : type === 'assignment' ? 'Accept assignment' : type === 'hiring' ? 'I’m interested' : 'Accept request'}
-            </button>
-          </footer>
+      <div className="mdiscover-detail">
+        {details.length > 0 && (
+          <dl className="mdiscover-details">
+            {details.map((d) => <div key={d.label}><dt>{d.label}</dt><dd>{d.value}</dd></div>)}
+          </dl>
         )}
-      </article>
+      </div>
     </div>
   );
-}
-
-function StatusPill({ recipient }: { recipient: SubscriptionCardRecipient }) {
-  const card = recipient.card as OpportunityCard | undefined;
-  const state = card?.cancelled_at ? 'cancelled' : card?.recalled_at ? 'recalled' : card?.paused_at ? 'paused' : card?.state === 'assigned' ? 'active' : recipient.status;
-  return <span className="mdiscover-status" data-status={state}>{state === 'pending' ? 'New' : state[0].toUpperCase() + state.slice(1)}</span>;
-}
-
-function DiscoverEmpty({ title, body, action, onAction }: { title: string; body: string; action?: string; onAction?: () => void }) {
-  return (
-    <div className="mdiscover-empty">
-      <span>{MIcon.inboxOutline}</span><b>{title}</b><p>{body}</p>
-      {action && <button type="button" onClick={onAction}>{action}</button>}
-    </div>
-  );
-}
-
-function requestTitle(card: OpportunityCard) {
-  return card.submission_subscription?.subscription?.name || card.brand_name || (card.card_type === 'assignment' ? 'New assignment' : card.card_type === 'hiring' ? 'New job opening' : 'New subscription');
-}
-function requestMeta(card: OpportunityCard) {
-  return [card.submission?.business_name || card.business_nature, planLabel(card)].filter(Boolean).join(' · ');
-}
-function planLabel(card: OpportunityCard) {
-  const plan = card.submission_subscription?.plan;
-  return [plan?.plan, plan?.tier].filter(Boolean).join(' · ') || null;
-}
-function priceLabel(card: OpportunityCard) {
-  const amount = card.partner_price_override ?? card.proposed_price;
-  if (amount == null) return null;
-  return `₹${Number(amount).toLocaleString('en-IN')}${card.card_type === 'assignment' ? ' / project' : ' / month'}`;
-}
-function typeIcon(type: string) {
-  if (type === 'assignment') return MIcon.tasks;
-  if (type === 'hiring') return MIcon.profile;
-  return MIcon.calendar;
-}
-function tabTitle(tab: DiscoverTab) {
-  if (tab === 'new') return 'New work requests';
-  if (tab === 'subscription') return 'My subscriptions';
-  if (tab === 'assignment') return 'My assignments';
-  return 'Job openings';
-}
-function tabDescription(tab: DiscoverTab) {
-  if (tab === 'new') return 'Requests waiting for your response';
-  if (tab === 'subscription') return 'Ongoing monthly opportunities';
-  if (tab === 'assignment') return 'One-off project opportunities';
-  return 'Roles and longer-term opportunities';
-}
-function tabLabel(tab: DiscoverTab) {
-  if (tab === 'subscription') return 'Subscription';
-  if (tab === 'assignment') return 'Assignment';
-  if (tab === 'hiring') return 'Job opening';
-  return 'New';
-}
-function relativeDate(value: string | null | undefined) {
-  if (!value) return '';
-  const days = Math.max(0, Math.floor((Date.now() - new Date(value).getTime()) / 86_400_000));
-  if (days === 0) return 'Today';
-  if (days === 1) return 'Yesterday';
-  if (days < 7) return `${days}d ago`;
-  return new Intl.DateTimeFormat('en', { day: 'numeric', month: 'short' }).format(new Date(value));
-}
-function formatDate(value: string | null | undefined) {
-  if (!value) return null;
-  const date = new Date(`${value.slice(0, 10)}T00:00:00`);
-  return Number.isNaN(date.getTime()) ? value : new Intl.DateTimeFormat('en', { day: 'numeric', month: 'short', year: 'numeric' }).format(date);
 }

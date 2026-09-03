@@ -3111,6 +3111,134 @@
 .msh .mdiscover-sheet > footer button:disabled { opacity: .55; }
 @keyframes msh-sheet-up { from { transform: translateY(24px); opacity: .7; } to { transform: translateY(0); opacity: 1; } }
 
+/* ── Discover: Categories grid ──────────────────────────────────────── */
+.msh .mdiscover-categories { display: grid; gap: 10px; }
+.msh .mdiscover-category {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--m-hair);
+  border-radius: 16px;
+  background: var(--m-elevated, var(--m-surface));
+  color: var(--m-ink);
+  text-align: left;
+  box-shadow: 0 2px 10px color-mix(in srgb, var(--m-ink) 4%, transparent);
+  cursor: pointer;
+}
+.msh .mdiscover-category-icon {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  flex: none;
+  place-items: center;
+  border-radius: 12px;
+  background: var(--m-accent-soft);
+  font-size: 20px;
+}
+.msh .mdiscover-category-copy { display: block; min-width: 0; flex: 1; }
+.msh .mdiscover-category-copy b { display: block; font-size: 14px; font-weight: 680; }
+.msh .mdiscover-category-copy small { display: block; margin-top: 2px; color: var(--m-ink-3); font-size: 11.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ── Discover: Back button + breadcrumb ─────────────────────────────── */
+.msh .mdiscover-back {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  flex: none;
+  place-items: center;
+  border: 1px solid var(--m-hair);
+  border-radius: 11px;
+  background: var(--m-surface);
+  color: var(--m-ink-3);
+  cursor: pointer;
+}
+.msh .mdiscover-back svg { width: 18px; height: 18px; }
+.msh .mdiscover-breadcrumb { color: var(--m-accent); cursor: pointer; }
+.msh .mdiscover-breadcrumb:hover { text-decoration: underline; }
+
+/* ── Discover: Search bar + sort ────────────────────────────────────── */
+.msh .mdiscover-search-bar { margin: 0 0 14px; }
+.msh .mdiscover-search-form { display: flex; gap: 8px; margin-bottom: 8px; }
+.msh .mdiscover-search-field {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  border: 1px solid var(--m-hair);
+  border-radius: 12px;
+  background: var(--m-surface);
+}
+.msh .mdiscover-search-field svg { width: 16px; height: 16px; color: var(--m-ink-4); flex: none; }
+.msh .mdiscover-search-field input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  padding: 10px 0;
+  font-size: 13px;
+  color: var(--m-ink);
+  outline: none;
+}
+.msh .mdiscover-search-field input::placeholder { color: var(--m-ink-4); }
+.msh .mdiscover-search-btn {
+  padding: 0 14px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--m-ink);
+  color: var(--m-surface);
+  font-size: 13px;
+  font-weight: 650;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.msh .mdiscover-sort {
+  width: 100%;
+  padding: 9px 12px;
+  border: 1px solid var(--m-hair);
+  border-radius: 12px;
+  background: var(--m-surface);
+  color: var(--m-ink);
+  font-size: 13px;
+}
+
+/* ── Discover: Profile card meta ────────────────────────────────────── */
+.msh .mdiscover-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 4px;
+  color: var(--m-ink-3);
+  font-size: 11.5px;
+}
+.msh .mdiscover-card-meta span + span::before { content: '·'; margin-right: 4px; }
+
+/* ── Discover: Pagination ───────────────────────────────────────────── */
+.msh .mdiscover-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 18px 0 32px;
+}
+.msh .mdiscover-pagination button {
+  padding: 8px 14px;
+  border: 1px solid var(--m-hair);
+  border-radius: 10px;
+  background: var(--m-surface);
+  color: var(--m-ink);
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+}
+.msh .mdiscover-pagination button:disabled { opacity: .45; cursor: default; }
+.msh .mdiscover-pagination span { font-size: 12px; color: var(--m-ink-3); }
+
+/* ── Discover: Detail view ──────────────────────────────────────────── */
+.msh .mdiscover-detail { padding-top: 4px; }
+
 /* ════════════════════════════════════════════════════════════════════════
    MOBILE LOGIN — LoginScreen.kt: carbon hero + white sheet pulled over it.
    Lives outside .msh because auth pages aren't inside the app shell.
