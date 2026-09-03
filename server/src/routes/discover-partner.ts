@@ -39,7 +39,7 @@ const readCache = new Map<string, CacheEntry>();
 
 // ---- Config check -----------------------------------------------------------
 function configured(): boolean {
-  return !!(config.squadhireApiUrl && config.squadhireBusinessToken);
+  return !!config.squadhireApiUrl;
 }
 
 function buildUrl(path: string, search?: string): string {
@@ -57,9 +57,11 @@ async function callUpstream(
   body?: unknown,
 ): Promise<{ ok: boolean; status: number; body: string }> {
   const headers: Record<string, string> = {
-    'Authorization': `Bearer ${config.squadhireBusinessToken}`,
     'Content-Type': 'application/json',
   };
+  if (config.squadhireBusinessToken) {
+    headers['Authorization'] = `Bearer ${config.squadhireBusinessToken}`;
+  }
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
