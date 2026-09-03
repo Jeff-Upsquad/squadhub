@@ -12,6 +12,7 @@ import { useMeetingPanelStore } from '../../../stores/meetingPanelStore';
 import type { MentionUser } from '../../../components/MentionPicker';
 import EmojiPicker from './EmojiPicker';
 import VoiceRecorder from './VoiceRecorder';
+import ScreenRecorder from './ScreenRecorder';
 import { ScheduleSendModal, ScheduledStrip, formatScheduledTime } from './ScheduleSend';
 import { useScheduleMessage } from '../../../hooks/useScheduledMessages';
 
@@ -169,6 +170,7 @@ const MessageComposer = forwardRef<MessageComposerHandle, Props>(function Messag
   const needsSoloConfirm = soloGuard && !parentMessageId;
   const [showEmoji, setShowEmoji] = useState(false);
   const [recording, setRecording] = useState(false);
+  const [screenRecording, setScreenRecording] = useState(false);
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [sendError, setSendError] = useState<string | null>(null);
   const [focused, setFocused] = useState(false);
@@ -581,6 +583,34 @@ const MessageComposer = forwardRef<MessageComposerHandle, Props>(function Messag
     }
   };
 
+  const handleScreenComplete = async (blob: Blob, durationMs: number) => {
+    setScreenRecording(false);
+    setSending(true);
+    setSendError(null);
+    try {
+      const filename = `screen-${Date.now()}.webm`;
+      const result = await upload(blob, filename, blob.type || 'video/webm');
+      if (!result) throw new Error('Upload failed');
+      await postMessage({
+        type: 'video',
+        file_url: result.file_url,
+        file_name: result.file_name,
+        file_size: result.file_size,
+        file_mime: result.file_mime,
+        duration_ms: durationMs,
+      });
+    } catch (err: unknown) {
+      const message =
+        (err as { response?: { data?: { error?: string } } })?.response?.data?.error ||
+        (err as Error)?.message ||
+        'Could not send the screen recording.';
+      console.error('Screen recording failed:', err);
+      setSendError(message);
+    } finally {
+      setSending(false);
+    }
+  };
+
   const insertEmoji = (emoji: string) => editor?.chain().focus().insertContent(emoji).run();
 
   const setLink = () => {
@@ -710,6 +740,10 @@ const MessageComposer = forwardRef<MessageComposerHandle, Props>(function Messag
           <div className="p-2">
             <VoiceRecorder onCancel={() => setRecording(false)} onComplete={handleVoiceComplete} />
           </div>
+        ) : screenRecording ? (
+          <div className="p-2">
+            <ScreenRecorder onCancel={() => setScreenRecording(false)} onComplete={handleScreenComplete} />
+          </div>
         ) : (
           <>
             {/* Formatting toolbar (WYSIWYG via Tiptap commands) */}
@@ -833,6 +867,12 @@ const MessageComposer = forwardRef<MessageComposerHandle, Props>(function Messag
                     <path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6 6 0 006-6v-1.5m-6 7.5a6 6 0 01-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 01-3-3V4.5a3 3 0 116 0v8.25a3 3 0 01-3 3z" />
                   </svg>
                 </ToolBtn>
+                <ToolBtn title="Record screen" onClick={() => setScreenRecording(true)}>
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="2" y="3" width="20" height="14" rx="2" />
+                    <path d="M8 21h8m-4-4v4" />
+                  </svg>
+                </ToolBtn>
               </div>
 
               <div className="sqc-composer__bottom-right">
@@ -860,7 +900,7 @@ const MessageComposer = forwardRef<MessageComposerHandle, Props>(function Messag
       {scheduledNote ? (
         <div className="sqc-composer__hint">{scheduledNote}</div>
       ) : (
-        (focused || hasText) && !recording && (
+        (focused || hasText) && !recording && !screenRecording && (
           <div className="sqc-composer__hint">
             <strong>Shift + Return</strong> to add a new line
           </div>
