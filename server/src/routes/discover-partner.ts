@@ -138,20 +138,20 @@ async function proxyRead(req: Request, res: Response, path: string) {
 
 /** GET /partner/discover/categories — list all talent categories */
 router.get('/categories', (req: Request, res: Response) => {
-  proxyRead(req, res, '/public/categories');
+  proxyRead(req, res, '/api/public/categories');
 });
 
 /** GET /partner/discover/:categorySlug — list profiles in a category */
 router.get('/:categorySlug', (req: Request, res: Response) => {
   const categorySlug = String(req.params.categorySlug);
-  proxyRead(req, res, `/business/discover/${encodeURIComponent(categorySlug)}`);
+  proxyRead(req, res, `/api/business/discover/${encodeURIComponent(categorySlug)}`);
 });
 
 /** GET /partner/discover/:categorySlug/:id — single profile detail */
 router.get('/:categorySlug/:id', (req: Request, res: Response) => {
   const categorySlug = String(req.params.categorySlug);
   const id = String(req.params.id);
-  proxyRead(req, res, `/business/discover/${encodeURIComponent(categorySlug)}/${encodeURIComponent(id)}`);
+  proxyRead(req, res, `/api/business/discover/${encodeURIComponent(categorySlug)}/${encodeURIComponent(id)}`);
 });
 
 export default router;
