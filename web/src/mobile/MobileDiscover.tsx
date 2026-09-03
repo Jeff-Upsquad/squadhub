@@ -86,9 +86,10 @@ export default function MobileDiscover() {
     staleTime: 30_000,
   });
 
-  const profiles: Profile[] = profilesQuery.data?.profiles ?? [];
-  const total: number = profilesQuery.data?.total ?? 0;
-  const totalPages = Math.ceil(total / (profilesQuery.data?.per_page ?? 20));
+  const rawProfiles = profilesQuery.data;
+  const profiles: Profile[] = Array.isArray(rawProfiles) ? rawProfiles : rawProfiles?.profiles ?? [];
+  const total: number = Array.isArray(rawProfiles) ? rawProfiles.length : rawProfiles?.total ?? 0;
+  const totalPages = Math.ceil(total / 20);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
