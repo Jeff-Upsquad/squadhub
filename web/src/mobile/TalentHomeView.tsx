@@ -80,7 +80,7 @@ export default function TalentHomeView() {
 
   const respond = useMutation({
     mutationFn: ({ id, action }: { id: string; action: 'accept' | 'reject' }) =>
-      api.post(`/partner/opportunities/${id}/${action}`),
+      api.patch(`/partner/discover/opportunities/${id}/respond`, { action }),
     onSuccess: async () => {
       setSelected(null);
       await Promise.all([

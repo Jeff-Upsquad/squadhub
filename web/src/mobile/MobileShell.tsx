@@ -118,14 +118,14 @@ export default function MobileShell({
   const tabs = BUSINESS_TABS;
   const { data: discoverPendingData } = useQuery({
     queryKey: ['partner-opportunities-pending'],
-    queryFn: () => api.get('/partner/opportunities?status=pending').then((r) => r.data),
+    queryFn: () => api.get('/partner/discover/opportunities').then((r) => r.data),
     enabled: isPartner,
     refetchInterval: 30_000,
   });
   const discoverUnread = Array.isArray(discoverPendingData?.data)
     ? (discoverPendingData.data as SubscriptionCardRecipient[]).filter((item) => {
         const expiresAt = (item.card as (typeof item.card & { expires_at?: string | null }))?.expires_at;
-        return !expiresAt || new Date(expiresAt).getTime() > Date.now();
+        return item.status === 'pending' && (!expiresAt || new Date(expiresAt).getTime() > Date.now());
       }).length
     : 0;
 

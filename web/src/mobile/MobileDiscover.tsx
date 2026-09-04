@@ -37,12 +37,8 @@ const STAGES: Array<{ key: StageTab; label: string }> = [
 ];
 
 export async function fetchTalentOpportunities() {
-  const responses = await Promise.all(
-    ['pending', 'accepted', 'rejected'].map((status) =>
-      api.get(`/partner/opportunities?status=${status}`).then((response) => response.data?.data || []),
-    ),
-  );
-  return responses.flat() as SubscriptionCardRecipient[];
+  const response = await api.get('/partner/discover/opportunities');
+  return (response.data?.data || []) as SubscriptionCardRecipient[];
 }
 
 export default function MobileDiscover({ onNavigate, hideTopNav }: { onNavigate: (destination: TalentDestination) => void; hideTopNav?: boolean }) {
@@ -77,7 +73,7 @@ export default function MobileDiscover({ onNavigate, hideTopNav }: { onNavigate:
 
   const respond = useMutation({
     mutationFn: ({ id, action }: { id: string; action: 'accept' | 'reject' }) =>
-      api.post(`/partner/opportunities/${id}/${action}`),
+      api.patch(`/partner/discover/opportunities/${id}/respond`, { action }),
     onSuccess: async () => {
       setSelected(null);
       await Promise.all([
