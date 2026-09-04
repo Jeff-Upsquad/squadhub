@@ -1,6 +1,5 @@
 'use client';
-import { useCallback, useEffect, useState } from 'react';
-import LearningSidebar from './LearningSidebar';
+import { useCallback, useEffect } from 'react';
 import LearningItemView from './LearningItemView';
 import LearningOverview from './LearningOverview';
 import { useLearningStore } from '../../../stores/learningStore';
@@ -14,33 +13,31 @@ import { useLearningStore } from '../../../stores/learningStore';
 // The overview's search `query` is lifted here so returning from an item lands
 // back on the same results.
 export default function LearningShell() {
-  const [activeItemId, setActiveItemId] = useState<string | null>(null);
-  const [activeLessonId, setActiveLessonId] = useState<string | null>(null);
-  const [sectionAnchor, setSectionAnchor] = useState<string | null>(null);
-  const [query, setQuery] = useState('');
+  const activeItemId = useLearningStore((s) => s.activeItemId);
+  const activeLessonId = useLearningStore((s) => s.activeLessonId);
+  const sectionAnchor = useLearningStore((s) => s.sectionAnchor);
+  const query = useLearningStore((s) => s.query);
+  const setActiveItem = useLearningStore((s) => s.setActiveItem);
+  const setQuery = useLearningStore((s) => s.setQuery);
   const learningTarget = useLearningStore((s) => s.target);
 
-  const open = useCallback((itemId: string, lessonId?: string | null) => {
-    setActiveItemId(itemId);
-    setActiveLessonId(lessonId ?? null);
-    setSectionAnchor(null);
-  }, []);
+  const open = useCallback(
+    (itemId: string, lessonId?: string | null) => {
+      setActiveItem(itemId, lessonId ?? null, null);
+    },
+    [setActiveItem],
+  );
   const back = useCallback(() => {
-    setActiveItemId(null);
-    setActiveLessonId(null);
-    setSectionAnchor(null);
-  }, []);
+    setActiveItem(null, null, null);
+  }, [setActiveItem]);
 
   // Apply a navigation target fired from outside the Resources module (e.g. a
   // mirrored task's "Open resource" button). The nonce makes re-firing the same
   // target take effect again.
   useEffect(() => {
     if (!learningTarget) return;
-    setActiveItemId(learningTarget.itemId);
-    setActiveLessonId(learningTarget.lessonId ?? null);
-    setSectionAnchor(learningTarget.sectionAnchor ?? null);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [learningTarget?.nonce]);
+    setActiveItem(learningTarget.itemId, learningTarget.lessonId ?? null, learningTarget.sectionAnchor ?? null);
+  }, [learningTarget?.nonce, setActiveItem]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (activeItemId) {
     return (
@@ -55,14 +52,12 @@ export default function LearningShell() {
     );
   }
 
+  // Catalog sidebar is rendered by MainLayout's outer module sidebar (same
+  // container/width/height as Home) so the side menu doesn't jump in width or
+  // height when switching to Resources. This shell only renders the overview.
   return (
-    <div className="grid h-full grid-cols-1 overflow-hidden md:grid-cols-[300px_1fr]">
-      <aside className="hidden h-full min-h-0 flex-col overflow-hidden border-[var(--sh-hair)] bg-[var(--sidebar)] md:flex md:border-r">
-        <LearningSidebar activeItemId={activeItemId} onSelectItem={(id) => open(id)} />
-      </aside>
-      <section className="flex h-full min-h-0 flex-col overflow-hidden bg-surface">
-        <LearningOverview query={query} setQuery={setQuery} onSelectItem={open} />
-      </section>
+    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-surface">
+      <LearningOverview query={query} setQuery={setQuery} onSelectItem={open} />
     </div>
   );
 }

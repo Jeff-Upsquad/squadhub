@@ -223,7 +223,7 @@ export default function NotesSidebar() {
   };
 
   return (
-    <aside className="sh-notes-sidebar flex h-full w-[260px] shrink-0 flex-col border-r border-[var(--sh-hair)] bg-[var(--sh-rail-2,var(--surface))]">
+    <aside className="sh-notes-sidebar flex h-full w-full shrink-0 flex-col bg-[var(--sidebar)]">
       <div className="flex items-center justify-between px-3 py-3">
         <h2 className="text-[13px] font-semibold tracking-tight text-[var(--sh-ink)]">SquadNotes</h2>
         <button className="sh-note-row__act" title="New page" onClick={newPage}>

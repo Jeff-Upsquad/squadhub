@@ -16,6 +16,15 @@ interface LearningState {
   target: LearningTarget | null;
   setLearningTarget: (t: Omit<LearningTarget, 'nonce'> | null) => void;
   clearLearningTarget: () => void;
+  // Catalog UI state — lifted so the module sidebar (rendered by MainLayout)
+  // and the content pane (LearningShell) stay in sync. This keeps the side
+  // menu's width/height identical to Home's outer sidebar (same container).
+  activeItemId: string | null;
+  activeLessonId: string | null;
+  sectionAnchor: string | null;
+  query: string;
+  setActiveItem: (itemId: string | null, lessonId?: string | null, sectionAnchor?: string | null) => void;
+  setQuery: (q: string) => void;
 }
 
 export const useLearningStore = create<LearningState>()((set, get) => ({
@@ -31,4 +40,11 @@ export const useLearningStore = create<LearningState>()((set, get) => ({
     set({ target: { ...t, nonce } });
   },
   clearLearningTarget: () => set({ target: null }),
+  activeItemId: null,
+  activeLessonId: null,
+  sectionAnchor: null,
+  query: '',
+  setActiveItem: (itemId, lessonId = null, sectionAnchor = null) =>
+    set({ activeItemId: itemId, activeLessonId: lessonId, sectionAnchor }),
+  setQuery: (q) => set({ query: q }),
 }));

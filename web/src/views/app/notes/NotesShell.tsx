@@ -1,16 +1,16 @@
 'use client';
 import { useNotesStore } from '../../../stores/notesStore';
-import NotesSidebar from './NotesSidebar';
 import NotePage from './NotePage';
 import './notes.css';
 
 export default function NotesShell() {
   const activeNoteId = useNotesStore((s) => s.activeNoteId);
 
+  // Sidebar is rendered by MainLayout's outer module sidebar (same container as
+  // Home/Resources) so width/height stay identical across sections.
   return (
     <div className="flex min-h-0 flex-1" data-note-open={activeNoteId ? 'true' : undefined}>
-      <NotesSidebar />
-      <div className="flex min-w-0 flex-1 flex-col overflow-y-auto">
+      <div className="flex min-w-0 flex-1 flex-col overflow-y-auto bg-surface">
         {activeNoteId ? (
           <>
             {/* Phone: the editor replaces the pages list, so it owns a way

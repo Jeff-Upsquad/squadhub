@@ -66,8 +66,11 @@ import DayPlannerView from '../views/app/DayPlannerView';
 import CalendarView from '../views/app/calendar/CalendarView';
 import RoutinesView from '../views/app/RoutinesView';
 import LearningShell from '../views/app/learning/LearningShell';
+import LearningSidebar from '../views/app/learning/LearningSidebar';
 import ClipsView from '../views/app/clips/ClipsView';
 import AppsSidebar from '../views/app/apps/AppsSidebar';
+import NotesSidebar from '../views/app/notes/NotesSidebar';
+import { useLearningStore } from '../stores/learningStore';
 import { launchApp, type AppDef } from '../config/apps';
 import { useUserType, useIsPartner } from '../hooks/useUserType';
 import { useNavHistory } from '../hooks/useNavHistory';
@@ -394,6 +397,8 @@ export default function MainLayout() {
     window.localStorage.setItem(SIDEBAR_W_KEY, String(SIDEBAR_W_DEFAULT));
   };
   const isMobile = useIsMobile();
+  const learningActiveItemId = useLearningStore((s) => s.activeItemId);
+  const setLearningActiveItem = useLearningStore((s) => s.setActiveItem);
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
   const [showCreateChannel, setShowCreateChannel] = useState(false);
   // Mobile shell's "New message" row — the desktop sidebar opens this modal
@@ -1404,9 +1409,11 @@ export default function MainLayout() {
         </div>
       </div>
 
-      {/* Module sidebar — always visible, flat edges, drop shadow to the right.
-          Width is user-resizable via the edge handle (double-click resets). */}
-      {currentWorkspace && activeSection !== 'learning' && activeSection !== 'docs' && activeSection !== 'cal' && (
+      {/* Module sidebar — shared outer container for all sections so the side
+          menu keeps the same width/height when switching (e.g. Home ↔ Resources).
+          Calendar is full-width by design, and an open Resource item hides the
+          catalog sidebar to let its own chapter/page nav take over. */}
+      {currentWorkspace && activeSection !== 'cal' && !(activeSection === 'learning' && learningActiveItemId) && (
         <div
           className={`flex h-full shrink-0 flex-col overflow-hidden bg-[var(--sidebar)] border-r border-[var(--sh-hair)] relative z-[2] ${
             resizingSidebar ? '' : 'transition-[width] duration-200 ease-in-out'
@@ -1422,6 +1429,13 @@ export default function MainLayout() {
               onNavBack={nav.goBack}
               onNavForward={nav.goForward}
             />
+          ) : activeSection === 'learning' ? (
+            <LearningSidebar
+              activeItemId={learningActiveItemId}
+              onSelectItem={(id) => setLearningActiveItem(id, null, null)}
+            />
+          ) : activeSection === 'docs' ? (
+            <NotesSidebar />
           ) : (
             <HomeSidebar
               workspaceId={currentWorkspace.id}
