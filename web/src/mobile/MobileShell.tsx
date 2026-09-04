@@ -38,6 +38,7 @@ import MobileTour, { hasSeenMobileTour } from './MobileTour';
 import { MAvatar, MIcon, MRow } from './MobileKit';
 import type { OpenTarget } from './useMobileSpaces';
 import api from '../services/api';
+import TalentShell from './TalentShell';
 
 type MTab = 'home' | 'chat' | 'inbox' | 'discover' | 'more';
 
@@ -105,7 +106,16 @@ export default function MobileShell({
   // its established four-tab navigation.
   const isClient = useIsClient();
   const isPartner = useIsPartner();
-  const tabs = isPartner ? PARTNER_TABS : BUSINESS_TABS;
+  // Top-level Work | Discover switcher — mirrors Yubo's Swipe / Near you pill.
+  // Work = current SquadHub shell; Discover = full Squad Hire talent app (Profiles frontend)
+  // embedded with its own bottom nav (TalentBottomNav). Persisted so a refresh keeps the surface.
+  const [surface, setSurface] = useState<'work' | 'discover'>(() => {
+    if (typeof window === 'undefined') return 'work';
+    try { return (localStorage.getItem('msh-surface') as 'work' | 'discover') || 'work'; } catch { return 'work'; }
+  });
+  useEffect(() => { try { localStorage.setItem('msh-surface', surface); } catch {} }, [surface]);
+  // Work tabs deliberately exclude Discover — Discover now lives as its own surface with the talent app's bottom nav.
+  const tabs = BUSINESS_TABS;
   const { data: discoverPendingData } = useQuery({
     queryKey: ['partner-opportunities-pending'],
     queryFn: () => api.get('/partner/opportunities?status=pending').then((r) => r.data),
@@ -291,7 +301,7 @@ export default function MobileShell({
       <div className="msh-tabbar-row">
         {tabs.map((t) => {
           const on = tab === t.key;
-          const badge = t.key === 'inbox' ? inboxUnread : t.key === 'chat' ? supportUnread : t.key === 'discover' ? discoverUnread : 0;
+          const badge = t.key === 'inbox' ? inboxUnread : t.key === 'chat' ? supportUnread : 0;
           return (
             <button
               key={t.key}
@@ -319,151 +329,179 @@ export default function MobileShell({
     </nav>
   );
 
+  // Work | Discover pill badge mirrors yubo's "Near you 24"
+  const surfaceDiscoverBadge = discoverUnread;
+
   return (
     <div className="msh" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
-      {carbonHeader && (
-        <header className="msh-header">
-          {tab === 'chat' ? (
-            <>
-              <div className="msh-header-row">
-                <h1 className="msh-chat-title">Chat</h1>
-                <button type="button" className="msh-hbtn" aria-label="New message" onClick={onNewDm}>
-                  {MIcon.compose}
-                </button>
-              </div>
-              {chatSearchOpen ? (
-                <label className="msh-search-field">
-                  <span>{MIcon.search}</span>
-                  <input
-                    value={chatQuery}
-                    onChange={(e) => setChatQuery(e.target.value)}
-                    placeholder="Search channels, DMs…"
-                    autoFocus
-                  />
-                  <button
-                    type="button"
-                    aria-label="Close search"
-                    onClick={() => { setChatSearchOpen(false); setChatQuery(''); }}
-                  >
-                    {MIcon.close}
-                  </button>
-                </label>
-              ) : (
-                <button type="button" className="msh-search-pill" onClick={() => setChatSearchOpen(true)}>
-                  {MIcon.search}
-                  <span>Search channels, DMs…</span>
-                </button>
-              )}
-            </>
-          ) : (
-            <div className="msh-header-row">
-              <div className="msh-logo" aria-hidden>S</div>
-              <div className="msh-wordmark">
-                <b>SquadHub</b>
-                <span>powered by UpSquad</span>
-              </div>
-              <button type="button" className="msh-hbtn" aria-label="Search" onClick={onOpenSearch}>
-                {MIcon.search}
-              </button>
-              <button
-                type="button"
-                className="msh-hbtn"
-                style={{ background: 'transparent', padding: 0 }}
-                aria-label="Account"
-                onClick={() => setDrawerOpen(true)}
-              >
-                <MAvatar name={user?.display_name || user?.email} url={user?.avatar_url} size={34} presence />
-              </button>
-            </div>
-          )}
-        </header>
-      )}
-
-      <div className="msh-sheet" data-flush={!carbonHeader ? 'true' : undefined}>
-        {/* Drilled-in screens get a back app bar. Inbox and More roots paint
-            their own chrome, the way InboxScreen.kt / MoreScreen.kt do. */}
-        {showAppBar && (
-          <div className="msh-appbar">
-            <button type="button" className="msh-appbar-btn" aria-label="Back" onClick={goBack}>
-              {MIcon.back}
-            </button>
-            {!section?.bare && <h1 className="msh-appbar-title">{title}</h1>}
-            {section?.bare && <span style={{ flex: 1 }} />}
-          </div>
-        )}
-
-        {banner}
-
-        {/* Hosted desktop panes bring their own scrolling (a chat log pinned
-            above a composer, a virtualized list). They must fill the sheet, so
-            they sit directly in the flex column — wrapping them in .msh-scroll
-            would collapse them to content height. The phone-native roots are
-            plain documents and do scroll inside .msh-scroll. */}
-        {settingsOpen ? (
-          <div className="msh-scroll">
-            <MobileSettings />
-          </div>
-        ) : onSection || tab === 'inbox' ? (
-          <div className="msh-pane">{renderPane()}</div>
-        ) : (
-          <div className="msh-scroll">
-            {tab === 'home' ? (
-              isClient ? (
-                <MobileHome workspaceId={workspaceId} onOpen={openTarget} onCreateIn={createIn} />
-              ) : (
-                <MobilePartnerHome
-                  workspaceId={workspaceId}
-                  onOpen={openTarget}
-                  onCreateIn={createIn}
-                  onOpenFavorite={openPartnerFavorite}
-                />
-              )
-            ) : tab === 'chat' ? (
-              <MobileChat
-                channels={channels}
-                dms={dms}
-                meId={user?.id}
-                supportChannelId={supportChannelId}
-                supportUnread={supportUnread}
-                query={chatQuery}
-                onOpenChannel={(id, t) => openConversation(id, 'channel', t)}
-                onOpenDm={(id, t) => openConversation(id, 'dm', t)}
-              />
-            ) : tab === 'discover' ? (
-              <MobileDiscover
-                onNavigate={(destination) => {
-                  const destinationTab: MTab = destination === 'notifications' ? 'inbox' : destination;
-                  selectTab(destinationTab);
-                }}
-              />
-            ) : (
-              <MobileMore
-                onOpen={openMore}
-                onOpenAccount={() => setDrawerOpen(true)}
-                onLogout={() => {
-                  usePMStore.getState().reset();
-                  onLogout();
-                }}
-              />
-            )}
-          </div>
-        )}
-
-        {/* Create a task — on Home, and inside any space or list. */}
-        {showFab && (
+      {/* ── Work | Discover switcher (yubo-style pill) ───────────────────── */}
+      <div className="msh-surface-switch-wrap">
+        <div className="msh-surface-switch" role="tablist" aria-label="Work or Discover">
           <button
             type="button"
-            className="msh-fab"
-            aria-label="New task"
-            data-tour={onSection ? undefined : 'fab'}
-            onClick={() => setCreating({ preset: fabTarget })}
+            role="tab"
+            aria-selected={surface === 'work'}
+            data-on={surface === 'work' ? 'true' : undefined}
+            onClick={() => setSurface('work')}
           >
-            {MIcon.plus}
+            Work
           </button>
-        )}
+          <button
+            type="button"
+            role="tab"
+            aria-selected={surface === 'discover'}
+            data-on={surface === 'discover' ? 'true' : undefined}
+            onClick={() => setSurface('discover')}
+          >
+            Discover
+            {surfaceDiscoverBadge > 0 && <em>{surfaceDiscoverBadge > 99 ? '99+' : surfaceDiscoverBadge}</em>}
+          </button>
+        </div>
       </div>
 
-      {tabBar}
+      {surface === 'discover' ? (
+        <div className="msh-sheet" data-flush="true" style={{ background: '#F5F5F6' }}>
+          <TalentShell
+            channels={channels}
+            dms={dms}
+            meId={user?.id}
+            supportChannelId={supportChannelId}
+            supportUnread={supportUnread}
+            onOpenChannel={(id, kind, title) => openConversation(id, kind, title)}
+          />
+        </div>
+      ) : (
+        <>
+          {carbonHeader && (
+            <header className="msh-header">
+              {tab === 'chat' ? (
+                <>
+                  <div className="msh-header-row">
+                    <h1 className="msh-chat-title">Chat</h1>
+                    <button type="button" className="msh-hbtn" aria-label="New message" onClick={onNewDm}>
+                      {MIcon.compose}
+                    </button>
+                  </div>
+                  {chatSearchOpen ? (
+                    <label className="msh-search-field">
+                      <span>{MIcon.search}</span>
+                      <input
+                        value={chatQuery}
+                        onChange={(e) => setChatQuery(e.target.value)}
+                        placeholder="Search channels, DMs…"
+                        autoFocus
+                      />
+                      <button
+                        type="button"
+                        aria-label="Close search"
+                        onClick={() => { setChatSearchOpen(false); setChatQuery(''); }}
+                      >
+                        {MIcon.close}
+                      </button>
+                    </label>
+                  ) : (
+                    <button type="button" className="msh-search-pill" onClick={() => setChatSearchOpen(true)}>
+                      {MIcon.search}
+                      <span>Search channels, DMs…</span>
+                    </button>
+                  )}
+                </>
+              ) : (
+                <div className="msh-header-row">
+                  <div className="msh-logo" aria-hidden>S</div>
+                  <div className="msh-wordmark">
+                    <b>SquadHub</b>
+                    <span>powered by UpSquad</span>
+                  </div>
+                  <button type="button" className="msh-hbtn" aria-label="Search" onClick={onOpenSearch}>
+                    {MIcon.search}
+                  </button>
+                  <button
+                    type="button"
+                    className="msh-hbtn"
+                    style={{ background: 'transparent', padding: 0 }}
+                    aria-label="Account"
+                    onClick={() => setDrawerOpen(true)}
+                  >
+                    <MAvatar name={user?.display_name || user?.email} url={user?.avatar_url} size={34} presence />
+                  </button>
+                </div>
+              )}
+            </header>
+          )}
+
+          <div className="msh-sheet" data-flush={!carbonHeader ? 'true' : undefined}>
+            {showAppBar && (
+              <div className="msh-appbar">
+                <button type="button" className="msh-appbar-btn" aria-label="Back" onClick={goBack}>
+                  {MIcon.back}
+                </button>
+                {!section?.bare && <h1 className="msh-appbar-title">{title}</h1>}
+                {section?.bare && <span style={{ flex: 1 }} />}
+              </div>
+            )}
+
+            {banner}
+
+            {settingsOpen ? (
+              <div className="msh-scroll">
+                <MobileSettings />
+              </div>
+            ) : onSection || tab === 'inbox' ? (
+              <div className="msh-pane">{renderPane()}</div>
+            ) : (
+              <div className="msh-scroll">
+                {tab === 'home' ? (
+                  isClient ? (
+                    <MobileHome workspaceId={workspaceId} onOpen={openTarget} onCreateIn={createIn} />
+                  ) : (
+                    <MobilePartnerHome
+                      workspaceId={workspaceId}
+                      onOpen={openTarget}
+                      onCreateIn={createIn}
+                      onOpenFavorite={openPartnerFavorite}
+                    />
+                  )
+                ) : tab === 'chat' ? (
+                  <MobileChat
+                    channels={channels}
+                    dms={dms}
+                    meId={user?.id}
+                    supportChannelId={supportChannelId}
+                    supportUnread={supportUnread}
+                    query={chatQuery}
+                    onOpenChannel={(id, t) => openConversation(id, 'channel', t)}
+                    onOpenDm={(id, t) => openConversation(id, 'dm', t)}
+                  />
+                ) : (
+                  <MobileMore
+                    onOpen={openMore}
+                    onOpenAccount={() => setDrawerOpen(true)}
+                    onLogout={() => {
+                      usePMStore.getState().reset();
+                      onLogout();
+                    }}
+                  />
+                )}
+              </div>
+            )}
+
+            {showFab && (
+              <button
+                type="button"
+                className="msh-fab"
+                aria-label="New task"
+                data-tour={onSection ? undefined : 'fab'}
+                onClick={() => setCreating({ preset: fabTarget })}
+              >
+                {MIcon.plus}
+              </button>
+            )}
+          </div>
+
+          {tabBar}
+        </>
+      )}
 
       {floating && <div className="msh-floating">{floating}</div>}
 
