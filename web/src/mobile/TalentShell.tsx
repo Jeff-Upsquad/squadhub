@@ -222,30 +222,12 @@ function TalentChatView({ channels, dms, meId, supportChannelId, supportUnread, 
 }
 
 function TalentNotificationsView() {
+  const src = `${TALENT_WEB_BASE}/talent/notifications?in_app=1`;
   return (
-    <div className="space-y-4 bg-[#F5F5F6] min-h-full p-3">
-      <section className="relative overflow-hidden rounded-2xl border border-[#E7E7EA] bg-white px-5 py-6">
-        <div className="absolute inset-0 pointer-events-none" style={{ background: 'radial-gradient(600px 200px at 70% 100%, rgba(255,250,194,0.7), transparent 60%)' }} />
-        <div className="relative">
-          <span className="inline-flex items-center gap-1.5 rounded-full border-2 border-[#0a0a0a] bg-white px-3 py-1.5 text-xs font-semibold text-[#0a0a0a] shadow-sm">
-            <span className="h-2.5 w-2.5 rounded-full bg-[#FFFAC2] border border-[#E7E7EA]" />
-            All caught up
-          </span>
-          <h1 className="mt-3 text-[28px] font-semibold tracking-[-0.02em] text-[#0a0a0a]"> <span className="bg-[#FFFAC2] px-1">Notifications</span>.</h1>
-          <p className="mt-1 text-sm text-[#737373]">Announcements and profile updates from UpSquad.</p>
-        </div>
-      </section>
-
-      <div className="flex items-center gap-1 rounded-2xl border border-[#E7E7EA] bg-white p-1.5">
-        <button className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-[#0a0a0a] px-3 py-2 text-sm font-semibold text-white">Unread <span className="text-[#a3a3a3]">0</span></button>
-        <button className="flex flex-1 items-center justify-center gap-1.5 rounded-xl px-3 py-2 text-sm font-medium text-[#525252]">All <span className="text-[#a3a3a3]">21</span></button>
-        <button className="flex flex-1 items-center justify-center gap-1.5 rounded-xl px-3 py-2 text-sm font-medium text-[#525252]">Read <span className="text-[#a3a3a3]">21</span></button>
-      </div>
-
-      <div className="rounded-2xl border border-[#E7E7EA] bg-white p-8 text-center">
-        <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-[#FFFAC2]/60"><svg className="h-6 w-6 text-[#0a0a0a]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}><path strokeLinecap="round" strokeLinejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" /></svg></div>
-        <p className="mt-4 text-[16px] font-semibold text-[#0a0a0a]">No unread notifications</p>
-        <p className="mt-1 text-sm text-[#737373]">You&apos;re all caught up.</p>
+    <div className="flex min-h-[60dvh] flex-col bg-white">
+      <iframe src={src} title="Notifications" className="h-[calc(100dvh-160px)] min-h-[520px] w-full flex-1 border-0" loading="lazy" />
+      <div className="border-t border-[#E7E7EA] bg-white px-3 py-2 text-center">
+        <a href={src} target="_blank" rel="noreferrer" className="text-xs font-medium text-[#525252]">Open in SquadHire</a>
       </div>
     </div>
   );
