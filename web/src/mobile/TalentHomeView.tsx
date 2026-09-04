@@ -85,19 +85,32 @@ export default function TalentHomeView() {
         <TalentHomeTabs active={tab} onChange={setTab} />
       </div>
 
-      <div className="rounded-xl bg-white p-3 shadow-sm">
-        <div className="flex items-center justify-between">
-          <span className="text-sm font-medium">WhatsApp updates</span>
-          <span className="h-6 w-10 rounded-full bg-green-500" />
+      <div className="flex items-center justify-between rounded-2xl border border-[#E7E7EA] bg-white px-4 py-3">
+        <div>
+          <p className="text-sm font-semibold text-[#0a0a0a]">WhatsApp updates</p>
+          <p className="mt-0.5 text-xs leading-relaxed text-[#737373]">Get a WhatsApp message when a new opportunity arrives. Throttled so you won&apos;t be spammed if several arrive at once.</p>
         </div>
-        <p className="mt-1 text-xs text-[#737373]">Get a WhatsApp message when a new opportunity arrives.</p>
+        <label className="relative ml-3 inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full bg-[#22C55E] p-0.5">
+          <span className="inline-block h-5 w-5 translate-x-5 rounded-full bg-white shadow" />
+          <input type="checkbox" className="sr-only" defaultChecked readOnly />
+        </label>
       </div>
 
-      <div className="flex gap-2 overflow-x-auto">
-        <button className="rounded-full bg-white px-4 py-2 text-sm font-semibold shadow">Pending 14</button>
-        <button className="rounded-full bg-[#F5F5F6] px-4 py-2 text-sm text-[#525252]">Bidding 1</button>
-        <button className="rounded-full bg-[#F5F5F6] px-4 py-2 text-sm text-[#525252]">Responded</button>
-        <button className="rounded-full bg-[#F5F5F6] px-4 py-2 text-sm text-[#525252]">Expired</button>
+      <div className="flex items-stretch gap-1 overflow-x-auto rounded-2xl bg-[#F0F0F2] p-1.5">
+        <button className="flex min-w-[72px] flex-1 flex-col items-center justify-center rounded-xl bg-white px-2 py-2 shadow-sm">
+          <span className="text-[13px] font-semibold text-[#0a0a0a]">Pending</span>
+          <span className="text-[13px] font-bold text-[#0a0a0a]">14</span>
+        </button>
+        <button className="flex min-w-[72px] flex-1 flex-col items-center justify-center rounded-xl px-2 py-2">
+          <span className="text-[13px] font-medium text-[#525252]">Bidding</span>
+          <span className="mt-0.5 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-white px-1.5 text-[11px] font-semibold text-[#525252] shadow-sm">1</span>
+        </button>
+        <button className="flex min-w-[72px] flex-1 flex-col items-center justify-center rounded-xl px-2 py-2">
+          <span className="text-[13px] font-medium text-[#737373]">Responded</span>
+        </button>
+        <button className="flex min-w-[72px] flex-1 flex-col items-center justify-center rounded-xl px-2 py-2">
+          <span className="text-[13px] font-medium text-[#737373]">Expired</span>
+        </button>
       </div>
 
       <div className="space-y-3">
