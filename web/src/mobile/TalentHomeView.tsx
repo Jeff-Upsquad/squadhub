@@ -96,19 +96,19 @@ export default function TalentHomeView() {
         </label>
       </div>
 
-      <div className="flex items-stretch gap-1 overflow-x-auto rounded-2xl bg-[#F0F0F2] p-1.5">
-        <button className="flex min-w-[72px] flex-1 flex-col items-center justify-center rounded-xl bg-white px-2 py-2 shadow-sm">
+      <div className="flex flex-wrap gap-1 rounded-2xl border border-[#E7E7EA] bg-[#F5F5F6] p-1.5">
+        <button className="flex items-center justify-center gap-1.5 rounded-xl bg-white px-3 py-2 shadow-sm">
           <span className="text-[13px] font-semibold text-[#0a0a0a]">Pending</span>
-          <span className="text-[13px] font-bold text-[#0a0a0a]">14</span>
+          <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-[#FFFAC2] px-1.5 text-[11px] font-semibold text-[#0a0a0a]">14</span>
         </button>
-        <button className="flex min-w-[72px] flex-1 flex-col items-center justify-center rounded-xl px-2 py-2">
+        <button className="flex items-center justify-center gap-1.5 rounded-xl px-3 py-2">
           <span className="text-[13px] font-medium text-[#525252]">Bidding</span>
-          <span className="mt-0.5 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-white px-1.5 text-[11px] font-semibold text-[#525252] shadow-sm">1</span>
+          <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-[#E7E7EA] px-1.5 text-[11px] font-semibold text-[#525252]">1</span>
         </button>
-        <button className="flex min-w-[72px] flex-1 flex-col items-center justify-center rounded-xl px-2 py-2">
+        <button className="flex items-center justify-center rounded-xl px-3 py-2">
           <span className="text-[13px] font-medium text-[#737373]">Responded</span>
         </button>
-        <button className="flex min-w-[72px] flex-1 flex-col items-center justify-center rounded-xl px-2 py-2">
+        <button className="flex items-center justify-center rounded-xl px-3 py-2">
           <span className="text-[13px] font-medium text-[#737373]">Expired</span>
         </button>
       </div>
