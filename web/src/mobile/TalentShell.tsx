@@ -99,8 +99,16 @@ export function TalentBottomNav({ active, onChange, unreadMessages = 0, unreadNo
   );
 }
 
-// ── TalentMore (simplified, ported from Profiles/frontend/src/views/talent/TalentMore.tsx) ──
-function TalentMoreView() {
+// ── TalentMore (ported from Profiles/frontend/src/views/talent/TalentMore.tsx) ──
+function TalentMoreView({ onSelect }: { onSelect?: (label: string) => void }) {
+  const handle = (label: string) => {
+    if (onSelect) onSelect(label);
+    // Fallback: open Profiles frontend if available, otherwise toast
+    // For now just navigate within talent shell or external
+    if (label === 'Contact Support' && typeof window !== 'undefined') {
+      window.location.href = '/app#support';
+    }
+  };
   return (
     <div className="space-y-6 bg-[#F5F5F6] p-4">
       <div>
@@ -109,14 +117,14 @@ function TalentMoreView() {
       </div>
       {[
         { title: 'Profile', items: [
-          { label: 'Basic Profile', desc: 'Your personal details and job preferences', icon: 'user' },
-          { label: 'Job Profiles', desc: 'Role-specific profiles businesses discover', icon: 'brief' },
-          { label: 'My Clients', desc: 'Businesses you are working with', icon: 'users' },
+          { label: 'Basic Profile', desc: 'Your personal details and job preferences' },
+          { label: 'Job Profiles', desc: 'Role-specific profiles businesses discover' },
+          { label: 'My Clients', desc: 'Businesses you are working with' },
         ]},
         { title: 'Account', items: [
-          { label: 'Settings', desc: 'Login details and account preferences', icon: 'settings' },
-          { label: 'Training Program', desc: 'Courses, SOPs, and assigned lessons', icon: 'play' },
-          { label: 'Contact Support', desc: 'Chat with the UpSquad team', icon: 'chat' },
+          { label: 'Settings', desc: 'Login details and account preferences' },
+          { label: 'Training Program', desc: 'Courses, SOPs, and assigned lessons' },
+          { label: 'Contact Support', desc: 'Chat with the UpSquad team' },
         ]},
       ].map((group) => (
         <section key={group.title} className="overflow-hidden rounded-2xl border border-[#E7E7EA] bg-white">
@@ -125,17 +133,19 @@ function TalentMoreView() {
           </div>
           <ul className="divide-y divide-[#E7E7EA]">
             {group.items.map((it) => (
-              <li key={it.label} className="flex items-center gap-3 px-5 py-3.5">
-                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#F5F5F6] text-[#525252]">
-                  <GridIcon />
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-[15px] font-semibold text-[#0a0a0a]">{it.label}</span>
-                  <span className="mt-0.5 block truncate text-xs text-[#737373]">{it.desc}</span>
-                </span>
-                <svg className="h-4 w-4 shrink-0 text-[#a3a3a3]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-                </svg>
+              <li key={it.label}>
+                <button type="button" onClick={() => handle(it.label)} className="flex w-full items-center gap-3 px-5 py-3.5 text-left transition-colors hover:bg-[#F5F5F6] active:bg-[#EFEFEF]">
+                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#F5F5F6] text-[#525252]">
+                    <GridIcon />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-[15px] font-semibold text-[#0a0a0a]">{it.label}</span>
+                    <span className="mt-0.5 block truncate text-xs text-[#737373]">{it.desc}</span>
+                  </span>
+                  <svg className="h-4 w-4 shrink-0 text-[#a3a3a3]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                  </svg>
+                </button>
               </li>
             ))}
           </ul>
@@ -172,7 +182,7 @@ export default function TalentShell({ channels, dms, meId, supportChannelId, sup
   return (
     <div className="flex flex-1 flex-col min-h-0 bg-[#F5F5F6]">
       <div className="flex-1 overflow-y-auto min-h-0">
-        {tab === 'home' && <TalentHomeView />}
+        {tab === 'home' && <TalentHomeView onNav={(t) => { if (t === 'chat') setTab('chatroom'); else if (t === 'notifications') setTab('notifications'); else if (t === 'more') setTab('more'); }} />}
         {tab === 'chatroom' && (
           <div className="bg-white min-h-full">
             <MobileChat
@@ -188,7 +198,7 @@ export default function TalentShell({ channels, dms, meId, supportChannelId, sup
           </div>
         )}
         {tab === 'notifications' && <TalentNotificationsView />}
-        {tab === 'more' && <TalentMoreView />}
+        {tab === 'more' && <TalentMoreView onSelect={(label) => { /* keep in More for now; toast */ if (typeof window !== 'undefined') console.log('[talent more]', label); }} />}
         {tab === 'squadhub' && (
           <div className="bg-[#F5F5F6] p-6 text-center">
             <p className="text-sm text-[#737373]">SquadHub gateway — switch back to Work to continue.</p>

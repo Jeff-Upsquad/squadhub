@@ -113,35 +113,41 @@
   -webkit-tap-highlight-color: transparent;
 }
 
-/* ── Work | Discover top switcher (yubo-style pill) ──────────────────── */
+/* ── Work | Discover top switcher (full-width rectangle, smaller height) ─ */
 .msh-surface-switch-wrap {
   flex: none;
   display: flex;
   justify-content: center;
-  padding: calc(var(--m-safe-top) + 8px) 16px 8px;
+  padding: calc(var(--m-safe-top) + 8px) 12px 8px;
   background: transparent;
 }
 .msh-surface-switch {
-  display: inline-flex;
+  display: flex;
+  width: 100%;
+  max-width: 100%;
   gap: 4px;
-  padding: 4px;
-  border-radius: 999px;
+  padding: 3px;
+  border-radius: 12px;
   background: rgba(255,255,255,0.12);
   backdrop-filter: blur(8px);
   border: 1px solid rgba(255,255,255,0.12);
 }
 .msh-surface-switch button {
   position: relative;
+  flex: 1 1 0;
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 6px;
-  padding: 7px 18px;
+  padding: 6px 12px;
   border: 0;
-  border-radius: 999px;
+  border-radius: 9px;
   background: transparent;
   color: rgba(255,255,255,0.75);
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 600;
+  line-height: 1;
+  height: 30px;
   cursor: pointer;
   transition: background 0.18s ease, color 0.18s ease, box-shadow 0.18s ease;
 }
