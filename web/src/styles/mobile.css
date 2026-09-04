@@ -541,13 +541,6 @@
   border-top: 1px solid var(--m-hair-3);
   padding-bottom: var(--m-safe-bottom);
 }
-.msh-tabbar--top {
-  border-top: none;
-  border-bottom: 1px solid var(--m-hair-3);
-  padding-bottom: 0;
-  padding-top: var(--m-safe-top);
-  order: -1;
-}
 .msh-tabbar-row {
   display: flex;
   align-items: center;
@@ -2886,6 +2879,54 @@
     radial-gradient(circle at 92% 0%, color-mix(in srgb, var(--m-accent) 13%, transparent), transparent 28%),
     var(--m-surface);
 }
+.msh .mdiscover-talent-nav {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 5px;
+  margin: 0 0 22px;
+  padding: 5px;
+  border: 1px solid var(--m-hair);
+  border-radius: 17px;
+  background: color-mix(in srgb, var(--m-surface) 92%, transparent);
+  box-shadow: 0 5px 18px color-mix(in srgb, var(--m-ink) 5%, transparent);
+}
+.msh .mdiscover-talent-nav > button {
+  display: flex;
+  min-width: 0;
+  min-height: 57px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  border-radius: 13px;
+  background: transparent;
+  color: var(--m-ink-4);
+  font-size: 9.5px;
+  font-weight: 650;
+}
+.msh .mdiscover-talent-nav > button[data-on] {
+  background: var(--m-ink);
+  color: var(--m-surface);
+}
+.msh .mdiscover-talent-nav-icon { position: relative; display: grid; place-items: center; }
+.msh .mdiscover-talent-nav-icon svg { width: 19px; height: 19px; }
+.msh .mdiscover-talent-nav-icon em {
+  position: absolute;
+  top: -7px;
+  right: -11px;
+  display: grid;
+  min-width: 15px;
+  height: 15px;
+  place-items: center;
+  padding: 0 3px;
+  border: 2px solid var(--m-ink);
+  border-radius: 8px;
+  background: var(--m-accent);
+  color: var(--m-on-accent);
+  font-size: 7px;
+  font-style: normal;
+  font-weight: 850;
+}
 .msh .mdiscover-head { padding: 6px 2px 18px; }
 .msh .mdiscover-eyebrow {
   color: var(--m-accent);
@@ -2970,6 +3011,45 @@
   font-weight: 800;
 }
 .msh .mdiscover-tabs button[data-on] > span { background: var(--m-accent); color: var(--m-on-accent); }
+.msh .mdiscover-stage-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 3px;
+  margin-bottom: 7px;
+  padding: 3px;
+  border-radius: 12px;
+  background: var(--m-surface-alt);
+}
+.msh .mdiscover-stage-tabs button {
+  display: inline-flex;
+  min-width: 0;
+  min-height: 34px;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--m-ink-4);
+  font-size: 11px;
+  font-weight: 650;
+}
+.msh .mdiscover-stage-tabs button[data-on] {
+  background: var(--m-surface);
+  color: var(--m-ink);
+  box-shadow: 0 2px 7px color-mix(in srgb, var(--m-ink) 7%, transparent);
+}
+.msh .mdiscover-stage-tabs button > span {
+  display: grid;
+  min-width: 17px;
+  height: 17px;
+  place-items: center;
+  padding: 0 4px;
+  border-radius: 9px;
+  background: var(--m-hair-3);
+  color: var(--m-ink-2);
+  font-size: 8px;
+  font-weight: 800;
+}
 .msh .mdiscover-section { padding-top: 9px; }
 .msh .mdiscover-section-head {
   display: flex;
@@ -3047,7 +3127,7 @@
 .msh .mdiscover-status[data-status='pending'] { background: var(--m-accent-soft); color: var(--m-accent); }
 .msh .mdiscover-status[data-status='accepted'], .msh .mdiscover-status[data-status='active'] { background: #e9f5ee; color: #1f7a47; }
 .msh .mdiscover-status[data-status='rejected'], .msh .mdiscover-status[data-status='cancelled'] { background: #fbeaea; color: #9b2c2c; }
-.msh .mdiscover-status[data-status='paused'], .msh .mdiscover-status[data-status='recalled'] { background: #fff2d9; color: #8a6300; }
+.msh .mdiscover-status[data-status='paused'], .msh .mdiscover-status[data-status='recalled'], .msh .mdiscover-status[data-status='expired'] { background: #fff2d9; color: #8a6300; }
 .msh .mdiscover-card-copy > b { display: block; margin-top: 4px; overflow: hidden; font-size: 14px; font-weight: 680; text-overflow: ellipsis; white-space: nowrap; }
 .msh .mdiscover-card-copy > small { display: block; margin-top: 2px; overflow: hidden; color: var(--m-ink-3); font-size: 11.5px; text-overflow: ellipsis; white-space: nowrap; }
 .msh .mdiscover-card-foot { display: flex; justify-content: space-between; gap: 8px; margin-top: 9px; color: var(--m-ink-2); font-size: 11px; font-weight: 650; }
@@ -3110,134 +3190,6 @@
 .msh .mdiscover-accept { flex: 1; background: var(--m-ink); color: var(--m-surface); }
 .msh .mdiscover-sheet > footer button:disabled { opacity: .55; }
 @keyframes msh-sheet-up { from { transform: translateY(24px); opacity: .7; } to { transform: translateY(0); opacity: 1; } }
-
-/* ── Discover: Categories grid ──────────────────────────────────────── */
-.msh .mdiscover-categories { display: grid; gap: 10px; }
-.msh .mdiscover-category {
-  display: flex;
-  width: 100%;
-  align-items: center;
-  gap: 12px;
-  padding: 14px;
-  border: 1px solid var(--m-hair);
-  border-radius: 16px;
-  background: var(--m-elevated, var(--m-surface));
-  color: var(--m-ink);
-  text-align: left;
-  box-shadow: 0 2px 10px color-mix(in srgb, var(--m-ink) 4%, transparent);
-  cursor: pointer;
-}
-.msh .mdiscover-category-icon {
-  display: grid;
-  width: 44px;
-  height: 44px;
-  flex: none;
-  place-items: center;
-  border-radius: 12px;
-  background: var(--m-accent-soft);
-  font-size: 20px;
-}
-.msh .mdiscover-category-copy { display: block; min-width: 0; flex: 1; }
-.msh .mdiscover-category-copy b { display: block; font-size: 14px; font-weight: 680; }
-.msh .mdiscover-category-copy small { display: block; margin-top: 2px; color: var(--m-ink-3); font-size: 11.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-
-/* ── Discover: Back button + breadcrumb ─────────────────────────────── */
-.msh .mdiscover-back {
-  display: grid;
-  width: 34px;
-  height: 34px;
-  flex: none;
-  place-items: center;
-  border: 1px solid var(--m-hair);
-  border-radius: 11px;
-  background: var(--m-surface);
-  color: var(--m-ink-3);
-  cursor: pointer;
-}
-.msh .mdiscover-back svg { width: 18px; height: 18px; }
-.msh .mdiscover-breadcrumb { color: var(--m-accent); cursor: pointer; }
-.msh .mdiscover-breadcrumb:hover { text-decoration: underline; }
-
-/* ── Discover: Search bar + sort ────────────────────────────────────── */
-.msh .mdiscover-search-bar { margin: 0 0 14px; }
-.msh .mdiscover-search-form { display: flex; gap: 8px; margin-bottom: 8px; }
-.msh .mdiscover-search-field {
-  display: flex;
-  flex: 1;
-  align-items: center;
-  gap: 8px;
-  padding: 0 12px;
-  border: 1px solid var(--m-hair);
-  border-radius: 12px;
-  background: var(--m-surface);
-}
-.msh .mdiscover-search-field svg { width: 16px; height: 16px; color: var(--m-ink-4); flex: none; }
-.msh .mdiscover-search-field input {
-  flex: 1;
-  min-width: 0;
-  border: 0;
-  background: transparent;
-  padding: 10px 0;
-  font-size: 13px;
-  color: var(--m-ink);
-  outline: none;
-}
-.msh .mdiscover-search-field input::placeholder { color: var(--m-ink-4); }
-.msh .mdiscover-search-btn {
-  padding: 0 14px;
-  border: 0;
-  border-radius: 12px;
-  background: var(--m-ink);
-  color: var(--m-surface);
-  font-size: 13px;
-  font-weight: 650;
-  cursor: pointer;
-  white-space: nowrap;
-}
-.msh .mdiscover-sort {
-  width: 100%;
-  padding: 9px 12px;
-  border: 1px solid var(--m-hair);
-  border-radius: 12px;
-  background: var(--m-surface);
-  color: var(--m-ink);
-  font-size: 13px;
-}
-
-/* ── Discover: Profile card meta ────────────────────────────────────── */
-.msh .mdiscover-card-meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  margin-top: 4px;
-  color: var(--m-ink-3);
-  font-size: 11.5px;
-}
-.msh .mdiscover-card-meta span + span::before { content: '·'; margin-right: 4px; }
-
-/* ── Discover: Pagination ───────────────────────────────────────────── */
-.msh .mdiscover-pagination {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  padding: 18px 0 32px;
-}
-.msh .mdiscover-pagination button {
-  padding: 8px 14px;
-  border: 1px solid var(--m-hair);
-  border-radius: 10px;
-  background: var(--m-surface);
-  color: var(--m-ink);
-  font-size: 12px;
-  font-weight: 650;
-  cursor: pointer;
-}
-.msh .mdiscover-pagination button:disabled { opacity: .45; cursor: default; }
-.msh .mdiscover-pagination span { font-size: 12px; color: var(--m-ink-3); }
-
-/* ── Discover: Detail view ──────────────────────────────────────────── */
-.msh .mdiscover-detail { padding-top: 4px; }
 
 /* ════════════════════════════════════════════════════════════════════════
    MOBILE LOGIN — LoginScreen.kt: carbon hero + white sheet pulled over it.

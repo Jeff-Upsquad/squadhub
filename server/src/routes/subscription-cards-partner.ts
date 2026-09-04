@@ -59,7 +59,7 @@ router.get('/', async (req: Request, res: Response) => {
       let externalQuery = supabaseAdmin
         .from('subscription_card_external_recipients')
         .select('*')
-        .eq('email', req.userEmail.trim().toLowerCase())
+        .ilike('email', req.userEmail.trim())
         .is('archived_at', null)
         .or('notified_at.not.is.null,status.neq.pending')
         .order('created_at', { ascending: false });
@@ -298,7 +298,7 @@ async function respond(
         .from('subscription_card_external_recipients')
         .select('*')
         .eq('id', req.params.recipient_id)
-        .eq('email', req.userEmail.trim().toLowerCase())
+        .ilike('email', req.userEmail.trim())
         .is('archived_at', null)
         .maybeSingle();
       if (externalError) {
@@ -321,14 +321,22 @@ async function respond(
       res.status(404).json({ success: false, error: 'Opportunity not found' });
       return;
     }
+    if (recipient.status !== 'pending') {
+      res.status(409).json({ success: false, error: 'You have already responded to this opportunity' });
+      return;
+    }
 
     const { data: card } = await supabaseAdmin
       .from('subscription_cards')
-      .select('state')
+      .select('state, expires_at')
       .eq('id', recipient.card_id)
       .maybeSingle();
     if (!card || card.state !== 'published') {
       res.status(409).json({ success: false, error: 'This card is no longer available' });
+      return;
+    }
+    if (card.expires_at && new Date(card.expires_at).getTime() <= Date.now()) {
+      res.status(409).json({ success: false, error: 'This opportunity has expired' });
       return;
     }
 
@@ -336,10 +344,15 @@ async function respond(
       .from(recipientTable)
       .update({ status: newStatus, responded_at: new Date().toISOString() })
       .eq('id', req.params.recipient_id)
+      .eq('status', 'pending')
       .select('*')
-      .single();
+      .maybeSingle();
     if (updErr) {
       res.status(500).json({ success: false, error: updErr.message });
+      return;
+    }
+    if (!updated) {
+      res.status(409).json({ success: false, error: 'You have already responded to this opportunity' });
       return;
     }
 

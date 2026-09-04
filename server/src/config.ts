@@ -64,11 +64,6 @@ export const config = {
   // a deploy (complements the mini_apps.is_enabled=false kill switch).
   candidatesProxyEnabled: (process.env.CANDIDATES_PROXY_ENABLED || 'true') !== 'false',
 
-  // SquadHire Discover — proxy to SquadHire's business discover API for the
-  // Partner app's Discover tab (Categories → Profiles marketplace).
-  squadhireApiUrl: process.env.SQUADHIRE_API_URL || '',
-  squadhireBusinessToken: process.env.SQUADHIRE_BUSINESS_TOKEN || '',
-
   // Squad CRM system events — delivers the self-serve password-reset temp
   // password over WhatsApp (the CRM owns the approved template and the sender
   // number). When unset, the reset still works but reports "not delivered", so

@@ -23,7 +23,7 @@
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import type { Channel, DmConversation, Favorite, User } from '@squadhub/shared';
+import type { Channel, DmConversation, Favorite, SubscriptionCardRecipient, User } from '@squadhub/shared';
 import type { ActiveSection, HomeView } from '../layouts/MainLayout';
 import { launchApp, type AppDef } from '../config/apps';
 import { useIsClient, useIsPartner } from '../hooks/useUserType';
@@ -112,7 +112,12 @@ export default function MobileShell({
     enabled: isPartner,
     refetchInterval: 30_000,
   });
-  const discoverUnread = Array.isArray(discoverPendingData?.data) ? discoverPendingData.data.length : 0;
+  const discoverUnread = Array.isArray(discoverPendingData?.data)
+    ? (discoverPendingData.data as SubscriptionCardRecipient[]).filter((item) => {
+        const expiresAt = (item.card as (typeof item.card & { expires_at?: string | null }))?.expires_at;
+        return !expiresAt || new Date(expiresAt).getTime() > Date.now();
+      }).length
+    : 0;
 
   const [tab, setTab] = useState<MTab>('home');
   const [chatQuery, setChatQuery] = useState('');
@@ -281,11 +286,8 @@ export default function MobileShell({
   // Home always offers create; inside a space/list the + files straight into it.
   const fabTarget = onSection ? section.target : null;
   const showFab = onSection ? !!fabTarget : tab === 'home';
-  // Discover renders the tab bar at the top instead of the bottom.
-  const topNav = tab === 'discover' && !onSection;
-
   const tabBar = !onSection && (
-    <nav className={`msh-tabbar${topNav ? ' msh-tabbar--top' : ''}`} data-tour="tabbar">
+    <nav className="msh-tabbar" data-tour="tabbar">
       <div className="msh-tabbar-row">
         {tabs.map((t) => {
           const on = tab === t.key;
@@ -319,9 +321,7 @@ export default function MobileShell({
 
   return (
     <div className="msh" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
-      {topNav && tabBar}
-
-      {carbonHeader && !topNav && (
+      {carbonHeader && (
         <header className="msh-header">
           {tab === 'chat' ? (
             <>
@@ -430,7 +430,12 @@ export default function MobileShell({
                 onOpenDm={(id, t) => openConversation(id, 'dm', t)}
               />
             ) : tab === 'discover' ? (
-              <MobileDiscover />
+              <MobileDiscover
+                onNavigate={(destination) => {
+                  const destinationTab: MTab = destination === 'notifications' ? 'inbox' : destination;
+                  selectTab(destinationTab);
+                }}
+              />
             ) : (
               <MobileMore
                 onOpen={openMore}
@@ -458,7 +463,7 @@ export default function MobileShell({
         )}
       </div>
 
-      {!topNav && tabBar}
+      {tabBar}
 
       {floating && <div className="msh-floating">{floating}</div>}
 
