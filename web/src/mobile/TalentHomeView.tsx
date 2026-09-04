@@ -1,15 +1,35 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import type { SubscriptionCardRecipient } from '@squadhub/shared';
 import { useAuthStore } from '../stores/authStore';
+import api from '../services/api';
+import {
+  RequestCard,
+  RequestSheet,
+  cardType,
+  fetchTalentOpportunities,
+  stageFor,
+  type OpportunityCard,
+  type ProductTab,
+  type StageTab,
+} from './MobileDiscover';
 
 type TalentHomeTab = 'subscriptions' | 'assignments' | 'jobs';
+type TalentHomeStage = StageTab | 'bidding';
 
-function TalentHomeTabs({ active, onChange }: { active: TalentHomeTab; onChange: (t: TalentHomeTab) => void }) {
+const PRODUCT_BY_TAB: Record<TalentHomeTab, ProductTab> = {
+  subscriptions: 'subscription',
+  assignments: 'assignment',
+  jobs: 'hiring',
+};
+
+function TalentHomeTabs({ active, counts, onChange }: { active: TalentHomeTab; counts: Record<TalentHomeTab, number>; onChange: (t: TalentHomeTab) => void }) {
   const tabs: Array<{ key: TalentHomeTab; label: string; count: number }> = [
-    { key: 'subscriptions', label: 'Subscriptions', count: 14 },
-    { key: 'assignments', label: 'Assignments', count: 3 },
-    { key: 'jobs', label: 'Jobs', count: 4 },
+    { key: 'subscriptions', label: 'Subscriptions', count: counts.subscriptions },
+    { key: 'assignments', label: 'Assignments', count: counts.assignments },
+    { key: 'jobs', label: 'Jobs', count: counts.jobs },
   ];
   return (
     <div className="flex w-full items-center gap-1 rounded-xl border border-[#E7E7EA] bg-[#F5F5F6] p-1.5">
@@ -18,7 +38,7 @@ function TalentHomeTabs({ active, onChange }: { active: TalentHomeTab; onChange:
         return (
           <button key={t.key} type="button" onClick={() => onChange(t.key)} className={`flex min-w-0 flex-1 items-center justify-center gap-1 whitespace-nowrap rounded-lg px-1.5 py-2 text-[12px] font-semibold ${isActive ? 'bg-white text-[#0a0a0a] shadow' : 'text-[#525252]'}`}>
             <span className="truncate">{t.label}</span>
-            <span className={`inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full px-1 text-[10px] font-semibold ${isActive ? 'bg-[#FFFAC2] text-[#0a0a0a]' : 'bg-[#E7E7EA] text-[#525252]'}`}>{t.count}</span>
+            {t.count > 0 && <span className={`inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full px-1 text-[10px] font-semibold ${isActive ? 'bg-[#FFFAC2] text-[#0a0a0a]' : 'bg-[#E7E7EA] text-[#525252]'}`}>{t.count}</span>}
           </button>
         );
       })}
@@ -26,24 +46,50 @@ function TalentHomeTabs({ active, onChange }: { active: TalentHomeTab; onChange:
   );
 }
 
-const MOCK_CARDS: Record<TalentHomeTab, Array<{ id: string; brand: string; title: string; subtitle: string }>> = {
-  subscriptions: [
-    { id: '1', brand: 'Harigovind g', title: 'Harigovind g — Designer plus Editor — Plus', subtitle: 'Designer plus Editor · Plus' },
-    { id: '2', brand: 'AdmireCreations', title: 'AdmireCreations — Designers — Personal', subtitle: 'Designers · Personal' },
-  ],
-  assignments: [
-    { id: '3', brand: 'Acme Corp', title: 'Acme — Video Editor', subtitle: 'Short-form edits · 3 days' },
-  ],
-  jobs: [
-    { id: '4', brand: 'UpSquad', title: 'Operations Associate', subtitle: 'Full-time · Kerala' },
-  ],
-};
-
 export default function TalentHomeView() {
   const user = useAuthStore((s) => s.user);
   const firstName = user?.display_name?.split(' ')[0] ?? 'John';
+  const queryClient = useQueryClient();
   const [tab, setTab] = useState<TalentHomeTab>('subscriptions');
-  const cards = MOCK_CARDS[tab];
+  const [stage, setStage] = useState<TalentHomeStage>('pending');
+  const [selected, setSelected] = useState<SubscriptionCardRecipient | null>(null);
+
+  const query = useQuery({
+    queryKey: ['partner-opportunities-discover'],
+    queryFn: fetchTalentOpportunities,
+    staleTime: 20_000,
+  });
+  const all = useMemo(
+    () => (query.data || []).filter((item, index, rows) => rows.findIndex((row) => row.id === item.id) === index),
+    [query.data],
+  );
+  const product = PRODUCT_BY_TAB[tab];
+  const productItems = useMemo(() => all.filter((item) => cardType(item) === product), [all, product]);
+  const cards = useMemo(() => productItems.filter((item) => homeStageFor(item) === stage), [productItems, stage]);
+  const productCounts = useMemo(() => ({
+    subscriptions: all.filter((item) => cardType(item) === 'subscription' && homeStageFor(item) === 'pending').length,
+    assignments: all.filter((item) => cardType(item) === 'assignment' && homeStageFor(item) === 'pending').length,
+    jobs: all.filter((item) => cardType(item) === 'hiring' && homeStageFor(item) === 'pending').length,
+  }), [all]);
+  const stageCounts = useMemo(() => ({
+    pending: productItems.filter((item) => homeStageFor(item) === 'pending').length,
+    bidding: productItems.filter((item) => homeStageFor(item) === 'bidding').length,
+    responded: productItems.filter((item) => homeStageFor(item) === 'responded').length,
+    expired: productItems.filter((item) => homeStageFor(item) === 'expired').length,
+  }), [productItems]);
+
+  const respond = useMutation({
+    mutationFn: ({ id, action }: { id: string; action: 'accept' | 'reject' }) =>
+      api.post(`/partner/opportunities/${id}/${action}`),
+    onSuccess: async () => {
+      setSelected(null);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['partner-opportunities-discover'] }),
+        queryClient.invalidateQueries({ queryKey: ['partner-opportunities'] }),
+        queryClient.invalidateQueries({ queryKey: ['partner-opportunities-pending'] }),
+      ]);
+    },
+  });
 
   return (
     <div className="space-y-4 bg-[#F5F5F6] p-3">
@@ -82,7 +128,7 @@ export default function TalentHomeView() {
       </section>
 
       <div className="bg-transparent py-1">
-        <TalentHomeTabs active={tab} onChange={setTab} />
+        <TalentHomeTabs active={tab} counts={productCounts} onChange={(nextTab) => { setTab(nextTab); setStage('pending'); }} />
       </div>
 
       <div className="flex items-center justify-between rounded-2xl border border-[#E7E7EA] bg-white px-4 py-3">
@@ -96,38 +142,52 @@ export default function TalentHomeView() {
         </label>
       </div>
 
-      <div className="flex flex-wrap gap-1 rounded-2xl border border-[#E7E7EA] bg-[#F5F5F6] p-1.5">
-        <button className="flex items-center justify-center gap-1.5 rounded-xl bg-white px-3 py-2 shadow-sm">
-          <span className="text-[13px] font-semibold text-[#0a0a0a]">Pending</span>
-          <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-[#FFFAC2] px-1.5 text-[11px] font-semibold text-[#0a0a0a]">14</span>
-        </button>
-        <button className="flex items-center justify-center gap-1.5 rounded-xl px-3 py-2">
-          <span className="text-[13px] font-medium text-[#525252]">Bidding</span>
-          <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-[#E7E7EA] px-1.5 text-[11px] font-semibold text-[#525252]">1</span>
-        </button>
-        <button className="flex items-center justify-center rounded-xl px-3 py-2">
-          <span className="text-[13px] font-medium text-[#737373]">Responded</span>
-        </button>
-        <button className="flex items-center justify-center rounded-xl px-3 py-2">
-          <span className="text-[13px] font-medium text-[#737373]">Expired</span>
-        </button>
+      <div className="flex flex-wrap gap-1 rounded-2xl border border-[#E7E7EA] bg-[#F5F5F6] p-1.5" role="tablist" aria-label="Opportunity status">
+        {(['pending', 'bidding', 'responded', 'expired'] as TalentHomeStage[]).map((item) => {
+          const active = stage === item;
+          return (
+            <button key={item} type="button" role="tab" aria-selected={active} onClick={() => setStage(item)} className={`flex items-center justify-center gap-1.5 rounded-xl px-3 py-2 ${active ? 'bg-white shadow-sm' : ''}`}>
+              <span className={`text-[13px] capitalize ${active ? 'font-semibold text-[#0a0a0a]' : 'font-medium text-[#737373]'}`}>{item}</span>
+              {stageCounts[item] > 0 && <span className={`inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-[11px] font-semibold ${active ? 'bg-[#FFFAC2] text-[#0a0a0a]' : 'bg-[#E7E7EA] text-[#525252]'}`}>{stageCounts[item]}</span>}
+            </button>
+          );
+        })}
       </div>
 
-      <div className="space-y-3">
-        {cards.map((c) => (
-          <div key={c.id} className="rounded-2xl border border-[#E7E7EA] bg-white p-4">
-            <div className="flex items-center gap-2">
-              <span className="rounded-full bg-[#F5F5F6] px-2 py-1 text-[10px] font-semibold uppercase">New offer</span>
-              <span className="rounded-full bg-[#F5F5F6] px-2 py-1 text-[10px] uppercase">Subscription</span>
-            </div>
-            <p className="mt-3 text-sm font-semibold text-[#0a0a0a]">{c.title}</p>
-            <p className="text-xs text-[#737373]">{c.subtitle}</p>
-            <div className="mt-3 rounded-xl bg-[#F5F5F6] p-3">
-              <p className="text-xs font-medium">4 hrs/day · 24 hrs/week · 96 hrs/month</p>
-            </div>
+      <div className="mdiscover-list" aria-live="polite">
+        {query.isLoading ? (
+          <div className="mdiscover-skeletons" aria-label="Loading opportunities"><i /><i /></div>
+        ) : query.isError ? (
+          <button type="button" onClick={() => query.refetch()} className="rounded-xl border border-[#E7E7EA] bg-white p-5 text-left">
+            <span className="block text-sm font-semibold text-[#0a0a0a]">Couldn&apos;t load opportunities</span>
+            <span className="mt-1 block text-xs text-[#737373]">Tap to try again.</span>
+          </button>
+        ) : cards.length === 0 ? (
+          <div className="rounded-xl border border-dashed border-[#D8D8DC] bg-white px-5 py-8 text-center">
+            <p className="text-sm font-semibold text-[#0a0a0a]">Nothing here yet</p>
+            <p className="mt-1 text-xs text-[#737373]">New opportunities and your responses will appear here.</p>
           </div>
+        ) : cards.map((item) => (
+          <RequestCard key={item.id} recipient={item} onClick={() => setSelected(item)} />
         ))}
       </div>
+
+      {selected && (
+        <RequestSheet
+          recipient={selected}
+          busy={respond.isPending}
+          error={(respond.error as any)?.response?.data?.error || (respond.isError ? 'We couldn\'t save your response.' : null)}
+          onClose={() => setSelected(null)}
+          onRespond={(action) => respond.mutate({ id: selected.id, action })}
+        />
+      )}
     </div>
   );
+}
+
+function homeStageFor(recipient: SubscriptionCardRecipient): TalentHomeStage {
+  const stage = stageFor(recipient);
+  const card = recipient.card as OpportunityCard | undefined;
+  if (stage === 'responded' && recipient.status === 'accepted' && card?.state !== 'assigned') return 'bidding';
+  return stage;
 }

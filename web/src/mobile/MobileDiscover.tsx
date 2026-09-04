@@ -7,10 +7,10 @@ import api from '../services/api';
 import { MIcon } from './MobileKit';
 
 type TalentDestination = 'home' | 'chat' | 'notifications' | 'more';
-type ProductTab = 'subscription' | 'assignment' | 'hiring';
-type StageTab = 'pending' | 'responded' | 'expired';
+export type ProductTab = 'subscription' | 'assignment' | 'hiring';
+export type StageTab = 'pending' | 'responded' | 'expired';
 
-type OpportunityCard = SubscriptionCard & {
+export type OpportunityCard = SubscriptionCard & {
   expires_at?: string | null;
   paused_at?: string | null;
   cancelled_at?: string | null;
@@ -36,6 +36,15 @@ const STAGES: Array<{ key: StageTab; label: string }> = [
   { key: 'expired', label: 'Expired' },
 ];
 
+export async function fetchTalentOpportunities() {
+  const responses = await Promise.all(
+    ['pending', 'accepted', 'rejected'].map((status) =>
+      api.get(`/partner/opportunities?status=${status}`).then((response) => response.data?.data || []),
+    ),
+  );
+  return responses.flat() as SubscriptionCardRecipient[];
+}
+
 export default function MobileDiscover({ onNavigate, hideTopNav }: { onNavigate: (destination: TalentDestination) => void; hideTopNav?: boolean }) {
   const queryClient = useQueryClient();
   const [product, setProduct] = useState<ProductTab>('subscription');
@@ -44,14 +53,7 @@ export default function MobileDiscover({ onNavigate, hideTopNav }: { onNavigate:
 
   const query = useQuery({
     queryKey: ['partner-opportunities-discover'],
-    queryFn: async () => {
-      const responses = await Promise.all(
-        ['pending', 'accepted', 'rejected'].map((status) =>
-          api.get(`/partner/opportunities?status=${status}`).then((response) => response.data?.data || []),
-        ),
-      );
-      return responses.flat() as SubscriptionCardRecipient[];
-    },
+    queryFn: fetchTalentOpportunities,
     staleTime: 20_000,
   });
 
@@ -190,13 +192,14 @@ function TalentTopNav({ pending, onNavigate }: { pending: number; onNavigate: (d
   );
 }
 
-function RequestCard({ recipient, onClick }: { recipient: SubscriptionCardRecipient; onClick: () => void }) {
+export function RequestCard({ recipient, onClick }: { recipient: SubscriptionCardRecipient; onClick: () => void }) {
   const card = recipient.card as OpportunityCard | undefined;
   if (!card) return null;
   const type = cardType(recipient);
   const meta = requestMeta(card);
+  const facts = requestFacts(card, type);
   return (
-    <button type="button" className="mdiscover-card" data-type={type} onClick={onClick}>
+    <button type="button" className="mdiscover-card" data-type={type} onClick={onClick} aria-label={`Open details for ${requestTitle(card)}`}>
       <span className="mdiscover-card-icon">{typeIcon(type)}</span>
       <span className="mdiscover-card-copy">
         <span className="mdiscover-card-topline">
@@ -205,8 +208,18 @@ function RequestCard({ recipient, onClick }: { recipient: SubscriptionCardRecipi
         </span>
         <b>{requestTitle(card)}</b>
         {meta && <small>{meta}</small>}
+        {facts.length > 0 && (
+          <span className="mdiscover-card-facts">
+            {facts.map(([label, value]) => (
+              <span key={label}>
+                <em>{label}</em>
+                <strong>{value}</strong>
+              </span>
+            ))}
+          </span>
+        )}
         <span className="mdiscover-card-foot">
-          {priceLabel(card) || 'Open brief'}
+          <span>View full details</span>
           <em>{relativeDate(card.published_at || recipient.created_at)}</em>
         </span>
       </span>
@@ -215,7 +228,7 @@ function RequestCard({ recipient, onClick }: { recipient: SubscriptionCardRecipi
   );
 }
 
-function RequestSheet({ recipient, busy, error, onClose, onRespond }: {
+export function RequestSheet({ recipient, busy, error, onClose, onRespond }: {
   recipient: SubscriptionCardRecipient;
   busy: boolean;
   error: string | null;
@@ -301,7 +314,7 @@ function DiscoverEmpty({ title, body, action, onAction }: { title: string; body:
   );
 }
 
-function cardType(recipient: SubscriptionCardRecipient): ProductTab {
+export function cardType(recipient: SubscriptionCardRecipient): ProductTab {
   const type = recipient.card?.card_type;
   return type === 'assignment' || type === 'hiring' ? type : 'subscription';
 }
@@ -313,7 +326,7 @@ function isExpired(recipient: SubscriptionCardRecipient) {
   return Number.isFinite(expiry) && expiry < Date.now();
 }
 
-function stageFor(recipient: SubscriptionCardRecipient): StageTab {
+export function stageFor(recipient: SubscriptionCardRecipient): StageTab {
   if (recipient.status === 'pending' && isExpired(recipient)) return 'expired';
   return recipient.status === 'pending' ? 'pending' : 'responded';
 }
@@ -332,6 +345,20 @@ function priceLabel(card: OpportunityCard) {
   const amount = card.partner_price_override ?? card.proposed_price;
   if (amount == null) return null;
   return `₹${Number(amount).toLocaleString('en-IN')}${card.card_type === 'assignment' ? ' / project' : ' / month'}`;
+}
+function requestFacts(card: OpportunityCard, type: ProductTab): string[][] {
+  const plan = card.submission_subscription?.plan;
+  const commitment = type === 'subscription'
+    ? [plan?.daily_hours != null ? `${plan.daily_hours}h/day` : null, plan?.weekly_hours != null ? `${plan.weekly_hours}h/week` : null].filter(Boolean).join(' · ')
+    : card.assignment_details?.duration || null;
+  const timing = type === 'assignment'
+    ? formatDate(card.assignment_details?.deadline)
+    : formatDate(card.expires_at);
+  return [
+    ['Pay', priceLabel(card)],
+    [type === 'subscription' ? 'Commitment' : 'Timeline', commitment],
+    [type === 'assignment' ? 'Deadline' : 'Respond by', timing],
+  ].filter((row): row is string[] => Boolean(row[1])).slice(0, 3);
 }
 function typeIcon(type: ProductTab) {
   if (type === 'assignment') return MIcon.tasks;

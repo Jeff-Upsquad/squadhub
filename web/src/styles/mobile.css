@@ -3142,31 +3142,40 @@
 }
 .msh .mdiscover-list { display: grid; gap: 10px; }
 .msh .mdiscover-card {
+  position: relative;
   display: flex;
   width: 100%;
   align-items: flex-start;
-  gap: 12px;
-  padding: 14px;
+  gap: 11px;
+  min-height: 132px;
+  padding: 14px 15px;
+  overflow: hidden;
   border: 1px solid var(--m-hair);
-  border-radius: 16px;
+  border-radius: 12px;
   background: var(--m-elevated, var(--m-surface));
   color: var(--m-ink);
   text-align: left;
-  box-shadow: 0 2px 10px color-mix(in srgb, var(--m-ink) 4%, transparent);
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--m-ink) 4%, transparent);
+  transition: border-color 140ms ease, box-shadow 140ms ease, transform 140ms ease;
 }
+.msh .mdiscover-card::before { position: absolute; inset: 0 auto 0 0; width: 3px; background: var(--m-accent); content: ''; }
+.msh .mdiscover-card[data-type='assignment']::before { background: #2563eb; }
+.msh .mdiscover-card[data-type='hiring']::before { background: #9333ea; }
+.msh .mdiscover-card:active { transform: scale(.992); }
+.msh .mdiscover-card:focus-visible { border-color: var(--m-accent); outline: 2px solid color-mix(in srgb, var(--m-accent) 22%, transparent); outline-offset: 2px; }
 .msh .mdiscover-card-icon {
   display: grid;
-  width: 40px;
-  height: 40px;
+  width: 36px;
+  height: 36px;
   flex: none;
   place-items: center;
-  border-radius: 12px;
+  border-radius: 10px;
   background: var(--m-accent-soft);
   color: var(--m-accent);
 }
 .msh .mdiscover-card[data-type='assignment'] .mdiscover-card-icon { background: color-mix(in srgb, #dbeafe 76%, var(--m-surface)); color: #2563eb; }
 .msh .mdiscover-card[data-type='hiring'] .mdiscover-card-icon { background: color-mix(in srgb, #f3e8ff 76%, var(--m-surface)); color: #9333ea; }
-.msh .mdiscover-card-icon svg { width: 20px; height: 20px; }
+.msh .mdiscover-card-icon svg { width: 18px; height: 18px; }
 .msh .mdiscover-card-icon[data-large] { width: 44px; height: 44px; border-radius: 14px; }
 .msh .mdiscover-card-copy { display: block; min-width: 0; flex: 1; }
 .msh .mdiscover-card-topline { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
@@ -3190,9 +3199,13 @@
 .msh .mdiscover-status[data-status='accepted'], .msh .mdiscover-status[data-status='active'] { background: #e9f5ee; color: #1f7a47; }
 .msh .mdiscover-status[data-status='rejected'], .msh .mdiscover-status[data-status='cancelled'] { background: #fbeaea; color: #9b2c2c; }
 .msh .mdiscover-status[data-status='paused'], .msh .mdiscover-status[data-status='recalled'], .msh .mdiscover-status[data-status='expired'] { background: #fff2d9; color: #8a6300; }
-.msh .mdiscover-card-copy > b { display: block; margin-top: 4px; overflow: hidden; font-size: 14px; font-weight: 680; text-overflow: ellipsis; white-space: nowrap; }
+.msh .mdiscover-card-copy > b { display: -webkit-box; margin-top: 4px; overflow: hidden; font-size: 14px; font-weight: 700; line-height: 1.35; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
 .msh .mdiscover-card-copy > small { display: block; margin-top: 2px; overflow: hidden; color: var(--m-ink-3); font-size: 11.5px; text-overflow: ellipsis; white-space: nowrap; }
-.msh .mdiscover-card-foot { display: flex; justify-content: space-between; gap: 8px; margin-top: 9px; color: var(--m-ink-2); font-size: 11px; font-weight: 650; }
+.msh .mdiscover-card-facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1px; margin-top: 10px; overflow: hidden; border: 1px solid var(--m-hair-3); border-radius: 9px; background: var(--m-hair-3); }
+.msh .mdiscover-card-facts > span { min-width: 0; padding: 7px 8px; background: var(--m-surface-alt); }
+.msh .mdiscover-card-facts em { display: block; overflow: hidden; color: var(--m-ink-4); font-size: 8.5px; font-style: normal; font-weight: 700; letter-spacing: .25px; text-overflow: ellipsis; text-transform: uppercase; white-space: nowrap; }
+.msh .mdiscover-card-facts strong { display: block; margin-top: 2px; overflow: hidden; color: var(--m-ink-2); font-size: 10.5px; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
+.msh .mdiscover-card-foot { display: flex; justify-content: space-between; gap: 8px; margin-top: 9px; color: var(--m-accent); font-size: 10.5px; font-weight: 700; }
 .msh .mdiscover-card-foot em { color: var(--m-ink-4); font-style: normal; font-weight: 500; }
 .msh .mdiscover-chevron { align-self: center; color: var(--m-ink-4); }
 .msh .mdiscover-chevron svg { width: 16px; height: 16px; }
