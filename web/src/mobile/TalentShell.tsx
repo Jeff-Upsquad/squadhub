@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, ReactNode } from 'react';
-import MobileDiscover from './MobileDiscover';
 import MobileChat from './MobileChat';
+import TalentHomeView from './TalentHomeView';
 import type { Channel, DmConversation } from '@squadhub/shared';
 
 // ── Icons (copied from TalentBottomNav) ──────────────────────────────────
@@ -172,17 +172,7 @@ export default function TalentShell({ channels, dms, meId, supportChannelId, sup
   return (
     <div className="flex flex-1 flex-col min-h-0 bg-[#F5F5F6]">
       <div className="flex-1 overflow-y-auto min-h-0">
-        {tab === 'home' && (
-          <div className="bg-[#F5F5F6] p-3">
-            {/* Reuse MobileDiscover but wrapped to look like talent dashboard */}
-            <MobileDiscover onNavigate={(dest) => {
-              if (dest === 'chat') setTab('chatroom');
-              else if (dest === 'notifications') setTab('notifications');
-              else if (dest === 'more') setTab('more');
-              else setTab('home');
-            }} />
-          </div>
-        )}
+        {tab === 'home' && <TalentHomeView />}
         {tab === 'chatroom' && (
           <div className="bg-white min-h-full">
             <MobileChat
