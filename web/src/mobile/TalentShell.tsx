@@ -103,16 +103,47 @@ export function TalentBottomNav({ active, onChange, unreadMessages = 0, unreadNo
 function TalentMoreView({ onSelect }: { onSelect?: (label: string) => void }) {
   const [detail, setDetail] = useState<string | null>(null);
   if (detail) {
+    const isBasic = detail === 'Basic Profile';
+    const isJob = detail === 'Job Profiles';
+    const isClients = detail === 'My Clients';
+    const isTraining = detail === 'Training Program';
+    const isContact = detail === 'Contact Support';
+    const isSettings = detail === 'Settings';
     return (
       <div className="min-h-full bg-[#F5F5F6] p-4">
         <button type="button" onClick={() => setDetail(null)} className="mb-4 inline-flex items-center gap-1.5 rounded-full bg-white px-3 py-1.5 text-sm font-medium text-[#0a0a0a] shadow">
           <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" /></svg>
           Back
         </button>
-        <div className="rounded-2xl border border-[#E7E7EA] bg-white p-6">
+        <div className="rounded-2xl border border-[#E7E7EA] bg-white p-5">
           <h2 className="text-lg font-semibold text-[#0a0a0a]">{detail}</h2>
-          <p className="mt-2 text-sm text-[#737373]">This mirrors Profiles/frontend/src/app/talent/{detail.toLowerCase().replace(/ /g, '-')}. Content is available in the talent web app — here it is presented as a placeholder until the full form is embedded.</p>
-          <button type="button" onClick={() => setDetail(null)} className="mt-4 rounded-full bg-[#0a0a0a] px-4 py-2 text-sm font-semibold text-white">Close</button>
+          {isBasic && (
+            <div className="mt-4 space-y-3">
+              <div className="grid grid-cols-2 gap-3"><input placeholder="First name" className="rounded-xl border border-[#E7E7EA] bg-white px-3 py-2.5 text-sm" defaultValue="First" /><input placeholder="Last name" className="rounded-xl border border-[#E7E7EA] bg-white px-3 py-2.5 text-sm" defaultValue="Name" /></div>
+              <input placeholder="Phone" className="w-full rounded-xl border border-[#E7E7EA] bg-white px-3 py-2.5 text-sm" defaultValue="+91 90000 00000" />
+              <input placeholder="Email" className="w-full rounded-xl border border-[#E7E7EA] bg-white px-3 py-2.5 text-sm" defaultValue="you@example.com" />
+              <textarea placeholder="Current address" rows={2} className="w-full rounded-xl border border-[#E7E7EA] bg-white px-3 py-2.5 text-sm" defaultValue="Your official and current address as on Aadhaar" />
+              <button type="button" className="w-full rounded-full bg-[#0a0a0a] py-2.5 text-sm font-semibold text-white">Save</button>
+            </div>
+          )}
+          {isJob && (
+            <div className="mt-4 space-y-3">
+              <div className="rounded-xl border border-dashed border-[#E7E7EA] p-6 text-center"><p className="text-sm font-medium text-[#0a0a0a]">No job profiles yet</p><p className="mt-1 text-xs text-[#737373]">Create a role-specific profile businesses will discover.</p><button type="button" className="mt-3 rounded-full bg-[#0a0a0a] px-4 py-2 text-xs font-semibold text-white">Add profile</button></div>
+            </div>
+          )}
+          {isClients && (
+            <div className="mt-4 rounded-xl bg-[#F5F5F6] p-6 text-center"><p className="text-sm font-medium text-[#0a0a0a]">No clients yet</p><p className="mt-1 text-xs text-[#737373]">Businesses you work with will appear here.</p></div>
+          )}
+          {isSettings && (
+            <div className="mt-4 divide-y divide-[#F0F0F0] rounded-xl border border-[#E7E7EA] overflow-hidden">{['Notifications','Privacy','Language','Logout'].map((s) => <div key={s} className="flex items-center justify-between px-4 py-3 text-sm"><span className="font-medium text-[#0a0a0a]">{s}</span><svg className="h-4 w-4 text-[#a3a3a3]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" /></svg></div>)}</div>
+          )}
+          {isTraining && (
+            <div className="mt-4 space-y-2">{['Onboarding Course','SOP Basics','Client Handling'].map((c) => <div key={c} className="flex items-center gap-3 rounded-xl border border-[#E7E7EA] p-3"><span className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#F5F5F6] text-[#0a0a0a]">▶</span><span className="text-sm font-medium text-[#0a0a0a]">{c}</span></div>)}</div>
+          )}
+          {isContact && (
+            <div className="mt-4 text-center"><p className="text-sm text-[#737373]">Chat with the UpSquad team</p><button type="button" className="mt-3 w-full rounded-full bg-[#0a0a0a] py-2.5 text-sm font-semibold text-white">Open chat</button></div>
+          )}
+          {!isBasic && !isJob && !isClients && !isSettings && !isTraining && !isContact && <p className="mt-2 text-sm text-[#737373]">Details for {detail}.</p>}
         </div>
       </div>
     );
@@ -168,13 +199,29 @@ function TalentMoreView({ onSelect }: { onSelect?: (label: string) => void }) {
 }
 
 function TalentChatView({ channels, dms, meId, supportChannelId, supportUnread, onOpenChannel }: { channels: Channel[]; dms: DmConversation[]; meId?: string; supportChannelId: string | null; supportUnread: number; onOpenChannel: (id: string, kind: 'channel' | 'dm', title: string) => void }) {
-  return (
-    <div className="flex min-h-full flex-col bg-[#F5F5F6]">
-      <div className="sticky top-0 z-10 border-b border-[#E7E7EA] bg-white px-4 py-3">
-        <h1 className="text-lg font-semibold text-[#0a0a0a]">Chatroom</h1>
-        <p className="text-xs text-[#737373]">Conversations with businesses and support</p>
+  const hasChats = (channels.length + dms.length) > 0;
+  if (!hasChats) {
+    return (
+      <div className="flex min-h-full flex-col bg-white">
+        <div className="border-b border-[#E7E7EA] px-4 py-3">
+          <h1 className="text-[18px] font-semibold tracking-[-0.36px] text-[#0a0a0a]">Chatroom</h1>
+        </div>
+        <div className="h-px bg-[#E7E7EA]" />
+        <div className="flex flex-1 flex-col items-center justify-center px-8 py-16 text-center">
+          <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-[#F5F5F6]"><svg className="h-7 w-7 text-[#a3a3a3]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}><path strokeLinecap="round" strokeLinejoin="round" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" /></svg></div>
+          <p className="mt-4 text-[15px] font-semibold text-[#0a0a0a]">No chatrooms yet</p>
+          <p className="mt-1 max-w-[28ch] text-sm leading-relaxed text-[#737373]">A business will open one after they shortlist you. An UpSquad teammate is always in the room.</p>
+        </div>
       </div>
-      <div className="flex-1 bg-white">
+    );
+  }
+  return (
+    <div className="flex min-h-full flex-col bg-white">
+      <div className="border-b border-[#E7E7EA] px-4 py-3">
+        <h1 className="text-[18px] font-semibold tracking-[-0.36px] text-[#0a0a0a]">Chatroom</h1>
+      </div>
+      <div className="h-px bg-[#E7E7EA]" />
+      <div className="flex-1">
         <MobileChat
           channels={channels}
           dms={dms}
