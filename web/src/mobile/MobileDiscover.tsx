@@ -36,7 +36,7 @@ const STAGES: Array<{ key: StageTab; label: string }> = [
   { key: 'expired', label: 'Expired' },
 ];
 
-export default function MobileDiscover({ onNavigate }: { onNavigate: (destination: TalentDestination) => void }) {
+export default function MobileDiscover({ onNavigate, hideTopNav }: { onNavigate: (destination: TalentDestination) => void; hideTopNav?: boolean }) {
   const queryClient = useQueryClient();
   const [product, setProduct] = useState<ProductTab>('subscription');
   const [stage, setStage] = useState<StageTab>('pending');
@@ -88,7 +88,7 @@ export default function MobileDiscover({ onNavigate }: { onNavigate: (destinatio
 
   return (
     <div className="mdiscover">
-      <TalentTopNav pending={pendingTotal} onNavigate={onNavigate} />
+      {!hideTopNav && <TalentTopNav pending={pendingTotal} onNavigate={onNavigate} />}
 
       <header className="mdiscover-head">
         <span className="mdiscover-eyebrow">SquadHire talent workspace</span>

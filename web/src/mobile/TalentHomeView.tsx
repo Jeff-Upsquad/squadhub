@@ -57,10 +57,8 @@ export default function TalentHomeView({ onNav }: { onNav?: (tab: 'chat' | 'noti
         </div>
       </section>
 
-      {/* Reuse the proven MobileDiscover which already fetches /partner/opportunities
-          correctly (pending/accepted/rejected) and handles product+stage tabs, skeletons,
-          empty states and the detail sheet — so cards actually show. */}
       <MobileDiscover
+        hideTopNav
         onNavigate={(dest) => {
           if (!onNav) return;
           if (dest === 'chat') onNav('chat');
