@@ -70,6 +70,7 @@ import LearningSidebar from '../views/app/learning/LearningSidebar';
 import ClipsView from '../views/app/clips/ClipsView';
 import AppsSidebar from '../views/app/apps/AppsSidebar';
 import NotesSidebar from '../views/app/notes/NotesSidebar';
+import CalendarOuterPalette from '../views/app/calendar/CalendarOuterPalette';
 import { useLearningStore } from '../stores/learningStore';
 import { launchApp, type AppDef } from '../config/apps';
 import { useUserType, useIsPartner } from '../hooks/useUserType';
@@ -1410,10 +1411,10 @@ export default function MainLayout() {
       </div>
 
       {/* Module sidebar — shared outer container for all sections so the side
-          menu keeps the same width/height when switching (e.g. Home ↔ Resources).
-          Calendar is full-width by design, and an open Resource item hides the
-          catalog sidebar to let its own chapter/page nav take over. */}
-      {currentWorkspace && activeSection !== 'cal' && !(activeSection === 'learning' && learningActiveItemId) && (
+          menu keeps the same width/height when switching (e.g. Home ↔
+          Resources ↔ Calendar). An open Resource item hides the catalog sidebar
+          to let its own chapter/page nav take over. */}
+      {currentWorkspace && !(activeSection === 'learning' && learningActiveItemId) && (
         <div
           className={`flex h-full shrink-0 flex-col overflow-hidden bg-[var(--sidebar)] border-r border-[var(--sh-hair)] relative z-[2] ${
             resizingSidebar ? '' : 'transition-[width] duration-200 ease-in-out'
@@ -1436,6 +1437,8 @@ export default function MainLayout() {
             />
           ) : activeSection === 'docs' ? (
             <NotesSidebar />
+          ) : activeSection === 'cal' ? (
+            <CalendarOuterPalette />
           ) : (
             <HomeSidebar
               workspaceId={currentWorkspace.id}

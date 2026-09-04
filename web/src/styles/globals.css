@@ -672,8 +672,11 @@ body.sb-resizing { user-select: none; -webkit-user-select: none; cursor: col-res
 .sh-view .dp-now-chip { position: absolute; left: -66px; top: -9px; background: #dc2626; color: #fff; font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 4px; font-family: 'Inter', sans-serif; }
 
 /* ============================ Calendar app ============================ */
-/* Two-pane shell: draggable task palette (left) + month/week/day grid. */
-.sh-view.cal-view { display: grid; grid-template-columns: 360px 1fr; height: 100%; min-height: 0; }
+/* Two-pane shell: draggable task palette (left) + month/week/day grid.
+   Width matches the shared outer module sidebar (240px) so switching Home ↔
+   Calendar doesn't jump. Height handoff is via MainLayout's outer sidebar. */
+.sh-view.cal-view { display: grid; grid-template-columns: 240px 1fr; height: 100%; min-height: 0; }
+.sh-view.cal-view[data-hide-palette="true"] { grid-template-columns: 1fr; }
 
 /* ---- Left palette ---- */
 .cal-palette { border-right: 1px solid var(--sh-hair); overflow-y: auto; background: var(--surface); display: flex; flex-direction: column; }

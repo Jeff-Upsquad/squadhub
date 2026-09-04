@@ -1,8 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMyTasks, useUpdateTask } from '../../../hooks/useTasks';
 import { usePMStore } from '../../../stores/pmStore';
-import { planDateKey, useDayPlansRange } from '../../../hooks/useDayPlanner';
-import CalendarTaskPalette from './CalendarTaskPalette';
+import { planDateKey } from '../../../hooks/useDayPlanner';
 import MonthGrid from './MonthGrid';
 import MultiDayCalendar from './MultiDayCalendar';
 import {
@@ -34,7 +33,7 @@ function fromKey(key: string): Date {
 }
 
 export default function CalendarView() {
-  const { data, isLoading } = useMyTasks();
+  const { data } = useMyTasks();
   const updateTask = useUpdateTask(null);
   const setActiveTask = usePMStore((s) => s.setActiveTask);
 
@@ -91,23 +90,6 @@ export default function CalendarView() {
     return mode === 'week' ? week : week.slice(0, SPAN[mode]);
   }, [mode, anchor, weekStartsOn]);
 
-  // A task is "scheduled" (and so drops out of the palette) once it's placed on
-  // the calendar: a work_date (month-day / all-day drop) OR a real day_plan on
-  // a currently-visible day (timed-slot drop). Virtual rows — occurrences the
-  // server derives from a task's due/start date — don't count; only explicit
-  // placements do. Reuses the cached ['day-plans', date] queries the grid fetches.
-  const plansByDate = useDayPlansRange(dayKeys);
-  const scheduledIds = useMemo(() => {
-    const ids = new Set<string>();
-    for (const t of allTasks) if (t.work_date) ids.add(t.id);
-    for (const day of dayKeys) {
-      for (const p of plansByDate[day] ?? []) {
-        if (!(p as { virtual?: boolean }).virtual) ids.add(p.task_id);
-      }
-    }
-    return ids;
-  }, [allTasks, plansByDate, dayKeys]);
-
   const scheduleOnDay = (taskId: string, day: Date) =>
     updateTask.mutate({ id: taskId, work_date: dayToWorkDateISO(day) });
 
@@ -149,10 +131,11 @@ export default function CalendarView() {
 
   const scheduledCount = useMemo(() => allTasks.filter((t) => t.work_date).length, [allTasks]);
 
+  // Palette lives in MainLayout's shared outer sidebar (same 240px resizable
+  // container as Home/Resources) so the side menu doesn't jump in width or
+  // height when switching to Calendar.
   return (
-    <div className="sh-view cal-view">
-      <CalendarTaskPalette tasks={allTasks} isLoading={isLoading} scheduledIds={scheduledIds} />
-
+    <div className="sh-view cal-view" data-hide-palette="true">
       <div className="cal-main">
         <div className="cal-head">
           <div className="cal-head-left">
