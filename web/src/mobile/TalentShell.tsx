@@ -224,11 +224,8 @@ function TalentChatView({ channels, dms, meId, supportChannelId, supportUnread, 
 function TalentNotificationsView() {
   const src = `${TALENT_WEB_BASE}/talent/notifications?in_app=1`;
   return (
-    <div className="flex min-h-[60dvh] flex-col bg-white">
-      <iframe src={src} title="Notifications" className="h-[calc(100dvh-160px)] min-h-[520px] w-full flex-1 border-0" loading="lazy" />
-      <div className="border-t border-[#E7E7EA] bg-white px-3 py-2 text-center">
-        <a href={src} target="_blank" rel="noreferrer" className="text-xs font-medium text-[#525252]">Open in SquadHire</a>
-      </div>
+    <div className="flex h-full min-h-0 flex-col bg-white">
+      <iframe src={src} title="Notifications" className="block h-[calc(100dvh-96px)] min-h-[520px] w-full flex-1 border-0" loading="lazy" />
     </div>
   );
 }
