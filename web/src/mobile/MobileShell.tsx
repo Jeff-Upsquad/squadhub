@@ -334,32 +334,35 @@ export default function MobileShell({
 
   return (
     <div className="msh" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
-      {/* ── Work | Discover switcher (yubo-style pill) ───────────────────── */}
-      <div className="msh-surface-switch-wrap">
-        <div className="msh-surface-switch" role="tablist" aria-label="Work or Discover">
-          <button
-            type="button"
-            role="tab"
-            aria-selected={surface === 'work'}
-            data-on={surface === 'work' ? 'true' : undefined}
-            onClick={() => setSurface('work')}
-          >
-            Work
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={surface === 'discover'}
-            data-on={surface === 'discover' ? 'true' : undefined}
-            onClick={() => setSurface('discover')}
-          >
-            Discover
-            {surfaceDiscoverBadge > 0 && <em>{surfaceDiscoverBadge > 99 ? '99+' : surfaceDiscoverBadge}</em>}
-          </button>
+      {/* Talent discovery is exclusive to partner accounts. Keep the whole
+          surface—not only its API request—out of every other mobile shell. */}
+      {isPartner && (
+        <div className="msh-surface-switch-wrap">
+          <div className="msh-surface-switch" role="tablist" aria-label="Work or Discover">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={surface === 'work'}
+              data-on={surface === 'work' ? 'true' : undefined}
+              onClick={() => setSurface('work')}
+            >
+              Work
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={surface === 'discover'}
+              data-on={surface === 'discover' ? 'true' : undefined}
+              onClick={() => setSurface('discover')}
+            >
+              Discover
+              {surfaceDiscoverBadge > 0 && <em>{surfaceDiscoverBadge > 99 ? '99+' : surfaceDiscoverBadge}</em>}
+            </button>
+          </div>
         </div>
-      </div>
+      )}
 
-      {surface === 'discover' ? (
+      {isPartner && surface === 'discover' ? (
         <div className="msh-sheet" data-flush="true" style={{ background: '#F5F5F6' }}>
           <TalentShell
             channels={channels}
