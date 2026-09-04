@@ -101,13 +101,25 @@ export function TalentBottomNav({ active, onChange, unreadMessages = 0, unreadNo
 
 // ── TalentMore (ported from Profiles/frontend/src/views/talent/TalentMore.tsx) ──
 function TalentMoreView({ onSelect }: { onSelect?: (label: string) => void }) {
+  const [detail, setDetail] = useState<string | null>(null);
+  if (detail) {
+    return (
+      <div className="min-h-full bg-[#F5F5F6] p-4">
+        <button type="button" onClick={() => setDetail(null)} className="mb-4 inline-flex items-center gap-1.5 rounded-full bg-white px-3 py-1.5 text-sm font-medium text-[#0a0a0a] shadow">
+          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" /></svg>
+          Back
+        </button>
+        <div className="rounded-2xl border border-[#E7E7EA] bg-white p-6">
+          <h2 className="text-lg font-semibold text-[#0a0a0a]">{detail}</h2>
+          <p className="mt-2 text-sm text-[#737373]">This mirrors Profiles/frontend/src/app/talent/{detail.toLowerCase().replace(/ /g, '-')}. Content is available in the talent web app — here it is presented as a placeholder until the full form is embedded.</p>
+          <button type="button" onClick={() => setDetail(null)} className="mt-4 rounded-full bg-[#0a0a0a] px-4 py-2 text-sm font-semibold text-white">Close</button>
+        </div>
+      </div>
+    );
+  }
   const handle = (label: string) => {
+    setDetail(label);
     if (onSelect) onSelect(label);
-    // Fallback: open Profiles frontend if available, otherwise toast
-    // For now just navigate within talent shell or external
-    if (label === 'Contact Support' && typeof window !== 'undefined') {
-      window.location.href = '/app#support';
-    }
   };
   return (
     <div className="space-y-6 bg-[#F5F5F6] p-4">
@@ -155,6 +167,29 @@ function TalentMoreView({ onSelect }: { onSelect?: (label: string) => void }) {
   );
 }
 
+function TalentChatView({ channels, dms, meId, supportChannelId, supportUnread, onOpenChannel }: { channels: Channel[]; dms: DmConversation[]; meId?: string; supportChannelId: string | null; supportUnread: number; onOpenChannel: (id: string, kind: 'channel' | 'dm', title: string) => void }) {
+  return (
+    <div className="flex min-h-full flex-col bg-[#F5F5F6]">
+      <div className="sticky top-0 z-10 border-b border-[#E7E7EA] bg-white px-4 py-3">
+        <h1 className="text-lg font-semibold text-[#0a0a0a]">Chatroom</h1>
+        <p className="text-xs text-[#737373]">Conversations with businesses and support</p>
+      </div>
+      <div className="flex-1 bg-white">
+        <MobileChat
+          channels={channels}
+          dms={dms}
+          meId={meId}
+          supportChannelId={supportChannelId}
+          supportUnread={supportUnread}
+          query=""
+          onOpenChannel={(id, t) => onOpenChannel(id, 'channel', t)}
+          onOpenDm={(id, t) => onOpenChannel(id, 'dm', t)}
+        />
+      </div>
+    </div>
+  );
+}
+
 function TalentNotificationsView() {
   return (
     <div className="bg-[#F5F5F6] min-h-full p-4">
@@ -182,20 +217,16 @@ export default function TalentShell({ channels, dms, meId, supportChannelId, sup
   return (
     <div className="flex flex-1 flex-col min-h-0 bg-[#F5F5F6]">
       <div className="flex-1 overflow-y-auto min-h-0">
-        {tab === 'home' && <TalentHomeView onNav={(t) => { if (t === 'chat') setTab('chatroom'); else if (t === 'notifications') setTab('notifications'); else if (t === 'more') setTab('more'); }} />}
+        {tab === 'home' && <TalentHomeView />}
         {tab === 'chatroom' && (
-          <div className="bg-white min-h-full">
-            <MobileChat
-              channels={channels}
-              dms={dms}
-              meId={meId}
-              supportChannelId={supportChannelId}
-              supportUnread={supportUnread}
-              query=""
-              onOpenChannel={(id, t) => onOpenChannel(id, 'channel', t)}
-              onOpenDm={(id, t) => onOpenChannel(id, 'dm', t)}
-            />
-          </div>
+          <TalentChatView
+            channels={channels}
+            dms={dms}
+            meId={meId}
+            supportChannelId={supportChannelId}
+            supportUnread={supportUnread}
+            onOpenChannel={onOpenChannel}
+          />
         )}
         {tab === 'notifications' && <TalentNotificationsView />}
         {tab === 'more' && <TalentMoreView onSelect={(label) => { /* keep in More for now; toast */ if (typeof window !== 'undefined') console.log('[talent more]', label); }} />}
