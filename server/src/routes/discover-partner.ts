@@ -89,6 +89,7 @@ async function proxyRead(
   res: Response,
   table: string,
   params: Record<string, string>,
+  transform?: (body: string) => string,
 ) {
   if (!configured()) {
     res.status(503).json({ success: false, error: 'Discover is not configured' });
@@ -100,14 +101,16 @@ async function proxyRead(
   const now = Date.now();
 
   if (cached && cached.expiresAt > now) {
-    res.status(cached.status).type('application/json').send(cached.body);
+    const body = transform ? transform(cached.body) : cached.body;
+    res.status(cached.status).type('application/json').send(body);
     return;
   }
 
   if (breakerIsOpen()) {
     if (cached) {
       res.setHeader('X-Discover-Stale', '1');
-      res.status(cached.status).type('application/json').send(cached.body);
+      const body = transform ? transform(cached.body) : cached.body;
+      res.status(cached.status).type('application/json').send(body);
       return;
     }
     res.status(503).json({ success: false, error: 'SquadHire is temporarily unavailable' });
@@ -119,11 +122,13 @@ async function proxyRead(
     if (result.ok) {
       readCache.set(cacheKey, { status: result.status, body: result.body, expiresAt: now + CACHE_TTL_MS });
     }
-    res.status(result.status).type('application/json').send(result.body);
+    const body = transform ? transform(result.body) : result.body;
+    res.status(result.status).type('application/json').send(body);
   } catch {
     if (cached) {
       res.setHeader('X-Discover-Stale', '1');
-      res.status(cached.status).type('application/json').send(cached.body);
+      const body = transform ? transform(cached.body) : cached.body;
+      res.status(cached.status).type('application/json').send(body);
       return;
     }
     res.status(503).json({ success: false, error: 'SquadHire is temporarily unavailable' });
@@ -132,13 +137,41 @@ async function proxyRead(
 
 // ---- Routes -----------------------------------------------------------------
 
+/** Wrap a Supabase array into the format the Android/web clients expect */
+function wrapResponse(supabaseBody: string, wrapper: string, extra?: Record<string, unknown>): string {
+  try {
+    const arr = JSON.parse(supabaseBody);
+    if (Array.isArray(arr)) {
+      const result: Record<string, unknown> = { [wrapper]: arr };
+      if (extra) Object.assign(result, extra);
+      return JSON.stringify(result);
+    }
+    // Already an object (error), pass through
+    return supabaseBody;
+  } catch {
+    return supabaseBody;
+  }
+}
+
+function wrapSingle(supabaseBody: string, wrapper: string): string {
+  try {
+    const arr = JSON.parse(supabaseBody);
+    if (Array.isArray(arr)) {
+      return JSON.stringify({ [wrapper]: arr[0] ?? null });
+    }
+    return supabaseBody;
+  } catch {
+    return supabaseBody;
+  }
+}
+
 /** GET /partner/discover/categories — list all active talent categories */
 router.get('/categories', (req: Request, res: Response) => {
   proxyRead(req, res, 'categories', {
     select: 'id,name,slug,description,icon_url',
     is_active: 'eq.true',
     order: 'name.asc',
-  });
+  }, (body) => wrapResponse(body, 'categories'));
 });
 
 /** GET /partner/discover/:categorySlug — list profiles in a category */
@@ -210,7 +243,8 @@ router.get('/:categorySlug', async (req: Request, res: Response) => {
   const profileCached = readCache.get(profileCacheKey);
 
   if (profileCached && profileCached.expiresAt > now) {
-    res.status(profileCached.status).type('application/json').send(profileCached.body);
+    const wrapped = wrapResponse(profileCached.body, 'profiles', { total: JSON.parse(profileCached.body).length, page, per_page: limit });
+    res.status(profileCached.status).type('application/json').send(wrapped);
     return;
   }
 
@@ -219,7 +253,8 @@ router.get('/:categorySlug', async (req: Request, res: Response) => {
     if (result.ok) {
       readCache.set(profileCacheKey, { status: result.status, body: result.body, expiresAt: now + CACHE_TTL_MS });
     }
-    res.status(result.status).type('application/json').send(result.body);
+    const wrapped = wrapResponse(result.body, 'profiles', { total: JSON.parse(result.body).length, page, per_page: limit });
+    res.status(result.status).type('application/json').send(wrapped);
   } catch {
     if (profileCached) {
       res.setHeader('X-Discover-Stale', '1');
@@ -238,7 +273,7 @@ router.get('/:categorySlug/:id', (req: Request, res: Response) => {
     select: 'id,category_id,status,field_data,tier,created_at,talent_users!inner(id,full_name,profile_photo_url,current_location,phone)',
     id: `eq.${id}`,
     is_active: 'eq.true',
-  });
+  }, (body) => wrapSingle(body, 'profile'));
 });
 
 export default router;
