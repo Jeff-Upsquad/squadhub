@@ -31,7 +31,7 @@ import type { AdminSubscriptionCard } from './AdminSubscriptionCards';
 // make their own unread badges disappear.
 
 // ── The business portal's recipient shape (mirrors CardRecipientForBusiness) ──
-type OfferAmount = { amount?: number; currency?: string | null; period?: string | null };
+type OfferAmount = { amount?: number; currency?: string | null; period?: string | null; unit?: 'design' | 'video' | null; quantity?: number | null };
 
 type BusinessRecipient = {
   recipient_id: string;
@@ -80,7 +80,16 @@ type BusinessCard = {
   categories: Array<{ id: string; name: string }>;
   custom_deliverables: Array<{ id?: string; name?: string; kind?: string; per_day?: number; per_week?: number; per_month?: number }>;
   additional_requirements: Record<string, string[]> | null;
-  assignment_details: { duration?: string; start_date?: string; deadline?: string } | null;
+  assignment_details: {
+    duration?: string;
+    start_date?: string;
+    deadline?: string;
+    request_type?: 'fixed' | 'business_service';
+    work_type?: string;
+    pricing_basis?: 'project' | 'per_unit';
+    unit?: 'design' | 'video';
+    quantity?: number;
+  } | null;
 };
 
 type CardPayment = {
@@ -386,11 +395,13 @@ export default function AdminCardClientPreview({
     brief?.subscription_name && titleLead !== brief.subscription_name
       ? `${titleLead} · ${brief.subscription_name}`
       : titleLead;
+  const timeline = brief?.assignment_details ?? null;
+  const workUnit = timeline?.pricing_basis === 'per_unit' ? timeline.unit ?? null : null;
+  const workQuantity = Number.isInteger(timeline?.quantity) && Number(timeline?.quantity) > 0 ? Number(timeline?.quantity) : null;
   const priceDisplay =
     listPrice != null
-      ? `${symbolFor(currency)}${listPrice.toLocaleString()}${isAssignment ? '' : '/mo'}`
+      ? `${symbolFor(currency)}${listPrice.toLocaleString()}${timeline?.pricing_basis === 'per_unit' && timeline.unit ? `/${timeline.unit}` : isAssignment ? '' : '/mo'}`
       : null;
-  const timeline = brief?.assignment_details ?? null;
 
   const headerRow = (
     <div className="flex items-center justify-between gap-3">
@@ -567,8 +578,18 @@ export default function AdminCardClientPreview({
               )}
 
               {priceDisplay && (
-                <Section title={isAssignment ? 'Project budget' : 'Budget'}>
+                <Section title={workUnit ? `Price per ${workUnit}` : isAssignment ? 'Project budget' : 'Budget'}>
                   <p className="text-lg font-semibold text-[var(--color-sh-ink)]">{priceDisplay}</p>
+                </Section>
+              )}
+
+              {isAssignment && workUnit && (
+                <Section title="Work request">
+                  <dl className="grid grid-cols-1 gap-x-6 gap-y-2 sm:grid-cols-2">
+                    {timeline?.work_type && <DetailRow label="Type of work">{timeline.work_type}</DetailRow>}
+                    {workQuantity && <DetailRow label="Quantity">{workQuantity} {workQuantity === 1 ? workUnit : `${workUnit}s`}</DetailRow>}
+                    <DetailRow label="Pricing">Talent quotes per {workUnit}</DetailRow>
+                  </dl>
                 </Section>
               )}
 
@@ -644,7 +665,7 @@ export default function AdminCardClientPreview({
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
                     <TalentIdentity r={r} adminUrl={adminUrl} />
                     <div className="flex flex-col gap-2.5 sm:ml-auto sm:flex-row sm:items-center">
-                      <PriceBlock r={r} listPrice={listPrice} isAssignment={isAssignment} />
+                      <PriceBlock r={r} listPrice={listPrice} isAssignment={isAssignment} unit={workUnit} quantity={workQuantity} />
                       <span className="self-start rounded-full bg-emerald-100 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-700">
                         Assigned
                       </span>
@@ -654,6 +675,8 @@ export default function AdminCardClientPreview({
                     r={r}
                     payment={payments[r.recipient_id] ?? null}
                     isAssignment={isAssignment}
+                    unit={workUnit}
+                    quantity={workQuantity}
                     onCreateLink={() => paymentLink.mutate(r)}
                     creating={paymentLink.isPending}
                   />
@@ -683,7 +706,7 @@ export default function AdminCardClientPreview({
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
                       <TalentIdentity r={r} adminUrl={adminUrl} />
                       <div className="flex flex-col gap-2.5 sm:ml-auto sm:flex-row sm:items-center">
-                        <PriceBlock r={r} listPrice={listPrice} isAssignment={isAssignment} />
+                        <PriceBlock r={r} listPrice={listPrice} isAssignment={isAssignment} unit={workUnit} quantity={workQuantity} />
                         <div className="flex flex-wrap items-center gap-2">
                           <button
                             type="button"
@@ -715,6 +738,8 @@ export default function AdminCardClientPreview({
                       r={r}
                       payment={payment}
                       isAssignment={isAssignment}
+                      unit={workUnit}
+                      quantity={workQuantity}
                       onCreateLink={() => paymentLink.mutate(r)}
                       creating={paymentLink.isPending}
                     />
@@ -765,7 +790,7 @@ export default function AdminCardClientPreview({
               <div className="flex flex-col gap-3">
                 <TalentIdentity r={r} adminUrl={adminUrl} inactive={(isClosed || hasSelection) && !r.selected_at} />
                 <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between">
-                  <PriceBlock r={r} listPrice={listPrice} isAssignment={isAssignment} />
+                  <PriceBlock r={r} listPrice={listPrice} isAssignment={isAssignment} unit={workUnit} quantity={workQuantity} />
                   {rowActions(
                     r,
                     <>
@@ -827,7 +852,7 @@ export default function AdminCardClientPreview({
                   subtitle={r.responded_at ? `Accepted ${formatRelative(r.responded_at)}` : undefined}
                 />
                 <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between">
-                  <PriceBlock r={r} listPrice={listPrice} isAssignment={isAssignment} />
+                  <PriceBlock r={r} listPrice={listPrice} isAssignment={isAssignment} unit={workUnit} quantity={workQuantity} />
                   {rowActions(
                     r,
                     <>
@@ -1093,17 +1118,22 @@ function PriceBlock({
   r,
   listPrice,
   isAssignment = false,
+  unit = null,
+  quantity = null,
 }: {
   r: BusinessRecipient;
   listPrice: number | null;
   isAssignment?: boolean;
+  unit?: 'design' | 'video' | null;
+  quantity?: number | null;
 }) {
   const resolved = resolvePrice(r);
   if (!resolved) return null;
 
   const cur = symbolFor(resolved.currency);
-  const isProject = isAssignment || resolved.period === 'project';
-  const suffix = isProject ? '' : '/mo';
+  const effectivePeriod = unit && !resolved.fromBid ? `per_${unit}` : resolved.period;
+  const suffix = effectivePeriod === 'per_video' ? '/video' : effectivePeriod === 'per_design' ? '/design' : effectivePeriod === 'project' || isAssignment ? '' : '/mo';
+  const total = unit && quantity ? resolved.amount * quantity : null;
   const label = priceLabel(resolved.offerStatus, resolved.fromBid);
   const differs = listPrice != null && listPrice > 0 && resolved.amount !== listPrice;
   const isAgreed = resolved.fromBid && resolved.offerStatus === 'accepted';
@@ -1127,6 +1157,11 @@ function PriceBlock({
       >
         {label}
       </p>
+      {quantity && total != null && (
+        <p className="mt-0.5 text-[10px] font-medium text-[var(--color-sh-ink-subtle)]">
+          {quantity} {quantity === 1 ? unit : `${unit}s`} · {cur}{total.toLocaleString()} total
+        </p>
+      )}
       <p
         className={`mt-0.5 font-[family-name:var(--font-jakarta)] text-[15px] font-bold leading-tight tabular-nums sm:text-base ${
           isAgreed ? 'text-emerald-900 dark:text-emerald-300' : 'text-[var(--color-sh-ink)]'
@@ -1156,17 +1191,22 @@ function PaymentBlock({
   r,
   payment,
   isAssignment,
+  unit,
+  quantity,
   onCreateLink,
   creating,
 }: {
   r: BusinessRecipient;
   payment: CardPayment | null;
   isAssignment: boolean;
+  unit: 'design' | 'video' | null;
+  quantity: number | null;
   onCreateLink: () => void;
   creating: boolean;
 }) {
   const resolved = resolvePrice(r);
-  const amount = payment?.amount ?? resolved?.amount ?? null;
+  const quoteAmount = resolved?.amount ?? null;
+  const amount = payment?.amount ?? (unit && quantity && quoteAmount != null ? quoteAmount * quantity : quoteAmount);
   const currencyCode = payment?.currency ?? resolved?.currency ?? null;
   if (amount == null || !(amount > 0)) return null;
 

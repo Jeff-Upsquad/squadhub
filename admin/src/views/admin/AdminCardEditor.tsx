@@ -205,6 +205,11 @@ interface CardData {
   card_type?: 'subscription' | 'assignment' | 'hiring' | null;
   assignment_details?: {
     pricing_mode?: 'priced' | 'unpriced' | null;
+    request_type?: 'fixed' | 'business_service' | null;
+    work_type?: string | null;
+    pricing_basis?: 'project' | 'per_unit' | null;
+    unit?: 'design' | 'video' | null;
+    quantity?: number | null;
     duration?: string | null;
     start_date?: string | null;
     deadline?: string | null;
@@ -354,6 +359,9 @@ export default function AdminCardEditor({
   const [assignmentDeadline, setAssignmentDeadline] = useState('');
   const [assignmentScopeType, setAssignmentScopeType] = useState('');
   const [assignmentPricingMode, setAssignmentPricingMode] = useState<'priced' | 'unpriced'>('priced');
+  const [assignmentRequestType, setAssignmentRequestType] = useState<'fixed' | 'business_service'>('fixed');
+  const [assignmentWorkType, setAssignmentWorkType] = useState('');
+  const [assignmentUnit, setAssignmentUnit] = useState<'design' | 'video'>('design');
   // Read live from form state (not the loaded card) so flipping the mode
   // re-labels the Pricing table immediately, before a save round-trip.
   const assignmentUnpriced = assignmentPricingMode === 'unpriced';
@@ -454,6 +462,9 @@ export default function AdminCardEditor({
     setAssignmentDeadline(ad?.deadline || '');
     setAssignmentScopeType(ad?.scope_type || '');
     setAssignmentPricingMode(ad?.pricing_mode === 'unpriced' ? 'unpriced' : 'priced');
+    setAssignmentRequestType(ad?.request_type === 'business_service' ? 'business_service' : 'fixed');
+    setAssignmentWorkType(ad?.work_type || '');
+    setAssignmentUnit(ad?.unit === 'video' ? 'video' : 'design');
   }, [card]);
 
   // Toggle a tier on/off, syncing tierPricing in lockstep so every
@@ -860,6 +871,11 @@ export default function AdminCardEditor({
                 deadline: assignmentDeadline || null,
                 scope_type: assignmentScopeType || null,
                 pricing_mode: assignmentPricingMode,
+                request_type: assignmentRequestType,
+                work_type: assignmentRequestType === 'business_service' ? assignmentWorkType || null : null,
+                pricing_basis: assignmentRequestType === 'business_service' ? 'per_unit' : 'project',
+                unit: assignmentRequestType === 'business_service' ? assignmentUnit : null,
+                quantity: null,
               },
             }
           : {}),
@@ -1496,6 +1512,63 @@ export default function AdminCardEditor({
               plan: how the deal is priced, how long it runs, and when. */}
           {isAssignment && (
             <Section title="Scope & Timeline">
+              <Field label="Requirement type">
+                <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+                  {([
+                    { value: 'fixed' as const, title: 'Project requirement', desc: 'The existing one-off assignment brief and project budget.' },
+                    { value: 'business_service' as const, title: 'Business service request', desc: 'A design or video service quoted per item.' },
+                  ]).map((o) => {
+                    const on = assignmentRequestType === o.value;
+                    return (
+                      <button
+                        key={o.value}
+                        type="button"
+                        aria-pressed={on}
+                        disabled={!isEditable}
+                        onClick={() => {
+                          if (!isEditable) return;
+                          setAssignmentRequestType(o.value);
+                          if (o.value === 'business_service') setAssignmentPricingMode('unpriced');
+                        }}
+                        className={`rounded-xl border p-3 text-left transition disabled:cursor-not-allowed ${
+                          on
+                            ? 'border-[var(--color-sh-ink)] bg-[var(--color-sh-lime-soft)]'
+                            : 'border-[var(--color-sh-warm-border)] bg-[var(--color-surface)]'
+                        } ${isEditable ? '' : 'opacity-70'}`}
+                      >
+                        <span className="block text-sm font-semibold text-[var(--color-sh-ink)]">{o.title}</span>
+                        <span className="mt-0.5 block text-[11px] leading-relaxed text-[var(--color-sh-ink-muted)]">{o.desc}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </Field>
+
+              {assignmentRequestType === 'business_service' && (
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <Field label="Type of work">
+                    <input
+                      value={assignmentWorkType}
+                      onChange={(e) => setAssignmentWorkType(e.target.value)}
+                      disabled={!isEditable}
+                      placeholder={assignmentUnit === 'video' ? 'e.g. YouTube edit' : 'e.g. Social media design'}
+                      className="sh-input"
+                    />
+                  </Field>
+                  <Field label="Quote unit">
+                    <select
+                      value={assignmentUnit}
+                      onChange={(e) => setAssignmentUnit(e.target.value as 'design' | 'video')}
+                      disabled={!isEditable}
+                      className="sh-input"
+                    >
+                      <option value="design">Per design</option>
+                      <option value="video">Per video</option>
+                    </select>
+                  </Field>
+                </div>
+              )}
+
               <Field label="How this is priced">
                 <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
                   {([
@@ -1516,7 +1589,7 @@ export default function AdminCardEditor({
                         key={o.value}
                         type="button"
                         aria-pressed={on}
-                        disabled={!isEditable}
+                        disabled={!isEditable || assignmentRequestType === 'business_service'}
                         onClick={() => { if (isEditable) setAssignmentPricingMode(o.value); }}
                         className={`flex items-start gap-2.5 rounded-xl border p-3 text-left transition disabled:cursor-not-allowed ${
                           on
@@ -1573,7 +1646,7 @@ export default function AdminCardEditor({
                 </Field>
               </div>
 
-              <Field label="Engagement shape" optional>
+              {assignmentRequestType === 'fixed' && <Field label="Engagement shape" optional>
                 <select
                   value={assignmentScopeType}
                   onChange={(e) => setAssignmentScopeType(e.target.value)}
@@ -1585,7 +1658,7 @@ export default function AdminCardEditor({
                   <option value="ongoing">Ongoing / retainer</option>
                   <option value="milestone">Milestone-based</option>
                 </select>
-              </Field>
+              </Field>}
 
               {assignmentStartDate && assignmentDeadline && (() => {
                 const span = daysFromToday(assignmentDeadline);

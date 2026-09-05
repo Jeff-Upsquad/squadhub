@@ -390,6 +390,11 @@ const submissionSchema = z.object({
         start_date: z.string().trim().max(40).optional(),
         deadline: z.string().trim().max(40).optional(),
         scope_type: z.string().trim().max(100).optional(),
+        request_type: z.enum(['fixed', 'business_service']).optional(),
+        work_type: z.string().trim().min(1).max(120).optional(),
+        pricing_basis: z.enum(['project', 'per_unit']).optional(),
+        unit: z.enum(['design', 'video']).optional(),
+        quantity: z.number().int().min(1).max(999).optional(),
         // Assignment path: how the card is priced to talents. 'priced' shows the
         // budget as an offer (accept/decline/counter); 'unpriced' hides it and
         // invites talents to submit their own offer.
@@ -418,6 +423,16 @@ const submissionSchema = z.object({
       path: ['working_days'],
       message: 'Please pick at least one working day.',
     });
+  }
+  for (const [role, requirement] of Object.entries(val.role_requirements)) {
+    if (requirement.request_type !== 'business_service') continue;
+    if (requirement.pricing_mode !== 'unpriced' || !requirement.work_type || requirement.pricing_basis !== 'per_unit' || !requirement.unit) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['role_requirements', role],
+        message: 'Business service requests must invite quotes and include a work type and unit.',
+      });
+    }
   }
 });
 
@@ -706,6 +721,11 @@ router.post('/landing', ipRateLimit, async (req: Request, res: Response) => {
                   deadline: roleReq?.deadline || null,
                   scope_type: roleReq?.scope_type || null,
                   pricing_mode: roleReq?.pricing_mode || 'priced',
+                  request_type: roleReq?.request_type || 'fixed',
+                  work_type: roleReq?.work_type || null,
+                  pricing_basis: roleReq?.pricing_basis || 'project',
+                  unit: roleReq?.unit || null,
+                  quantity: roleReq?.quantity || null,
                 }
               : null,
           // Subscriptions: catalog-seeded per-tier pricing. Assignments: per-level offers.

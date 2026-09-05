@@ -19,6 +19,7 @@ import {
 import { config } from '../config';
 import { supabaseAdmin } from '../supabase';
 import { expandBusinessBid, loadCardBidPricing } from './cardBidPricing';
+import { totalOfferFigures } from './perUnitPricing';
 
 const LIVE_TIMEOUT_MS = 5_000;
 
@@ -28,6 +29,9 @@ interface OfferAmount {
   side?: 'business' | 'talent' | string;
   currency?: string;
   period?: string;
+  pricing_basis?: 'project' | 'per_unit';
+  unit?: 'design' | 'video';
+  quantity?: number;
 }
 
 interface SnapshotOffer {
@@ -113,21 +117,22 @@ async function resolveDualAmount(
     typeof raw.partner_amount === 'number' && raw.partner_amount >= 0
       ? Math.round(raw.partner_amount)
       : null;
+  const total = (business: number, partner: number) => totalOfferFigures(business, partner, raw);
 
   if (partnerHint != null && (raw.side === 'business' || raw.side == null)) {
-    return { business: amount, partner: partnerHint };
+    return total(amount, partnerHint);
   }
   if (raw.side === 'talent') {
     const ctx = await loadCardBidPricing(cardId);
     const business = customerPriceFromPartner(amount, ctx?.card ?? {}, ctx?.pricing ?? null);
-    return { business, partner: amount };
+    return total(business, amount);
   }
   // Default: amount is business-side (admin counters + listed customer price).
   try {
     const ctx = await loadCardBidPricing(cardId);
     if (ctx) {
       const expanded = expandBusinessBid(amount, ctx);
-      return { business: expanded.amount, partner: expanded.partner_amount };
+      return total(expanded.amount, expanded.partner_amount);
     }
   } catch {
     // Min-floor rejection shouldn't block locking an already-accepted figure —
@@ -137,7 +142,7 @@ async function resolveDualAmount(
   const partner =
     partnerHint ??
     partnerPriceFromCustomer(amount, ctx?.card ?? {}, ctx?.pricing ?? null);
-  return { business: amount, partner };
+  return total(amount, partner);
 }
 
 export interface LockAcceptedBidResult {

@@ -36,7 +36,10 @@ const respondSchema = z.object({ action: z.enum(['accept', 'reject']) });
 const offerAmountSchema = z.object({
   amount: z.number().positive(),
   currency: z.string().trim().min(1).max(8).optional(),
-  period: z.enum(['project', 'per_month', 'per_week', 'per_day', 'per_hour']).optional(),
+  period: z.enum(['project', 'per_month', 'per_week', 'per_day', 'per_hour', 'per_design', 'per_video']).optional(),
+  pricing_basis: z.enum(['project', 'per_unit']).optional(),
+  unit: z.enum(['design', 'video']).optional(),
+  quantity: z.number().int().min(1).max(999).optional(),
 });
 const submitOfferSchema = z.object({
   amount: offerAmountSchema,
@@ -231,6 +234,13 @@ function adaptCanonicalCard(item: any, partnerId: string) {
         duration: assignment.duration || content.timeline || null,
         start_date: assignment.start_date || content.start_date || null,
         deadline: assignment.deadline || content.deadline || null,
+        scope_type: assignment.scope_type || null,
+        pricing_mode: assignment.pricing_mode || 'priced',
+        request_type: assignment.request_type || 'fixed',
+        work_type: assignment.work_type || null,
+        pricing_basis: assignment.pricing_basis || 'project',
+        unit: assignment.unit || null,
+        quantity: assignment.quantity || null,
       } : null,
       source_content: content,
       job_profile_id: item.job_profile_id || null,

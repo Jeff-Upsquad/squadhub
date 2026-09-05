@@ -478,6 +478,11 @@ const clientBriefSchema = z.object({
   start_date: z.string().optional(),
   deadline: z.string().optional(),
   scope_type: z.string().optional(),
+  request_type: z.enum(['fixed', 'business_service']).optional(),
+  work_type: z.string().trim().min(1).max(120).optional(),
+  pricing_basis: z.enum(['project', 'per_unit']).optional(),
+  unit: z.enum(['design', 'video']).optional(),
+  quantity: z.number().int().min(1).max(999).optional(),
   // How an assignment card is priced to talents. 'priced' shows the budget as
   // an offer (accept/decline/counter); 'unpriced' invites talents to submit
   // their own offer. Stored in assignment_details.pricing_mode.
@@ -647,6 +652,11 @@ router.post('/subscription-cards/client-brief', async (req: Request, res: Respon
                 deadline: body.deadline || null,
                 scope_type: body.scope_type || null,
                 pricing_mode: body.pricing_mode || 'priced',
+                request_type: body.request_type || 'fixed',
+                work_type: body.work_type || null,
+                pricing_basis: body.pricing_basis || 'project',
+                unit: body.unit || null,
+                quantity: body.quantity || null,
               }
             : null,
         working_days: body.working_days || [],
@@ -809,6 +819,11 @@ const editCardSchema = z.object({
       deadline: z.string().nullable().optional(),
       scope_type: z.string().nullable().optional(),
       pricing_mode: z.enum(['priced', 'unpriced']).nullable().optional(),
+      request_type: z.enum(['fixed', 'business_service']).nullable().optional(),
+      work_type: z.string().trim().max(120).nullable().optional(),
+      pricing_basis: z.enum(['project', 'per_unit']).nullable().optional(),
+      unit: z.enum(['design', 'video']).nullable().optional(),
+      quantity: z.number().int().min(1).max(999).nullable().optional(),
     })
     .optional(),
 });
@@ -909,7 +924,19 @@ router.patch('/subscription-cards/:id/edit', async (req: Request, res: Response)
         card.assignment_details && typeof card.assignment_details === 'object'
           ? (card.assignment_details as Record<string, unknown>)
           : {};
-      updates.assignment_details = { ...existing, ...body.assignment_details };
+      const merged = { ...existing, ...body.assignment_details } as Record<string, unknown>;
+      if (merged.request_type === 'business_service') {
+        merged.pricing_mode = 'unpriced';
+        merged.pricing_basis = 'per_unit';
+        if (
+          typeof merged.work_type !== 'string' || !merged.work_type.trim() ||
+          (merged.unit !== 'design' && merged.unit !== 'video')
+        ) {
+          res.status(400).json({ success: false, error: 'Business service requests require a work type and unit.' });
+          return;
+        }
+      }
+      updates.assignment_details = merged;
     }
 
     // "Save Draft" on a New Deal promotes it: new → draft. This is the gate

@@ -2102,6 +2102,11 @@ router.post('/:id/duplicate', async (req: Request, res: Response) => {
           deadline: null,
           scope_type: null,
           pricing_mode: 'priced',
+          request_type: 'fixed',
+          work_type: null,
+          pricing_basis: 'project',
+          unit: null,
+          quantity: null,
         };
       } else {
         // Assignments carry a one-off project scope/timeline; subscriptions don't.

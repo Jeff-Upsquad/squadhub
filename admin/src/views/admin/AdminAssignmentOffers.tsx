@@ -9,6 +9,9 @@ interface OfferAmount {
   amount: number;
   currency?: string;
   period?: string;
+  pricing_basis?: 'project' | 'per_unit';
+  unit?: 'design' | 'video';
+  quantity?: number;
   /** Talent-side pay derived from margin (when amount is business-side). */
   partner_amount?: number;
   margin_amount?: number;
@@ -62,10 +65,13 @@ function fmtAmount(a: unknown): string | null {
   if (typeof o.amount !== 'number') return null;
   const cur = o.currency && o.currency !== 'INR' ? `${o.currency} ` : '₹';
   const business = `${cur}${o.amount.toLocaleString()}`;
+  const suffix = o.period === 'per_video' ? '/video' : o.period === 'per_design' ? '/design' : o.period === 'per_month' ? '/mo' : '';
+  const quantity = Number.isInteger(o.quantity) && Number(o.quantity) > 0 ? Number(o.quantity) : 1;
+  const total = o.unit ? ` · ${quantity} ${quantity === 1 ? o.unit : `${o.unit}s`} · ${cur}${(o.amount * quantity).toLocaleString()} total` : '';
   if (typeof o.partner_amount === 'number') {
-    return `${business} business · ${cur}${o.partner_amount.toLocaleString()} talent`;
+    return `${business}${suffix} business · ${cur}${o.partner_amount.toLocaleString()}${suffix} talent${total}`;
   }
-  return business;
+  return `${business}${suffix}${total}`;
 }
 
 function fmtMoney(n: number | null | undefined): string {
@@ -168,8 +174,16 @@ export default function AdminAssignmentOffers({
       showToast(`Business bid cannot be below catalog min ${fmtMoney(minBusiness)}`, 'error');
       return;
     }
+    const existing = rawOffers.find((o) => o.id === offerId)?.current_amount;
     counter.mutate(
-      { offerId, amount: { amount: n, currency: 'INR', period: 'project' } },
+      { offerId, amount: {
+        amount: n,
+        currency: 'INR',
+        period: existing?.period || 'project',
+        ...(existing?.pricing_basis ? { pricing_basis: existing.pricing_basis } : {}),
+        ...(existing?.unit ? { unit: existing.unit } : {}),
+        ...(existing?.quantity ? { quantity: existing.quantity } : {}),
+      } },
       {
         onSuccess: () => {
           setCounterFor(null);
@@ -427,6 +441,10 @@ export function ClientBidActions({
     'admin-assignment-offers',
     cardId,
   ])?.bid_pricing ?? null;
+  const cachedOffer = qc.getQueryData<{ offers?: AdminOffer[] }>([
+    'admin-assignment-offers',
+    cardId,
+  ])?.offers?.find((o) => o.id === offerId)?.current_amount;
   const minBusiness = bidPricing?.min_customer_price ?? null;
 
   const invalidate = () => {
@@ -467,7 +485,14 @@ export function ClientBidActions({
       showToast(`Bid cannot be below ${fmtMoney(minBusiness)}`, 'error');
       return;
     }
-    act.mutate({ kind: 'counter', amount: { amount: n, currency: 'INR', period: 'project' } });
+    act.mutate({ kind: 'counter', amount: {
+      amount: n,
+      currency: 'INR',
+      period: cachedOffer?.period || 'project',
+      ...(cachedOffer?.pricing_basis ? { pricing_basis: cachedOffer.pricing_basis } : {}),
+      ...(cachedOffer?.unit ? { unit: cachedOffer.unit } : {}),
+      ...(cachedOffer?.quantity ? { quantity: cachedOffer.quantity } : {}),
+    } });
   };
 
   const busy = act.isPending || disabled;

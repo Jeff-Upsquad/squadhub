@@ -2258,6 +2258,14 @@ export const SUBSCRIPTION_CARD_TYPES: SubscriptionCardType[] = ['subscription', 
  * carries what has no dedicated column.
  */
 export interface AssignmentDetails {
+  /** Existing project brief or a per-work business service request. */
+  request_type?: 'fixed' | 'business_service' | null;
+  /** Selected deliverable subtype, e.g. "YouTube video" or "Logo design". */
+  work_type?: string | null;
+  /** A project total or a quote for each requested unit. */
+  pricing_basis?: 'project' | 'per_unit' | null;
+  unit?: 'design' | 'video' | null;
+  quantity?: number | null;
   /** Free-text timeline, e.g. "4 weeks", "2 months". */
   duration?: string | null;
   /** ISO date the engagement should start. */

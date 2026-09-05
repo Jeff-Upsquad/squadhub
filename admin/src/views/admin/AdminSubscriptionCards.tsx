@@ -103,7 +103,18 @@ export type AdminSubscriptionCard = {
   // + project budget/timeline instead of plan/monthly price). Defaults to
   // 'subscription' on legacy rows.
   card_type?: 'subscription' | 'assignment' | 'hiring' | null;
-  assignment_details?: { duration?: string | null; start_date?: string | null; deadline?: string | null; scope_type?: string | null; pricing_mode?: 'priced' | 'unpriced' | null } | null;
+  assignment_details?: {
+    duration?: string | null;
+    start_date?: string | null;
+    deadline?: string | null;
+    scope_type?: string | null;
+    pricing_mode?: 'priced' | 'unpriced' | null;
+    request_type?: 'fixed' | 'business_service' | null;
+    work_type?: string | null;
+    pricing_basis?: 'project' | 'per_unit' | null;
+    unit?: 'design' | 'video' | null;
+    quantity?: number | null;
+  } | null;
   source?: 'submission' | 'request' | 'custom' | null;
   submission?: {
     id: string;
@@ -1100,14 +1111,17 @@ function CardGroup({
 function priceLabelForCard(card: AdminSubscriptionCard): string {
   const planPrice = card.submission_subscription?.plan?.pricing?.[0];
   const priceCurrency = planPrice?.country?.currency || '₹';
-  const per = card.card_type === 'assignment' ? '' : '/mo';
   const priceValue = resolveFinalizedPrice(card) ?? planPrice?.price ?? null;
   if (priceValue == null) return '';
-  const business = `${priceCurrency}${Number(priceValue).toLocaleString()}${per}`;
   const hasAgreed =
     card.subscription_price != null &&
     card.subscription_price > 0 &&
     (card.state === 'assigned' || !!card.selected_recipient_id || card.partner_price_override != null);
+  const unit = card.assignment_details?.pricing_basis === 'per_unit' ? card.assignment_details.unit : null;
+  // Accepted per-unit offers are locked as the whole order total. Before that,
+  // proposed_price remains the list/ceiling for each item.
+  const per = card.card_type !== 'assignment' ? '/mo' : unit && !hasAgreed ? `/${unit}` : '';
+  const business = `${priceCurrency}${Number(priceValue).toLocaleString()}${per}`;
   if (hasAgreed && card.partner_price_override != null) {
     return `Final ${business} · talent ${priceCurrency}${Number(card.partner_price_override).toLocaleString()}${per}`;
   }
@@ -1123,6 +1137,10 @@ function SubscriptionCardRow({ card, onOpen, showCancelledTag, showArchivedTag, 
   const planName =
     card.card_type === 'assignment'
       ? [
+          card.assignment_details?.work_type,
+          card.assignment_details?.pricing_basis === 'per_unit' && card.assignment_details?.quantity && card.assignment_details?.unit
+            ? `${card.assignment_details.quantity} ${card.assignment_details.quantity === 1 ? card.assignment_details.unit : `${card.assignment_details.unit}s`}`
+            : '',
           card.assignment_details?.duration,
           card.assignment_details?.deadline
             ? `due ${new Date(`${card.assignment_details.deadline}T00:00:00`).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}`

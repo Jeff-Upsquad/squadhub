@@ -1496,11 +1496,29 @@ function CardDetails({ card, activeCard, isSecondaryView, countries, squadhireCa
       {card.card_type === 'assignment' ? (
         <DetailSection title="Assignment">
           <DetailRow
+            label="Requirement type"
+            value={card.assignment_details?.request_type === 'business_service' ? 'Business service request' : 'Project requirement'}
+          />
+          {card.assignment_details?.request_type === 'business_service' && (
+            <>
+              <DetailRow label="Type of work" value={card.assignment_details?.work_type || EMPTY} />
+              <DetailRow
+                label="Quantity"
+                value={card.assignment_details?.quantity
+                  ? `${card.assignment_details.quantity} ${card.assignment_details.quantity === 1 ? card.assignment_details.unit : `${card.assignment_details.unit}s`}`
+                  : EMPTY}
+              />
+              <DetailRow label="Quote basis" value={`Per ${card.assignment_details?.unit || 'item'}`} />
+            </>
+          )}
+          <DetailRow
             label="Pricing"
             value={card.assignment_details?.pricing_mode === 'unpriced' ? 'Invite offers — no price shown' : 'Priced — accept / decline / counter'}
           />
           <DetailRow
-            label={card.assignment_details?.pricing_mode === 'unpriced' ? 'Budget ceiling' : 'Project budget'}
+            label={card.assignment_details?.pricing_basis === 'per_unit'
+              ? `Price per ${card.assignment_details?.unit || 'item'}`
+              : card.assignment_details?.pricing_mode === 'unpriced' ? 'Budget ceiling' : 'Project budget'}
             value={card.proposed_price ? `${cur} ${card.proposed_price.toLocaleString()}` : EMPTY}
           />
           <DetailRow label="Service" value={serviceDisplay} />
