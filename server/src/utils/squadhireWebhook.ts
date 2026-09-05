@@ -2229,6 +2229,12 @@ export async function notifySquadhireOfFreshBroadcast(
 // and the SquadHire mirror stays live (the bug that made assignment
 // + subscription recalls look like no-ops on the talent side).
 //
+// Also MUST skip when the card was never synced to SquadHire.
+// Admin publish only stages recipients; Broadcast is what sets
+// squadhire_synced_at. Recalling an unsynced published card used to
+// CREATE the mirror on Profiles (first ingest), which fan-out /
+// WhatsApp'd matches — the opposite of a takedown.
+//
 // Historically this POSTed to a /cards/recall side-channel that
 // Profiles never implemented; the archived re-delivery is the real
 // contract (same path archive/cancel already use).
@@ -2236,6 +2242,16 @@ export async function notifySquadhireOfFreshBroadcast(
 
 export async function notifySquadhireOfCardRecall(cardId: string): Promise<void> {
   try {
+    const { data: syncState } = await supabaseAdmin
+      .from('subscription_cards')
+      .select('squadhire_synced_at')
+      .eq('id', cardId)
+      .maybeSingle();
+    if (!syncState?.squadhire_synced_at) {
+      console.warn('[squadhire-webhook] card-recall skipped: no mirror', { cardId });
+      return;
+    }
+
     const payload = await buildSquadhirePayloadForCard(cardId);
     if (!payload) {
       // No mirror to take down (never published, no categories, no tiers).
