@@ -92,7 +92,13 @@ const nextConfig = {
     externalDir: true,
   },
 
-  webpack: (config) => {
+  webpack: (config, { dev }) => {
+    // Dev-only: the webpack filesystem cache under web/.next keeps corrupting
+    // (ENOENT on *.pack.gz → missing CSS chunks → unstyled pages and
+    // `__webpack_modules__ is not a function` overlays). In-memory caching is
+    // marginally slower on boot but doesn't rot. Production builds keep the
+    // default filesystem cache.
+    if (dev) config.cache = false;
     config.resolve.alias = {
       ...config.resolve.alias,
       // Two source roots for `@`, tried in order. web/src always wins, so no

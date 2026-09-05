@@ -33,6 +33,20 @@ router.get('/opportunities', async (req: Request, res: Response) => {
 });
 
 const respondSchema = z.object({ action: z.enum(['accept', 'reject']) });
+const offerAmountSchema = z.object({
+  amount: z.number().positive(),
+  currency: z.string().trim().min(1).max(8).optional(),
+  period: z.enum(['project', 'per_month', 'per_week', 'per_day', 'per_hour']).optional(),
+});
+const submitOfferSchema = z.object({
+  amount: offerAmountSchema,
+  terms: z.record(z.unknown()).optional(),
+  note: z.string().trim().max(2000).optional(),
+});
+const offerRespondSchema = z.object({
+  action: z.enum(['accept', 'decline', 'withdraw']),
+  note: z.string().trim().max(2000).optional(),
+});
 
 router.patch('/opportunities/:recipientId/respond', async (req: Request, res: Response) => {
   if (!req.userEmail) {
@@ -65,6 +79,72 @@ router.patch('/opportunities/:recipientId/respond', async (req: Request, res: Re
     });
   }
 });
+
+router.get('/opportunities/:recipientId/offer', async (req: Request, res: Response) => {
+  if (!req.userEmail) {
+    res.status(400).json({ success: false, error: 'Your account has no email address.' });
+    return;
+  }
+  try {
+    const path = `/api/integrations/squadhub/talent/workspace/cards/${encodeURIComponent(req.params.recipientId as string)}/offer`;
+    const url = new URL(squadhireUrl(path));
+    url.searchParams.set('email', req.userEmail);
+    const upstream = await fetch(url, {
+      headers: signedHeaders(),
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+    });
+    const body = await readJson(upstream);
+    if (!upstream.ok) throw upstreamError(upstream.status, body);
+    res.json(body);
+  } catch (err: any) {
+    console.error('[discover-partner] offer fetch failed:', err?.message);
+    res.status(err?.status || 502).json({ success: false, error: err?.message || 'Could not load offer activity.' });
+  }
+});
+
+router.post('/opportunities/:recipientId/offer', async (req: Request, res: Response) => {
+  if (!req.userEmail) {
+    res.status(400).json({ success: false, error: 'Your account has no email address.' });
+    return;
+  }
+  const parsed = submitOfferSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ success: false, error: parsed.error.errors[0].message });
+    return;
+  }
+  await proxyOfferWrite(req, res, '/offer', { email: req.userEmail, ...parsed.data });
+});
+
+router.post('/opportunities/:recipientId/offer/respond', async (req: Request, res: Response) => {
+  if (!req.userEmail) {
+    res.status(400).json({ success: false, error: 'Your account has no email address.' });
+    return;
+  }
+  const parsed = offerRespondSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ success: false, error: parsed.error.errors[0].message });
+    return;
+  }
+  await proxyOfferWrite(req, res, '/offer/respond', { email: req.userEmail, ...parsed.data });
+});
+
+async function proxyOfferWrite(req: Request, res: Response, suffix: string, body: Record<string, unknown>) {
+  try {
+    const path = `/api/integrations/squadhub/talent/workspace/cards/${encodeURIComponent(req.params.recipientId as string)}${suffix}`;
+    const upstream = await fetch(squadhireUrl(path), {
+      method: 'POST',
+      headers: signedHeaders(),
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+    });
+    const responseBody = await readJson(upstream);
+    if (!upstream.ok) throw upstreamError(upstream.status, responseBody);
+    res.json(responseBody);
+  } catch (err: any) {
+    console.error('[discover-partner] offer action failed:', err?.message);
+    res.status(err?.status || 502).json({ success: false, error: err?.message || 'Could not save the offer.' });
+  }
+}
 
 async function fetchCanonicalCards(email: string, cardType: typeof productTypes[number]) {
   const url = new URL(squadhireUrl('/api/integrations/squadhub/talent/workspace/cards'));
@@ -152,6 +232,9 @@ function adaptCanonicalCard(item: any, partnerId: string) {
         start_date: assignment.start_date || content.start_date || null,
         deadline: assignment.deadline || content.deadline || null,
       } : null,
+      source_content: content,
+      job_profile_id: item.job_profile_id || null,
+      funnel_stage: item.funnel_stage || null,
       submission: {
         business_name: content.brand_name || content.business_name || null,
       },
