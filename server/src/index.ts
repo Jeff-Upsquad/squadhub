@@ -64,6 +64,7 @@ import subscriptionCardsAdminOffersRoutes from './routes/subscription-cards-admi
 import subscriptionCardsAdminClientViewRoutes from './routes/subscription-cards-admin-client-view';
 import subscriptionCardsPartnerRoutes from './routes/subscription-cards-partner';
 import discoverPartnerRoutes from './routes/discover-partner';
+import partnerTalentRoutes from './routes/partner-talent';
 import subscriptionCardsLinkingRoutes from './routes/subscription-cards-linking';
 import subscriptionsAdminRoutes from './routes/subscriptions-admin';
 import assignmentCatalogAdminRoutes from './routes/assignments-admin';
@@ -227,6 +228,7 @@ app.use('/admin', subscriptionCardsAdminSelectRoutes);
 app.use('/admin', subscriptionCardsLinkingRoutes);
 app.use('/partner/opportunities', subscriptionCardsPartnerRoutes);
 app.use('/partner/discover', discoverPartnerRoutes);
+app.use('/partner/talent', partnerTalentRoutes);
 app.use('/admin/subscriptions', subscriptionsAdminRoutes);
 app.use('/admin/assignment-catalog', assignmentCatalogAdminRoutes);
 app.use('/admin/subscription-assignments', subscriptionAssignmentsAdminRoutes);
