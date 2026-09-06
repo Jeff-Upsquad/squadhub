@@ -901,17 +901,17 @@ export function stageFor(recipient: SubscriptionCardRecipient): StageTab {
   return recipient.status === 'pending' ? 'pending' : 'responded';
 }
 
-function requestTitle(card: OpportunityCard) {
+export function requestTitle(card: OpportunityCard) {
   return card.submission?.business_name || card.brand_name || (card.card_type === 'assignment' ? 'New assignment' : card.card_type === 'hiring' ? 'New job opening' : 'New subscription');
 }
-function requestMeta(card: OpportunityCard) {
+export function requestMeta(card: OpportunityCard) {
   return [card.business_nature, planLabel(card)].filter(Boolean).join(' · ');
 }
 function planLabel(card: OpportunityCard) {
   const plan = card.submission_subscription?.plan;
   return [plan?.plan, plan?.tier].filter(Boolean).join(' · ') || null;
 }
-function priceLabel(card: OpportunityCard) {
+export function priceLabel(card: OpportunityCard) {
   const amount = card.partner_price_override ?? card.proposed_price;
   if (amount == null) return null;
   return `₹${Number(amount).toLocaleString('en-IN')}${card.card_type === 'assignment' ? ' / project' : ' / month'}`;

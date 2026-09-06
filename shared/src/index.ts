@@ -2677,6 +2677,12 @@ export interface SubscriptionCardRecipient {
   status: RecipientStatus;
   responded_at: string | null;
   created_at: string;
+  /** Canonical business-side funnel state, when supplied by SquadHire. */
+  business_review_status?: 'shortlisted' | 'rejected' | null;
+  selected_at?: string | null;
+  passed_over_at?: string | null;
+  /** The partner's answer to the two high-attention in-app prompts. */
+  notification_responses?: Partial<Record<'shortlist' | 'selection', 'confirm' | 'decline'>>;
   // Joined
   card?: SubscriptionCard;
 }

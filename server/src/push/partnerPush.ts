@@ -48,6 +48,18 @@ export async function sendPartnerPush(notification: PartnerNotification): Promis
     // Thread root id when the message is a reply, so the app can deep-link the
     // tap straight to the thread instead of the parent conversation.
     parent_message_id: asStr(meta.parent_message_id),
+    // Opportunity presentation fields used by the partner app's shortlist and
+    // selection surfaces. Empty values are harmless for older notification rows.
+    notification_kind: asStr(meta.notification_kind) || notification.reference_type || '',
+    card_type: asStr(meta.card_type),
+    card_title: asStr(meta.card_title),
+    business_name: asStr(meta.business_name),
+    plan_name: asStr(meta.plan_name),
+    service_type: asStr(meta.service_type),
+    commitment_label: asStr(meta.commitment_label),
+    price_label: asStr(meta.price_label),
+    route: asStr(meta.route),
+    link_url: asStr(meta.link_url),
   };
 
   try {

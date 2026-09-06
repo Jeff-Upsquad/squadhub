@@ -3,6 +3,7 @@
 import { useState, ReactNode } from 'react';
 import MobileChat from './MobileChat';
 import TalentHomeView from './TalentHomeView';
+import TalentNotificationsView, { TalentNotificationPrompts, useOpportunityNotifications } from './TalentNotifications';
 import type { Channel, DmConversation } from '@squadhub/shared';
 
 // ── Icons (copied from TalentBottomNav) ──────────────────────────────────
@@ -221,15 +222,6 @@ function TalentChatView({ channels, dms, meId, supportChannelId, supportUnread, 
   );
 }
 
-function TalentNotificationsView() {
-  const src = `${TALENT_WEB_BASE}/talent/notifications?in_app=1`;
-  return (
-    <div className="flex h-full min-h-0 flex-col bg-white">
-      <iframe src={src} title="Notifications" className="block h-[calc(100dvh-96px)] min-h-[520px] w-full flex-1 border-0" loading="lazy" />
-    </div>
-  );
-}
-
 interface TalentShellProps {
   channels: Channel[];
   dms: DmConversation[];
@@ -241,9 +233,15 @@ interface TalentShellProps {
 
 export default function TalentShell({ channels, dms, meId, supportChannelId, supportUnread, onOpenChannel }: TalentShellProps) {
   const [tab, setTab] = useState<TalentTab>('home');
+  const opportunityNotifications = useOpportunityNotifications();
+  const normalNotificationCount = (opportunityNotifications.data || []).filter((item) => {
+    const card = item.card as any;
+    return item.status === 'pending' && !item.business_review_status && !item.selected_at && !card?.funnel_stage;
+  }).length;
 
   return (
     <div className="flex flex-1 flex-col min-h-0 bg-[#F5F5F6]">
+      <TalentNotificationPrompts />
       <div className="flex-1 overflow-y-auto min-h-0">
         {tab === 'home' && <TalentHomeView />}
         {tab === 'chatroom' && (
@@ -264,7 +262,7 @@ export default function TalentShell({ channels, dms, meId, supportChannelId, sup
           </div>
         )}
       </div>
-      <TalentBottomNav active={tab} onChange={setTab} />
+      <TalentBottomNav active={tab} onChange={setTab} unreadNotifications={normalNotificationCount} />
     </div>
   );
 }
