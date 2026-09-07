@@ -75,6 +75,9 @@ const nextConfig = {
       { source: '/notifications/:path*', destination: `${API_URL}/notifications/:path*` },
       { source: '/push/:path*', destination: `${API_URL}/push/:path*` },
       { source: '/lms/:path*', destination: `${API_URL}/lms/:path*` },
+      // SOP enforcement (rules/flags/strikes). Without this, Next serves HTML 404
+      // and Save rule shows axios's "Request failed with status code 404".
+      { source: '/sop-breaches/:path*', destination: `${API_URL}/sop-breaches/:path*` },
       { source: '/meetings/:path*', destination: `${API_URL}/meetings/:path*` },
       { source: '/meeting-events/:path*', destination: `${API_URL}/meeting-events/:path*` },
       { source: '/profile-access/:path*', destination: `${API_URL}/profile-access/:path*` },
