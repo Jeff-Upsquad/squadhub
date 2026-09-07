@@ -926,7 +926,7 @@ export default function MainLayout() {
   // a Squad Clip resumes instead of restarting). Only the active tab is shown;
   // the rest are kept mounted but display:none. Navigation/mutations still flow
   // through the global stores, which always mirror the active tab.
-  const renderChat = (snap: TabSnapshot) => {
+  const renderChat = (snap: TabSnapshot, active = true) => {
     const channelId = snap.channelId;
     const kind = snap.channelKind;
     const isDm = kind === 'dm';
@@ -1028,7 +1028,7 @@ export default function MainLayout() {
         <div className="flex flex-1 overflow-hidden">
           {channelId ? (
             <div className="flex-1 flex flex-col overflow-hidden">
-              <ChatPanel channelId={channelId} kind={kind} />
+              <ChatPanel channelId={channelId} kind={kind} active={active} />
             </div>
           ) : (
             <div className="flex flex-1 items-center justify-center text-sm text-foreground-dim">
@@ -1105,7 +1105,7 @@ export default function MainLayout() {
       if (snap.channelId && snap.channelId === supportChannelId) {
         return <SupportChannelView workspaceId={currentWorkspace?.id ?? null} />;
       }
-      return renderChat(snap);
+      return renderChat(snap, active);
     }
     if (hv === 'tasks') {
       if (snap.designFolderId) return <ClientDesignDashboard folderId={snap.designFolderId} />;
