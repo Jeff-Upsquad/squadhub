@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { requireAuth } from '../middleware/auth';
 import { requireAdmin } from '../middleware/admin';
 import { supabaseAdmin } from '../supabase';
+import { getItemAccess, meetsAccess } from '../services/lmsAccess';
 
 const router = Router();
 
@@ -37,6 +38,38 @@ async function tableExists(table: string): Promise<boolean> {
   // PGRST205 = table not found
   if ((error as any).code === 'PGRST205' || error.message.includes('does not exist')) return false;
   return true;
+}
+
+/** Platform admin OR per-document LMS admin. */
+async function requireDocumentAdmin(itemId: string, userId: string, res: Response): Promise<boolean> {
+  const level = await getItemAccess(itemId, userId);
+  if (!meetsAccess(level, 'admin')) {
+    res.status(403).json({ success: false, error: 'Admin access required for this document' });
+    return false;
+  }
+  return true;
+}
+
+/** Live SOP only — drafts/clones cannot own enforcement rules. */
+async function liveSopItemId(itemId: string, res: Response): Promise<string | null> {
+  const { data: item } = await supabaseAdmin
+    .from('lms_items')
+    .select('id, origin_item_id, track')
+    .eq('id', itemId)
+    .maybeSingle();
+  if (!item) {
+    res.status(404).json({ success: false, error: 'Document not found' });
+    return null;
+  }
+  if ((item as any).origin_item_id) {
+    res.status(400).json({ success: false, error: 'Set enforcement on the published SOP, not a draft' });
+    return null;
+  }
+  if ((item as any).track !== 'sop') {
+    res.status(400).json({ success: false, error: 'Enforcement rules can only be set on SOPs' });
+    return null;
+  }
+  return (item as any).id as string;
 }
 
 // ============================================================
@@ -117,26 +150,56 @@ const ruleSchema = z.object({
   item_id: z.string().uuid(),
   lesson_id: z.string().uuid().nullable().optional(),
   severity: z.enum(['low', 'medium', 'high']).default('medium'),
-  window_value: z.number().int().min(1).max(999).default(30),
+  window_value: z.coerce.number().int().min(1).max(999).default(30),
   window_unit: z.enum(['minute', 'hour', 'day', 'week', 'month']).default('day'),
-  flag_threshold: z.number().int().min(1).max(100).default(3),
-  strike_points: z.number().int().min(0).max(100).default(1),
+  flag_threshold: z.coerce.number().int().min(1).max(100).default(3),
+  // Fractional points are allowed (e.g. 0.5 for a low-severity page).
+  strike_points: z.coerce.number().min(0).max(100).default(1),
   is_active: z.boolean().optional(),
 });
 
-router.put('/rules', requireAdmin, async (req: Request, res: Response) => {
+function roundPoints(n: number): number {
+  return Math.round(n * 100) / 100;
+}
+
+function zodMessage(err: z.ZodError): string {
+  const issue = err.issues?.[0] || (err as any).errors?.[0];
+  return issue?.message || 'Invalid rule';
+}
+
+router.put('/rules', async (req: Request, res: Response) => {
   try {
     const body = ruleSchema.parse(req.body);
+    const liveId = await liveSopItemId(body.item_id, res);
+    if (!liveId) return;
+    if (!(await requireDocumentAdmin(liveId, req.userId!, res))) return;
+
+    const lessonId = body.lesson_id || null;
+    if (lessonId) {
+      const { data: lesson } = await supabaseAdmin
+        .from('lms_lessons')
+        .select('id, item_id')
+        .eq('id', lessonId)
+        .maybeSingle();
+      if (!lesson || (lesson as any).item_id !== liveId) {
+        res.status(400).json({ success: false, error: 'Page does not belong to this SOP' });
+        return;
+      }
+    }
+
+    const strikePoints = roundPoints(body.strike_points);
     const hasTable = await tableExists('sop_enforcement_rules');
     if (!hasTable) {
-      const key = `${body.item_id}::${body.lesson_id || 'item'}`;
+      const key = `${liveId}::${lessonId || 'item'}`;
       const existing = memRules.get(key);
       const rule = {
         id: existing?.id || `mem-${Date.now()}`,
         ...body,
-        lesson_id: body.lesson_id || null,
+        item_id: liveId,
+        lesson_id: lessonId,
+        strike_points: strikePoints,
         is_active: body.is_active ?? true,
-        created_by: req.userId!,
+        created_by: existing?.created_by || req.userId!,
         created_at: existing?.created_at || new Date().toISOString(),
         updated_at: new Date().toISOString(),
       };
@@ -145,40 +208,67 @@ router.put('/rules', requireAdmin, async (req: Request, res: Response) => {
       return;
     }
 
-    const { data, error } = await supabaseAdmin
+    // Lookup + update/insert so NULL lesson_id (top-page rule) still unique-matches.
+    // ON CONFLICT (item_id, lesson_id) never matches NULL = NULL in Postgres.
+    let find = supabaseAdmin
       .from('sop_enforcement_rules')
-      .upsert({
-        item_id: body.item_id,
-        lesson_id: body.lesson_id || null,
-        severity: body.severity,
-        window_value: body.window_value,
-        window_unit: body.window_unit,
-        flag_threshold: body.flag_threshold,
-        strike_points: body.strike_points,
-        is_active: body.is_active ?? true,
-        created_by: req.userId!,
-        updated_at: new Date().toISOString(),
-      }, { onConflict: 'item_id,lesson_id' })
-      .select()
-      .single();
+      .select('id')
+      .eq('item_id', liveId)
+      .limit(1);
+    find = lessonId ? find.eq('lesson_id', lessonId) : find.is('lesson_id', null);
+    const { data: existingRows, error: findErr } = await find;
+    if (findErr) { res.status(500).json({ success: false, error: findErr.message }); return; }
+    const existingId = existingRows?.[0]?.id as string | undefined;
+
+    const payload = {
+      item_id: liveId,
+      lesson_id: lessonId,
+      severity: body.severity,
+      window_value: body.window_value,
+      window_unit: body.window_unit,
+      flag_threshold: body.flag_threshold,
+      strike_points: strikePoints,
+      is_active: body.is_active ?? true,
+      updated_at: new Date().toISOString(),
+    };
+
+    const query = existingId
+      ? supabaseAdmin.from('sop_enforcement_rules').update(payload).eq('id', existingId)
+      : supabaseAdmin.from('sop_enforcement_rules').insert({ ...payload, created_by: req.userId! });
+
+    const { data, error } = await query.select().single();
     if (error) { res.status(500).json({ success: false, error: error.message }); return; }
     res.json({ success: true, data });
   } catch (err) {
-    if (err instanceof z.ZodError) { res.status(400).json({ success: false, error: err.errors[0].message }); return; }
+    if (err instanceof z.ZodError) { res.status(400).json({ success: false, error: zodMessage(err) }); return; }
     console.error('Upsert SOP rule error:', err);
     res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });
 
 // DELETE /sop-breaches/rules/:id
-router.delete('/rules/:id', requireAdmin, async (req: Request, res: Response) => {
+router.delete('/rules/:id', async (req: Request, res: Response) => {
   try {
     const hasTable = await tableExists('sop_enforcement_rules');
     if (!hasTable) {
-      for (const [k, v] of memRules.entries()) if (v.id === req.params.id) memRules.delete(k);
+      let foundKey: string | null = null;
+      let foundItemId: string | null = null;
+      for (const [k, v] of memRules.entries()) {
+        if (v.id === req.params.id) { foundKey = k; foundItemId = v.item_id; break; }
+      }
+      if (!foundKey || !foundItemId) { res.status(404).json({ success: false, error: 'Rule not found' }); return; }
+      if (!(await requireDocumentAdmin(foundItemId, req.userId!, res))) return;
+      memRules.delete(foundKey);
       res.json({ success: true });
       return;
     }
+    const { data: rule } = await supabaseAdmin
+      .from('sop_enforcement_rules')
+      .select('id, item_id')
+      .eq('id', req.params.id)
+      .maybeSingle();
+    if (!rule) { res.status(404).json({ success: false, error: 'Rule not found' }); return; }
+    if (!(await requireDocumentAdmin((rule as any).item_id, req.userId!, res))) return;
     const { error } = await supabaseAdmin.from('sop_enforcement_rules').delete().eq('id', req.params.id);
     if (error) { res.status(500).json({ success: false, error: error.message }); return; }
     res.json({ success: true });
@@ -574,7 +664,7 @@ router.get('/admin/summary', requireAdmin, async (req: Request, res: Response) =
       }
       for (const s of memStrikes) {
         const cur = byUser.get(s.user_id) || { flags: 0, strikes: 0, points: 0 };
-        cur.strikes++; cur.points += s.points;
+        cur.strikes++; cur.points += Number(s.points) || 0;
         byUser.set(s.user_id, cur);
       }
       const users = Array.from(byUser.entries()).map(([user_id, v]) => ({ user_id, ...v }));
@@ -590,7 +680,7 @@ router.get('/admin/summary', requireAdmin, async (req: Request, res: Response) =
     }
     for (const s of strikes || []) {
       const cur = byUser.get((s as any).user_id) || { flags: 0, strikes: 0, points: 0 };
-      cur.strikes++; cur.points += (s as any).points;
+      cur.strikes++; cur.points += Number((s as any).points) || 0;
       byUser.set((s as any).user_id, cur);
     }
     // enrich with user display

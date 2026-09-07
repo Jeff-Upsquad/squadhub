@@ -8,6 +8,7 @@ import { useCollabFull, useEditorMutations, useSubmitReview, useDiscardDraft, us
 import NotionEditor from './NotionEditor';
 import SendTaskModal from './SendTaskModal';
 import TaskSendsPanel from './TaskSendsPanel';
+import SopEnforcementEditor from '../../../components/sop/SopEnforcementEditor';
 
 type Props = {
   draftItemId: string;
@@ -31,6 +32,7 @@ export default function LmsEditor({ draftItemId, isClone, onExit, onSubmitted }:
   const [activeLessonId, setActiveLessonId] = useState<string | null>(null);
   const [sendOpen, setSendOpen] = useState(false);
   const [rosterOpen, setRosterOpen] = useState(false);
+  const [enforcementOpen, setEnforcementOpen] = useState(false);
 
   const lessons = useMemo(() => item?.lessons || [], [item]);
   const isCourse = item?.kind === 'course';
@@ -83,11 +85,19 @@ export default function LmsEditor({ draftItemId, isClone, onExit, onSubmitted }:
           {!isClone && (
             <>
               <button
-                onClick={() => setRosterOpen((o) => !o)}
+                onClick={() => { setEnforcementOpen(false); setRosterOpen((o) => !o); }}
                 className="rounded-md border border-[var(--sh-hair)] bg-white px-2.5 py-1 text-[12px] font-medium text-[var(--sh-ink-2)] hover:bg-black/5"
               >
                 Roster
               </button>
+              {isSop && (
+                <button
+                  onClick={() => { setRosterOpen(false); setEnforcementOpen((o) => !o); }}
+                  className="rounded-md border border-[var(--sh-hair)] bg-white px-2.5 py-1 text-[12px] font-medium text-[var(--sh-ink-2)] hover:bg-black/5"
+                >
+                  Enforcement
+                </button>
+              )}
               <button
                 onClick={() => setSendOpen(true)}
                 className="rounded-md border border-[var(--sh-hair)] bg-white px-2.5 py-1 text-[12px] font-medium text-[var(--sh-ink-2)] hover:bg-black/5"
@@ -138,6 +148,17 @@ export default function LmsEditor({ draftItemId, isClone, onExit, onSubmitted }:
             <button onClick={() => setRosterOpen(false)} className="text-[12px] text-[var(--sh-ink-3)] hover:text-[var(--sh-ink)]">Close</button>
           </div>
           <TaskSendsPanel itemId={item.id} />
+        </div>
+      )}
+
+      {enforcementOpen && !isClone && isSop && (
+        <div className="max-h-[55vh] overflow-y-auto border-b border-[var(--sh-hair)] bg-[var(--surface)]">
+          <SopEnforcementEditor
+            itemId={item.id}
+            lessons={lessons}
+            initialLessonId={activeLessonId}
+            onClose={() => setEnforcementOpen(false)}
+          />
         </div>
       )}
 

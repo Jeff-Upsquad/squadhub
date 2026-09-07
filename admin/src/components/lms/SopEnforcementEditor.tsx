@@ -55,6 +55,11 @@ export default function SopEnforcementEditor({ itemId, lessons }: { itemId: stri
     });
   };
 
+  const saveError =
+    (upsert.error as any)?.response?.data?.error
+    || (upsert.error as any)?.message
+    || 'Failed to save rule';
+
   const severityColor = (s: string) => s === 'high' ? 'bg-red-500' : s === 'medium' ? 'bg-amber-500' : 'bg-emerald-500';
 
   return (
@@ -107,7 +112,7 @@ export default function SopEnforcementEditor({ itemId, lessons }: { itemId: stri
               </label>
               <label>
                 <span className="mb-1 block text-[11px] font-medium text-foreground-dim">Strike points</span>
-                <input type="number" min={0} max={100} value={form.strike_points} onChange={(e) => setForm((f) => ({ ...f, strike_points: Number(e.target.value) }))} className="w-full rounded-md border border-divider bg-surface px-2 py-1.5 text-[12px]" />
+                <input type="number" min={0} max={100} step={0.1} value={form.strike_points} onChange={(e) => setForm((f) => ({ ...f, strike_points: Number(e.target.value) }))} className="w-full rounded-md border border-divider bg-surface px-2 py-1.5 text-[12px]" />
               </label>
               <label>
                 <span className="mb-1 block text-[11px] font-medium text-foreground-dim">Window value</span>
@@ -131,7 +136,7 @@ export default function SopEnforcementEditor({ itemId, lessons }: { itemId: stri
             <button onClick={handleSave} disabled={upsert.isPending} className="mt-3 w-full rounded-md bg-ink px-3 py-2 text-[12px] font-semibold text-white hover:bg-ink-hover disabled:opacity-50">
               {upsert.isPending ? 'Saving…' : 'Save rule'}
             </button>
-            {upsert.isError && <p className="mt-2 text-[11px] text-red-600">{(upsert.error as any)?.response?.data?.error || 'Failed'}</p>}
+            {upsert.isError && <p className="mt-2 text-[11px] text-red-600">{saveError}</p>}
           </div>
         </>
       )}

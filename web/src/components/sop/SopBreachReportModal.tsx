@@ -48,7 +48,7 @@ export default function SopBreachReportModal({ targetUserId, targetUserName, sou
             <div className="text-[12px] text-[var(--sh-ink-3)]">Loading SOPs…</div>
           ) : !rules || rules.length === 0 ? (
             <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-[12px] text-amber-800">
-              No SOP enforcement rules configured yet. Ask an admin to set up rules for an SOP page first (severity, time window, threshold).
+              No SOP enforcement rules configured yet. A document admin can add them from Resources on the SOP (Enforcement).
             </div>
           ) : (
             <select
