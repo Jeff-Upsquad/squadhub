@@ -7,6 +7,7 @@ import { useStartEditDraft } from '../../../hooks/useLmsCollab';
 import BlockRenderer from './blocks/BlockRenderer';
 import LmsEditor from './LmsEditor';
 import LmsCommentsPanel from './LmsCommentsPanel';
+import SopEnforcementEditor from '../../../components/sop/SopEnforcementEditor';
 
 const RANK: Record<LmsAccessLevel, number> = { viewer: 1, commenter: 2, contributor: 3, admin: 4 };
 const can = (a: LmsAccessLevel | undefined, min: LmsAccessLevel) => !!a && RANK[a] >= RANK[min];
@@ -58,6 +59,7 @@ export default function LearningItemView({
   const [activeLessonId, setActiveLessonId] = useState<string | null>(initialLessonId ?? null);
   const [editing, setEditing] = useState<{ draftItemId: string; isClone: boolean } | null>(null);
   const [showComments, setShowComments] = useState(false);
+  const [showEnforcement, setShowEnforcement] = useState(false);
   const [submittedNote, setSubmittedNote] = useState(false);
   const contentRef = useRef<HTMLElement>(null);
   const pendingSectionRef = useRef<string | null>(initialSectionAnchor ?? null);
@@ -188,8 +190,13 @@ export default function LearningItemView({
             </>
           )}
           {can(access, 'commenter') && (
-            <button onClick={() => setShowComments(true)} className="rounded-[6px] border border-[var(--sh-hair)] bg-[var(--surface)] px-2.5 py-1 text-[12px] text-[var(--sh-ink-2)] hover:bg-[var(--sh-hair-3)]">
+            <button onClick={() => { setShowEnforcement(false); setShowComments(true); }} className="rounded-[6px] border border-[var(--sh-hair)] bg-[var(--surface)] px-2.5 py-1 text-[12px] text-[var(--sh-ink-2)] hover:bg-[var(--sh-hair-3)]">
               Comments
+            </button>
+          )}
+          {isSop && access === 'admin' && (
+            <button onClick={() => { setShowComments(false); setShowEnforcement(true); }} className="rounded-[6px] border border-[var(--sh-hair)] bg-[var(--surface)] px-2.5 py-1 text-[12px] text-[var(--sh-ink-2)] hover:bg-[var(--sh-hair-3)]">
+              Enforcement
             </button>
           )}
           {can(access, 'contributor') && (
@@ -272,6 +279,20 @@ export default function LearningItemView({
           <div className="absolute inset-0 bg-black/20" />
           <div className="relative z-10 h-full w-[340px] max-w-[85vw] border-l border-[var(--sh-hair)] bg-[var(--surface)] shadow-xl" onClick={(e) => e.stopPropagation()}>
             <LmsCommentsPanel itemId={item.id} access={access!} />
+          </div>
+        </div>
+      )}
+
+      {showEnforcement && isSop && access === 'admin' && (
+        <div className="fixed inset-0 z-40 flex justify-end" onClick={() => setShowEnforcement(false)}>
+          <div className="absolute inset-0 bg-black/20" />
+          <div className="relative z-10 h-full w-[400px] max-w-[85vw] border-l border-[var(--sh-hair)] bg-[var(--surface)] shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <SopEnforcementEditor
+              itemId={item.id}
+              lessons={lessons}
+              initialLessonId={activeLessonId}
+              onClose={() => setShowEnforcement(false)}
+            />
           </div>
         </div>
       )}
