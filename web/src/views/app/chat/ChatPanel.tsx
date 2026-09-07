@@ -118,11 +118,12 @@ function notifMatchesConversation(
     : n.metadata?.channel_id === channelId;
 }
 
-// A mounted chat is not necessarily being viewed: browsers keep the active
-// channel mounted while its tab or window is in the background. Only advance
-// read state when the user can actually see and interact with the conversation.
-function isConversationActivelyViewed(): boolean {
-  return document.visibilityState === 'visible' && document.hasFocus();
+// A mounted chat is not necessarily being viewed. Keep-alive in-app tabs leave
+// ChatPanel mounted behind display:none, and browsers keep a channel mounted
+// while its window is in the background. Only advance read state when this
+// pane is the active tab *and* the document is visible and focused.
+function isConversationActivelyViewed(paneActive: boolean): boolean {
+  return paneActive && document.visibilityState === 'visible' && document.hasFocus();
 }
 
 // ---- Format date for separator ----
@@ -146,10 +147,12 @@ export default function ChatPanel({
   channelId,
   kind = 'channel',
   soloGuard = false,
+  active = true,
 }: {
   channelId: string;
   kind?: ChatKind;
   soloGuard?: boolean;
+  active?: boolean;
 }) {
   const queryClient = useQueryClient();
   const activeThreadParentId = useWorkspaceStore((s) => s.activeThreadParentId);
@@ -303,21 +306,23 @@ export default function ChatPanel({
       }
       queryClient.invalidateQueries({ queryKey });
       // A message arriving in the conversation already on screen is read on
-      // sight — but a background tab merely has the conversation mounted and
-      // must retain its unread state until the user returns.
-      if (isConversationActivelyViewed()) markChatRead();
+      // sight — but a hidden keep-alive tab or background browser window
+      // merely has the conversation mounted and must retain its unread state
+      // until the user returns.
+      if (isConversationActivelyViewed(active)) markChatRead();
     };
     // Edits/deletes/reactions send partial payloads, so reconcile via refetch.
     const handleMessageMutated = () => {
       queryClient.invalidateQueries({ queryKey });
     };
     // Clear a matching notification only while the conversation is genuinely
-    // visible. A background tab may still have this ChatPanel mounted and must
-    // not silently consume the alert.
+    // visible. A keep-alive tab (display:none) or background browser window
+    // may still have this ChatPanel mounted and must not silently consume
+    // the alert.
     const handleNotification = (n: { metadata?: Record<string, unknown> | null }) => {
       if (
         notifMatchesConversation(n, channelId, kind) &&
-        isConversationActivelyViewed()
+        isConversationActivelyViewed(active)
       ) {
         clearConversationNotifications();
       }
@@ -338,7 +343,7 @@ export default function ChatPanel({
       socket.off('message_deleted', handleMessageMutated);
       socket.off('new_notification', handleNotification);
     };
-  }, [channelId, kind, queryClient, queryKey, clearConversationNotifications, markChatRead]);
+  }, [channelId, kind, queryClient, queryKey, clearConversationNotifications, markChatRead, active]);
 
   useEffect(() => () => {
     arrivalTimersRef.current.forEach(clearTimeout);
@@ -347,7 +352,8 @@ export default function ChatPanel({
 
   // Clear accumulated read state when this conversation becomes the active,
   // visible browser view. Listening for both focus and visibility covers
-  // switching back from another window, another tab, and an installed PWA.
+  // switching back from another window, another browser tab, and an installed
+  // PWA. `active` covers switching back from another in-app keep-alive tab.
   useEffect(() => {
     if (!channelId) return;
 
@@ -356,7 +362,7 @@ export default function ChatPanel({
       if (frame !== null) window.cancelAnimationFrame(frame);
       frame = window.requestAnimationFrame(() => {
         frame = null;
-        if (!isConversationActivelyViewed()) return;
+        if (!isConversationActivelyViewed(active)) return;
 
         // Advance the chat read mark on every genuine view — even when there
         // are no inbox notifications to clear.
@@ -380,7 +386,7 @@ export default function ChatPanel({
       window.removeEventListener('focus', syncVisibleConversation);
       document.removeEventListener('visibilitychange', syncVisibleConversation);
     };
-  }, [channelId, kind, queryClient, clearConversationNotifications, markChatRead]);
+  }, [channelId, kind, queryClient, clearConversationNotifications, markChatRead, active]);
 
   // Each page is oldest-first, but pages arrive newest-batch-first (page 0 is the
   // initial load, page 1 is the older batch behind it, …). Reverse the page order
