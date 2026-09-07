@@ -11,6 +11,8 @@ const TYPE_LABELS: Record<string, string> = {
   message_mention: 'Mention',
   dm_received: 'Direct Message',
   reaction_added: 'Reaction',
+  sop_flag: 'SOP flag',
+  sop_strike: 'SOP strike',
 };
 
 const recentlyShownIds = new Set<string>();

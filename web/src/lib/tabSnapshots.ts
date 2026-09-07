@@ -129,6 +129,9 @@ export function buildChatSnapshot(channelId: string, kind: ChatKind): TabSnapsho
 export function buildHomeSnapshot(homeView: HomeView = 'hub'): TabSnapshot {
   return base('home', homeView);
 }
+export function buildLearningSnapshot(): TabSnapshot {
+  return base('learning', 'hub');
+}
 
 /** True for a gesture that should open a destination in a NEW tab: ⌘/Ctrl-click or middle-click. */
 export function wantsNewTab(e: ReactMouseEvent): boolean {
