@@ -162,6 +162,26 @@ function roundPoints(n: number): number {
   return Math.round(n * 100) / 100;
 }
 
+/** Calendar-month strike-point total (IST), including strikes already saved. */
+async function monthlyStrikePoints(userId: string, hasTable: boolean): Promise<number> {
+  const now = new Date();
+  const ist = new Date(now.getTime() + 5.5 * 3600_000);
+  const monthStart = `${ist.getUTCFullYear()}-${String(ist.getUTCMonth() + 1).padStart(2, '0')}-01T00:00:00+05:30`;
+  if (!hasTable) {
+    return roundPoints(
+      memStrikes
+        .filter((s) => s.user_id === userId && s.created_at >= monthStart)
+        .reduce((sum, s) => sum + (Number(s.points) || 0), 0),
+    );
+  }
+  const { data } = await supabaseAdmin
+    .from('sop_strikes')
+    .select('points')
+    .eq('user_id', userId)
+    .gte('created_at', monthStart);
+  return roundPoints((data || []).reduce((sum, s: any) => sum + (Number(s.points) || 0), 0));
+}
+
 function zodMessage(err: z.ZodError): string {
   const issue = err.issues?.[0] || (err as any).errors?.[0];
   return issue?.message || 'Invalid rule';
@@ -419,20 +439,25 @@ router.post('/report', async (req: Request, res: Response) => {
 
     const sopLabel = lessonTitle ? `${itemTitle} › ${lessonTitle}` : itemTitle;
     const link = `/resources/${rule.item_id}${rule.lesson_id ? `?lesson=${rule.lesson_id}` : ''}`;
+    const reason = (body.reason || '').trim();
+    const pts = roundPoints(Number(rule.strike_points) || 0);
+    const monthlyPoints = await monthlyStrikePoints(body.user_id, hasTable);
+    const windowTxt = windowLabel(rule.window_value, rule.window_unit);
 
-    // Build notification for the flagged user
-    const notifTitle = isStrike
-      ? `Strike: ${sopLabel} — ${countInWindow}/${threshold} flags in ${windowLabel(rule.window_value, rule.window_unit)}`
-      : `Flag: ${sopLabel} — ${countInWindow}/${threshold} in ${windowLabel(rule.window_value, rule.window_unit)}`;
-    const notifBody = isStrike
-      ? `You received ${rule.strike_points} strike point(s) (${rule.severity} severity). Flags: ${countInWindow}/${threshold} within ${windowLabel(rule.window_value, rule.window_unit)}.`
-      : `You were flagged for breaking "${sopLabel}" (${rule.severity}). Flags: ${countInWindow}/${threshold} within ${windowLabel(rule.window_value, rule.window_unit)} — ${threshold - countInWindow} until strike (${rule.strike_points} pts).`;
+    const notifTitle = isStrike ? `SOP strike: ${sopLabel}` : `SOP flag: ${sopLabel}`;
+    const notifBody = [
+      reason ? `Reason: ${reason}` : null,
+      `Flags: ${countInWindow}/${threshold} in ${windowTxt}`,
+      isStrike
+        ? `This strike: ${pts} pt · Total this month: ${monthlyPoints} pt`
+        : `Total strike points this month: ${monthlyPoints} pt`,
+    ].filter(Boolean).join('\n');
 
     // Try to insert notification (best-effort)
     try {
       const hasNotifTable = await tableExists('notifications');
       if (hasNotifTable) {
-        await supabaseAdmin.from('notifications').insert({
+        const { data: notifRow, error: notifErr } = await supabaseAdmin.from('notifications').insert({
           user_id: body.user_id,
           type: isStrike ? 'sop_strike' : 'sop_flag',
           reference_id: isStrike ? (strike?.id || flag.id) : flag.id,
@@ -446,24 +471,29 @@ router.post('/report', async (req: Request, res: Response) => {
             lesson_id: rule.lesson_id || null,
             item_title: itemTitle,
             lesson_title: lessonTitle,
+            sop_label: sopLabel,
             severity: rule.severity,
             window_value: rule.window_value,
             window_unit: rule.window_unit,
+            window_label: windowTxt,
             flag_threshold: threshold,
-            strike_points: rule.strike_points,
+            strike_points: pts,
             flag_count: countInWindow,
+            monthly_points: monthlyPoints,
+            reason: reason || null,
             flag_id: flag.id,
             strike_id: strike?.id || null,
             sop_link: link,
           },
-        });
-
-        // Socket push
-        try {
-          const io = (req as any).app.get('io');
-          const { data: notif } = await supabaseAdmin.from('notifications').select('*').eq('user_id', body.user_id).order('created_at', { ascending: false }).limit(1).maybeSingle();
-          if (notif && io) io.to(`chat_user:${body.user_id}`).emit('new_notification', notif);
-        } catch {}
+        }).select().single();
+        if (notifErr) {
+          console.error('SOP notification insert failed:', notifErr.message);
+        } else if (notifRow) {
+          try {
+            const io = (req as any).app.get('io');
+            if (io) io.to(`chat_user:${body.user_id}`).emit('new_notification', notifRow);
+          } catch {}
+        }
       }
     } catch (e) {
       console.error('SOP notification insert failed:', e);

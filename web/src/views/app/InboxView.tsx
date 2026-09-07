@@ -9,6 +9,7 @@ import InboxMessageDetail from './inbox/InboxMessageDetail';
 import DesktopNotificationsBanner from '../../components/DesktopNotificationsBanner';
 import InstallPwaPrompt from '../../components/InstallPwaPrompt';
 import { useIsMobile } from '../../hooks/useIsMobile';
+import { openSopResource, sopTargetFromNotification } from '../../lib/openSopResource';
 
 export type Notification = {
   id: string;
@@ -25,7 +26,9 @@ export type Notification = {
     | 'dm_received'
     | 'reaction_added'
     | 'lms_assigned'
-    | 'lms_updated';
+    | 'lms_updated'
+    | 'sop_flag'
+    | 'sop_strike';
   reference_id: string;
   reference_type: string;
   actor_id: string | null;
@@ -98,6 +101,8 @@ function ctxLine(n: Notification): string {
     case 'reaction_added': return 'Reaction';
     case 'lms_assigned': return 'Learning';
     case 'lms_updated': return 'Learning';
+    case 'sop_flag': return 'SOP flag';
+    case 'sop_strike': return 'SOP strike';
     default: return n.type;
   }
 }
@@ -147,6 +152,14 @@ function CtxGlyph({ n }: { n: Notification }) {
         <path d="m4 19 8-4 8 4-8 4z" />
         <path d="M12 15V5l8 4-8 4" />
         <path d="m4 9 8-4 8 4" />
+      </svg>
+    );
+  }
+  if (n.type === 'sop_flag' || n.type === 'sop_strike') {
+    return (
+      <svg {...common}>
+        <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+        <path d="M12 9v4M12 17h.01" />
       </svg>
     );
   }
@@ -298,6 +311,11 @@ export default function InboxView({
   const openSource = (n: Notification, jump?: ChatJump) => {
     if (n.reference_type === 'task' && n.metadata?.task_id) {
       setActiveTask(n.metadata.task_id as string);
+      return;
+    }
+    const sop = sopTargetFromNotification(n);
+    if (sop) {
+      openSopResource(sop.itemId, sop.lessonId);
       return;
     }
     const target = chatTargetFor(n);
@@ -615,7 +633,7 @@ function NotifRow({
         <div className="ib-content">
           <div className="ib-from">{n.actor?.display_name || 'System'}</div>
           {action && action !== (n.body || '').trim() && <div className="ib-action">{action}</div>}
-          {n.body && <div className="ib-snip">{n.body}</div>}
+          {n.body && <div className="ib-snip" style={{ whiteSpace: 'pre-wrap' }}>{n.body}</div>}
         </div>
       </div>
       {!n.is_read && (
@@ -634,6 +652,42 @@ function NotifRow({
           </svg>
         </button>
       )}
+    </div>
+  );
+}
+
+function SopNotifFacts({ n }: { n: Notification }) {
+  const m = n.metadata || {};
+  const reason = (m.reason as string | null) || null;
+  const flags = m.flag_count;
+  const threshold = m.flag_threshold;
+  const monthly = m.monthly_points;
+  const pts = m.strike_points;
+  const windowTxt = (m.window_label as string) || null;
+  return (
+    <div style={{ margin: '0 16px 16px', display: 'grid', gap: 8 }}>
+      {reason && (
+        <div style={{ border: '1px solid var(--sh-hair)', borderRadius: 10, padding: '10px 12px', background: 'var(--sh-hair-3)' }}>
+          <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase', color: 'var(--sh-ink-3)' }}>Reason</div>
+          <div style={{ marginTop: 4, fontSize: 13.5, color: 'var(--sh-ink)', whiteSpace: 'pre-wrap' }}>{reason}</div>
+        </div>
+      )}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+        <div style={{ border: '1px solid var(--sh-hair)', borderRadius: 10, padding: '10px 12px' }}>
+          <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase', color: 'var(--sh-ink-3)' }}>Flags</div>
+          <div style={{ marginTop: 2, fontSize: 18, fontWeight: 700, color: 'var(--sh-ink)' }}>
+            {flags ?? '—'}{threshold != null ? <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--sh-ink-3)' }}> / {threshold}</span> : null}
+          </div>
+          {windowTxt && <div style={{ marginTop: 2, fontSize: 11, color: 'var(--sh-ink-3)' }}>{windowTxt}</div>}
+        </div>
+        <div style={{ border: '1px solid var(--sh-hair)', borderRadius: 10, padding: '10px 12px' }}>
+          <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase', color: 'var(--sh-ink-3)' }}>This month</div>
+          <div style={{ marginTop: 2, fontSize: 18, fontWeight: 700, color: 'var(--sh-ink)' }}>{monthly ?? 0} pt</div>
+          {n.type === 'sop_strike' && pts != null && (
+            <div style={{ marginTop: 2, fontSize: 11, color: 'var(--sh-ink-3)' }}>This strike: {pts} pt</div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
@@ -659,10 +713,13 @@ function DetailPane({ n, onOpen }: { n: Notification; onOpen: () => void }) {
           <svg width="12" height="12" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
             <path d="M5 12h14M13 6l6 6-6 6" />
           </svg>
-          Open
+          {n.type === 'sop_flag' || n.type === 'sop_strike' ? 'Open SOP' : 'Open'}
         </button>
       </div>
       <div className="th-scroll">
+        {(n.type === 'sop_flag' || n.type === 'sop_strike') && (
+          <SopNotifFacts n={n} />
+        )}
         {n.body ? (
           <div className="th-msg">
             <div
@@ -676,7 +733,7 @@ function DetailPane({ n, onOpen }: { n: Notification; onOpen: () => void }) {
                 <b>{n.actor?.display_name || 'System'}</b>
                 <span>{slackTime(n.created_at)}</span>
               </div>
-              <p style={{ margin: '2px 0 0' }}>{n.body}</p>
+              <p style={{ margin: '2px 0 0', whiteSpace: 'pre-wrap' }}>{n.body}</p>
             </div>
           </div>
         ) : (

@@ -3,8 +3,9 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import api from '../services/api';
 import { usePMStore } from '../stores/pmStore';
 import { useTabsStore } from '../stores/tabsStore';
-import { buildChatSnapshot, buildHomeSnapshot } from '../lib/tabSnapshots';
+import { buildChatSnapshot, buildHomeSnapshot, buildLearningSnapshot } from '../lib/tabSnapshots';
 import { avatarFor, chatTargetFor, type Notification } from '../views/app/InboxView';
+import { openSopResource, sopTargetFromNotification } from '../lib/openSopResource';
 
 /**
  * Floating notification panel — opened by the rail's inbox button. A compact
@@ -27,6 +28,8 @@ const ACTION_LABEL: Record<Notification['type'], string> = {
   reaction_added: 'Reacted to your message',
   lms_assigned: 'Assigned you a course',
   lms_updated: 'Updated a course',
+  sop_flag: 'Flagged you for an SOP',
+  sop_strike: 'Issued you an SOP strike',
 };
 
 // Titles read "<actor> <verb phrase> <entity>" — peel off the first two so the
@@ -187,6 +190,14 @@ export default function InboxSlider({ onClose }: { onClose: () => void }) {
       return;
     }
 
+    const sop = sopTargetFromNotification(n);
+    if (sop) {
+      openInNewTab(buildLearningSnapshot());
+      openSopResource(sop.itemId, sop.lessonId);
+      onClose();
+      return;
+    }
+
     const target = chatTargetFor(n);
     if (target) {
       openInNewTab(buildChatSnapshot(target.id, target.kind));
@@ -283,7 +294,7 @@ export default function InboxSlider({ onClose }: { onClose: () => void }) {
                         <span className="truncate">{chip}</span>
                       </div>
                     )}
-                    {n.body && <div className="mt-1 text-[13px] leading-[1.45] text-[var(--sh-ink)] line-clamp-2">{n.body}</div>}
+                    {n.body && <div className="mt-1 text-[13px] leading-[1.45] text-[var(--sh-ink)] line-clamp-3 whitespace-pre-wrap">{n.body}</div>}
                   </div>
                 </button>
               );
