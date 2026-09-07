@@ -162,24 +162,101 @@ function roundPoints(n: number): number {
   return Math.round(n * 100) / 100;
 }
 
-/** Calendar-month strike-point total (IST), including strikes already saved. */
-async function monthlyStrikePoints(userId: string, hasTable: boolean): Promise<number> {
+function istMonthStart(): string {
   const now = new Date();
   const ist = new Date(now.getTime() + 5.5 * 3600_000);
-  const monthStart = `${ist.getUTCFullYear()}-${String(ist.getUTCMonth() + 1).padStart(2, '0')}-01T00:00:00+05:30`;
+  return `${ist.getUTCFullYear()}-${String(ist.getUTCMonth() + 1).padStart(2, '0')}-01T00:00:00+05:30`;
+}
+
+/** Calendar-month strike count + points (IST), including strikes already saved. */
+async function monthlyStrikeStats(userId: string, hasTable: boolean): Promise<{ count: number; points: number }> {
+  const monthStart = istMonthStart();
   if (!hasTable) {
-    return roundPoints(
-      memStrikes
-        .filter((s) => s.user_id === userId && s.created_at >= monthStart)
-        .reduce((sum, s) => sum + (Number(s.points) || 0), 0),
-    );
+    const rows = memStrikes.filter((s) => s.user_id === userId && s.created_at >= monthStart);
+    return {
+      count: rows.length,
+      points: roundPoints(rows.reduce((sum, s) => sum + (Number(s.points) || 0), 0)),
+    };
   }
   const { data } = await supabaseAdmin
     .from('sop_strikes')
     .select('points')
     .eq('user_id', userId)
     .gte('created_at', monthStart);
-  return roundPoints((data || []).reduce((sum, s: any) => sum + (Number(s.points) || 0), 0));
+  const rows = data || [];
+  return {
+    count: rows.length,
+    points: roundPoints(rows.reduce((sum, s: any) => sum + (Number(s.points) || 0), 0)),
+  };
+}
+
+type ResolvedSource = {
+  source_kind: string;
+  source_id: string | null;
+  source_label: string;
+  channel_id: string | null;
+  dm_conversation_id: string | null;
+  message_id: string | null;
+  parent_id: string | null;
+  task_id: string | null;
+};
+
+async function resolveReportSource(kind: string | undefined, sourceId: string | undefined): Promise<ResolvedSource> {
+  const base: ResolvedSource = {
+    source_kind: kind || 'manual',
+    source_id: sourceId || null,
+    source_label: 'Reported privately',
+    channel_id: null,
+    dm_conversation_id: null,
+    message_id: null,
+    parent_id: null,
+    task_id: null,
+  };
+  if (!sourceId) return base;
+
+  if (kind === 'task') {
+    const { data } = await supabaseAdmin.from('tasks').select('id, title').eq('id', sourceId).maybeSingle();
+    return {
+      ...base,
+      task_id: sourceId,
+      source_label: (data as any)?.title ? `Task · ${(data as any).title}` : 'Task',
+    };
+  }
+
+  if (kind === 'message') {
+    const { data: msg } = await supabaseAdmin
+      .from('messages')
+      .select('id, channel_id, dm_conversation_id, parent_message_id')
+      .eq('id', sourceId)
+      .maybeSingle();
+    if (!msg) {
+      return { ...base, message_id: sourceId, source_label: 'Message' };
+    }
+    const parentId = (msg as any).parent_message_id || null;
+    if ((msg as any).channel_id) {
+      const { data: ch } = await supabaseAdmin.from('channels').select('name').eq('id', (msg as any).channel_id).maybeSingle();
+      const name = (ch as any)?.name as string | undefined;
+      return {
+        ...base,
+        message_id: (msg as any).id,
+        parent_id: parentId,
+        channel_id: (msg as any).channel_id,
+        source_label: name ? `#${name}` : 'Channel message',
+      };
+    }
+    if ((msg as any).dm_conversation_id) {
+      return {
+        ...base,
+        message_id: (msg as any).id,
+        parent_id: parentId,
+        dm_conversation_id: (msg as any).dm_conversation_id,
+        source_label: 'Direct message',
+      };
+    }
+    return { ...base, message_id: (msg as any).id, source_label: 'Message' };
+  }
+
+  return base;
 }
 
 function zodMessage(err: z.ZodError): string {
@@ -441,16 +518,16 @@ router.post('/report', async (req: Request, res: Response) => {
     const link = `/resources/${rule.item_id}${rule.lesson_id ? `?lesson=${rule.lesson_id}` : ''}`;
     const reason = (body.reason || '').trim();
     const pts = roundPoints(Number(rule.strike_points) || 0);
-    const monthlyPoints = await monthlyStrikePoints(body.user_id, hasTable);
+    const monthly = await monthlyStrikeStats(body.user_id, hasTable);
     const windowTxt = windowLabel(rule.window_value, rule.window_unit);
+    const source = await resolveReportSource(body.source_kind, body.source_id);
 
-    const notifTitle = isStrike ? `SOP strike: ${sopLabel}` : `SOP flag: ${sopLabel}`;
+    const notifTitle = isStrike ? `SOP strike · ${sopLabel}` : `SOP flag · ${sopLabel}`;
     const notifBody = [
       reason ? `Reason: ${reason}` : null,
       `Flags: ${countInWindow}/${threshold} in ${windowTxt}`,
-      isStrike
-        ? `This strike: ${pts} pt · Total this month: ${monthlyPoints} pt`
-        : `Total strike points this month: ${monthlyPoints} pt`,
+      isStrike ? `This strike: ${pts} pt` : null,
+      `${monthly.count} strike${monthly.count === 1 ? '' : 's'} this month · ${monthly.points} pt`,
     ].filter(Boolean).join('\n');
 
     // Try to insert notification (best-effort)
@@ -479,11 +556,13 @@ router.post('/report', async (req: Request, res: Response) => {
             flag_threshold: threshold,
             strike_points: pts,
             flag_count: countInWindow,
-            monthly_points: monthlyPoints,
+            monthly_points: monthly.points,
+            monthly_strikes: monthly.count,
             reason: reason || null,
             flag_id: flag.id,
             strike_id: strike?.id || null,
             sop_link: link,
+            ...source,
           },
         }).select().single();
         if (notifErr) {
