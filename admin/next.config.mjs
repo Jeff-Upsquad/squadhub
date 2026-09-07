@@ -26,6 +26,7 @@ const nextConfig = {
       // Collaborative LMS endpoints (shares/comments/review) — admins pass the
       // per-item access gate, so the admin editor reuses the same routes.
       { source: '/api/lms/:path*', destination: `${API_URL}/lms/:path*` },
+      { source: '/api/sop-breaches/:path*', destination: `${API_URL}/sop-breaches/:path*` },
       { source: '/api/users/:path*', destination: `${API_URL}/users/:path*` },
       { source: '/api/workspaces/:path*', destination: `${API_URL}/workspaces/:path*` },
       { source: '/api/health/:path*', destination: `${API_URL}/health/:path*` },
