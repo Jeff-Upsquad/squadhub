@@ -9,7 +9,8 @@ import InboxMessageDetail from './inbox/InboxMessageDetail';
 import DesktopNotificationsBanner from '../../components/DesktopNotificationsBanner';
 import InstallPwaPrompt from '../../components/InstallPwaPrompt';
 import { useIsMobile } from '../../hooks/useIsMobile';
-import { openSopResource, sopTargetFromNotification } from '../../lib/openSopResource';
+import { openSopFromNotification, openSopSource, sopSourceFromNotification, sopTargetFromNotification } from '../../lib/openSopResource';
+import SopNotifCard from '../../components/sop/SopNotifCard';
 
 export type Notification = {
   id: string;
@@ -313,9 +314,8 @@ export default function InboxView({
       setActiveTask(n.metadata.task_id as string);
       return;
     }
-    const sop = sopTargetFromNotification(n);
-    if (sop) {
-      openSopResource(sop.itemId, sop.lessonId);
+    if (sopTargetFromNotification(n)) {
+      openSopFromNotification(n);
       return;
     }
     const target = chatTargetFor(n);
@@ -541,13 +541,30 @@ export default function InboxView({
           </div>
         ) : (
           filtered.map((n) => (
-            <NotifRow
-              key={n.id}
-              n={n}
-              active={current?.id === n.id}
-              onClick={() => onRowClick(n)}
-              onMarkRead={() => markRead.mutate(n.id)}
-            />
+            n.type === 'sop_flag' || n.type === 'sop_strike' ? (
+              <SopNotifCard
+                key={n.id}
+                n={n}
+                active={current?.id === n.id}
+                onSelect={() => onRowClick(n)}
+                onOpenSop={() => {
+                  if (!n.is_read) markRead.mutate(n.id);
+                  openSopFromNotification(n);
+                }}
+                onOpenSource={sopSourceFromNotification(n) ? () => {
+                  if (!n.is_read) markRead.mutate(n.id);
+                  openSopSource(n, { setHomeView });
+                } : undefined}
+              />
+            ) : (
+              <NotifRow
+                key={n.id}
+                n={n}
+                active={current?.id === n.id}
+                onClick={() => onRowClick(n)}
+                onMarkRead={() => markRead.mutate(n.id)}
+              />
+            )
           ))
         )}
       </div>
@@ -576,6 +593,13 @@ export default function InboxView({
 }
 
 function renderDetail(n: Notification, onOpen: (jump?: ChatJump) => void) {
+  if (n.type === 'sop_flag' || n.type === 'sop_strike') {
+    return (
+      <div className="th-pane" style={{ justifyContent: 'center', padding: 28, color: 'var(--sh-ink-3)', fontSize: 13, textAlign: 'center' }}>
+        Use Open SOP or the source link on the notification.
+      </div>
+    );
+  }
   if (n.reference_type === 'task' && n.metadata?.task_id) {
     return <InboxTaskDetail taskId={n.metadata.task_id as string} notificationId={n.id} onOpen={onOpen} />;
   }
@@ -656,42 +680,6 @@ function NotifRow({
   );
 }
 
-function SopNotifFacts({ n }: { n: Notification }) {
-  const m = n.metadata || {};
-  const reason = (m.reason as string | null) || null;
-  const flags = m.flag_count;
-  const threshold = m.flag_threshold;
-  const monthly = m.monthly_points;
-  const pts = m.strike_points;
-  const windowTxt = (m.window_label as string) || null;
-  return (
-    <div style={{ margin: '0 16px 16px', display: 'grid', gap: 8 }}>
-      {reason && (
-        <div style={{ border: '1px solid var(--sh-hair)', borderRadius: 10, padding: '10px 12px', background: 'var(--sh-hair-3)' }}>
-          <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase', color: 'var(--sh-ink-3)' }}>Reason</div>
-          <div style={{ marginTop: 4, fontSize: 13.5, color: 'var(--sh-ink)', whiteSpace: 'pre-wrap' }}>{reason}</div>
-        </div>
-      )}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-        <div style={{ border: '1px solid var(--sh-hair)', borderRadius: 10, padding: '10px 12px' }}>
-          <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase', color: 'var(--sh-ink-3)' }}>Flags</div>
-          <div style={{ marginTop: 2, fontSize: 18, fontWeight: 700, color: 'var(--sh-ink)' }}>
-            {flags ?? '—'}{threshold != null ? <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--sh-ink-3)' }}> / {threshold}</span> : null}
-          </div>
-          {windowTxt && <div style={{ marginTop: 2, fontSize: 11, color: 'var(--sh-ink-3)' }}>{windowTxt}</div>}
-        </div>
-        <div style={{ border: '1px solid var(--sh-hair)', borderRadius: 10, padding: '10px 12px' }}>
-          <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase', color: 'var(--sh-ink-3)' }}>This month</div>
-          <div style={{ marginTop: 2, fontSize: 18, fontWeight: 700, color: 'var(--sh-ink)' }}>{monthly ?? 0} pt</div>
-          {n.type === 'sop_strike' && pts != null && (
-            <div style={{ marginTop: 2, fontSize: 11, color: 'var(--sh-ink-3)' }}>This strike: {pts} pt</div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function DetailPane({ n, onOpen }: { n: Notification; onOpen: () => void }) {
   const av = avatarFor(n);
   return (
@@ -713,13 +701,10 @@ function DetailPane({ n, onOpen }: { n: Notification; onOpen: () => void }) {
           <svg width="12" height="12" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
             <path d="M5 12h14M13 6l6 6-6 6" />
           </svg>
-          {n.type === 'sop_flag' || n.type === 'sop_strike' ? 'Open SOP' : 'Open'}
+          Open
         </button>
       </div>
       <div className="th-scroll">
-        {(n.type === 'sop_flag' || n.type === 'sop_strike') && (
-          <SopNotifFacts n={n} />
-        )}
         {n.body ? (
           <div className="th-msg">
             <div

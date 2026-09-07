@@ -468,6 +468,95 @@ body {
 .sh-view .ib-item:hover .ib-mark-read,
 .sh-view .ib-item .ib-mark-read:focus-visible { opacity: 1; }
 .sh-view .ib-item .ib-mark-read:hover { background: var(--sh-ink); color: var(--surface); border-color: var(--sh-ink); }
+
+/* SOP flag/strike inbox card — anonymous citation, not an actor row. */
+.sopn {
+  padding: 13px 16px 14px;
+  border-bottom: 1px solid var(--sh-hair-3);
+  cursor: pointer;
+  background:
+    linear-gradient(180deg, color-mix(in srgb, #B45309 6%, var(--surface)) 0%, var(--surface) 42%);
+}
+.sopn[data-strike="true"] {
+  background:
+    linear-gradient(180deg, color-mix(in srgb, #8B1E1E 8%, var(--surface)) 0%, var(--surface) 48%);
+}
+.sopn:hover { filter: brightness(0.985); }
+.sopn[data-active="true"] { box-shadow: inset 2px 0 0 var(--sh-ink); }
+.sopn[data-unread="true"]:not([data-strike="true"]) { box-shadow: inset 2px 0 0 #B45309; }
+.sopn[data-unread="true"][data-strike="true"] { box-shadow: inset 2px 0 0 #8B1E1E; }
+.sopn-head { display: flex; align-items: baseline; gap: 8px; color: var(--sh-ink-3); }
+.sopn-kicker {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: #B45309;
+}
+.sopn[data-strike="true"] .sopn-kicker { color: #8B1E1E; }
+.sopn-time { margin-left: auto; font-size: 11px; color: var(--sh-ink-3); }
+.sopn-title {
+  margin: 6px 0 0;
+  font-family: 'Plus Jakarta Sans', 'Inter', sans-serif;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.25;
+  color: var(--sh-ink);
+}
+.sopn-sub { margin: 2px 0 0; font-size: 11.5px; color: var(--sh-ink-3); }
+.sopn-meter { display: flex; align-items: center; gap: 10px; margin-top: 11px; }
+.sopn-flags { display: flex; align-items: flex-end; gap: 3px; }
+.sopn-pennant { display: block; }
+.sopn-meter-copy { font-size: 12.5px; color: var(--sh-ink); }
+.sopn-meter-copy b { font-size: 16px; font-weight: 800; letter-spacing: -0.03em; }
+.sopn-meter-copy span { color: var(--sh-ink-3); font-weight: 500; }
+.sopn-meter-copy em { display: block; font-style: normal; font-size: 10.5px; color: var(--sh-ink-3); margin-top: 1px; }
+.sopn-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 11px; }
+.sopn-stat {
+  border: 1px solid var(--sh-hair);
+  border-radius: 10px;
+  padding: 8px 10px 7px;
+  background: color-mix(in srgb, var(--surface) 70%, transparent);
+}
+.sopn-stat-k { display: block; font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--sh-ink-3); }
+.sopn-stat-v { display: block; margin-top: 3px; font-size: 16px; font-weight: 800; letter-spacing: -0.03em; color: var(--sh-ink); line-height: 1.15; }
+.sopn-stat-v small { font-size: 11px; font-weight: 600; color: var(--sh-ink-3); letter-spacing: 0; }
+.sopn-stat-v em { display: block; font-style: normal; font-size: 11px; font-weight: 600; color: var(--sh-ink-3); margin-top: 1px; }
+.sopn-reason {
+  margin: 10px 0 0;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: var(--sh-hair-3);
+  font-size: 12.5px;
+  color: var(--sh-ink);
+  line-height: 1.4;
+  white-space: pre-wrap;
+}
+.sopn-reason span {
+  display: block;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--sh-ink-3);
+  margin-bottom: 3px;
+}
+.sopn-links { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+.sopn-btn {
+  border: 1px solid var(--sh-hair);
+  background: var(--surface);
+  color: var(--sh-ink);
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+}
+.sopn-btn:hover { background: var(--sh-hair-3); }
+.sopn-btn-ink { background: var(--sh-ink); color: var(--surface); border-color: var(--sh-ink); }
+.sopn-btn-ink:hover { filter: brightness(1.08); background: var(--sh-ink); }
+
 /* Reading pane — Slack Thread layout: header bar, scrollable messages,
    composer pinned to the bottom. */
 .sh-view .inbox-detail { display: flex; flex-direction: column; overflow: hidden; background: var(--surface); }

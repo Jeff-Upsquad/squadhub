@@ -3,9 +3,10 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import api from '../services/api';
 import { usePMStore } from '../stores/pmStore';
 import { useTabsStore } from '../stores/tabsStore';
-import { buildChatSnapshot, buildHomeSnapshot, buildLearningSnapshot } from '../lib/tabSnapshots';
+import { buildChatSnapshot, buildHomeSnapshot } from '../lib/tabSnapshots';
 import { avatarFor, chatTargetFor, type Notification } from '../views/app/InboxView';
-import { openSopResource, sopTargetFromNotification } from '../lib/openSopResource';
+import { openSopFromNotification, openSopSource, sopSourceFromNotification, sopTargetFromNotification } from '../lib/openSopResource';
+import SopNotifCard from './sop/SopNotifCard';
 
 /**
  * Floating notification panel — opened by the rail's inbox button. A compact
@@ -190,10 +191,8 @@ export default function InboxSlider({ onClose }: { onClose: () => void }) {
       return;
     }
 
-    const sop = sopTargetFromNotification(n);
-    if (sop) {
-      openInNewTab(buildLearningSnapshot());
-      openSopResource(sop.itemId, sop.lessonId);
+    if (sopTargetFromNotification(n)) {
+      openSopFromNotification(n, { newTab: true });
       onClose();
       return;
     }
@@ -262,6 +261,25 @@ export default function InboxSlider({ onClose }: { onClose: () => void }) {
             </div>
           ) : (
             shown.map((n) => {
+              if (n.type === 'sop_flag' || n.type === 'sop_strike') {
+                return (
+                  <SopNotifCard
+                    key={n.id}
+                    n={n}
+                    onSelect={() => { if (!n.is_read) markRead.mutate(n.id); }}
+                    onOpenSop={() => {
+                      if (!n.is_read) markRead.mutate(n.id);
+                      openSopFromNotification(n, { newTab: true });
+                      onClose();
+                    }}
+                    onOpenSource={sopSourceFromNotification(n) ? () => {
+                      if (!n.is_read) markRead.mutate(n.id);
+                      openSopSource(n, { newTab: true });
+                      onClose();
+                    } : undefined}
+                  />
+                );
+              }
               const av = avatarFor(n);
               const chip = chipFor(n);
               return (
