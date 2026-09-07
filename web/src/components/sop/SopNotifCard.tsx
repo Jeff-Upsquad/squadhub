@@ -114,12 +114,16 @@ export default function SopNotifCard({
         <button type="button" className="sopn-btn sopn-btn-ink" onClick={(e) => { e.stopPropagation(); onOpenSop(); }}>
           Open SOP
         </button>
-        {source && onOpenSource && (
-          <button type="button" className="sopn-btn" onClick={(e) => { e.stopPropagation(); onOpenSource(); }}>
-            {source.label}
-          </button>
-        )}
       </div>
+      {source && onOpenSource && (
+        <button
+          type="button"
+          className="sopn-source"
+          onClick={(e) => { e.stopPropagation(); onOpenSource(); }}
+        >
+          Click to view the source/reason for this {strike ? 'strike' : 'flag'}.
+        </button>
+      )}
     </article>
   );
 }

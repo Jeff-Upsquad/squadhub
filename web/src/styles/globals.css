@@ -556,6 +556,22 @@ body {
 .sopn-btn:hover { background: var(--sh-hair-3); }
 .sopn-btn-ink { background: var(--sh-ink); color: var(--surface); border-color: var(--sh-ink); }
 .sopn-btn-ink:hover { filter: brightness(1.08); background: var(--sh-ink); }
+.sopn-source {
+  display: block;
+  margin-top: 10px;
+  padding: 0;
+  border: 0;
+  background: none;
+  font-size: 12.5px;
+  font-weight: 500;
+  line-height: 1.4;
+  color: var(--sh-ink-2);
+  text-align: left;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.sopn-source:hover { color: var(--sh-ink); }
 
 /* Reading pane — Slack Thread layout: header bar, scrollable messages,
    composer pinned to the bottom. */
