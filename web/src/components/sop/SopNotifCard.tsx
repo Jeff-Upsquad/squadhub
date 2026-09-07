@@ -91,8 +91,20 @@ export default function SopNotifCard({
 
       <div className="sopn-stats">
         <div className="sopn-stat">
-          <span className="sopn-stat-k">This {strike ? 'strike' : 'flag'}</span>
-          <span className="sopn-stat-v">{pts ?? 0} <small>pt</small></span>
+          {strike ? (
+            <>
+              <span className="sopn-stat-k">This strike</span>
+              <span className="sopn-stat-v">{pts ?? 0} <small>pt</small></span>
+            </>
+          ) : (
+            <>
+              <span className="sopn-stat-k">This flag</span>
+              <span className="sopn-stat-v">
+                0 <small>pt</small>
+                <em>{pts ?? 0} pt if you reach {total} flags</em>
+              </span>
+            </>
+          )}
         </div>
         <div className="sopn-stat">
           <span className="sopn-stat-k">This month</span>
