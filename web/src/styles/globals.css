@@ -8815,4 +8815,193 @@ ol.sqc-list {
  * would vanish on the yellow fill otherwise. */
 .dark .sh-btn-primary { color: #0a0a0a; }
 
+/* ── Minimal Group + Filter bar (mgf) ─────────────────────────────
+ * One shared toolbar for List / Folder / Space views. Minimal pills like
+ * the reference: small 28px pills, subtle borders, teal active filter. */
+.mgf-bar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 3px 12px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--sh-hair);
+  min-height: 32px;
+  font-family: 'Plus Jakarta Sans', 'Inter', sans-serif;
+}
+.mgf-right { display: flex; align-items: center; gap: 4px; min-width: 0; margin-left: auto; }
+.mgf-anchor { position: relative; display: inline-flex; }
+.mgf-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 22px;
+  padding: 0 9px;
+  font-size: 11.5px;
+  font-weight: 600;
+  line-height: 1;
+  color: var(--sh-ink-2);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+}
+.mgf-pill:hover { background: var(--sh-hair-3); color: var(--sh-ink); }
+/* Active group / filter — neutral gray stadium pill (no tint) */
+.mgf-pill[data-active] { background: #edf0f4; border-color: #dde3ea; color: var(--sh-ink); font-weight: 600; }
+.dark .mgf-pill[data-active] { background: #21262d; border-color: #2d333c; color: #e2e8f0; }
+.mgf-pill svg { flex-shrink: 0; }
+.mgf-filter[data-active] {
+  background: #edf0f4;
+  border-color: #dde3ea;
+  color: var(--sh-ink);
+  font-weight: 600;
+}
+.mgf-filter[data-active]:hover { background: #e2e7ee; border-color: #cfd6e0; color: var(--sh-ink); }
+.dark .mgf-filter[data-active] { background: #21262d; border-color: #2d333c; color: #e2e8f0; }
+.dark .mgf-filter[data-active]:hover { background: #2a313a; border-color: #3a424d; color: #f1f5f9; }
+.mgf-iconbtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 22px;
+  min-width: 22px;
+  padding: 0 5px;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--sh-ink-3);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.mgf-iconbtn:hover { background: var(--sh-hair-3); color: var(--sh-ink); }
+.mgf-iconbtn[data-active] { color: var(--sh-ink); background: #edf0f4; border-color: #dde3ea; }
+.dark .mgf-iconbtn[data-active] { background: #21262d; border-color: #2d333c; color: #e2e8f0; }
+.mgf-sortlbl { max-width: 140px; overflow: hidden; text-overflow: ellipsis; }
+.mgf-mini {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 22px;
+  padding: 0 9px;
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--sh-ink-2);
+  background: var(--surface);
+  border: 1px solid var(--sh-hair);
+  border-radius: 999px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.mgf-mini:hover { background: var(--sh-hair-3); }
+.mgf-mini[data-active] { background: var(--sh-ink); border-color: var(--sh-ink); color: var(--surface); }
+.mgf-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  min-width: 190px;
+  background: var(--surface);
+  border: 1px solid var(--sh-hair);
+  border-radius: 12px;
+  box-shadow: 0 12px 32px rgba(15,23,42,0.12), 0 2px 6px rgba(15,23,42,0.06);
+  padding: 5px;
+  z-index: 40;
+}
+.mgf-right .mgf-menu, .mgf-right .mgf-pop { left: auto; right: 0; }
+.mgf-menu-head {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--sh-ink-4);
+  padding: 7px 9px 5px;
+}
+.mgf-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+  padding: 7px 9px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--sh-ink-2);
+  background: transparent;
+  border: none;
+  border-radius: 7px;
+  cursor: pointer;
+}
+.mgf-item:hover { background: var(--sh-hair-3); }
+.mgf-item[data-active] { background: #eef3ff; color: var(--sh-ink); font-weight: 600; }
+.dark .mgf-item[data-active] { background: rgba(41,98,255,0.14); }
+.mgf-check { margin-left: auto; color: #2962ff; display: inline-flex; }
+.mgf-pop {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  width: 264px;
+  max-height: min(70vh, 460px);
+  overflow-y: auto;
+  background: var(--surface);
+  border: 1px solid var(--sh-hair);
+  border-radius: 12px;
+  box-shadow: 0 12px 32px rgba(15,23,42,0.12), 0 2px 6px rgba(15,23,42,0.06);
+  padding: 8px;
+  z-index: 40;
+  font-size: 12px;
+}
+.mgf-sec { padding: 2px 2px 8px; margin-bottom: 8px; border-bottom: 1px solid var(--sh-hair-3); }
+.mgf-sec[data-last] { border-bottom: none; margin-bottom: 0; padding-bottom: 2px; }
+.mgf-sec-t {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--sh-ink-4);
+  padding: 4px 6px;
+}
+.mgf-sec-b { display: flex; flex-direction: column; gap: 1px; }
+.mgf-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 6px;
+  border-radius: 6px;
+  cursor: pointer;
+  user-select: none;
+  font-size: 12.5px;
+  color: var(--sh-ink);
+}
+.mgf-row:hover { background: var(--sh-hair-3); }
+.mgf-row input { margin: 0; accent-color: var(--sh-ink); }
+.mgf-dot { width: 8px; height: 8px; border-radius: 999px; flex-shrink: 0; }
+.mgf-ava {
+  width: 18px; height: 18px; border-radius: 999px;
+  background: var(--sh-hair-3); color: var(--sh-ink);
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 10px; font-weight: 700; flex-shrink: 0;
+}
+.mgf-row-lbl { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mgf-empty { padding: 5px 6px; color: var(--sh-ink-4); font-size: 11.5px; font-style: italic; }
+.mgf-foot {
+  display: flex; align-items: center; justify-content: space-between;
+  padding-top: 8px; margin-top: 6px; border-top: 1px solid var(--sh-hair);
+}
+.mgf-clear {
+  background: transparent; border: none; cursor: pointer;
+  font-size: 11.5px; color: var(--sh-ink-3); padding: 4px 2px;
+}
+.mgf-clear:disabled { color: var(--sh-ink-4); cursor: default; }
+.mgf-clear:not(:disabled):hover { color: var(--sh-ink); }
+.mgf-done {
+  background: #0f172a; color: #fff; border: none; border-radius: 999px;
+  font-size: 11.5px; font-weight: 600; padding: 5px 14px; cursor: pointer;
+}
+.dark .mgf-done { background: #e2e8f0; color: #0f172a; }
+
 } /* end @layer components */

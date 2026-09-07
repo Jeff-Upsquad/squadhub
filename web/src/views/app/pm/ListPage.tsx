@@ -16,20 +16,13 @@ import ViewTabs from '../../../components/pm/ViewTabs';
 import SettingsSlider from '../../../components/SettingsSlider';
 import ManageMembersModal from './ManageMembersModal';
 import TaskCreatePanel from './TaskCreatePanel';
-import FilterBar from '../../../components/pm/FilterBar';
-import GroupByDropdown from '../../../components/pm/GroupByDropdown';
+import MinimalGroupFilterBar from '../../../components/pm/MinimalGroupFilterBar';
 import ViewSearchInput from '../../../components/pm/ViewSearchInput';
 import ContainerChatButton from '../../../components/pm/ContainerChatButton';
 import { LIST_GROUP_BY_OPTIONS, SORT_BY_OPTIONS, isTaskCompleted, type SortBy } from '../../../lib/taskGrouping';
 import { type ListGroupBy } from '../../../stores/pmStore';
 import { EMPTY_FILTER, deriveAssigneeOptions, deriveTagOptions, filterTasks, type TaskFilterState } from '../../../lib/filters';
 import { useIsMobile } from '../../../hooks/useIsMobile';
-
-const SORT_ICON = (
-  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M3 6h13M3 12h9M3 18h5M17 8v12m0 0l-3-3m3 3l3-3" />
-  </svg>
-);
 
 export default function ListPage({
   listId: propListId,
@@ -319,65 +312,51 @@ export default function ListPage({
         )}
       </div>
 
-      {/* Group by dropdown + Filter + Sort + Focus today + My tasks toggle (List view only) */}
+      {/* Minimal Group + Filter bar (List view only) */}
       {contentType === 'list' && (
-        <div className="lv-subtoolbar shrink-0">
-          <span className="st-label">Group by</span>
-          <GroupByDropdown
-            options={LIST_GROUP_BY_OPTIONS}
-            value={listGroupBy}
-            onChange={(v) => setWorkingConfig((c) => ({ ...c, groupBy: v }))}
-          />
-          <div className="st-divider" />
-          <FilterBar
-            filters={filters}
-            onChange={(next) => setWorkingConfig((c) => ({ ...c, filters: next }))}
-            statuses={statuses}
-            assigneeOptions={assigneeOptions}
-            tagOptions={tagOptions}
-          />
-          <GroupByDropdown
-            options={SORT_BY_OPTIONS}
-            value={sortBy}
-            onChange={(v) => setWorkingConfig((c) => ({ ...c, sortBy: v }))}
-            icon={SORT_ICON}
-            menuTitle="Sort tasks by"
-          />
-          {canEdit && configDirty && (
-            <div className="vt-saverow">
-              <button type="button" className="lv-toolbtn vt-save" onClick={saveView} title="Save these settings to this view">Save view</button>
-              <button type="button" className="lv-toolbtn lv-toolbtn--outline" onClick={saveAsNewView} title="Save as a new view">Save as new</button>
-            </div>
-          )}
-          <button
-            type="button"
-            onClick={() => listScopeKey && setScopedFocusToday(listScopeKey, !focusToday)}
-            className="lv-toolbtn lv-toolbtn--outline"
-            data-active={focusToday}
-            aria-pressed={focusToday}
-            title="Show only tasks scheduled for today"
-          >
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
-            </svg>
-            Focus today
-          </button>
-          <div className="st-spacer" />
-          <button
-            type="button"
-            onClick={() => setMyTasksOnly(!myTasksOnly)}
-            className="lv-toolbtn lv-toolbtn--outline"
-            data-active={myTasksOnly}
-            aria-pressed={myTasksOnly}
-            title="Show only tasks assigned to me"
-          >
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-              <circle cx="12" cy="7" r="4" />
-            </svg>
-            My tasks
-          </button>
-        </div>
+        <MinimalGroupFilterBar
+          groupOptions={LIST_GROUP_BY_OPTIONS as { value: string; label: string }[]}
+          groupBy={listGroupBy}
+          onGroupChange={(v) => setWorkingConfig((c) => ({ ...c, groupBy: v }))}
+          filters={filters}
+          onFiltersChange={(next) => setWorkingConfig((c) => ({ ...c, filters: next }))}
+          statuses={statuses}
+          assigneeOptions={assigneeOptions}
+          tagOptions={tagOptions}
+          sortOptions={SORT_BY_OPTIONS as { value: string; label: string }[]}
+          sortBy={sortBy}
+          onSortChange={(v) => setWorkingConfig((c) => ({ ...c, sortBy: v }))}
+          extraRight={
+            <>
+              {canEdit && configDirty && (
+                <>
+                  <button type="button" className="mgf-mini" data-active onClick={saveView} title="Save these settings to this view">Save view</button>
+                  <button type="button" className="mgf-mini" onClick={saveAsNewView} title="Save as a new view">Save as new</button>
+                </>
+              )}
+              <button
+                type="button"
+                onClick={() => listScopeKey && setScopedFocusToday(listScopeKey, !focusToday)}
+                className="mgf-mini"
+                data-active={focusToday || undefined}
+                aria-pressed={focusToday}
+                title="Show only tasks scheduled for today"
+              >
+                Focus today
+              </button>
+              <button
+                type="button"
+                onClick={() => setMyTasksOnly(!myTasksOnly)}
+                className="mgf-mini"
+                data-active={myTasksOnly || undefined}
+                aria-pressed={myTasksOnly}
+                title="Show only tasks assigned to me"
+              >
+                My tasks
+              </button>
+            </>
+          }
+        />
       )}
 
       {/* Phone scope chips — TaskFilter.kt's All / Today / Overdue pills with
@@ -414,23 +393,27 @@ export default function ListPage({
         </div>
       )}
 
-      {/* For board view: filter row (+ save) above content */}
+      {/* For board view: minimal filter row (+ save) above content */}
       {contentType === 'board' && (
-        <div className="sh-view dl-groupby shrink-0" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <FilterBar
-            filters={filters}
-            onChange={(next) => setWorkingConfig((c) => ({ ...c, filters: next }))}
-            statuses={statuses}
-            assigneeOptions={assigneeOptions}
-            tagOptions={tagOptions}
-          />
-          {canEdit && configDirty && (
-            <div className="vt-saverow">
-              <button type="button" className="lv-toolbtn vt-save" onClick={saveView} title="Save this filter to this view">Save view</button>
-              <button type="button" className="lv-toolbtn lv-toolbtn--outline" onClick={saveAsNewView} title="Save as a new view">Save as new</button>
-            </div>
-          )}
-        </div>
+        <MinimalGroupFilterBar
+          hideGroup
+          groupOptions={[]}
+          groupBy="none"
+          onGroupChange={() => {}}
+          filters={filters}
+          onFiltersChange={(next) => setWorkingConfig((c) => ({ ...c, filters: next }))}
+          statuses={statuses}
+          assigneeOptions={assigneeOptions}
+          tagOptions={tagOptions}
+          extraRight={
+            canEdit && configDirty ? (
+              <>
+                <button type="button" className="mgf-mini" data-active onClick={saveView} title="Save this filter to this view">Save view</button>
+                <button type="button" className="mgf-mini" onClick={saveAsNewView} title="Save as a new view">Save as new</button>
+              </>
+            ) : undefined
+          }
+        />
       )}
 
       {/* Content area + task detail panel */}

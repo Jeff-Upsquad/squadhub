@@ -7,8 +7,7 @@ import { useSpace } from '../../../hooks/useSpaces';
 import { useIsMobile } from '../../../hooks/useIsMobile';
 import TaskGroupCard from './TaskGroupCard';
 import { GROUP_BY_OPTIONS, groupTasks, partitionByCompletion, buildFocusTodayGroup, isTaskCompleted, type GroupBy } from '../../../lib/taskGrouping';
-import FilterBar from '../../../components/pm/FilterBar';
-import GroupByDropdown from '../../../components/pm/GroupByDropdown';
+import MinimalGroupFilterBar from '../../../components/pm/MinimalGroupFilterBar';
 import ViewSearchInput from '../../../components/pm/ViewSearchInput';
 import ContainerChatButton from '../../../components/pm/ContainerChatButton';
 import ListChipsFilter from '../../../components/pm/ListChipsFilter';
@@ -286,23 +285,17 @@ export default function SpacePage({ spacePageId: propSpacePageId }: { spacePageI
         myAccess={space?.my_access_level}
       />
 
-      {/* Group by dropdown + Filter */}
-      <div className="lv-subtoolbar shrink-0">
-        <span className="st-label">Group by</span>
-        <GroupByDropdown
-          options={GROUP_BY_OPTIONS}
-          value={groupBy}
-          onChange={(v) => groupScopeKey && setScopedGroupBy(groupScopeKey, v as GroupBy)}
-        />
-        <div className="st-divider" />
-        <FilterBar
-          filters={filters}
-          onChange={(next) => scopeKey && setScopeFilters(scopeKey, next)}
-          statuses={spaceStatuses}
-          assigneeOptions={assigneeOptions}
-          tagOptions={tagOptions}
-        />
-      </div>
+      {/* Minimal Group + Filter bar */}
+      <MinimalGroupFilterBar
+        groupOptions={GROUP_BY_OPTIONS as { value: string; label: string }[]}
+        groupBy={groupBy}
+        onGroupChange={(v) => groupScopeKey && setScopedGroupBy(groupScopeKey, v as GroupBy)}
+        filters={filters}
+        onFiltersChange={(next) => scopeKey && setScopeFilters(scopeKey, next)}
+        statuses={spaceStatuses}
+        assigneeOptions={assigneeOptions}
+        tagOptions={tagOptions}
+      />
 
       {/* Body */}
       <div className="td-scroll lv-card-canvas" style={{ flex: 1, overflowY: 'auto' }}>
