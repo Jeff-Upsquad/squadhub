@@ -2478,6 +2478,8 @@ export default function TaskDetailPanel({
           targetUserName={assignees[0]?.display_name || assignees[0]?.email || 'assignee'}
           sourceKind="task"
           sourceId={task.id}
+          taskId={task.id}
+          listId={(task as any).list_id || task.list?.id || null}
           onClose={() => setShowReport(false)}
           onReported={(detail) => setFlagDetail(detail)}
         />

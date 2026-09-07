@@ -8,11 +8,16 @@ interface Props {
   targetUserName?: string;
   sourceKind?: 'task' | 'message' | 'manual';
   sourceId?: string;
+  // Scoping for the reportee picker — only members of this chat / list are shown.
+  channelId?: string | null;
+  dmConversationId?: string | null;
+  listId?: string | null;
+  taskId?: string | null;
   onClose: () => void;
   onReported?: (info: { sop_label: string; count_in_window: number; threshold: number; window_label: string; severity: string; strike_points: number; is_strike: boolean; sop_link: string }) => void;
 }
 
-export default function SopBreachReportModal({ targetUserId, targetUserName, sourceKind = 'manual', sourceId, onClose, onReported }: Props) {
+export default function SopBreachReportModal({ targetUserId, targetUserName, sourceKind = 'manual', sourceId, channelId, dmConversationId, listId, taskId, onClose, onReported }: Props) {
   const { data: rules, isLoading } = useAllSopRules();
   const report = useReportBreach();
   const [selectedRuleId, setSelectedRuleId] = useState<string>('');
@@ -26,20 +31,67 @@ export default function SopBreachReportModal({ targetUserId, targetUserName, sou
   const [userResults, setUserResults] = useState<Array<{ id: string; display_name: string; avatar_url?: string | null; email?: string | null }>>([]);
   const [userSearching, setUserSearching] = useState(false);
   const [userOpen, setUserOpen] = useState(false);
+  // List/task scope: members allowed as reportee (client-filtered by query).
+  const [scopedMembers, setScopedMembers] = useState<Array<{ id: string; display_name: string; avatar_url?: string | null; email?: string | null }> | null>(null);
 
   useEffect(() => {
     setReporteeId(targetUserId);
     setReporteeName(targetUserName || targetUserId);
   }, [targetUserId, targetUserName]);
 
-  // Debounced user search for changing the reportee.
+  const hasChatScope = !!(channelId || dmConversationId);
+  const scopeTaskId = taskId || (sourceKind === 'task' ? sourceId : undefined);
+  const scopeListId = listId || undefined;
+
+  // Load list/task members once when the picker opens (task scope).
+  useEffect(() => {
+    if (!userOpen || hasChatScope) return;
+    const idForTask = scopeTaskId;
+    const idForList = scopeListId;
+    if (!idForTask && !idForList) { setScopedMembers(null); return; }
+    let cancel = false;
+    (async () => {
+      try {
+        const url = idForTask ? `/pm/tasks/${idForTask}/assignable-users` : `/pm/lists/${idForList}/assignable-users`;
+        const res = await api.get(url);
+        if (cancel) return;
+        const users = (res.data?.data || []).map((u: any) => ({ id: u.id, display_name: u.display_name || u.email || u.id, avatar_url: u.avatar_url ?? null, email: u.email ?? null }));
+        // Always keep the default reportee selectable even if not in scope.
+        if (targetUserId && !users.some((u: any) => u.id === targetUserId)) {
+          users.unshift({ id: targetUserId, display_name: targetUserName || targetUserId, avatar_url: null, email: null });
+        }
+        setScopedMembers(users);
+      } catch {
+        if (!cancel) setScopedMembers(null);
+      }
+    })();
+    return () => { cancel = true; };
+  }, [userOpen, hasChatScope, scopeTaskId, scopeListId, targetUserId, targetUserName]);
+
+  // Debounced user search for changing the reportee — scoped to the
+  // chat/DM or list members, never global.
   useEffect(() => {
     if (!userOpen) return;
+    // Task/list scope is client-filtered from the loaded members.
+    if (!hasChatScope && (scopeTaskId || scopeListId)) {
+      const q = userQuery.trim().toLowerCase();
+      if (!scopedMembers) { setUserResults([]); setUserSearching(true); return; }
+      setUserSearching(false);
+      setUserResults(
+        scopedMembers.filter((u) =>
+          !q || (u.display_name || '').toLowerCase().includes(q) || (u.email || '').toLowerCase().includes(q),
+        ).slice(0, 10),
+      );
+      return;
+    }
     const q = userQuery.trim();
     setUserSearching(true);
     const t = setTimeout(async () => {
       try {
-        const res = await api.get('/users/search', { params: { q, limit: 10 } });
+        const params: Record<string, string | number> = { q, limit: 10 };
+        if (channelId) params.channel_id = channelId;
+        else if (dmConversationId) params.dm_conversation_id = dmConversationId;
+        const res = await api.get('/users/search', { params });
         let users = res.data?.data || [];
         // /users/search excludes self — still include the default reportee
         // so it stays selectable when it matches the query.
@@ -57,7 +109,7 @@ export default function SopBreachReportModal({ targetUserId, targetUserName, sou
       }
     }, 200);
     return () => clearTimeout(t);
-  }, [userQuery, userOpen, targetUserId, targetUserName]);
+  }, [userQuery, userOpen, targetUserId, targetUserName, channelId, dmConversationId, hasChatScope, scopeTaskId, scopeListId, scopedMembers]);
 
   const handleSubmit = async () => {
     if (!selectedRuleId || !reporteeId) return;
@@ -100,7 +152,7 @@ export default function SopBreachReportModal({ targetUserId, targetUserName, sou
                 {userSearching && userResults.length === 0 ? (
                   <div className="px-3 py-2 text-[12px] text-[var(--sh-ink-3)]">Searching…</div>
                 ) : userResults.length === 0 ? (
-                  <div className="px-3 py-2 text-[12px] text-[var(--sh-ink-3)]">Type to search users…</div>
+                  <div className="px-3 py-2 text-[12px] text-[var(--sh-ink-3)]">No members found in this {hasChatScope ? 'chat' : 'list'}…</div>
                 ) : (
                   userResults.map((u) => (
                     <button

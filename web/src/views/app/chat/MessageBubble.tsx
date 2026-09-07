@@ -1044,6 +1044,8 @@ function ChatMessageBubble({ message, onOpenThread, inThread, grouped, threadMet
           targetUserName={sender?.display_name || sender?.email || 'sender'}
           sourceKind="message"
           sourceId={message.id}
+          channelId={message.channel_id}
+          dmConversationId={message.dm_conversation_id}
           onClose={() => setShowReport(false)}
           onReported={(detail) => setFlagDetail(detail)}
         />
