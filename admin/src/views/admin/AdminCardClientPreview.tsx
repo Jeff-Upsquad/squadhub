@@ -665,7 +665,7 @@ export default function AdminCardClientPreview({
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
                     <TalentIdentity r={r} adminUrl={adminUrl} />
                     <div className="flex flex-col gap-2.5 sm:ml-auto sm:flex-row sm:items-center">
-                      <PriceBlock r={r} listPrice={listPrice} isAssignment={isAssignment} unit={workUnit} quantity={workQuantity} />
+                      <PriceBlock r={r} listPrice={listPrice} listCurrency={currency} isAssignment={isAssignment} unit={workUnit} quantity={workQuantity} />
                       <span className="self-start rounded-full bg-emerald-100 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-700">
                         Assigned
                       </span>
@@ -679,6 +679,8 @@ export default function AdminCardClientPreview({
                     quantity={workQuantity}
                     onCreateLink={() => paymentLink.mutate(r)}
                     creating={paymentLink.isPending}
+                    listPrice={listPrice}
+                    listCurrency={currency}
                   />
                 </div>
               ))}
@@ -706,7 +708,7 @@ export default function AdminCardClientPreview({
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
                       <TalentIdentity r={r} adminUrl={adminUrl} />
                       <div className="flex flex-col gap-2.5 sm:ml-auto sm:flex-row sm:items-center">
-                        <PriceBlock r={r} listPrice={listPrice} isAssignment={isAssignment} unit={workUnit} quantity={workQuantity} />
+                        <PriceBlock r={r} listPrice={listPrice} listCurrency={currency} isAssignment={isAssignment} unit={workUnit} quantity={workQuantity} />
                         <div className="flex flex-wrap items-center gap-2">
                           <button
                             type="button"
@@ -742,6 +744,8 @@ export default function AdminCardClientPreview({
                       quantity={workQuantity}
                       onCreateLink={() => paymentLink.mutate(r)}
                       creating={paymentLink.isPending}
+                      listPrice={listPrice}
+                      listCurrency={currency}
                     />
                   </div>
                 );
@@ -790,7 +794,7 @@ export default function AdminCardClientPreview({
               <div className="flex flex-col gap-3">
                 <TalentIdentity r={r} adminUrl={adminUrl} inactive={(isClosed || hasSelection) && !r.selected_at} />
                 <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between">
-                  <PriceBlock r={r} listPrice={listPrice} isAssignment={isAssignment} unit={workUnit} quantity={workQuantity} />
+                  <PriceBlock r={r} listPrice={listPrice} listCurrency={currency} isAssignment={isAssignment} unit={workUnit} quantity={workQuantity} />
                   {rowActions(
                     r,
                     <>
@@ -852,7 +856,7 @@ export default function AdminCardClientPreview({
                   subtitle={r.responded_at ? `Accepted ${formatRelative(r.responded_at)}` : undefined}
                 />
                 <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between">
-                  <PriceBlock r={r} listPrice={listPrice} isAssignment={isAssignment} unit={workUnit} quantity={workQuantity} />
+                  <PriceBlock r={r} listPrice={listPrice} listCurrency={currency} isAssignment={isAssignment} unit={workUnit} quantity={workQuantity} />
                   {rowActions(
                     r,
                     <>
@@ -1117,18 +1121,40 @@ function priceLabel(status: string | null, fromBid: boolean): string {
 function PriceBlock({
   r,
   listPrice,
+  listCurrency = null,
   isAssignment = false,
   unit = null,
   quantity = null,
 }: {
   r: BusinessRecipient;
   listPrice: number | null;
+  listCurrency?: string | null;
   isAssignment?: boolean;
   unit?: 'design' | 'video' | null;
   quantity?: number | null;
 }) {
-  const resolved = resolvePrice(r);
-  if (!resolved) return null;
+  // Always show a figure: talent bid/offer first, then the talent's list price,
+  // then the card's list price as a fallback — never blank.
+  const resolved = resolvePrice(r) ?? (
+    listPrice != null && listPrice > 0
+      ? { amount: listPrice, currency: r.currency ?? listCurrency, period: 'per_month', fromBid: false, offerStatus: null }
+      : null
+  );
+  if (!resolved) {
+    return (
+      <div
+        className="w-full rounded-xl px-3.5 py-2 text-left ring-1 sm:w-auto sm:min-w-[7.5rem] sm:shrink-0 sm:text-right bg-[var(--color-sh-cream)] ring-[var(--color-sh-warm-border)]"
+        title="No bid yet"
+      >
+        <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--color-sh-ink-faint)]">
+          Price
+        </p>
+        <p className="mt-0.5 font-[family-name:var(--font-jakarta)] text-[15px] font-bold leading-tight tabular-nums sm:text-base text-[var(--color-sh-ink-subtle)]">
+          No bid yet
+        </p>
+      </div>
+    );
+  }
 
   const cur = symbolFor(resolved.currency);
   const effectivePeriod = unit && !resolved.fromBid ? `per_${unit}` : resolved.period;
@@ -1195,6 +1221,8 @@ function PaymentBlock({
   quantity,
   onCreateLink,
   creating,
+  listPrice = null,
+  listCurrency = null,
 }: {
   r: BusinessRecipient;
   payment: CardPayment | null;
@@ -1203,11 +1231,13 @@ function PaymentBlock({
   quantity: number | null;
   onCreateLink: () => void;
   creating: boolean;
+  listPrice?: number | null;
+  listCurrency?: string | null;
 }) {
   const resolved = resolvePrice(r);
-  const quoteAmount = resolved?.amount ?? null;
+  const quoteAmount = resolved?.amount ?? (listPrice != null && listPrice > 0 ? listPrice : null);
   const amount = payment?.amount ?? (unit && quantity && quoteAmount != null ? quoteAmount * quantity : quoteAmount);
-  const currencyCode = payment?.currency ?? resolved?.currency ?? null;
+  const currencyCode = payment?.currency ?? resolved?.currency ?? r.currency ?? listCurrency;
   if (amount == null || !(amount > 0)) return null;
 
   const cur = symbolFor(currencyCode);
