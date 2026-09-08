@@ -1033,18 +1033,21 @@ export default function AdminCardEditor({
   const isEditable = !forceReadOnly && (isDraft || isNew);
 
   // Publish gate: every selected tier must have a client-facing price —
-  // either a proposed price or a finalized subscription price (catalog-
-  // seeded briefs often have Final set with Proposed left at 0).
-  // Selected tiers need a Final/proposed. If none selected, catalog can still
-  // fill all three standard levels on publish (needs service + plan).
+  // a Final, a proposed price, or a stated client budget (budgets override
+  // catalog at publish). Exception: Agencies has no catalog price, so a
+  // selected-but-blank Agencies tier broadcasts as request-quote and never
+  // blocks publish. If none selected, catalog can still fill all three
+  // standard levels on publish (needs service + plan).
   // Publish gate:
   // - Assignment cards always broadcast to all 3 tiers (unpriced = inviting bids), so they can always publish.
   // - Subscription cards need either selected tiers with prices, or service+plan for catalog fill.
   const selectedHavePrices =
     tiers.length > 0 &&
     tiers.every((t) => {
+      if (t === 'Agencies') return true;
       const entry = tierPricing[t];
-      return (entry?.proposedPrice ?? 0) > 0 || (entry?.subscriptionPrice ?? 0) > 0;
+      const budget = clientBudgetsByTier[t] ?? null;
+      return (entry?.proposedPrice ?? 0) > 0 || (entry?.subscriptionPrice ?? 0) > 0 || (budget ?? 0) > 0;
     });
   const catalogCanFill =
     !!serviceType && !!planName && pricingTableTiers.some((t) => {
@@ -1199,7 +1202,7 @@ export default function AdminCardEditor({
                         ? 'Soft publish — build the list, then hand-pick recipients before broadcasting'
                         : isAssignment
                           ? 'Publish — all levels broadcast (priced tiers at set price, unpriced tiers invite bids)'
-                          : 'Publish — all levels broadcast (selected at set price, others at catalog)'
+                          : 'Publish — all levels broadcast (selected at set price, others as request-quote)'
                   }
                   className="sh-btn-primary sh-btn-primary-sm"
                 >
