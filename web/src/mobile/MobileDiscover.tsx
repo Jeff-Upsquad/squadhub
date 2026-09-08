@@ -269,7 +269,18 @@ export function RequestSheet({ recipient, busy, error, onClose, onRespond }: {
   const bidsLeft = offerQuery.data?.talent_bids_remaining ?? 3;
   const listAmount = firstNumber(content.monthly_price, content.proposed_price, card.partner_price_override, card.proposed_price) || 500;
   const standingAmount = firstNumber(openOffer?.current_amount?.amount, listAmount) || 500;
-  const pricingMode = type === 'assignment' && assignment.pricing_mode === 'unpriced' ? 'unpriced' : 'priced';
+  const subscriptionRequestQuote =
+    type === 'subscription' &&
+    (content.pricing_mode === 'unpriced' ||
+      content.request_quote === true ||
+      (content.pricing_mode !== 'priced' &&
+        content.request_quote !== false &&
+        !firstNumber(content.monthly_price, content.customer_monthly_price, content.proposed_price) &&
+        !stringValue(content.price_label)));
+  const pricingMode =
+    subscriptionRequestQuote || (type === 'assignment' && assignment.pricing_mode === 'unpriced')
+      ? 'unpriced'
+      : 'priced';
 
   const refreshOffers = async () => {
     setBidEditor(null);
@@ -299,16 +310,21 @@ export function RequestSheet({ recipient, busy, error, onClose, onRespond }: {
   const actionBusy = busy || submitOffer.isPending || respondOffer.isPending;
   const actionError = error || apiError(submitOffer.error) || apiError(respondOffer.error) || (offerQuery.isError ? 'Offer activity could not be loaded.' : null);
 
-  const paymentLabel = stringValue(content.price_label) || priceLabel(card);
+  const paymentLabel =
+    stringValue(content.price_label) ||
+    priceLabel(card) ||
+    (subscriptionRequestQuote ? 'Request quote' : null);
 
   const openBidEditor = (mode: 'submit' | 'counter') => {
     setBidAmount(snapBidAmount(standingAmount));
     setBidEditor(mode);
   };
-  const editorTitle = bidEditor === 'submit' ? 'Submit your offer' : type === 'subscription' ? 'Place your bid' : 'Send a counter-offer';
-  const editorSubmitLabel = bidEditor === 'submit' ? 'Submit offer' : type === 'subscription' ? 'Submit bid' : 'Send counter';
-  const editorHint = type === 'subscription'
-    ? 'Increase or decrease the set price in steps of ₹500, then submit your bid.'
+  const editorTitle = bidEditor === 'submit' && subscriptionRequestQuote ? 'Submit your quote' : bidEditor === 'submit' ? 'Submit your offer' : type === 'subscription' ? 'Place your bid' : 'Send a counter-offer';
+  const editorSubmitLabel = bidEditor === 'submit' && subscriptionRequestQuote ? 'Submit quote' : bidEditor === 'submit' ? 'Submit offer' : type === 'subscription' ? 'Submit bid' : 'Send counter';
+  const editorHint = subscriptionRequestQuote
+    ? 'Enter your monthly quote in steps of ₹500.'
+    : type === 'subscription'
+      ? 'Increase or decrease the set price in steps of ₹500, then submit your bid.'
     : 'Adjust the amount in steps of ₹500. Both sides can keep negotiating until you agree.';
   const editorReferenceLabel = !openOffer ? 'List price' : openOffer.last_actor_side === 'business' || openOffer.last_actor_side === 'admin' ? 'Business offer' : 'Your last bid';
   const editorReference = snapBidAmount(standingAmount);
@@ -349,7 +365,7 @@ export function RequestSheet({ recipient, busy, error, onClose, onRespond }: {
         {pricingMode === 'priced' ? (
           <button type="button" disabled={actionBusy || bidsLeft === 0} className="mdiscover-counter" onClick={() => openBidEditor('counter')}>Bid{bidsLeft > 0 ? ` (${bidsLeft} left)` : ''}</button>
         ) : (
-          <button type="button" disabled={actionBusy || bidsLeft === 0} className="mdiscover-counter" onClick={() => openBidEditor('submit')}>Submit an offer{bidsLeft > 0 ? ` (${bidsLeft} left)` : ''}</button>
+          <button type="button" disabled={actionBusy || bidsLeft === 0} className="mdiscover-counter" onClick={() => openBidEditor('submit')}>Submit a quote{bidsLeft > 0 ? ` (${bidsLeft} left)` : ''}</button>
         )}
         {pricingMode === 'priced' && <button type="button" disabled={actionBusy} className="mdiscover-accept" onClick={() => onRespond('accept')}>Accept</button>}
       </footer>

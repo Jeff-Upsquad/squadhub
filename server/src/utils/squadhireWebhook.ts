@@ -1065,6 +1065,13 @@ export async function buildSquadhirePayloadForCard(
       (contentSource as any).subscription_price == null &&
       ((contentSource as any).proposed_price == null ||
         (contentSource as any).proposed_price === 0);
+    if (cardType === 'subscription') {
+      // Make the action contract explicit for SquadHire. The missing-price
+      // fallback remains there for older deliveries, but new consumers no
+      // longer have to infer whether Accept or Submit quote is valid.
+      content.pricing_mode = isSubscriptionRequestQuote ? 'unpriced' : 'priced';
+      content.request_quote = isSubscriptionRequestQuote;
+    }
     if (isSubscriptionRequestQuote) {
       delete content.monthly_price;
       delete content.customer_monthly_price;
