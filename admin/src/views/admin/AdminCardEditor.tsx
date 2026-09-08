@@ -189,6 +189,9 @@ interface CardData {
   // distinct from proposed_price, which the admin sets. Shown once above the
   // pricing table (not per tier).
   client_budget: number | null;
+  // ISO currency code for the client's budget (e.g. 'USD' for non-India
+  // briefs). Used only to render the Client Proposed column's symbol.
+  budget_currency?: string | null;
   // Finalized monthly client price. null = not finalized (falls back to proposed).
   subscription_price: number | null;
   // Adjusted margin. null = inherit the plan catalog margin.
