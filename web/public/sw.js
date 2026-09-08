@@ -13,8 +13,9 @@ self.addEventListener('activate', (event) => {
   event.waitUntil(self.clients.claim());
 });
 
-// A push arrives only when the server sent one (which it does only while the
-// user has no live socket — see server/src/sockets/index.ts), so we always show.
+// The server fans a push out to every subscribed device. Suppress the system
+// notification only on a device that already has a focused SquadHub window;
+// another device being open must never silence this one.
 self.addEventListener('push', (event) => {
   let payload = {};
   try {
@@ -45,7 +46,18 @@ self.addEventListener('push', (event) => {
     return p && p.catch ? p.catch(() => {}) : Promise.resolve();
   };
 
-  event.waitUntil(Promise.all([self.registration.showNotification(title, options), updateBadge()]));
+  event.waitUntil(
+    (async () => {
+      await updateBadge();
+      const wins = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+      const alreadyVisibleHere = wins.some(
+        (client) => client.visibilityState === 'visible' && client.focused,
+      );
+      if (!alreadyVisibleHere) {
+        await self.registration.showNotification(title, options);
+      }
+    })(),
+  );
 });
 
 // Click → focus an existing SquadHub window (and route it in-app) or open one.
