@@ -24,6 +24,7 @@ export type Notification = {
     | 'task_due_soon'
     | 'mention'
     | 'message_mention'
+    | 'thread_reply'
     | 'dm_received'
     | 'reaction_added'
     | 'lms_assigned'
@@ -93,6 +94,7 @@ function ctxLine(n: Notification): string {
     case 'announcement': return 'Announcement';
     case 'dm_received': return 'Thread in a direct message';
     case 'message_mention': return chat?.kind === 'dm' ? 'Mention in a direct message' : 'Thread in a channel';
+    case 'thread_reply': return chat?.kind === 'dm' ? 'Reply in a direct message' : 'Reply in a channel thread';
     case 'mention': return 'Mention in a task';
     case 'task_assigned': return 'Task';
     case 'task_updated': return 'Task update';

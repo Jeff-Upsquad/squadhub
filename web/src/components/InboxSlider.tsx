@@ -25,6 +25,7 @@ const ACTION_LABEL: Record<Notification['type'], string> = {
   task_due_soon: 'Task due soon',
   mention: 'Mentioned you in a comment',
   message_mention: 'Mentioned you in a message',
+  thread_reply: 'Replied to your thread',
   dm_received: 'Sent you a direct message',
   reaction_added: 'Reacted to your message',
   lms_assigned: 'Assigned you a course',

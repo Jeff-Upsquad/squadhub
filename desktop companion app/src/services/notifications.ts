@@ -31,6 +31,7 @@ function getNotificationSubtitle(type: string): string {
     task_due_soon: 'Due Soon',
     mention: 'Mention',
     message_mention: 'Mention',
+    thread_reply: 'Thread Reply',
     dm_received: 'Direct Message',
     reaction_added: 'Reaction',
   };

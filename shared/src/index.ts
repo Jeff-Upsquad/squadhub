@@ -1058,6 +1058,7 @@ export interface SopBreachSummary {
 export type NotificationType =
   | 'announcement'
   | 'message_mention'
+  | 'thread_reply'
   | 'dm_received'
   | 'task_assigned'
   | 'task_updated'
