@@ -5,14 +5,17 @@ import { supabaseAdmin } from '../supabase';
  * catalog (customer price + margin). Used when a public requirement form is
  * submitted so New Deals land with usable pricing instead of blanks.
  *
- * Rules:
+ * Rules (selected tiers):
  *   - proposed_price stays 0 (admin may fill later)
  *   - markup stays null so the plan catalog margin (fixed OR percent) is
  *     inherited live — percent margins re-apply on every bid amount
- *   - customer price always → subscription_price (the Final price in the editor)
- *   - client budget (if any) is reference only: stored per tier as
+ *   - Final (subscription_price) = client budget when stated (overrides
+ *     catalog), else catalog customer price
+ *   - client budget (if any) is ALSO kept as reference:
  *     tier_pricing.<tier>.client_budget, and optionally as a scalar
  *     subscription_cards.client_budget when a single amount applies
+ * Unselected levels are not seeded here — publish expands them to
+ * request-quote (bidding), never catalog.
  */
 
 const PLAN_TO_CANONICAL: Record<string, string> = {
@@ -69,8 +72,8 @@ export async function buildCatalogTierPricing(opts: {
   tierBudgets?: Record<string, number> | null | undefined;
 }): Promise<Record<string, CatalogTierPricingEntry>> {
   const { serviceSlug, planName, tiers, countryId, clientBudget, tierBudgets } = opts;
-  // Final always comes from the catalog. Client budgets are attached as
-  // reference-only client_budget on each tier entry.
+  // Selected-tier Final: client budget (when stated) overrides catalog.
+  // The budget is ALSO kept as reference-only client_budget on each entry.
   const budgetFor = (tier: string): number | null => {
     const fromMap = tierBudgets?.[tier];
     if (typeof fromMap === 'number' && fromMap > 0) return fromMap;
@@ -149,11 +152,11 @@ export async function buildCatalogTierPricing(opts: {
 
     // Keep markup null so percent (or fixed) plan margins stay live during
     // bidding — resolvePlanMargin recomputes against each bid amount.
-    // Catalog min customer price seeds Final. Client budget is reference only.
+    // Selected-tier Final: client budget overrides catalog; no budget → catalog.
     out[tier] = {
       proposed_price: 0,
       markup: null,
-      subscription_price: pricing.price,
+      subscription_price: client_budget ?? pricing.price,
       ...(client_budget != null ? { client_budget } : {}),
     };
   }
@@ -201,11 +204,11 @@ export function coerceProposedPrice(value: number | null | undefined): number | 
 
 /**
  * Standard levels always broadcast on subscription publish.
- * Selected levels keep their set Final price; unselected levels go out
- * as "request quote" (no fixed price — talent is invited to quote).
- * Custom is only included when already selected. Agencies is a delivery
- * option alongside talent tiers but now also auto-broadcasts as
- * request-quote when not selected (no catalog price).
+ * Selected levels: manual Final wins, else client budget (overrides catalog),
+ * else catalog. Unselected levels go out as "request quote" (no fixed price
+ * — talent is invited to quote). Custom is only included when already
+ * selected. Agencies is a delivery option alongside talent tiers but now also
+ * auto-broadcasts as request-quote when not selected (no catalog price).
  */
 export const BROADCAST_STANDARD_TIERS = ['Top Talents', 'Pro', 'Junior', 'Agencies'] as const;
 
@@ -214,6 +217,7 @@ const SERVICE_TYPE_TO_SLUG: Record<string, string> = {
   Editors: 'video_editor',
   'Designer plus Editor': 'designer_video_editor',
   Accountants: 'accountant',
+  'Ads Specialists': 'ads_specialist',
 };
 
 /**
@@ -221,8 +225,10 @@ const SERVICE_TYPE_TO_SLUG: Record<string, string> = {
  *   - every standard level (Junior/Pro/Top Talents/Agencies) always broadcasts
  *   - plus Custom if it was selected with a publishable price
  *
- * Selected tiers with a publishable price keep their entry. Unselected
- * standard tiers go out as "request quote" (proposed_price 0, no
+ * Selected tiers price priority: explicit Final (subscription_price) when it
+ * is a manual admin figure, else client budget (client_budget) when stated
+ * (overrides catalog), else catalog, else request-quote.
+ * Unselected standard tiers go out as "request quote" (proposed_price 0, no
  * subscription_price) — talent quotes, no catalog price. Agencies has no
  * catalog price, so unselected Agencies is always request-quote.
  */
@@ -283,6 +289,38 @@ export async function expandBroadcastTiersForPublish(opts: {
   for (const tier of ordered) {
     const existingEntry = existing[tier];
     const isSelected = selected.includes(tier);
+    const clientB =
+      typeof existingEntry?.client_budget === 'number' && existingEntry.client_budget > 0
+        ? existingEntry.client_budget
+        : null;
+    const cat = catalog[tier];
+    const catPrice =
+      typeof cat?.subscription_price === 'number' && cat.subscription_price > 0
+        ? cat.subscription_price
+        : null;
+
+    // Selected + client budget stated: budget overrides an empty Final or a
+    // catalog-seeded Final. A Final distinct from BOTH catalog and budget is
+    // treated as a manual admin figure and wins.
+    if (isSelected && clientB != null) {
+      const existingFinal =
+        typeof existingEntry?.subscription_price === 'number' && existingEntry.subscription_price > 0
+          ? existingEntry.subscription_price
+          : null;
+      const finalIsManual =
+        existingFinal != null && catPrice != null && existingFinal !== catPrice && existingFinal !== clientB;
+      if (!finalIsManual) {
+        tierPricing[tier] = {
+          proposed_price: existingEntry?.proposed_price ?? 0,
+          markup: existingEntry?.markup ?? cat?.markup ?? null,
+          subscription_price: clientB,
+          client_budget: clientB,
+        };
+        targetTiers.push(tier);
+        continue;
+      }
+    }
+
     if (tierHasPublishablePrice(existingEntry)) {
       tierPricing[tier] = {
         proposed_price: existingEntry!.proposed_price ?? 0,
@@ -301,7 +339,6 @@ export async function expandBroadcastTiersForPublish(opts: {
     // Selected but blank: try catalog fallback; otherwise fall through to
     // request-quote (still broadcastable).
     if (isSelected) {
-      const cat = catalog[tier];
       if (tierHasPublishablePrice(cat)) {
         tierPricing[tier] = {
           proposed_price: 0,

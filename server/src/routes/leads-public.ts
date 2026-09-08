@@ -32,6 +32,7 @@ const SLUG_TO_SERVICE_TYPE: Record<string, string> = {
   video_editor: 'Editors',
   designer_video_editor: 'Designer plus Editor',
   accountant: 'Accountants',
+  ads_specialist: 'Ads Specialists',
 };
 
 const VALID_DAYS = new Set(['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']);
@@ -43,6 +44,7 @@ const SERVICE_TYPE_TO_SLUG: Record<string, string> = {
   Editors: 'video_editor',
   'Designer plus Editor': 'designer_video_editor',
   Accountants: 'accountant',
+  'Ads Specialists': 'ads_specialist',
 };
 
 // Card sources that surface in the admin "Form Requests" queue and can be
@@ -331,9 +333,9 @@ const submissionSchema = z.object({
   // two cards. The "Designer + Editor" combo box is its own distinct slug
   // (`designer_video_editor`) meaning one hybrid person, not two specialists.
   service_types: z
-    .array(z.enum(['designer', 'video_editor', 'designer_video_editor', 'accountant']))
+    .array(z.enum(['designer', 'video_editor', 'designer_video_editor', 'accountant', 'ads_specialist']))
     .min(1)
-    .max(4)
+    .max(5)
     .refine((arr) => new Set(arr).size === arr.length, {
       message: 'service_types must be unique',
     }),
@@ -366,7 +368,7 @@ const submissionSchema = z.object({
   // forward; legacy rows retain their existing value.
   role_requirements: z
     .record(
-      z.enum(['designer', 'video_editor', 'designer_video_editor', 'accountant']),
+      z.enum(['designer', 'video_editor', 'designer_video_editor', 'accountant', 'ads_specialist']),
       z.object({
         note: z.string().trim().max(2000).optional(),
         hours: z.string().trim().max(200).optional(),
@@ -386,6 +388,7 @@ const submissionSchema = z.object({
         // Assignment path: a single one-off project budget + timeline. budget
         // → proposed_price; the timeline fields land in assignment_details.
         budget: z.number().int().nonnegative().optional(),
+        currency: z.enum(['INR', 'USD', 'EUR', 'GBP', 'AED', 'AUD', 'CAD', 'SGD']).optional(),
         duration: z.string().trim().max(200).optional(),
         start_date: z.string().trim().max(40).optional(),
         deadline: z.string().trim().max(40).optional(),
@@ -638,8 +641,9 @@ router.post('/landing', ipRateLimit, async (req: Request, res: Response) => {
       // Subscription pricing seed from the admin catalog:
       //   - proposed_price stays 0
       //   - margin always auto-filled from catalog
-      //   - Final (subscription_price) = catalog customer price
-      //   - client budgets (per level) stored on tier_pricing.<tier>.client_budget
+      //   - Final (subscription_price) = client budget when stated (overrides
+      //     catalog), else catalog customer price
+      //   - client budgets (per level) also stored on tier_pricing.<tier>.client_budget
       // Assignments: per-level project budgets → proposed_price on each tier.
       const roleTiers = roleReq?.tiers || [];
       const roleTierBudgets: Record<string, number> = {};
@@ -661,6 +665,7 @@ router.post('/landing', ipRateLimit, async (req: Request, res: Response) => {
         markup: number | null;
         subscription_price: number | null;
         client_budget?: number | null;
+        currency?: string;
       }> = {};
 
       if (body.card_type === 'assignment') {
@@ -684,6 +689,11 @@ router.post('/landing', ipRateLimit, async (req: Request, res: Response) => {
           clientBudget: roleScalarBudget,
           tierBudgets: roleTierBudgets,
         });
+      }
+      if (roleReq?.currency) {
+        for (const tier of Object.keys(roleTierPricing)) {
+          roleTierPricing[tier] = { ...roleTierPricing[tier], currency: roleReq.currency };
+        }
       }
       // Single-tier cards also mirror the first tier onto the row columns so
       // the legacy single-tier publish path has something to read.
@@ -744,6 +754,7 @@ router.post('/landing', ipRateLimit, async (req: Request, res: Response) => {
           // Subscription: client's stated monthly budget (scalar when uniform).
           // Assignment: leave null — budgets live as proposed_price / tier_pricing.
           client_budget: body.card_type === 'assignment' ? null : roleClientBudget,
+          budget_currency: roleReq?.currency || null,
           working_days: body.working_days,
           customer_name: body.contact_name,
           customer_email: body.email,

@@ -16,6 +16,7 @@ const SERVICE_TYPE_TO_SLUG: Record<string, string> = {
   Editors: 'video_editor',
   'Designer plus Editor': 'designer_video_editor',
   Accountants: 'accountant',
+  'Ads Specialists': 'ads_specialist',
 };
 
 const PLAN_TO_CANONICAL: Record<string, string> = {
@@ -69,7 +70,11 @@ function pickCatalogPricing(
 
 /** Country currency codes are INR/USD; table UI shows symbols. */
 function currencySymbol(code: string | undefined | null): string {
-  return code === 'USD' ? '$' : '₹';
+  const symbols: Record<string, string> = {
+    INR: '₹', USD: '$', EUR: '€', GBP: '£', AED: 'AED ',
+    AUD: 'A$', CAD: 'C$', SGD: 'S$',
+  };
+  return (code && symbols[code]) || '₹';
 }
 
 /** "2026-10-10" → "10 Oct 2026". Returns null for empty/unparseable input. */
@@ -243,7 +248,7 @@ const TIER_DISPLAY_RANK: Record<string, number> = {
   'top talents': 0, pro: 1, junior: 2, agencies: 3, custom: 4,
 };
 const VALID_PLANS = ['starter', 'basic', 'plus', 'pro', 'personal'];
-const SERVICE_TYPES = ['Designers', 'Editors', 'Designer plus Editor', 'Accountants'];
+const SERVICE_TYPES = ['Designers', 'Editors', 'Designer plus Editor', 'Accountants', 'Ads Specialists'];
 
 export default function AdminCardEditor({
   cardId,
@@ -501,39 +506,6 @@ export default function AdminCardEditor({
     [],
   );
 
-  // The client's stated budget for a level ("Client proposed price"). Editable
-  // so a figure captured wrong on the brief — or renegotiated on a call — can
-  // be corrected here instead of in the DB. Lives on
-  // tier_pricing.<tier>.client_budget; the scalar card column is kept in step
-  // so clearing every row actually sticks across a reload (the loader falls
-  // back to the scalar when the per-tier map is empty).
-  const updateClientBudget = useCallback(
-    (tier: string, value: number | null) => {
-      const amount = value != null && value > 0 ? value : null;
-      const previous = clientBudgetsByTier[tier] ?? null;
-      const next = { ...clientBudgetsByTier };
-      if (amount != null) next[tier] = amount;
-      else delete next[tier];
-      setClientBudgetsByTier(next);
-      const vals = Object.values(next);
-      setClientBudget(vals.length > 0 && vals.every((v) => v === vals[0]) ? vals[0] : null);
-      // proposed_price mirrors the client's figure on intake, and the loader
-      // reads it back as the budget when no explicit client_budget is stored.
-      // Keep the two in step ONLY while proposed is still that mirror (blank,
-      // or equal to the amount we're replacing) and no Final has been set —
-      // never overwrite a distinct price an admin typed.
-      setTierPricing((prev) => {
-        const entry = prev[tier];
-        if (!entry) return prev;
-        if (entry.subscriptionPrice != null && entry.subscriptionPrice > 0) return prev;
-        const mirrors = !(entry.proposedPrice > 0) || entry.proposedPrice === previous;
-        if (!mirrors) return prev;
-        return { ...prev, [tier]: { ...entry, proposedPrice: amount ?? 0 } };
-      });
-    },
-    [clientBudgetsByTier],
-  );
-
   // Countries list (for Location + country-aware catalog pricing).
   const countriesQuery = useQuery({
     queryKey: ['admin-countries'],
@@ -649,9 +621,68 @@ export default function AdminCardEditor({
     [isAssignment, assignmentMarginByTier, catalogByTier, catalogPreferredCountryId, indiaCountryId],
   );
 
-  // Once per card+plan+tiers+country: fill blank Margin and blank Final from the
-  // catalog. Covers CRM/internal briefs that landed before server-side seeding,
-  // and plan changes in the editor. Client budget (if any) stays reference-only.
+  // The client's stated budget for a level ("Client proposed price"). Editable
+  // so a figure captured wrong on the brief — or renegotiated on a call — can
+  // be corrected here instead of in the DB. Lives on
+  // tier_pricing.<tier>.client_budget; the scalar card column is kept in step
+  // so clearing every row actually sticks across a reload (the loader falls
+  // back to the scalar when the per-tier map is empty).
+  // Selected-tier rule: a stated budget overrides catalog-seeded Final, so
+  // typing here also fills Final (unless Final is a distinct manual figure
+  // the admin typed — different from both catalog and the previous budget).
+  const updateClientBudget = useCallback(
+    (tier: string, value: number | null) => {
+      const amount = value != null && value > 0 ? value : null;
+      const previous = clientBudgetsByTier[tier] ?? null;
+      const next = { ...clientBudgetsByTier };
+      if (amount != null) next[tier] = amount;
+      else delete next[tier];
+      setClientBudgetsByTier(next);
+      const vals = Object.values(next);
+      setClientBudget(vals.length > 0 && vals.every((v) => v === vals[0]) ? vals[0] : null);
+      const catalogPrice = catalogPricingForTier(tier)?.price ?? null;
+      setTierPricing((prev) => {
+        const entry = prev[tier];
+        if (!entry) return prev;
+        const updated = { ...entry };
+        // proposed_price mirrors the client's figure on intake, and the loader
+        // reads it back as the budget when no explicit client_budget is stored.
+        // Keep the two in step ONLY while proposed is still that mirror (blank,
+        // or equal to the amount we're replacing) and no Final has been set.
+        if (!(entry.subscriptionPrice != null && entry.subscriptionPrice > 0)) {
+          const mirrors = !(entry.proposedPrice > 0) || entry.proposedPrice === previous;
+          if (mirrors) updated.proposedPrice = amount ?? 0;
+        }
+        // Final override for selected tiers: empty, previous-budget, or
+        // catalog-seeded Final follows the newly typed budget. A distinct
+        // manual Final is left alone. Clearing the budget resets a
+        // budget-derived Final so catalog can refill.
+        if (amount != null) {
+          const finalEmpty = !(entry.subscriptionPrice != null && entry.subscriptionPrice > 0);
+          const finalIsPrevBudget = entry.subscriptionPrice === previous;
+          const finalIsCatalog = catalogPrice != null && entry.subscriptionPrice === catalogPrice;
+          if (finalEmpty || finalIsPrevBudget || finalIsCatalog) {
+            updated.subscriptionPrice = amount;
+          }
+        } else if (entry.subscriptionPrice === previous) {
+          updated.subscriptionPrice = null;
+        }
+        if (
+          updated.subscriptionPrice === entry.subscriptionPrice &&
+          updated.proposedPrice === entry.proposedPrice
+        ) {
+          return prev;
+        }
+        return { ...prev, [tier]: updated };
+      });
+    },
+    [clientBudgetsByTier, catalogPricingForTier],
+  );
+
+  // Once per card+plan+tiers+country: fill blank Final from the client budget
+  // first (stated budget overrides catalog), else from the catalog. Covers
+  // CRM/internal briefs that landed before server-side seeding, and plan
+  // changes in the editor.
   const catalogSeedKeyRef = useRef('');
   useEffect(() => {
     if (!card) return;
@@ -670,8 +701,6 @@ export default function AdminCardEditor({
       let changed = false;
       const next = { ...prev };
       for (const tier of tiers) {
-        const row = catalogPricingForTier(tier);
-        if (!row || !(row.price > 0)) continue;
         const entry = next[tier] || {
           proposedPrice: 0,
           markup: null,
@@ -679,18 +708,28 @@ export default function AdminCardEditor({
         };
         // Do NOT seed absolute markup from a percent catalog margin — leave
         // markup null so the plan % stays live and re-applies on each bid.
-        // Final seeds to the catalog min price when empty.
+        // Selected-tier Final: client budget first (overrides catalog), else
+        // catalog min price — but only when Final is empty.
         const updated = { ...entry };
         if (updated.subscriptionPrice == null && !(updated.proposedPrice > 0)) {
-          updated.subscriptionPrice = row.price;
-          changed = true;
+          const budget = clientBudgetsByTier[tier] ?? null;
+          if (budget != null && budget > 0) {
+            updated.subscriptionPrice = budget;
+            changed = true;
+          } else {
+            const row = catalogPricingForTier(tier);
+            if (row && row.price > 0) {
+              updated.subscriptionPrice = row.price;
+              changed = true;
+            }
+          }
         }
         next[tier] = updated;
       }
       return changed ? next : prev;
     });
     catalogSeedKeyRef.current = seedKey;
-  }, [card, catalogPlan, tiers, catalogPricingForTier, catalogQueries, catalogPreferredCountryId, indiaCountryId]);
+  }, [card, catalogPlan, tiers, catalogPricingForTier, catalogQueries, catalogPreferredCountryId, indiaCountryId, clientBudgetsByTier]);
 
   const workingDaysCount = useMemo(
     () => workingDaysThisMonth(workingDays),
@@ -740,15 +779,19 @@ export default function AdminCardEditor({
     [clientBudgetsByTier, clientBudget, tiers],
   );
 
-  // Partner price preview: selected tiers use form Final − margin; unselected
-  // fall back to catalog Final − catalog margin (those levels still broadcast
-  // at catalog rates on publish).
+  // Partner price preview: selected tiers use form Final (client budget
+  // overrides catalog when stated) − margin; unselected levels show catalog
+  // reference (they broadcast as request-quote/bidding on publish).
   const partnerPriceForTier = useCallback(
     (tier: string): number | null => {
       const isSelected = tiers.includes(tier);
       const entry = tierPricing[tier];
       if (isSelected && entry) {
-        const finalized = entry.subscriptionPrice ?? (entry.proposedPrice > 0 ? entry.proposedPrice : null);
+        const budget = clientBudgetsByTier[tier] ?? null;
+        const finalized =
+          entry.subscriptionPrice ??
+          (entry.proposedPrice > 0 ? entry.proposedPrice : null) ??
+          (budget && budget > 0 ? budget : null);
         if (finalized == null) return null;
         const margin = entry.markup ?? catalogMarginForTier(tier) ?? 0;
         return Math.max(0, finalized - margin);
@@ -761,7 +804,7 @@ export default function AdminCardEditor({
           : Math.max(0, row.margin_value);
       return Math.max(0, row.price - marginAbs);
     },
-    [tiers, tierPricing, catalogMarginForTier, catalogPricingForTier],
+    [tiers, tierPricing, catalogMarginForTier, catalogPricingForTier, clientBudgetsByTier],
   );
 
   // Whether at least one selected tier has catalog data loaded — used to
@@ -1903,6 +1946,9 @@ export default function AdminCardEditor({
                       const partnerPrice = partnerPriceForTier(tier);
                       const catalogPricingRow = catalogPricingForTier(tier);
                       const catalogCurrency = currencySymbol(catalogPricingRow?.country?.currency);
+                      const clientBudgetCurrency = currencySymbol(
+                        card?.budget_currency || catalogPricingRow?.country?.currency,
+                      );
                       const catalogMarginInRupees = isSelected
                         ? catalogMarginForTier(tier)
                         : catalogPricingRow
@@ -1986,11 +2032,11 @@ export default function AdminCardEditor({
                                   updateClientBudget(tier, Number.isFinite(v) && v > 0 ? v : null);
                                 }}
                                 ariaLabel={`${tier} client proposed price`}
-                                currency={catalogCurrency}
+                                currency={clientBudgetCurrency}
                               />
                             ) : clientProposed != null ? (
                               <div className="text-xs font-semibold tabular-nums text-[var(--color-sh-ink)]">
-                                {catalogCurrency}{clientProposed.toLocaleString()}
+                                {clientBudgetCurrency}{clientProposed.toLocaleString()}
                               </div>
                             ) : (
                               <span className="text-[var(--color-sh-ink-faint)]">—</span>
