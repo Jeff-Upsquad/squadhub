@@ -31,6 +31,7 @@ const SERVICE_TYPE_LABEL: Record<string, string> = {
   designer: 'Designers',
   video_editor: 'Editors',
   designer_video_editor: 'Designer + Editor',
+  ads_specialist: 'Ads Specialist',
 };
 
 const PLAN_ORDER: SubscriptionPlan[] = ['Starter', 'Basic', 'Plus', 'Pro', 'Personal'];
@@ -487,6 +488,7 @@ const CARD_SERVICE_TYPE_LABEL: Record<string, string> = {
   Designers: 'Designers',
   Editors: 'Editors',
   'Designer plus Editor': 'Designer + Editor',
+  'Ads Specialists': 'Ads Specialist',
 };
 
 function BrandCard({ brand, countries }: { brand: ClientSubmissionBrand; countries: Country[] }) {

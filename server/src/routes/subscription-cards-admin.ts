@@ -267,6 +267,8 @@ router.get('/', async (req: Request, res: Response) => {
       Designers: 'designer',
       Editors: 'video_editor',
       'Designer plus Editor': 'designer_video_editor',
+      Accountants: 'accountant',
+      'Ads Specialists': 'ads_specialist',
     };
     const PLAN_NAME_TO_CANONICAL: Record<string, string> = {
       starter: 'Starter', basic: 'Basic', plus: 'Plus', pro: 'Pro', personal: 'Personal',

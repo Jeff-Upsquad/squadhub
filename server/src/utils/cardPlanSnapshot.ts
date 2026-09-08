@@ -46,6 +46,8 @@ const SERVICE_TYPE_TO_SLUG: Record<string, string> = {
   Designers: 'designer',
   Editors: 'video_editor',
   'Designer plus Editor': 'designer_video_editor',
+  Accountants: 'accountant',
+  'Ads Specialists': 'ads_specialist',
 };
 
 const PLAN_NAME_TO_CANONICAL: Record<string, string> = {

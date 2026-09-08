@@ -232,6 +232,8 @@ router.post('/subscription-cards/from-request', async (req: Request, res: Respon
       Designers: 'designer',
       Editors: 'video_editor',
       'Designer plus Editor': 'designer_video_editor',
+      Accountants: 'accountant',
+      'Ads Specialists': 'ads_specialist',
     };
     const subscriptionSlug = serviceToSlug[requestData.service_type] || '';
     let squadhireCategoryIds: string[] = [];
@@ -552,6 +554,7 @@ router.post('/subscription-cards/client-brief', async (req: Request, res: Respon
       Editors: 'video_editor',
       'Designer plus Editor': 'designer_video_editor',
       Accountants: 'accountant',
+      'Ads Specialists': 'ads_specialist',
     };
     const briefTiers = body.target_tiers || [];
     const briefTierBudgets: Record<string, number> = {};
@@ -895,6 +898,8 @@ router.patch('/subscription-cards/:id/edit', async (req: Request, res: Response)
         Designers: 'designer',
         Editors: 'video_editor',
         'Designer plus Editor': 'designer_video_editor',
+        Accountants: 'accountant',
+        'Ads Specialists': 'ads_specialist',
       };
       const newServiceType = body.service_type as string | null | undefined;
       const subscriptionSlug = newServiceType ? serviceToSlug[newServiceType] : null;
@@ -1092,6 +1097,8 @@ router.post('/subscription-cards/:id/publish', async (req: Request, res: Respons
       Designers: 'designer',
       Editors: 'video_editor',
       'Designer plus Editor': 'designer_video_editor',
+      Accountants: 'accountant',
+      'Ads Specialists': 'ads_specialist',
     };
     const currentServiceType = card.service_type as string | null | undefined;
     const subscriptionSlug = currentServiceType ? SERVICE_TYPE_TO_SLUG[currentServiceType] : null;

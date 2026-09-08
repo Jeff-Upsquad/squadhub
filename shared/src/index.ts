@@ -1736,7 +1736,7 @@ export interface PartnerClientAssignment {
 // ---- Clients Mini-App ----
 export type SubscriptionPlan = 'Starter' | 'Basic' | 'Plus' | 'Pro' | 'Personal';
 export type SubscriptionTier = 'Junior' | 'Pro' | 'Top Talents';
-export type SubscriptionSlug = 'designer' | 'video_editor' | 'accountant';
+export type SubscriptionSlug = 'designer' | 'video_editor' | 'designer_video_editor' | 'accountant' | 'ads_specialist';
 export type DeliverableKind = 'hours' | 'item';
 export type CurrencyCode = 'INR' | 'USD';
 
@@ -1888,6 +1888,8 @@ export interface SubscriptionCardTierPricing {
   subscription_price?: number | null;
   /** Client's stated budget for this experience level from their brief. */
   client_budget?: number | null;
+  /** Currency selected by the business for this tier's stated budget. */
+  currency?: string | null;
 }
 
 // ---- Pricing resolution helpers (single source of truth) ----
@@ -2166,7 +2168,7 @@ export type BrandSource = 'shared_form' | 'landing_page_form';
 
 // Service-type slug stored on the brand. Lets the brief form rehydrate
 // Step 1 roles on autofill without a label<->slug reverse map.
-export type BrandServiceType = 'designer' | 'video_editor' | 'designer_video_editor' | 'accountant';
+export type BrandServiceType = 'designer' | 'video_editor' | 'designer_video_editor' | 'accountant' | 'ads_specialist';
 
 export interface ClientSubmissionBrand {
   id: string;
@@ -2348,6 +2350,11 @@ const AR_VIDEO: AdditionalRequirementGroup[] = [
   { key: 'tools', label: 'Tools', options: ['Adobe Premiere Pro', 'DaVinci Resolve', 'Final Cut Pro', 'After Effects', 'CapCut', 'Filmora'] },
   { key: 'ai_tools', label: 'AI tools', options: ['Runway', 'Descript', 'Opus Clip', 'ElevenLabs'] },
 ];
+const AR_ADS_SPECIALIST: AdditionalRequirementGroup[] = [
+  { key: 'skills', label: 'Skill sets', options: ['Paid media strategy', 'Campaign optimisation', 'Creative testing', 'Conversion tracking', 'Landing-page CRO', 'Attribution', 'Media planning', 'Audience research'] },
+  { key: 'tools', label: 'Tools', options: ['GA4', 'Google Tag Manager', 'Looker Studio', 'Meta Ads Manager', 'Google Ads', 'LinkedIn Campaign Manager', 'HubSpot', 'Semrush'] },
+  { key: 'ai_tools', label: 'AI tools', options: ['ChatGPT', 'Claude', 'AdCreative.ai', 'Jasper', 'Canva Magic Studio'] },
+];
 
 /** Seed catalogs per service slug. Missing slug → the designer set as a safe default. */
 export const ADDITIONAL_REQUIREMENT_CATALOG: Record<string, AdditionalRequirementGroup[]> = {
@@ -2355,6 +2362,7 @@ export const ADDITIONAL_REQUIREMENT_CATALOG: Record<string, AdditionalRequiremen
   designer: AR_DESIGNER,
   video_editor: AR_VIDEO,
   designer_video_editor: AR_DESIGNER,
+  ads_specialist: AR_ADS_SPECIALIST,
 };
 
 export function additionalRequirementCatalog(slug: string | null | undefined): AdditionalRequirementGroup[] {
@@ -2492,6 +2500,8 @@ export interface SubscriptionCard {
    * tier_pricing.<tier>.client_budget.
    */
   client_budget?: number | null;
+  /** Currency selected by the business for its stated budget. */
+  budget_currency?: string | null;
   /** Adjusted margin (INR/month). null = use the plan catalog margin. */
   markup: number | null;
   /** Per-tier pricing for multi-tier draft cards: { [tier]: {...} }. */

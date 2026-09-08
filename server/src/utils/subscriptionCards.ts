@@ -557,6 +557,10 @@ export async function fanOutTierCards(
     'partner_price_override',
     'disabled_default_deliverable_ids',
     'client_budget',
+    'budget_currency',
+    'additional_requirements',
+    'brand_id',
+    'lead_submission_id',
   ] as const;
 
   const siblingIds: string[] = [];

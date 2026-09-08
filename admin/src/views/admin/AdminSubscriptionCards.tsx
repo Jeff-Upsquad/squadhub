@@ -172,6 +172,7 @@ const SERVICE_TYPE_BADGES: Record<string, { label: string; bg: string; color: st
   Editors: { label: 'Editor', bg: '#CCFBF1', color: '#115E59' },
   'Designer plus Editor': { label: 'Designer + Editor', bg: '#EDE9FE', color: '#5B21B6' },
   Accountants: { label: 'Accountant', bg: '#DBEAFE', color: '#1E40AF' },
+  'Ads Specialists': { label: 'Ads Specialist', bg: '#FEF3C7', color: '#92400E' },
 };
 
 export function ServiceTypeBadge({ serviceType }: { serviceType?: string | null }) {

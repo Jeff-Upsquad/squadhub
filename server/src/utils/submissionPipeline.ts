@@ -28,6 +28,8 @@ const CARD_SERVICE_TYPE_TO_SUB_SLUG: Record<string, string> = {
   'Designers': 'designer',
   'Editors': 'video_editor',
   'Designer plus Editor': 'designer_video_editor',
+  'Accountants': 'accountant',
+  'Ads Specialists': 'ads_specialist',
 };
 const CARD_PLAN_NAME_TO_CANONICAL: Record<string, string> = {
   starter: 'Starter',

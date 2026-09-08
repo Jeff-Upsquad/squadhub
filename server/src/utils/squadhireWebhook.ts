@@ -382,6 +382,8 @@ export async function buildSquadhirePayloadForCard(
         Designers: 'designer',
         Editors: 'video_editor',
         'Designer plus Editor': 'designer_video_editor',
+        Accountants: 'accountant',
+        'Ads Specialists': 'ads_specialist',
       };
       const guessedSlug =
         SERVICE_SLUG_MAP[subscriptionName] ??
@@ -630,6 +632,10 @@ export async function buildSquadhirePayloadForCard(
   let resolvedMonthlyPrice: number | null = null;
   let resolvedCustomerMonthlyPrice: number | null = null;
   let resolvedCurrency: string | null = null;
+  const briefBudgetCurrency =
+    typeof (contentSource as any).budget_currency === 'string'
+      ? (contentSource as any).budget_currency
+      : null;
   // Margin row for this country — used both for listed partner pay and for
   // the bid-floor / percent-ceil rules sent to SquadHire.
   let stagedMarginRow: PlanMarginFields | null = null;
@@ -745,7 +751,7 @@ export async function buildSquadhirePayloadForCard(
     const finalized = (contentSource as any).subscription_price as number | null;
     if (finalized != null && finalized > 0) {
       resolvedCustomerMonthlyPrice = finalized;
-      if (!resolvedCurrency) resolvedCurrency = 'INR';
+      if (!resolvedCurrency) resolvedCurrency = briefBudgetCurrency || 'INR';
       const override = card.partner_price_override as number | null | undefined;
       if (override == null) {
         const cardFields = {
@@ -800,7 +806,7 @@ export async function buildSquadhirePayloadForCard(
     if (finalized != null) {
       resolvedMonthlyPrice = partner ?? finalized;
       resolvedCustomerMonthlyPrice = finalized;
-      resolvedCurrency = 'INR';
+      resolvedCurrency = briefBudgetCurrency || 'INR';
     }
   }
 
