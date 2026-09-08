@@ -694,7 +694,8 @@ export default function AdminCardEditor({
     const anyRow = tiers.some((t) => catalogPricingForTier(t));
     if (!anyRow) return;
 
-    const seedKey = `${card.id}|${catalogPlan}|${tiers.join(',')}|${catalogPreferredCountryId || indiaCountryId || ''}`;
+    const budgetsSig = tiers.map((t) => clientBudgetsByTier[t] ?? '').join(',');
+    const seedKey = `${card.id}|${catalogPlan}|${tiers.join(',')}|${catalogPreferredCountryId || indiaCountryId || ''}|${budgetsSig}`;
     if (catalogSeedKeyRef.current === seedKey) return;
 
     setTierPricing((prev) => {
@@ -709,20 +710,29 @@ export default function AdminCardEditor({
         // Do NOT seed absolute markup from a percent catalog margin — leave
         // markup null so the plan % stays live and re-applies on each bid.
         // Selected-tier Final: client budget first (overrides catalog), else
-        // catalog min price — but only when Final is empty.
+        // catalog min price. Also reconciles previously saved Finals that are
+        // still sitting at the catalog price (seeded before the override rule
+        // existed) — a Final distinct from catalog is a manual figure and wins.
         const updated = { ...entry };
+        const budget = clientBudgetsByTier[tier] ?? null;
+        const hasBudget = budget != null && budget > 0;
+        const row = catalogPricingForTier(tier);
         if (updated.subscriptionPrice == null && !(updated.proposedPrice > 0)) {
-          const budget = clientBudgetsByTier[tier] ?? null;
-          if (budget != null && budget > 0) {
+          if (hasBudget) {
             updated.subscriptionPrice = budget;
             changed = true;
-          } else {
-            const row = catalogPricingForTier(tier);
-            if (row && row.price > 0) {
-              updated.subscriptionPrice = row.price;
-              changed = true;
-            }
+          } else if (row && row.price > 0) {
+            updated.subscriptionPrice = row.price;
+            changed = true;
           }
+        } else if (
+          hasBudget &&
+          row && row.price > 0 &&
+          updated.subscriptionPrice === row.price &&
+          updated.subscriptionPrice !== budget
+        ) {
+          updated.subscriptionPrice = budget;
+          changed = true;
         }
         next[tier] = updated;
       }
