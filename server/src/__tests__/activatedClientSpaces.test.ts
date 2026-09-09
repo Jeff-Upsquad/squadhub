@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  activatedClientChannelName,
   brandFolderName,
   templateListRows,
   templateSlugsForServiceType,
@@ -50,6 +51,27 @@ describe('brand folder naming', () => {
       { brand_name: 'Growth Digital Hub', customer_name: 'Majin', customer_company: 'Growth Digital Hub' },
       { business_name: 'Growth Digital Hub' },
     )).toBe('Growth Digital Hub');
+  });
+});
+
+describe('activated client-space channel naming', () => {
+  it('combines the brand and service space into a stable channel slug', () => {
+    expect(activatedClientChannelName(
+      'Growth Digital Hub',
+      'Design Space',
+      '12345678-abcd-1234-abcd-1234567890ab',
+    )).toBe('growth-digital-hub-design-space-12345678');
+  });
+
+  it('always returns a valid channel name within the 80-character limit', () => {
+    const name = activatedClientChannelName(
+      'Æ'.repeat(100),
+      'Video Editing / Reviews',
+      'abcdef12-abcd-1234-abcd-1234567890ab',
+    );
+    expect(name).toBe('video-editing-reviews-abcdef12');
+    expect(name.length).toBeLessThanOrEqual(80);
+    expect(name).toMatch(/^[a-z0-9-]+$/);
   });
 });
 

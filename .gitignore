@@ -12,6 +12,7 @@ build/
 
 # Next.js
 .next/
+.next-ui-preview/
 out/
 
 # Vite
