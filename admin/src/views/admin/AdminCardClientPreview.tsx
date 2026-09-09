@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import api from '@/services/api';
 import { showToast } from '@/components/Toast';
@@ -8,16 +8,21 @@ import { useSquadhireConfig } from '@/hooks/useSquadhireConfig';
 import CardViewToggle, { type CardViewMode } from './CardViewToggle';
 import AdminAssignmentOffers, { ClientBidActions } from './AdminAssignmentOffers';
 import ClientViewChatPanel from './ClientViewChatPanel';
+import ClientViewSquadHireEmbed from './ClientViewSquadHireEmbed';
 import { formatRelative } from './AdminSubscriptionCardRecipientsView';
 import type { AdminSubscriptionCard } from './AdminSubscriptionCards';
 import type { RecipientsResponse } from './AdminSubscriptionCardRecipientsPanel';
 
 // ─── The SquadHire business review screen, live inside the Hub ───────────────
 //
-// This is not an admin summary of what the customer sees — it reads the SAME
-// business-portal services the customer's own browser calls (via the signed
-// `client-view/card` webhook), so the photo, tier, category, live bid figure and
-// "New" markers are the customer's, resolved once, upstream.
+// This is not an admin summary of what the customer sees. When SquadHire
+// supports operator embed, we load their live business review screen (same UI
+// the customer gets, including future layout changes) in an iframe, using a
+// Hub-signed operator session — no extra login, and actions stamp the Hub user.
+// Pending & rejected stay Hub-only; they are not on the business screen.
+//
+// If embed is not available yet, we fall back to reconstructing the review
+// screen from the same `client-view/card` webhook the customer's browser calls.
 //
 // Every action the business can take is here too: shortlist, reject, select,
 // unselect, accept/counter/decline a bid, and the intro chatroom. They run
@@ -207,6 +212,24 @@ export default function AdminCardClientPreview({
   const [pipelineAudience, setPipelineAudience] = useState<PipelineAudience>('all');
   const isRecurringCard = card.card_type !== 'assignment' && card.card_type !== 'hiring';
 
+  const embedQ = useQuery({
+    queryKey: ['client-view-embed', card.id],
+    queryFn: async () => {
+      const r = await api.get(`/admin/subscription-cards/${card.id}/client-view/embed`);
+      return r.data as { supported?: boolean; embed_url?: string; reason?: string };
+    },
+    retry: false,
+    staleTime: 4 * 60 * 1000,
+  });
+  const embedUrl = embedQ.data?.supported && embedQ.data.embed_url ? embedQ.data.embed_url : null;
+
+  const onEmbedEvent = useCallback(() => {
+    qc.invalidateQueries({ queryKey: ['admin-card-events', card.id] });
+    qc.invalidateQueries({ queryKey: ['client-view-card', card.id] });
+    qc.invalidateQueries({ queryKey: ['admin-card-recipients', card.id] });
+    qc.invalidateQueries({ queryKey: ['admin-card-squadhire-recipients', card.id] });
+  }, [qc, card.id]);
+
   // The customer's own screen, straight from the business portal's services.
   const { data, isLoading, error } = useQuery({
     queryKey: ['client-view-card', card.id],
@@ -215,6 +238,7 @@ export default function AdminCardClientPreview({
       return r.data as { card: BusinessCard; recipients: BusinessRecipient[] };
     },
     retry: false,
+    refetchInterval: embedUrl ? 8_000 : false,
   });
 
   // Internal-only audience detail. These endpoints expose delivery state the
@@ -359,6 +383,7 @@ export default function AdminCardClientPreview({
         created_at: string;
       }>;
     },
+    refetchInterval: embedUrl ? 8_000 : false,
   });
   const clientEvents = useMemo(
     () => (events ?? []).filter((e) => e.event_type.startsWith('client_')).slice().reverse(),
@@ -673,14 +698,31 @@ export default function AdminCardClientPreview({
             <path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
           </svg>
           <p className="text-xs text-[var(--color-sh-ink-muted)]">
-            The business&rsquo;s own review screen in SquadHire, live — shortlist, reject, select,
-            unselect, bids and chatrooms all act as the business. Every action is logged below under{' '}
-            <span className="font-semibold">your name</span>, and chat messages show your name, not
-            the business&rsquo;s.
+            {embedUrl ? (
+              <>
+                Live SquadHire business screen — layout updates here when SquadHire changes it.
+                You are signed in as a SquadHub operator, not as the client. Shortlist, select, bids
+                and chat stamp <span className="font-semibold">your name</span>; if the business acts
+                in their own portal, the log below says so. Pending &amp; rejected stay on this Hub
+                page — the client never sees them.
+              </>
+            ) : (
+              <>
+                The business&rsquo;s own review screen in SquadHire, live — shortlist, reject, select,
+                unselect, bids and chatrooms all act as the business. Every action is logged below under{' '}
+                <span className="font-semibold">your name</span>, and chat messages show your name, not
+                the business&rsquo;s.
+              </>
+            )}
           </p>
         </div>
 
-        {error && (
+        {embedQ.isLoading && (
+          <div className="h-[720px] animate-pulse rounded-2xl bg-[var(--color-sh-cream)]" />
+        )}
+        {embedUrl && <ClientViewSquadHireEmbed embedUrl={embedUrl} onRemoteEvent={onEmbedEvent} />}
+
+        {!embedUrl && !embedQ.isLoading && error && (
           <div className="rounded-xl border border-amber-200 bg-amber-50/70 px-4 py-3 text-sm text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/20 dark:text-amber-300">
             {((error as any)?.response?.data?.error as string) ||
               'Could not load the business review screen from SquadHire.'}{' '}
@@ -689,6 +731,8 @@ export default function AdminCardClientPreview({
           </div>
         )}
 
+        {!embedUrl && !embedQ.isLoading && (
+        <>
         {/* ═══ Card brief — the customer's own copy ═══ */}
         <div className="sh-card p-5 sm:p-6">
           <div className="flex items-start justify-between gap-3">
@@ -1099,6 +1143,8 @@ export default function AdminCardClientPreview({
             </li>
           ))}
         </ListCard>
+        </>
+        )}
 
         {/* Internal sourcing visibility. Pending people have received the card
             and have not answered; Rejected people were passed on during review.
@@ -1834,6 +1880,21 @@ const CLIENT_EVENT_LABEL: Record<string, string> = {
   client_chat_message: 'Sent a chat message',
 };
 
+function activityActorLine(e: {
+  actor_label: string | null;
+  actor_type?: string | null;
+  metadata: Record<string, unknown> | null;
+}): string {
+  const source = e.metadata?.actor_source;
+  if (e.actor_type === 'business' || source === 'business') {
+    return e.actor_label && e.actor_label !== 'the business'
+      ? `by the business (${e.actor_label})`
+      : 'by the business';
+  }
+  if (e.actor_label) return `by ${e.actor_label} (SquadHub)`;
+  return 'by a SquadHub user';
+}
+
 function ActivityLog({
   events,
 }: {
@@ -1841,6 +1902,7 @@ function ActivityLog({
     id: string;
     event_type: string;
     actor_label: string | null;
+    actor_type?: string | null;
     metadata: Record<string, unknown> | null;
     created_at: string;
   }>;
@@ -1856,7 +1918,7 @@ function ActivityLog({
       {events.length === 0 ? (
         <div className="px-6 py-10 text-center">
           <p className="text-sm text-[var(--color-sh-ink-subtle)]">
-            Actions taken from this Client view — shortlist, reject, select, unselect, chat — appear here.
+            Actions from SquadHub operators and from the business in SquadHire appear here, labelled by who acted.
           </p>
         </div>
       ) : (
@@ -1876,7 +1938,7 @@ function ActivityLog({
                   </span>
                 </div>
                 <p className="mt-0.5 text-xs text-[var(--color-sh-ink-subtle)]">
-                  {e.actor_label ? `by ${e.actor_label}` : 'by a Leads user'}
+                  {activityActorLine(e)}
                 </p>
                 {preview && <p className="mt-1 text-xs text-[var(--color-sh-ink-muted)]">&ldquo;{preview}&rdquo;</p>}
               </li>

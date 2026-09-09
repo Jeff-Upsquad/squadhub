@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { config } from '../../config';
 import { supabaseAdmin } from '../../supabase';
 import { logCardEvent } from '../../utils/cardEvents';
+import { clientViewRemoteEventSchema, logClientViewRemoteEvent } from '../../utils/squadhireClientViewEvents';
 import { endActiveAssignmentTermsForCard } from '../../utils/assignmentTerms';
 import { lockAcceptedBidPrice } from '../../utils/lockAcceptedBidPrice';
 import { ensureSquadhireTalentProvisioned } from '../../utils/squadhireTalentSession';
@@ -590,6 +591,31 @@ router.post(
         return;
       }
       console.error('[squadhire-callback grant-deletes] error:', err);
+      res.status(500).json({ success: false, error: err?.message || 'Internal server error' });
+    }
+  },
+);
+
+// Operator embed + the customer's own portal both POST here so the Hub activity
+// log can label the click as SquadHub operator vs the business.
+router.post(
+  '/cards/client-view/events',
+  verifySquadhireCallbackSecret,
+  async (req: Request, res: Response) => {
+    try {
+      const body = clientViewRemoteEventSchema.parse(req.body);
+      const result = await logClientViewRemoteEvent(body);
+      if (!result.ok) {
+        res.status(result.status).json({ success: false, error: result.error });
+        return;
+      }
+      res.json({ success: true, duplicate: result.duplicate ?? false });
+    } catch (err: any) {
+      if (err instanceof z.ZodError) {
+        res.status(400).json({ success: false, error: err.errors[0].message });
+        return;
+      }
+      console.error('[squadhire-callback client-view-events] error:', err);
       res.status(500).json({ success: false, error: err?.message || 'Internal server error' });
     }
   },

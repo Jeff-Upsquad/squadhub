@@ -5,6 +5,7 @@ import { requireMiniAppOrAdmin } from '../middleware/miniApp';
 import { config } from '../config';
 import { supabaseAdmin } from '../supabase';
 import { logCardEvent, type CardEventType } from '../utils/cardEvents';
+import { requestClientViewEmbed } from '../utils/squadhireClientViewEmbed';
 
 /**
  * Client View — Leads / admin acting as the business on a published card.
@@ -91,7 +92,7 @@ async function proxy(
         actorId: req.userId ?? null,
         actorType: 'admin',
         actorLabel: req.userName || req.userEmail || null,
-        metadata: opts.metadata ?? {},
+        metadata: { actor_source: 'operator', ...(opts.metadata ?? {}) },
       });
     }
     res.status(upstream.status).type('application/json').send(text || '{}');
@@ -279,6 +280,32 @@ router.post('/:id/client-view/conversations/send', async (req: Request, res: Res
       preview,
     },
   });
+});
+
+// GET /admin/subscription-cards/:id/client-view/embed
+// Mint a SquadHire operator session for this card. No extra login: the signed-in
+// Hub user is passed as actor. Unsupported SquadHire deploys return
+// { supported: false } so the reconstructed Client view still works.
+router.get('/:id/client-view/embed', async (req: Request, res: Response) => {
+  const cardId = req.params.id as string;
+  if (!(await cardExists(cardId))) {
+    res.status(404).json({ success: false, error: 'Card not found' });
+    return;
+  }
+  if (!configured()) {
+    res.json({ supported: false, reason: 'not_configured' });
+    return;
+  }
+
+  const result = await requestClientViewEmbed({
+    webhookUrl: config.squadhireWebhookUrl,
+    webhookSecret: config.squadhireWebhookSecret,
+    squadhireAdminUrl: config.squadhireAdminUrl,
+    externalId: cardId,
+    actor: actorPayload(req),
+    parentOrigins: [config.adminUrl, config.clientUrl].filter(Boolean),
+  });
+  res.json(result);
 });
 
 // GET /admin/subscription-cards/:id/client-view/card

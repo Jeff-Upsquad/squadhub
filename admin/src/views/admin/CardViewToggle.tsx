@@ -6,9 +6,9 @@ export type CardViewMode = 'admin' | 'client' | 'details';
 
 // Segmented control that flips a card-detail screen between:
 //   · Admin — recipients funnel (working view)
-//   · Client view — same review screen the business sees in SquadHire,
-//     including shortlist / reject / select / bidding / chat (messages send
-//     as the acting Leads user, not as the business)
+//   · Client view — live SquadHire business review (operator embed when
+//     available), plus Hub-only pending/rejected and an activity log that
+//     names the SquadHub user vs the business
 //   · Deal details — the New Deal form layout, view-only, with every field
 //     that was available when the card was drafted/published
 export default function CardViewToggle({
