@@ -63,7 +63,7 @@ export default function ThemeToggle() {
       </button>
 
       {open && (
-        <div className="absolute bottom-0 left-12 z-50 w-44 rounded-xl border border-divider bg-surface py-1 shadow-lg">
+        <div className="absolute bottom-0 left-[calc(100%+10px)] z-[90] w-44 rounded-xl border border-divider bg-surface py-1 shadow-lg">
           <p className="px-3 pb-1 pt-2 text-[10px] font-medium uppercase tracking-wider text-foreground-dim">
             Appearance
           </p>

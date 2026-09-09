@@ -5,7 +5,9 @@
    ConfirmDialog's bg-orange-600) were never generated here — making those
    controls invisible. Scan the shared admin tree explicitly. */
 @source "../../../admin/src";
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;450;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+/* Google Fonts for Hub shell strings ('Inter' / 'Plus Jakarta Sans') load from
+   app/layout.tsx <link>s — a CSS @import after Tailwind is invalid and was
+   being dropped. next/font on <html> owns --font-jakarta / --font-inter. */
 @import "@xyflow/react/dist/style.css";
 
 /* Class-based dark mode — .dark on <html> */
@@ -21,7 +23,7 @@
   --foreground:       #1D1C1D;
   --foreground-muted: #616061;
   --foreground-dim:   rgba(29,28,29,0.5);
-  --icon-bar:         #F0F0F0;
+  --icon-bar:         #080909;
   --sidebar:          #F0F0F0;
   --sidebar-text:     #0A0A0A;
   --sidebar-active:   #FFFFFF;
@@ -236,6 +238,118 @@ body {
 }
 .sh-rail-item:hover .sh-rail-lb { color: var(--sh-ink-3); }
 .sh-rail-item[data-active="true"] .sh-rail-lb { color: var(--sh-ink-2); font-weight: 600; }
+
+/* ── Black icon rail — ClickUp shape, black instead of green.
+   Active = white squircle behind the icon only. Label stays on the rail
+   (light text), badge sits on the tile corner. */
+.sh-rail-bar {
+  --rail-badge: #eb3d76;
+  --rail-badge-text: #ffffff;
+  --rail-badge-ring: #080909;
+  background: #080909;
+  border-radius: 12px;
+}
+.sh-rail-bar .sh-rail-item { gap: 3px; padding: 3px 0 5px; border-radius: 12px; }
+.sh-rail-bar .sh-rail-ic {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  color: #c9cecc;
+  --ic-cut: #080909;
+  background: transparent;
+  border-color: transparent;
+}
+.sh-rail-bar .sh-rail-lb {
+  color: #c5c9c7;
+  max-width: 54px;
+  font-size: 9px;
+  font-weight: 650;
+  letter-spacing: -.01em;
+}
+.sh-rail-bar .sh-rail-item:hover { background: transparent; }
+.sh-rail-bar .sh-rail-item:hover .sh-rail-ic { background: rgba(255,255,255,.08); color: #ffffff; --ic-cut: #1d1f1f; }
+.sh-rail-bar .sh-rail-item:hover .sh-rail-lb { color: #f2f4f3; }
+.sh-rail-bar .sh-rail-item[data-active="true"] { background: transparent; box-shadow: none; }
+.sh-rail-bar .sh-rail-item[data-active="true"] .sh-rail-ic {
+  color: #0b0c0c;
+  border-color: transparent;
+  background: #ffffff;
+  --ic-cut: #ffffff;
+  box-shadow: none;
+}
+.sh-rail-bar .sh-rail-item[data-active="true"]:hover .sh-rail-ic {
+  background: #ffffff;
+  color: #0b0c0c;
+  --ic-cut: #ffffff;
+}
+.sh-rail-bar .sh-rail-item[data-active="true"] .sh-rail-lb {
+  color: #ffffff;
+  font-weight: 700;
+}
+
+/* ── Module sidebar — same black as the icon rail ───────────────────────── */
+.sh-mod-side {
+  --sidebar: #080909;
+  --surface: #141616;
+  --sh-ink: #f1f3f1;
+  --sh-ink-2: #d2d6d3;
+  --sh-ink-3: #9aa19c;
+  --sh-ink-4: #6f7672;
+  --sh-hair: #1e2120;
+  --sh-hair-2: #2a2e2c;
+  --sh-hair-3: #141616;
+  --foreground: #f1f3f1;
+  color: var(--sh-ink-2);
+  background: var(--sidebar);
+  border-right: 1px solid #080909;
+}
+
+/* ── Rail hover preview ────────────────────────────────────────────────────
+   This panel temporarily covers the pinned module sidebar. Its small pointer
+   visually connects it to the hovered rail item, while the close delay in the
+   shell makes the gap safe to cross with the mouse. */
+@keyframes sh-rail-preview-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.sh-rail-preview {
+  position: absolute;
+  top: 8px;
+  bottom: 8px;
+  z-index: 40;
+  pointer-events: auto;
+  animation: sh-rail-preview-in 110ms ease-out both;
+}
+.sh-rail-preview-surface {
+  position: relative;
+  z-index: 1;
+  border: 1px solid #1e2120;
+  background: #080909;
+  box-shadow: 0 18px 42px rgba(0, 0, 0, .32), 0 3px 12px rgba(0, 0, 0, .2);
+}
+.sh-rail-preview-pointer {
+  position: absolute;
+  left: -5px;
+  top: clamp(16px, var(--sh-preview-y, 36px), calc(100% - 24px));
+  z-index: 2;
+  width: 10px;
+  height: 10px;
+  transform: rotate(45deg);
+  border-left: 1px solid #1e2120;
+  border-bottom: 1px solid #1e2120;
+  background: #080909;
+}
+.sh-rail-bar .sh-rail-item[data-previewing="true"] .sh-rail-ic {
+  color: #ffffff;
+  background: rgba(255, 255, 255, .1);
+  --ic-cut: #202222;
+}
+.sh-rail-bar .sh-rail-item[data-previewing="true"] .sh-rail-lb {
+  color: #ffffff;
+}
+@media (prefers-reduced-motion: reduce) {
+  .sh-rail-preview { animation: none; }
+}
 
 /* Bottom utility cluster (theme toggle + avatar) — share the label styling */
 .sh-rail-util { display: flex; flex-direction: column; align-items: center; gap: 3px; }
@@ -7446,7 +7560,7 @@ ol.sqc-list {
 }
 .dark .hm-home { --hm-accent: #8CC4A6; --hm-red: #E08573; --hm-canvas: #131316; }
 
-.hm-home .hm-wrap { max-width: 1080px; margin: 0 auto; padding: 28px 44px 90px; }
+.hm-home .hm-wrap { width: 100%; max-width: none; margin: 0; padding: 28px 20px 90px; }
 
 @keyframes hm-rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 
@@ -8470,11 +8584,10 @@ ol.sqc-list {
  * ============================================================ */
 
 :root {
-  /* Fonts — web loads both families via the Google Fonts @import at the
-     top of this file; admin exposes them through next/font. Name them
-     here so the shared `sh-*` classes resolve the right faces. */
-  --font-jakarta:     'Plus Jakarta Sans';
-  --font-inter:       'Inter';
+  /* --font-jakarta / --font-inter come from next/font on <html> (see
+     app/layout.tsx), same as admin. Do not redefine them here — a bare
+     'Plus Jakarta Sans' string with no loaded @font-face falls back to
+     Times and makes Requirement Cards look serif-y in the mini app. */
 
   --sh-lime:          #FCF487;
   --sh-lime-hover:    #E8DD68;
