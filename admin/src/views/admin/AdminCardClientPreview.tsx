@@ -120,7 +120,7 @@ type MatchPreview = {
   computed_at: string;
 };
 
-type PipelineState = 'pending' | 'projected';
+type PipelineState = 'pending' | 'rejected';
 type PipelineAudience = 'all' | 'Junior' | 'Pro' | 'Top Talents' | 'Agencies';
 type PipelinePerson = {
   key: string;
@@ -193,7 +193,7 @@ export default function AdminCardClientPreview({
   onOpenPanel: () => void;
   viewMode: CardViewMode;
   onSetViewMode: (m: CardViewMode) => void;
-  // Sibling tier cards are needed only by the internal Pending / Projected
+  // Sibling tier cards are needed only by the internal Pending / Rejected
   // audience. The live business view itself remains sourced from SquadHire.
   groupCards?: AdminSubscriptionCard[];
 }) {
@@ -217,9 +217,9 @@ export default function AdminCardClientPreview({
     retry: false,
   });
 
-  // Internal-only audience detail. These endpoints expose the delivery state
-  // that the real business portal intentionally does not show: recipients who
-  // are waiting to respond, and matches staged for a future broadcast.
+  // Internal-only audience detail. These endpoints expose delivery state the
+  // real business portal does not show: people waiting to respond, and people
+  // who were rejected.
   const audienceCards = useMemo(
     () => (groupCards.length > 1 ? groupCards : [card]),
     [groupCards, card],
@@ -470,16 +470,18 @@ export default function AdminCardClientPreview({
       state: PipelineState;
       tier?: string | string[] | null;
     }) => {
-      if (kind === 'talent' && alreadyInReview.has(id)) return;
+      // Rejected people still have a business-recipient row; pending people in
+      // that list already appear in For Review / Shortlist and should not
+      // duplicate here.
+      if (kind === 'talent' && state !== 'rejected' && alreadyInReview.has(id)) return;
       const key = `${kind}:${id}`;
       const normalizedTiers = (Array.isArray(tier) ? tier : [tier])
         .map((value) => normalizeTier(value))
         .filter((value): value is string => !!value);
       const existing = people.get(key);
       if (existing) {
-        // A sent invitation is more actionable than the same person's older
-        // projection, so Pending wins while retaining every matched tier.
-        if (state === 'pending') existing.state = 'pending';
+        if (state === 'rejected') existing.state = 'rejected';
+        else if (state === 'pending' && existing.state !== 'rejected') existing.state = 'pending';
         for (const normalizedTier of normalizedTiers) {
           if (!existing.tiers.includes(normalizedTier)) existing.tiers.push(normalizedTier);
         }
@@ -496,6 +498,17 @@ export default function AdminCardClientPreview({
       });
     };
 
+    for (const r of recipients) {
+      if (r.business_review_status !== 'rejected') continue;
+      add({
+        id: r.talent_user_id,
+        name: r.talent_name,
+        kind: 'talent',
+        state: 'rejected',
+        tier: r.tier,
+      });
+    }
+
     audienceCards.forEach((audienceCard, index) => {
       const local = localAudienceQueries[index]?.data as RecipientsResponse | undefined;
       const remoteRaw = squadhireAudienceQueries[index]?.data as
@@ -503,57 +516,65 @@ export default function AdminCardClientPreview({
         | PendingTalent[]
         | undefined;
       const remote = Array.isArray(remoteRaw) ? remoteRaw : (remoteRaw?.data ?? []);
-      const preview = Array.isArray(remoteRaw) ? null : (remoteRaw?.match_preview ?? null);
       const tiers = audienceCard.target_tiers ?? [];
 
       for (const agency of local?.partners ?? []) {
+        if (agency.status === 'rejected') {
+          add({ id: agency.id, name: agency.name, kind: 'agency', state: 'rejected' });
+          continue;
+        }
         if (agency.status !== 'pending') continue;
+        if (!(agency.broadcast_at || audienceCard.needs_broadcast === false)) continue;
         add({
           id: agency.id,
           name: agency.name,
           kind: 'agency',
-          state:
-            agency.broadcast_at || audienceCard.needs_broadcast === false
-              ? 'pending'
-              : 'projected',
+          state: 'pending',
         });
       }
 
       const localTalents = new Map((local?.talents ?? []).map((talent) => [talent.external_user_id, talent]));
       for (const talent of local?.talents ?? []) {
-        if (talent.status !== 'pending') continue;
+        if (talent.status === 'rejected') {
+          add({
+            id: talent.external_user_id,
+            name: talent.name,
+            kind: 'talent',
+            state: 'rejected',
+            tier: tiers,
+          });
+          continue;
+        }
+        if (talent.status !== 'pending' || !talent.notified_at) continue;
         add({
           id: talent.external_user_id,
           name: talent.name,
           kind: 'talent',
-          state: talent.notified_at ? 'pending' : 'projected',
+          state: 'pending',
           tier: tiers,
         });
       }
 
       for (const talent of remote) {
-        if (talent.status !== 'pending' || localTalents.has(talent.talent_user_id)) continue;
-        add({
-          id: talent.talent_user_id,
-          name: talent.talent_name,
-          kind: 'talent',
-          state: audienceCard.squadhire_synced_at ? 'pending' : 'projected',
-          tier: tiers,
-        });
-      }
-
-      // Cached match previews can remain on a card after broadcast. Only use
-      // them while this tier is still awaiting its first release.
-      if (preview && audienceCard.state === 'published' && !audienceCard.squadhire_synced_at) {
-        for (const talent of preview.talents ?? []) {
+        if (localTalents.has(talent.talent_user_id)) continue;
+        if (talent.status === 'rejected') {
           add({
             id: talent.talent_user_id,
             name: talent.talent_name,
             kind: 'talent',
-            state: 'projected',
+            state: 'rejected',
             tier: tiers,
           });
+          continue;
         }
+        if (talent.status !== 'pending' || !audienceCard.squadhire_synced_at) continue;
+        add({
+          id: talent.talent_user_id,
+          name: talent.talent_name,
+          kind: 'talent',
+          state: 'pending',
+          tier: tiers,
+        });
       }
     });
 
@@ -1080,16 +1101,16 @@ export default function AdminCardClientPreview({
         </ListCard>
 
         {/* Internal sourcing visibility. Pending people have received the card
-            and have not answered; Projected people are matched/staged but the
-            card has not been released to them yet. This block intentionally
-            lives only in SquadHub/admin, never in the SquadHire business UI. */}
+            and have not answered; Rejected people were passed on during review.
+            This block lives only in SquadHub/admin, never in the SquadHire
+            business UI. */}
         {isRecurringCard && (
           <PipelineCard
             state={pipelineState}
             onStateChange={setPipelineState}
             stateCounts={{
               pending: pipelineCount('pending'),
-              projected: pipelineCount('projected'),
+              rejected: pipelineCount('rejected'),
             }}
             audience={pipelineAudience}
             onAudienceChange={setPipelineAudience}
@@ -1219,19 +1240,19 @@ function PipelineCard({
   const stateDescription =
     state === 'pending'
       ? 'Card sent — awaiting a response.'
-      : 'Matched to this requirement — not sent yet.';
+      : 'Passed on during review.';
 
   return (
     <div className="sh-card overflow-hidden">
       <div className="flex flex-col gap-3 border-b border-[var(--color-sh-warm-border)] px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
         <div>
           <h2 className="font-[family-name:var(--font-jakarta)] text-sm font-semibold text-[var(--color-sh-ink)]">
-            Pending &amp; projected
+            Pending &amp; rejected
           </h2>
           <p className="mt-0.5 text-xs text-[var(--color-sh-ink-faint)]">{stateDescription}</p>
         </div>
         <div className="inline-flex self-start rounded-lg border border-[var(--color-sh-warm-border)] bg-[var(--color-sh-cream)] p-0.5">
-          {(['pending', 'projected'] as const).map((tab) => {
+          {(['pending', 'rejected'] as const).map((tab) => {
             const active = state === tab;
             return (
               <button
@@ -1244,7 +1265,7 @@ function PipelineCard({
                     : 'text-[var(--color-sh-ink-subtle)] hover:text-[var(--color-sh-ink)]'
                 }`}
               >
-                {tab === 'pending' ? 'Pending' : 'Projected'}
+                {tab === 'pending' ? 'Pending' : 'Rejected'}
                 <span className="ml-1 opacity-65">({stateCounts[tab]})</span>
               </button>
             );
@@ -1310,10 +1331,10 @@ function PipelineCard({
                       className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
                         state === 'pending'
                           ? 'bg-amber-100 text-amber-700'
-                          : 'bg-sky-100 text-sky-700'
+                          : 'bg-red-100 text-red-700'
                       }`}
                     >
-                      {state === 'pending' ? 'Awaiting response' : 'Not sent'}
+                      {state === 'pending' ? 'Awaiting response' : 'Rejected'}
                     </span>
                   </div>
                 </div>
