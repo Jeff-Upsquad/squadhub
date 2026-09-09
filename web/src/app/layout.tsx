@@ -1,7 +1,25 @@
 import type { Metadata, Viewport } from 'next';
+import { Plus_Jakarta_Sans, Inter } from 'next/font/google';
 import '../styles/globals.css';
 import '../styles/mobile.css';
 import Providers from './providers';
+
+// Same faces as admin — Requirement Cards (and other shared admin modules)
+// use `font-[family-name:var(--font-jakarta)]`. Without next/font those
+// variables never resolve to a loaded face and headings fall back to Times.
+const jakarta = Plus_Jakarta_Sans({
+  subsets: ['latin'],
+  weight: ['400', '500', '600', '700', '800'],
+  variable: '--font-jakarta',
+  display: 'swap',
+});
+
+const inter = Inter({
+  subsets: ['latin'],
+  weight: ['400', '500', '600', '700'],
+  variable: '--font-inter',
+  display: 'swap',
+});
 
 export const metadata: Metadata = {
   title: 'SquadHub',
@@ -28,8 +46,18 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="en" className={`${jakarta.variable} ${inter.variable}`} suppressHydrationWarning>
       <head>
+        {/* Hub CSS still hardcodes 'Plus Jakarta Sans' / 'Inter' in many places.
+            The old globals.css @import sits after Tailwind and is ignored, so
+            load the faces here. next/font above owns --font-jakarta/--font-inter
+            for shared admin modules (Requirement Cards). */}
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        <link
+          href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap"
+          rel="stylesheet"
+        />
         {/* Anti-flicker: apply dark class before first paint */}
         <script
           dangerouslySetInnerHTML={{

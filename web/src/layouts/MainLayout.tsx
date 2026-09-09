@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import api from '../services/api';
 
@@ -94,6 +94,18 @@ import { canonicalKey, buildHomeSnapshot, type TabSnapshot } from '../lib/tabSna
 // ---- Types ----
 export type ActiveSection = 'home' | 'cal' | 'docs' | 'teams' | 'apps' | 'learning' | 'more';
 export type HomeView = 'hub' | 'chat' | 'tasks' | 'inbox' | 'my-tasks' | 'checkin' | 'checkin-partners' | 'check-ins' | 'candidates' | 'time-management' | 'sales-leads' | 'leads' | 'support-admin' | 'cashbook' | 'opportunities' | 'subscription-cards' | 'job-cards' | 'day-planner' | 'routines' | 'clips' | 'meetings' | 'partner-payments';
+type RailPreviewKey = 'home' | 'inbox' | 'tasks' | 'docs' | 'cal' | 'apps' | 'learning' | 'more';
+
+const RAIL_PREVIEW_TARGETS: Record<RailPreviewKey, { section: ActiveSection; homeView?: HomeView }> = {
+  home: { section: 'home', homeView: 'hub' },
+  inbox: { section: 'home', homeView: 'inbox' },
+  tasks: { section: 'home', homeView: 'my-tasks' },
+  docs: { section: 'docs' },
+  cal: { section: 'cal' },
+  apps: { section: 'apps' },
+  learning: { section: 'learning' },
+  more: { section: 'more' },
+};
 
 // One entry in the in-app navigation history: everything needed to bring the
 // user back to a view. Views switch via local state rather than URLs, so the
@@ -121,31 +133,31 @@ type NavSnapshot = {
 // the glyph is muted ink at rest and full ink (in the pill) when active.
 const ICON = {
   home: (
-    <svg className="h-[18px] w-[18px]" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+    <svg className="h-[16px] w-[16px]" viewBox="0 0 24 24" fill="currentColor" stroke="none">
       <path d="M11.05 4.05a1.45 1.45 0 0 1 1.9 0l6.4 5.34c.32.27.5.66.5 1.08v8.05A1.7 1.7 0 0 1 18.15 20.2H15.5v-4.55a3.5 3.5 0 0 0-7 0v4.55H5.85A1.7 1.7 0 0 1 4.15 18.5v-8.03c0-.42.18-.81.5-1.08z" />
     </svg>
   ),
   inbox: (
-    <svg className="h-[18px] w-[18px]" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+    <svg className="h-[16px] w-[16px]" viewBox="0 0 24 24" fill="currentColor" stroke="none">
       <path d="M5.8 4.4h12.4a2 2 0 0 1 2 2v11.2a2 2 0 0 1-2 2H5.8a2 2 0 0 1-2-2V6.4a2 2 0 0 1 2-2z" />
       <path d="M4.6 7.4l6.6 4.7a1.4 1.4 0 0 0 1.6 0l6.6-4.7" fill="none" stroke="var(--ic-cut)" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   ),
   tasks: (
-    <svg className="h-[18px] w-[18px]" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+    <svg className="h-[16px] w-[16px]" viewBox="0 0 24 24" fill="currentColor" stroke="none">
       <path d="M8.4 3.8h7.2a4.6 4.6 0 0 1 4.6 4.6v7.2a4.6 4.6 0 0 1-4.6 4.6H8.4a4.6 4.6 0 0 1-4.6-4.6V8.4a4.6 4.6 0 0 1 4.6-4.6z" />
       <path d="m8.4 12.1 2.5 2.5 4.7-5.2" fill="none" stroke="var(--ic-cut)" strokeWidth={1.9} strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   ),
   docs: (
-    <svg className="h-[18px] w-[18px]" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+    <svg className="h-[16px] w-[16px]" viewBox="0 0 24 24" fill="currentColor" stroke="none">
       <path d="M7.4 4.2h5.74a1 1 0 0 1 .71.3l4.06 4.06a1 1 0 0 1 .29.7v9.34A2.2 2.2 0 0 1 16 20.8H7.4A2.2 2.2 0 0 1 5.2 18.6V6.4A2.2 2.2 0 0 1 7.4 4.2z" />
       <path d="M13.3 4.5v3.2a1.4 1.4 0 0 0 1.4 1.4h3.2" fill="none" stroke="var(--ic-cut)" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" />
       <path d="M8.7 13.4h6.6M8.7 16.4h4.4" fill="none" stroke="var(--ic-cut)" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   ),
   cal: (
-    <svg className="h-[18px] w-[18px]" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+    <svg className="h-[16px] w-[16px]" viewBox="0 0 24 24" fill="currentColor" stroke="none">
       <rect x="4" y="5.4" width="16" height="14.6" rx="3" />
       <path d="M8.5 3.3v3.2M15.5 3.3v3.2" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" />
       <path d="M4.4 9.7h15.2" fill="none" stroke="var(--ic-cut)" strokeWidth={1.6} strokeLinecap="round" />
@@ -156,14 +168,14 @@ const ICON = {
     </svg>
   ),
   apps: (
-    <svg className="h-[18px] w-[18px]" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+    <svg className="h-[16px] w-[16px]" viewBox="0 0 24 24" fill="currentColor" stroke="none">
       <circle cx="6" cy="6" r="1.7" /><circle cx="12" cy="6" r="1.7" /><circle cx="18" cy="6" r="1.7" />
       <circle cx="6" cy="12" r="1.7" /><circle cx="12" cy="12" r="1.7" /><circle cx="18" cy="12" r="1.7" />
       <circle cx="6" cy="18" r="1.7" /><circle cx="12" cy="18" r="1.7" /><circle cx="18" cy="18" r="1.7" />
     </svg>
   ),
   learning: (
-    <svg className="h-[18px] w-[18px]" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+    <svg className="h-[16px] w-[16px]" viewBox="0 0 24 24" fill="currentColor" stroke="none">
       <path d="M12 5.4 2.5 9.3 12 13.2l9.5-3.9z" />
       <path d="M6.9 11.7v2.9c0 1.2 2.28 2.2 5.1 2.2s5.1-1 5.1-2.2v-2.9" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" />
       <path d="M21.5 9.6v3.7" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" />
@@ -171,13 +183,13 @@ const ICON = {
     </svg>
   ),
   timesheet: (
-    <svg className="h-[18px] w-[18px]" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+    <svg className="h-[16px] w-[16px]" viewBox="0 0 24 24" fill="currentColor" stroke="none">
       <path d="M8 5 16 5 12 11.2 16 19 8 19 12 11.2Z" />
       <path d="M6.6 3.9h10.8M6.6 20.1h10.8" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" />
     </svg>
   ),
   more: (
-    <svg className="h-[18px] w-[18px]" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+    <svg className="h-[16px] w-[16px]" viewBox="0 0 24 24" fill="currentColor" stroke="none">
       <circle cx="5.5" cy="12" r="1.5" />
       <circle cx="12" cy="12" r="1.5" />
       <circle cx="18.5" cy="12" r="1.5" />
@@ -205,6 +217,9 @@ function RailBtn({
   badgePulse = false,
   anchorKey,
   onClick,
+  onPreviewEnter,
+  onPreviewLeave,
+  previewing = false,
 }: {
   icon: React.ReactNode;
   label: string;
@@ -217,6 +232,9 @@ function RailBtn({
   /** Stable key so a Feature Tip coachmark can anchor to this rail button. */
   anchorKey?: string;
   onClick: () => void;
+  onPreviewEnter?: (event: ReactPointerEvent<HTMLButtonElement>) => void;
+  onPreviewLeave?: () => void;
+  previewing?: boolean;
 }) {
   return (
     <button
@@ -224,12 +242,15 @@ function RailBtn({
       title={label}
       data-tip-anchor={anchorKey}
       data-active={active}
+      data-previewing={previewing || undefined}
       className="sh-rail-item"
+      onPointerEnter={onPreviewEnter}
+      onPointerLeave={onPreviewLeave}
     >
       <span className="sh-rail-ic">
         {icon}
         {badge != null && badge > 0 && (
-          <span className="absolute top-[1px] right-[1px] grid place-items-center">
+          <span className="absolute -top-[3px] -right-[3px] grid place-items-center">
             {badgeAlert && badgePulse && (
               <span
                 aria-hidden
@@ -238,10 +259,10 @@ function RailBtn({
               />
             )}
             <span
-              className={`relative grid min-w-[14px] h-[14px] place-items-center rounded-full text-[9px] font-semibold px-[3px] leading-none ${
-                badgeAlert ? 'text-white' : 'text-[var(--sidebar)]'
+              className={`relative grid min-w-[14px] h-[14px] place-items-center rounded-full text-[8px] font-bold px-[3px] leading-none ${
+                badgeAlert ? 'text-white' : 'text-[var(--rail-badge-text,var(--sidebar))]'
               }`}
-              style={{ background: badgeAlert ? 'var(--sh-badge-alert)' : 'var(--sh-ink)' }}
+              style={{ background: badgeAlert ? 'var(--sh-badge-alert)' : 'var(--rail-badge, var(--sh-ink))', boxShadow: '0 0 0 2px var(--rail-badge-ring, transparent)' }}
             >
               {badge}
             </span>
@@ -359,6 +380,52 @@ export default function MainLayout() {
   // Schedule in-app toasts for upcoming work-block windows today.
   useWorkBlockNotifier();
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [railPreview, setRailPreview] = useState<RailPreviewKey | null>(null);
+  const [railPreviewAnchorY, setRailPreviewAnchorY] = useState(42);
+  const railPreviewOpenTimer = useRef<number | null>(null);
+  const railPreviewCloseTimer = useRef<number | null>(null);
+
+  const cancelRailPreviewTimers = useCallback(() => {
+    if (railPreviewOpenTimer.current != null) window.clearTimeout(railPreviewOpenTimer.current);
+    if (railPreviewCloseTimer.current != null) window.clearTimeout(railPreviewCloseTimer.current);
+    railPreviewOpenTimer.current = null;
+    railPreviewCloseTimer.current = null;
+  }, []);
+
+  const openRailPreviewSoon = useCallback((key: RailPreviewKey, event: ReactPointerEvent<HTMLButtonElement>) => {
+    if (!window.matchMedia('(hover: hover) and (pointer: fine)').matches) return;
+    const rect = event.currentTarget.getBoundingClientRect();
+    const anchorY = rect.top + rect.height / 2 - 8;
+    cancelRailPreviewTimers();
+    railPreviewOpenTimer.current = window.setTimeout(() => {
+      setRailPreviewAnchorY(anchorY);
+      setRailPreview(key);
+      railPreviewOpenTimer.current = null;
+    }, 130);
+  }, [cancelRailPreviewTimers]);
+
+  const closeRailPreviewSoon = useCallback(() => {
+    if (railPreviewOpenTimer.current != null) window.clearTimeout(railPreviewOpenTimer.current);
+    railPreviewOpenTimer.current = null;
+    if (railPreviewCloseTimer.current != null) window.clearTimeout(railPreviewCloseTimer.current);
+    railPreviewCloseTimer.current = window.setTimeout(() => {
+      setRailPreview(null);
+      railPreviewCloseTimer.current = null;
+    }, 240);
+  }, []);
+
+  const keepRailPreviewOpen = useCallback(() => {
+    if (railPreviewCloseTimer.current != null) window.clearTimeout(railPreviewCloseTimer.current);
+    railPreviewCloseTimer.current = null;
+  }, []);
+
+  const closeRailPreviewNow = useCallback(() => {
+    cancelRailPreviewTimers();
+    setRailPreview(null);
+  }, [cancelRailPreviewTimers]);
+
+  useEffect(() => () => cancelRailPreviewTimers(), [cancelRailPreviewTimers]);
+
   // Module sidebar width — shortened default (240px), user-resizable by
   // dragging the right edge. Persisted per browser; clamped 220–420.
   const SIDEBAR_W_KEY = 'sh-sidebar-width';
@@ -1133,6 +1200,49 @@ export default function MainLayout() {
     return <Home onOpenInbox={() => { setActiveSection('home'); setHomeView('inbox'); }} />;
   };
 
+  const renderModuleSidebar = (section: ActiveSection, sidebarView: HomeView) => {
+    if (!currentWorkspace) return null;
+    if (section === 'apps') {
+      return (
+        <AppsSidebar
+          activeView={sidebarView}
+          onOpenApp={handleOpenAppInModule}
+          canGoBack={nav.canGoBack}
+          canGoForward={nav.canGoForward}
+          onNavBack={nav.goBack}
+          onNavForward={nav.goForward}
+        />
+      );
+    }
+    if (section === 'learning') {
+      return <LearningSidebar activeItemId={learningActiveItemId} onSelectItem={(id) => setLearningActiveItem(id, null, null)} />;
+    }
+    if (section === 'docs') return <NotesSidebar />;
+    if (section === 'cal') return <CalendarOuterPalette />;
+    return (
+      <HomeSidebar
+        workspaceId={currentWorkspace.id}
+        channels={channels}
+        activeChannelId={activeChannelId}
+        homeView={sidebarView}
+        inboxAlert={inboxAlert}
+        inboxPulse={inboxPulse}
+        canGoBack={nav.canGoBack}
+        canGoForward={nav.canGoForward}
+        onNavBack={nav.goBack}
+        onNavForward={nav.goForward}
+        onChangeView={(v) => { setActiveSection('home'); setHomeView(v); setMobileDrawerOpen(false); }}
+        onSelectChannel={handleSelectChannel}
+        onSelectDm={handleSelectDm}
+        onCreateChannel={() => setShowCreateChannel(true)}
+        onOpenSpaces={handleOpenSpaces}
+        onOpenSearch={() => setSearchOpen(true)}
+        onOpenApps={() => { setActiveSection('apps'); setMobileDrawerOpen(false); }}
+        onLaunchApp={handleLaunchApp}
+      />
+    );
+  };
+
   // ---- Mobile browser view ------------------------------------------------
   // Below the md breakpoint the desktop chrome (icon rail + module sidebar +
   // tab strip) is replaced wholesale by the phone shell, which mirrors the
@@ -1191,8 +1301,22 @@ export default function MainLayout() {
     );
   }
 
+  const railPreviewTarget = railPreview ? RAIL_PREVIEW_TARGETS[railPreview] : null;
+
+  const commitRailPreview = () => {
+    if (!railPreviewTarget) return;
+    setExternalUrl(null);
+    setExternalTitle(null);
+    setActiveSection(railPreviewTarget.section);
+    if (railPreviewTarget.homeView) setHomeView(railPreviewTarget.homeView);
+    setSidebarOpen(true);
+    // Let the clicked preview item run its own handler before the flyout is
+    // removed. That way selecting a nested channel/document remains reliable.
+    window.setTimeout(closeRailPreviewNow, 0);
+  };
+
   return (
-    <div className="flex h-[100dvh] bg-[var(--sidebar)] text-foreground">
+    <div className="flex h-[100dvh] bg-surface text-foreground">
       {/* Mobile top bar — only renders below md breakpoint. */}
       <div className="fixed inset-x-0 top-0 z-[60] flex h-12 items-center justify-between border-b border-[var(--sh-hair)] bg-[var(--icon-bar)] px-3 md:hidden">
         <button
@@ -1240,24 +1364,15 @@ export default function MainLayout() {
       {/* Drawer container — wraps icon rail + module sidebar. On desktop this
           is a static flex row; on mobile it slides in/out as an overlay. */}
       <aside
-        className={`fixed inset-y-0 left-0 z-[81] flex transition-transform duration-200 ease-in-out md:static md:z-auto md:transition-none ${
+        className={`fixed inset-y-0 left-0 z-[81] flex transition-transform duration-200 ease-in-out md:relative md:z-auto md:transition-none ${
           mobileDrawerOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
         }`}
       >
-      {/* Far-left monochrome rail — 64px wide, inset right shadow, light gray */}
+      {/* Far-left rail — black, matches reference green bar but in black. Home sits at true top, no brand tile. */}
       <div
-        className="flex w-16 shrink-0 flex-col items-center gap-1 border-r border-[var(--sh-hair)] bg-[var(--icon-bar)] px-2 pt-[14px] pb-3 relative z-[3]"
+        className="sh-rail-bar flex w-[60px] shrink-0 flex-col items-center gap-0.5 bg-[#080909] px-[4px] pt-[10px] pb-3 relative z-[3] my-2 ml-2 mr-[2px]"
         style={{ boxShadow: 'var(--sh-rail-inset)' }}
       >
-        {/* Serif "S" logo */}
-        <div
-          className="mb-[14px] grid h-9 w-9 place-items-center rounded-[10px] bg-[var(--sh-ink)] text-[var(--sidebar)]"
-          style={{ fontFamily: 'var(--font-serif, Plus Jakarta Sans, sans-serif)', fontSize: 22, letterSpacing: '-0.02em', boxShadow: 'var(--sh-shadow-sm)' }}
-          title="SquadHub"
-        >
-          S
-        </div>
-
         {/* Main nav: Home / Inbox / Tasks / Docs / Cal / Apps */}
         <div className="flex w-full flex-col items-center gap-[2px]">
           <RailBtn
@@ -1265,7 +1380,10 @@ export default function MainLayout() {
             label="Home"
             anchorKey="rail.home"
             active={activeSection === 'home' && homeView === 'hub' && !externalUrl}
-            onClick={() => { setExternalUrl(null); setExternalTitle(null); setActiveSection('home'); setHomeView('hub'); }}
+            previewing={railPreview === 'home'}
+            onPreviewEnter={(event) => openRailPreviewSoon('home', event)}
+            onPreviewLeave={closeRailPreviewSoon}
+            onClick={() => { closeRailPreviewNow(); setExternalUrl(null); setExternalTitle(null); setActiveSection('home'); setHomeView('hub'); }}
           />
           <RailBtn
             icon={ICON.inbox}
@@ -1275,7 +1393,11 @@ export default function MainLayout() {
             badgeAlert={inboxAlert}
             badgePulse={inboxPulse}
             active={(activeSection === 'home' && homeView === 'inbox') || inboxSliderOpen}
+            previewing={railPreview === 'inbox'}
+            onPreviewEnter={(event) => openRailPreviewSoon('inbox', event)}
+            onPreviewLeave={closeRailPreviewSoon}
             onClick={() => {
+              closeRailPreviewNow();
               // The rail always toggles the slide-over; the full inbox view is
               // reached through the Home sidebar's Inbox item (or deep links).
               if (activeSection === 'home' && homeView === 'inbox') return;
@@ -1288,35 +1410,84 @@ export default function MainLayout() {
             label="Tasks"
             anchorKey="rail.tasks"
             active={activeSection === 'home' && homeView === 'my-tasks'}
-            onClick={() => { setActiveSection('home'); setHomeView('my-tasks'); }}
+            previewing={railPreview === 'tasks'}
+            onPreviewEnter={(event) => openRailPreviewSoon('tasks', event)}
+            onPreviewLeave={closeRailPreviewSoon}
+            onClick={() => { closeRailPreviewNow(); setActiveSection('home'); setHomeView('my-tasks'); }}
           />
           {hasNotes && (
-            <RailBtn icon={ICON.docs} label="Docs" anchorKey="rail.docs" active={activeSection === 'docs'} onClick={() => setActiveSection('docs')} />
+            <RailBtn
+              icon={ICON.docs}
+              label="Docs"
+              anchorKey="rail.docs"
+              active={activeSection === 'docs'}
+              previewing={railPreview === 'docs'}
+              onPreviewEnter={(event) => openRailPreviewSoon('docs', event)}
+              onPreviewLeave={closeRailPreviewSoon}
+              onClick={() => { closeRailPreviewNow(); setActiveSection('docs'); }}
+            />
           )}
-          <RailBtn icon={ICON.cal}  label="Cal"  anchorKey="rail.cal"  active={activeSection === 'cal'}  onClick={() => setActiveSection('cal')} />
-          <RailBtn icon={ICON.apps} label="Apps" anchorKey="rail.apps" active={activeSection === 'apps'} onClick={() => setActiveSection('apps')} />
-          <RailBtn icon={ICON.learning} label="Resources" anchorKey="rail.learning" badge={openSopTaskCount || undefined} active={activeSection === 'learning'} onClick={() => setActiveSection('learning')} />
+          <RailBtn
+            icon={ICON.cal}
+            label="Cal"
+            anchorKey="rail.cal"
+            active={activeSection === 'cal'}
+            previewing={railPreview === 'cal'}
+            onPreviewEnter={(event) => openRailPreviewSoon('cal', event)}
+            onPreviewLeave={closeRailPreviewSoon}
+            onClick={() => { closeRailPreviewNow(); setActiveSection('cal'); }}
+          />
+          <RailBtn
+            icon={ICON.apps}
+            label="Apps"
+            anchorKey="rail.apps"
+            active={activeSection === 'apps'}
+            previewing={railPreview === 'apps'}
+            onPreviewEnter={(event) => openRailPreviewSoon('apps', event)}
+            onPreviewLeave={closeRailPreviewSoon}
+            onClick={() => { closeRailPreviewNow(); setActiveSection('apps'); }}
+          />
+          <RailBtn
+            icon={ICON.learning}
+            label="Res"
+            anchorKey="rail.learning"
+            badge={openSopTaskCount || undefined}
+            active={activeSection === 'learning'}
+            previewing={railPreview === 'learning'}
+            onPreviewEnter={(event) => openRailPreviewSoon('learning', event)}
+            onPreviewLeave={closeRailPreviewSoon}
+            onClick={() => { closeRailPreviewNow(); setActiveSection('learning'); }}
+          />
           <button
             onClick={(e) => {
               setTimesheetAnchor((e.currentTarget as HTMLElement).getBoundingClientRect());
               setTimesheetOpen((v) => !v);
             }}
-            title="Time sheet"
+            title="Time"
             data-tip-anchor="rail.timesheet"
             data-active={timesheetOpen}
             className="sh-rail-item"
           >
             <span className="sh-rail-ic">{ICON.timesheet}</span>
-            <span className="sh-rail-lb">Timesheet</span>
+            <span className="sh-rail-lb">Time</span>
           </button>
         </div>
 
         {/* Divider */}
-        <div className="h-px w-7 bg-[var(--sh-hair-2)] my-2" />
+        <div className="h-px w-7 bg-white/10 my-2" />
 
         {/* Second nav: More */}
         <div className="flex w-full flex-col items-center gap-[2px]">
-          <RailBtn icon={ICON.more}  label="More"    anchorKey="rail.more"    active={activeSection === 'more'}    onClick={() => setActiveSection('more')} />
+          <RailBtn
+            icon={ICON.more}
+            label="More"
+            anchorKey="rail.more"
+            active={activeSection === 'more'}
+            previewing={railPreview === 'more'}
+            onPreviewEnter={(event) => openRailPreviewSoon('more', event)}
+            onPreviewLeave={closeRailPreviewSoon}
+            onClick={() => { closeRailPreviewNow(); setActiveSection('more'); }}
+          />
         </div>
 
         {/* Spacer */}
@@ -1373,7 +1544,7 @@ export default function MainLayout() {
             </button>
 
             {profileOpen && (
-              <div className="absolute bottom-0 left-[calc(100%+10px)] w-[220px] rounded-lg bg-[var(--surface)] border border-[var(--sh-hair)] shadow-lg z-50 overflow-hidden">
+              <div className="absolute bottom-0 left-[calc(100%+10px)] w-[220px] rounded-lg bg-[var(--surface)] border border-[var(--sh-hair)] shadow-lg z-[90] overflow-hidden">
                 <div className="px-3 py-3 border-b border-[var(--sh-hair)]">
                   <p className="text-[13px] font-medium text-[var(--foreground)] truncate">{user?.display_name || 'User'}</p>
                   <p className="text-[11px] text-[var(--foreground-dim)] truncate">{user?.email}</p>
@@ -1410,57 +1581,42 @@ export default function MainLayout() {
         </div>
       </div>
 
+      {/* Hover preview — floats over the current sidebar without navigating.
+          The delayed close gives the pointer time to cross the small visual
+          bridge from the rail into the interactive preview. */}
+      {railPreviewTarget && currentWorkspace && (
+        <div
+          className="sh-rail-preview hidden md:block"
+          style={{
+            left: 70,
+            width: sidebarWidth,
+            '--sh-preview-y': `${railPreviewAnchorY}px`,
+          } as CSSProperties}
+          onPointerEnter={keepRailPreviewOpen}
+          onPointerLeave={closeRailPreviewSoon}
+          onClickCapture={commitRailPreview}
+          role="navigation"
+          aria-label={`${SECTION_TITLES[railPreviewTarget.section]} preview`}
+        >
+          <span className="sh-rail-preview-pointer" aria-hidden="true" />
+          <div className="sh-mod-side sh-rail-preview-surface h-full w-full overflow-hidden rounded-[12px]">
+            {renderModuleSidebar(railPreviewTarget.section, railPreviewTarget.homeView ?? homeView)}
+          </div>
+        </div>
+      )}
+
       {/* Module sidebar — shared outer container for all sections so the side
           menu keeps the same width/height when switching (e.g. Home ↔
           Resources ↔ Calendar). An open Resource item hides the catalog sidebar
           to let its own chapter/page nav take over. */}
       {currentWorkspace && !(activeSection === 'learning' && learningActiveItemId) && (
         <div
-          className={`flex h-full shrink-0 flex-col overflow-hidden bg-[var(--sidebar)] border-r border-[var(--sh-hair)] relative z-[2] ${
+          className={`sh-mod-side flex shrink-0 flex-col overflow-hidden relative z-[2] my-2 rounded-[12px] ${
             resizingSidebar ? '' : 'transition-[width] duration-200 ease-in-out'
           } ${sidebarOpen ? '' : 'w-0'}`}
           style={{ boxShadow: 'var(--sh-sidebar-drop)', width: sidebarOpen ? sidebarWidth : 0 }}
         >
-          {activeSection === 'apps' ? (
-            <AppsSidebar
-              activeView={homeView}
-              onOpenApp={handleOpenAppInModule}
-              canGoBack={nav.canGoBack}
-              canGoForward={nav.canGoForward}
-              onNavBack={nav.goBack}
-              onNavForward={nav.goForward}
-            />
-          ) : activeSection === 'learning' ? (
-            <LearningSidebar
-              activeItemId={learningActiveItemId}
-              onSelectItem={(id) => setLearningActiveItem(id, null, null)}
-            />
-          ) : activeSection === 'docs' ? (
-            <NotesSidebar />
-          ) : activeSection === 'cal' ? (
-            <CalendarOuterPalette />
-          ) : (
-            <HomeSidebar
-              workspaceId={currentWorkspace.id}
-              channels={channels}
-              activeChannelId={activeChannelId}
-              homeView={homeView}
-              inboxAlert={inboxAlert}
-              inboxPulse={inboxPulse}
-              canGoBack={nav.canGoBack}
-              canGoForward={nav.canGoForward}
-              onNavBack={nav.goBack}
-              onNavForward={nav.goForward}
-              onChangeView={(v) => { setActiveSection('home'); setHomeView(v); setMobileDrawerOpen(false); }}
-              onSelectChannel={handleSelectChannel}
-              onSelectDm={handleSelectDm}
-              onCreateChannel={() => setShowCreateChannel(true)}
-              onOpenSpaces={handleOpenSpaces}
-              onOpenSearch={() => setSearchOpen(true)}
-              onOpenApps={() => { setActiveSection('apps'); setMobileDrawerOpen(false); }}
-              onLaunchApp={handleLaunchApp}
-            />
-          )}
+          {renderModuleSidebar(activeSection, homeView)}
           {sidebarOpen && !isMobile && (
             <div
               className="sb-resize"
@@ -1476,6 +1632,19 @@ export default function MainLayout() {
             />
           )}
         </div>
+      )}
+      {!sidebarOpen && (
+        <button
+          type="button"
+          onClick={() => setSidebarOpen(true)}
+          className="hidden md:grid self-start mt-4 ml-1 h-8 w-7 place-items-center rounded-[8px] bg-[var(--sidebar)] text-[var(--sh-ink-3)] hover:text-[var(--sh-ink)] hover:bg-[var(--sh-hair)]"
+          title="Open sidebar"
+          aria-label="Open sidebar"
+        >
+          <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+            <path d="M9 6l6 6-6 6" />
+          </svg>
+        </button>
       )}
       </aside>
 
