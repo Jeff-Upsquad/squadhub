@@ -689,9 +689,12 @@ export default function AdminCardClientPreview({
 
   return (
     <div className="flex min-h-0 h-full flex-col">
-      <div className="flex-1 space-y-4 overflow-y-auto px-6 pt-6 pb-10">
+      {/* Sticky chrome so Back / Client view stay visible in the Hub mini app
+          (tall embed probes used to shove them off-screen). */}
+      <div className="sticky top-0 z-20 shrink-0 border-b border-[var(--color-sh-warm-border)] bg-[var(--color-surface)] px-6 py-3">
         {headerRow}
-
+      </div>
+      <div className="flex-1 space-y-4 overflow-y-auto px-6 pt-4 pb-10">
         <div className="flex items-start gap-2 rounded-xl border border-[var(--color-sh-warm-border)] bg-[var(--color-sh-cream)] px-4 py-2.5">
           <svg className="mt-0.5 h-4 w-4 shrink-0 text-[var(--color-sh-ink-subtle)]" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
@@ -717,12 +720,14 @@ export default function AdminCardClientPreview({
           </p>
         </div>
 
-        {embedQ.isLoading && (
-          <div className="h-[720px] animate-pulse rounded-2xl bg-[var(--color-sh-cream)]" />
-        )}
-        {embedUrl && <ClientViewSquadHireEmbed embedUrl={embedUrl} onRemoteEvent={onEmbedEvent} />}
-
-        {!embedUrl && !embedQ.isLoading && error && (
+        {/* Show the reconstructed screen immediately. Only swap to the iframe
+            when SquadHire actually returns an embed URL — never blank the page
+            behind a tall loading skeleton while the probe runs. */}
+        {embedUrl ? (
+          <ClientViewSquadHireEmbed embedUrl={embedUrl} onRemoteEvent={onEmbedEvent} />
+        ) : (
+        <>
+        {error && (
           <div className="rounded-xl border border-amber-200 bg-amber-50/70 px-4 py-3 text-sm text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/20 dark:text-amber-300">
             {((error as any)?.response?.data?.error as string) ||
               'Could not load the business review screen from SquadHire.'}{' '}
@@ -731,8 +736,6 @@ export default function AdminCardClientPreview({
           </div>
         )}
 
-        {!embedUrl && !embedQ.isLoading && (
-        <>
         {/* ═══ Card brief — the customer's own copy ═══ */}
         <div className="sh-card p-5 sm:p-6">
           <div className="flex items-start justify-between gap-3">
