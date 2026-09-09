@@ -9005,3 +9005,43 @@ ol.sqc-list {
 .dark .mgf-done { background: #e2e8f0; color: #0f172a; }
 
 } /* end @layer components */
+
+/* ── Requirement Cards in the Hub mini app ─────────────────────────
+ * These classes already exist inside @layer components (matching admin).
+ * Hub shell CSS is unlayered and maps --color-sh-ink to nav ink, so lime
+ * primary buttons flattened to black here while admin.squadhub.in stayed
+ * yellow. Unlayered + hex so this surface matches admin. */
+button.sh-btn-primary {
+  color: #0a0a0a;
+  background-color: #FCF487;
+  border: 2px solid #0a0a0a;
+  box-shadow: 4px 4px 0 0 #000000;
+}
+button.sh-btn-primary:hover:not(:disabled) {
+  background-color: #E8DD68;
+  box-shadow: 6px 6px 0 0 #000000;
+}
+button.sh-btn-primary-sm { box-shadow: 3px 3px 0 0 #000000; }
+button.sh-btn-primary-sm:hover:not(:disabled) { box-shadow: 5px 5px 0 0 #000000; }
+button.sh-btn-primary-xs { box-shadow: 2px 2px 0 0 #000000; }
+button.sh-btn-primary-xs:hover:not(:disabled) { box-shadow: 3px 3px 0 0 #000000; }
+.dark button.sh-btn-primary { color: #0a0a0a; }
+
+button.sh-btn-ghost {
+  color: #0a0a0a;
+  background-color: #ffffff;
+  border: 1px solid #E8E5DE;
+}
+button.sh-btn-ghost:hover:not(:disabled) {
+  background-color: #F7F6F3;
+  border-color: #0a0a0a;
+}
+.dark button.sh-btn-ghost {
+  color: #e2e8f0;
+  background-color: var(--surface);
+  border-color: var(--sh-warm-border, #2a2d33);
+}
+.dark button.sh-btn-ghost:hover:not(:disabled) {
+  background-color: var(--surface-alt);
+  border-color: #e2e8f0;
+}
