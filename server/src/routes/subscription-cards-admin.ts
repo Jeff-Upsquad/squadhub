@@ -640,7 +640,7 @@ router.get('/:id/recipients', async (req: Request, res: Response) => {
     const [{ data: partnerRows }, { data: talentRows }] = await Promise.all([
       supabaseAdmin
         .from('subscription_card_recipients')
-        .select('partner_id, status, responded_at, assigned_manually, selected_at, selected_by, passed_over_at')
+        .select('partner_id, status, responded_at, assigned_manually, selected_at, selected_by, passed_over_at, broadcast_at')
         .eq('card_id', cardId)
         .is('archived_at', null),
       supabaseAdmin
@@ -670,6 +670,7 @@ router.get('/:id/recipients', async (req: Request, res: Response) => {
         selected_at: r.selected_at ?? null,
         selected_by: r.selected_by ?? null,
         passed_over_at: r.passed_over_at ?? null,
+        broadcast_at: r.broadcast_at ?? null,
       };
     });
 

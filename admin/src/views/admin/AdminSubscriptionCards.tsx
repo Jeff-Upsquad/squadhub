@@ -438,8 +438,10 @@ export default function AdminSubscriptionCards({
   //   'admin'   — recipients funnel (working view)
   //   'client'  — read-only mirror of the SquadHire business review screen
   //   'details' — New Deal form layout, view-only (every field from draft/publish)
-  // Reset to 'admin' whenever the detail collapses to the list.
-  const [cardViewMode, setCardViewMode] = useState<CardViewMode>('admin');
+  // Reset to 'client' whenever the detail collapses to the list so every card
+  // opens on the customer-facing review workflow first.
+  const defaultCardViewMode: CardViewMode = productLine === 'subscription' ? 'client' : 'admin';
+  const [cardViewMode, setCardViewMode] = useState<CardViewMode>(defaultCardViewMode);
   const [showBriefSlider, setShowBriefSlider] = useState(false);
   // The chosen launcher: which product (subscription/assignment) + role type
   // the brief form opens with. null = no form open.
@@ -651,11 +653,11 @@ export default function AdminSubscriptionCards({
   );
 
   // Collapsing the detail back to the list resets the view mode, so the next
-  // card always opens in the admin funnel (not whatever the last card used).
+  // card always opens in the client review view (not whatever the last card used).
   // Switching tiers keeps selectedCardId non-null, so the mode persists there.
   useEffect(() => {
-    if (!selectedCardId) setCardViewMode('admin');
-  }, [selectedCardId]);
+    if (!selectedCardId) setCardViewMode(defaultCardViewMode);
+  }, [defaultCardViewMode, selectedCardId]);
 
   // The per-tier sibling cards of the opened brief (tier-ordered), so the detail
   // view can show a tab per tier. Empty for single-tier / ungrouped cards.
@@ -896,6 +898,7 @@ export default function AdminSubscriptionCards({
             onOpenPanel={() => setShowPanel(true)}
             viewMode={cardViewMode}
             onSetViewMode={setCardViewMode}
+            groupCards={selectedGroupCards}
           />
         ) : cardViewMode === 'details' ? (
           <AdminCardEditor

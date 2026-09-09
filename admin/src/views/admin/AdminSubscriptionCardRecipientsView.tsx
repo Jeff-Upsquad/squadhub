@@ -1117,7 +1117,11 @@ export default function AdminSubscriptionCardRecipientsView({
           </button>
           <div className="flex items-center gap-2">
             {viewMode && onSetViewMode && (
-              <CardViewToggle viewMode={viewMode} onSetViewMode={onSetViewMode} />
+              <CardViewToggle
+                viewMode={viewMode}
+                onSetViewMode={onSetViewMode}
+                clientFirst={card.card_type !== 'assignment' && card.card_type !== 'hiring'}
+              />
             )}
             <button
               onClick={onOpenPanel}

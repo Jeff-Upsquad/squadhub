@@ -14,15 +14,23 @@ export type CardViewMode = 'admin' | 'client' | 'details';
 export default function CardViewToggle({
   viewMode,
   onSetViewMode,
+  clientFirst = false,
 }: {
   viewMode: CardViewMode;
   onSetViewMode: (m: CardViewMode) => void;
+  clientFirst?: boolean;
 }) {
-  const opts: { key: CardViewMode; label: string }[] = [
-    { key: 'admin', label: 'Admin' },
-    { key: 'client', label: 'Client view' },
-    { key: 'details', label: 'Deal details' },
-  ];
+  const opts: { key: CardViewMode; label: string }[] = clientFirst
+    ? [
+        { key: 'client', label: 'Client view' },
+        { key: 'admin', label: 'Admin' },
+        { key: 'details', label: 'Deal details' },
+      ]
+    : [
+        { key: 'admin', label: 'Admin' },
+        { key: 'client', label: 'Client view' },
+        { key: 'details', label: 'Deal details' },
+      ];
   return (
     <div className="inline-flex items-center gap-0.5 rounded-lg border border-[var(--color-sh-warm-border)] bg-[var(--color-sh-cream)] p-0.5">
       {opts.map((o) => {

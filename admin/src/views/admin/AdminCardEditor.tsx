@@ -1150,7 +1150,11 @@ export default function AdminCardEditor({
         <div className="flex shrink-0 items-center gap-2">
           {isEmbeddedDetail && (
             <>
-              <CardViewToggle viewMode={viewMode!} onSetViewMode={onSetViewMode!} />
+              <CardViewToggle
+                viewMode={viewMode!}
+                onSetViewMode={onSetViewMode!}
+                clientFirst={card?.card_type !== 'assignment' && card?.card_type !== 'hiring'}
+              />
               {onOpenPanel && (
                 <button onClick={onOpenPanel} className="sh-btn-ghost sh-btn-ghost-sm">
                   <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">

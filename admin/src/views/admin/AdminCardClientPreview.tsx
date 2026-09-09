@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import api from '@/services/api';
 import { showToast } from '@/components/Toast';
 import { useSquadhireConfig } from '@/hooks/useSquadhireConfig';
@@ -10,6 +10,7 @@ import AdminAssignmentOffers, { ClientBidActions } from './AdminAssignmentOffers
 import ClientViewChatPanel from './ClientViewChatPanel';
 import { formatRelative } from './AdminSubscriptionCardRecipientsView';
 import type { AdminSubscriptionCard } from './AdminSubscriptionCards';
+import type { RecipientsResponse } from './AdminSubscriptionCardRecipientsPanel';
 
 // ─── The SquadHire business review screen, live inside the Hub ───────────────
 //
@@ -105,6 +106,31 @@ type CardPayment = {
   invoice_sent_at: string | null;
 };
 
+type PendingTalent = {
+  talent_user_id: string;
+  talent_name: string | null;
+  status: 'pending' | 'accepted' | 'rejected';
+  responded_at: string | null;
+  created_at: string | null;
+};
+
+type MatchPreview = {
+  count: number;
+  talents: Array<{ talent_user_id: string; talent_name: string }>;
+  computed_at: string;
+};
+
+type PipelineState = 'pending' | 'projected';
+type PipelineAudience = 'all' | 'Junior' | 'Pro' | 'Top Talents' | 'Agencies';
+type PipelinePerson = {
+  key: string;
+  id: string;
+  name: string;
+  kind: 'talent' | 'agency';
+  state: PipelineState;
+  tiers: string[];
+};
+
 // Highest tier first, matching the business portal's All · Top talents · Pro · Junior.
 const TIER_TAB_ORDER = ['Top Talents', 'Pro', 'Junior'];
 
@@ -122,7 +148,7 @@ function normalizeTier(tier: string | null | undefined): string | null {
   const t = (tier ?? '').toLowerCase().trim();
   if (t === 'junior') return 'Junior';
   if (t === 'pro') return 'Pro';
-  if (t === 'top talents') return 'Top Talents';
+  if (t === 'top talent' || t === 'top talents') return 'Top Talents';
   return null;
 }
 
@@ -159,6 +185,7 @@ export default function AdminCardClientPreview({
   onOpenPanel,
   viewMode,
   onSetViewMode,
+  groupCards = [],
 }: {
   card: AdminSubscriptionCard;
   title: string;
@@ -166,6 +193,9 @@ export default function AdminCardClientPreview({
   onOpenPanel: () => void;
   viewMode: CardViewMode;
   onSetViewMode: (m: CardViewMode) => void;
+  // Sibling tier cards are needed only by the internal Pending / Projected
+  // audience. The live business view itself remains sourced from SquadHire.
+  groupCards?: AdminSubscriptionCard[];
 }) {
   const { adminUrl } = useSquadhireConfig();
   const qc = useQueryClient();
@@ -173,6 +203,9 @@ export default function AdminCardClientPreview({
   const [confirmUnselect, setConfirmUnselect] = useState<BusinessRecipient | null>(null);
   const [chatTarget, setChatTarget] = useState<{ id: string; name: string } | null>(null);
   const [activeTier, setActiveTier] = useState<string>('all');
+  const [pipelineState, setPipelineState] = useState<PipelineState>('pending');
+  const [pipelineAudience, setPipelineAudience] = useState<PipelineAudience>('all');
+  const isRecurringCard = card.card_type !== 'assignment' && card.card_type !== 'hiring';
 
   // The customer's own screen, straight from the business portal's services.
   const { data, isLoading, error } = useQuery({
@@ -182,6 +215,43 @@ export default function AdminCardClientPreview({
       return r.data as { card: BusinessCard; recipients: BusinessRecipient[] };
     },
     retry: false,
+  });
+
+  // Internal-only audience detail. These endpoints expose the delivery state
+  // that the real business portal intentionally does not show: recipients who
+  // are waiting to respond, and matches staged for a future broadcast.
+  const audienceCards = useMemo(
+    () => (groupCards.length > 1 ? groupCards : [card]),
+    [groupCards, card],
+  );
+  const localAudienceQueries = useQueries({
+    queries: audienceCards.map((audienceCard) => ({
+      queryKey: ['admin-card-recipients', audienceCard.id],
+      queryFn: () =>
+        api
+          .get(`/admin/subscription-cards/${audienceCard.id}/recipients`)
+          .then((r) => r.data?.data as RecipientsResponse),
+      enabled: isRecurringCard,
+    })),
+  });
+  const squadhireAudienceQueries = useQueries({
+    queries: audienceCards.map((audienceCard) => ({
+      queryKey: ['admin-card-squadhire-recipients', audienceCard.id],
+      queryFn: () =>
+        api
+          .get(`/admin/subscription-cards/${audienceCard.id}/squadhire-recipients`)
+          .then(
+            (r) =>
+              r.data as {
+                data: PendingTalent[];
+                match_preview?: MatchPreview | null;
+              },
+          ),
+      enabled:
+        isRecurringCard &&
+        Array.isArray(audienceCard.squadhire_category_ids) &&
+        audienceCard.squadhire_category_ids.length > 0,
+    })),
   });
 
   const { data: paymentsRes } = useQuery({
@@ -383,6 +453,130 @@ export default function AdminCardClientPreview({
     return key === 'all' ? pool.length : pool.filter((r) => normalizeTier(r.tier) === key).length;
   };
 
+  const pipelinePeople = useMemo<PipelinePerson[]>(() => {
+    const people = new Map<string, PipelinePerson>();
+    const alreadyInReview = new Set(recipients.map((r) => r.talent_user_id));
+
+    const add = ({
+      id,
+      name,
+      kind,
+      state,
+      tier,
+    }: {
+      id: string;
+      name: string | null | undefined;
+      kind: PipelinePerson['kind'];
+      state: PipelineState;
+      tier?: string | string[] | null;
+    }) => {
+      if (kind === 'talent' && alreadyInReview.has(id)) return;
+      const key = `${kind}:${id}`;
+      const normalizedTiers = (Array.isArray(tier) ? tier : [tier])
+        .map((value) => normalizeTier(value))
+        .filter((value): value is string => !!value);
+      const existing = people.get(key);
+      if (existing) {
+        // A sent invitation is more actionable than the same person's older
+        // projection, so Pending wins while retaining every matched tier.
+        if (state === 'pending') existing.state = 'pending';
+        for (const normalizedTier of normalizedTiers) {
+          if (!existing.tiers.includes(normalizedTier)) existing.tiers.push(normalizedTier);
+        }
+        if (existing.name === 'Unknown talent' && name) existing.name = name;
+        return;
+      }
+      people.set(key, {
+        key,
+        id,
+        name: name || (kind === 'agency' ? 'Unknown agency' : 'Unknown talent'),
+        kind,
+        state,
+        tiers: normalizedTiers,
+      });
+    };
+
+    audienceCards.forEach((audienceCard, index) => {
+      const local = localAudienceQueries[index]?.data as RecipientsResponse | undefined;
+      const remoteRaw = squadhireAudienceQueries[index]?.data as
+        | { data?: PendingTalent[]; match_preview?: MatchPreview | null }
+        | PendingTalent[]
+        | undefined;
+      const remote = Array.isArray(remoteRaw) ? remoteRaw : (remoteRaw?.data ?? []);
+      const preview = Array.isArray(remoteRaw) ? null : (remoteRaw?.match_preview ?? null);
+      const tiers = audienceCard.target_tiers ?? [];
+
+      for (const agency of local?.partners ?? []) {
+        if (agency.status !== 'pending') continue;
+        add({
+          id: agency.id,
+          name: agency.name,
+          kind: 'agency',
+          state:
+            agency.broadcast_at || audienceCard.needs_broadcast === false
+              ? 'pending'
+              : 'projected',
+        });
+      }
+
+      const localTalents = new Map((local?.talents ?? []).map((talent) => [talent.external_user_id, talent]));
+      for (const talent of local?.talents ?? []) {
+        if (talent.status !== 'pending') continue;
+        add({
+          id: talent.external_user_id,
+          name: talent.name,
+          kind: 'talent',
+          state: talent.notified_at ? 'pending' : 'projected',
+          tier: tiers,
+        });
+      }
+
+      for (const talent of remote) {
+        if (talent.status !== 'pending' || localTalents.has(talent.talent_user_id)) continue;
+        add({
+          id: talent.talent_user_id,
+          name: talent.talent_name,
+          kind: 'talent',
+          state: audienceCard.squadhire_synced_at ? 'pending' : 'projected',
+          tier: tiers,
+        });
+      }
+
+      // Cached match previews can remain on a card after broadcast. Only use
+      // them while this tier is still awaiting its first release.
+      if (preview && audienceCard.state === 'published' && !audienceCard.squadhire_synced_at) {
+        for (const talent of preview.talents ?? []) {
+          add({
+            id: talent.talent_user_id,
+            name: talent.talent_name,
+            kind: 'talent',
+            state: 'projected',
+            tier: tiers,
+          });
+        }
+      }
+    });
+
+    return [...people.values()].sort((a, b) => a.name.localeCompare(b.name));
+  }, [audienceCards, localAudienceQueries, squadhireAudienceQueries, recipients]);
+
+  const pipelineForState = pipelinePeople.filter((person) => person.state === pipelineState);
+  const pipelineVisible = pipelineForState.filter((person) => {
+    if (pipelineAudience === 'all') return true;
+    if (pipelineAudience === 'Agencies') return person.kind === 'agency';
+    return person.kind === 'talent' && person.tiers.includes(pipelineAudience);
+  });
+  const pipelineCount = (state: PipelineState) => pipelinePeople.filter((person) => person.state === state).length;
+  const pipelineAudienceCount = (audience: PipelineAudience) => {
+    const pool = pipelinePeople.filter((person) => person.state === pipelineState);
+    if (audience === 'all') return pool.length;
+    if (audience === 'Agencies') return pool.filter((person) => person.kind === 'agency').length;
+    return pool.filter((person) => person.kind === 'talent' && person.tiers.includes(audience)).length;
+  };
+  const pipelineLoading =
+    localAudienceQueries.some((query) => query.isLoading) ||
+    squadhireAudienceQueries.some((query) => query.isLoading);
+
   const additionalReqs = flattenAdditionalReqs(brief?.additional_requirements);
 
   const busy = review.isPending || selectMut.isPending;
@@ -412,7 +606,7 @@ export default function AdminCardClientPreview({
         Back to Subscription Cards
       </button>
       <div className="flex items-center gap-2">
-        <CardViewToggle viewMode={viewMode} onSetViewMode={onSetViewMode} />
+        <CardViewToggle viewMode={viewMode} onSetViewMode={onSetViewMode} clientFirst={isRecurringCard} />
         <button onClick={onOpenPanel} className="sh-btn-ghost sh-btn-ghost-sm">
           <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
             <path
@@ -885,6 +1079,27 @@ export default function AdminCardClientPreview({
           ))}
         </ListCard>
 
+        {/* Internal sourcing visibility. Pending people have received the card
+            and have not answered; Projected people are matched/staged but the
+            card has not been released to them yet. This block intentionally
+            lives only in SquadHub/admin, never in the SquadHire business UI. */}
+        {isRecurringCard && (
+          <PipelineCard
+            state={pipelineState}
+            onStateChange={setPipelineState}
+            stateCounts={{
+              pending: pipelineCount('pending'),
+              projected: pipelineCount('projected'),
+            }}
+            audience={pipelineAudience}
+            onAudienceChange={setPipelineAudience}
+            audienceCount={pipelineAudienceCount}
+            people={pipelineVisible}
+            loading={pipelineLoading}
+            adminUrl={adminUrl}
+          />
+        )}
+
         <ActivityLog events={clientEvents} />
       </div>
 
@@ -968,6 +1183,167 @@ function DetailRow({ label, children }: { label: string; children: React.ReactNo
     <div>
       <dt className="text-[11px] font-medium uppercase tracking-wider text-[var(--color-sh-ink-faint)]">{label}</dt>
       <dd className="text-sm text-[var(--color-sh-ink)]">{children}</dd>
+    </div>
+  );
+}
+
+const PIPELINE_AUDIENCES: Array<{ key: PipelineAudience; label: string }> = [
+  { key: 'all', label: 'All' },
+  { key: 'Junior', label: 'Juniors' },
+  { key: 'Pro', label: 'Pro' },
+  { key: 'Top Talents', label: 'Top Talent' },
+  { key: 'Agencies', label: 'Agencies' },
+];
+
+function PipelineCard({
+  state,
+  onStateChange,
+  stateCounts,
+  audience,
+  onAudienceChange,
+  audienceCount,
+  people,
+  loading,
+  adminUrl,
+}: {
+  state: PipelineState;
+  onStateChange: (state: PipelineState) => void;
+  stateCounts: Record<PipelineState, number>;
+  audience: PipelineAudience;
+  onAudienceChange: (audience: PipelineAudience) => void;
+  audienceCount: (audience: PipelineAudience) => number;
+  people: PipelinePerson[];
+  loading: boolean;
+  adminUrl: string | null | undefined;
+}) {
+  const stateDescription =
+    state === 'pending'
+      ? 'Card sent — awaiting a response.'
+      : 'Matched to this requirement — not sent yet.';
+
+  return (
+    <div className="sh-card overflow-hidden">
+      <div className="flex flex-col gap-3 border-b border-[var(--color-sh-warm-border)] px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+        <div>
+          <h2 className="font-[family-name:var(--font-jakarta)] text-sm font-semibold text-[var(--color-sh-ink)]">
+            Pending &amp; projected
+          </h2>
+          <p className="mt-0.5 text-xs text-[var(--color-sh-ink-faint)]">{stateDescription}</p>
+        </div>
+        <div className="inline-flex self-start rounded-lg border border-[var(--color-sh-warm-border)] bg-[var(--color-sh-cream)] p-0.5">
+          {(['pending', 'projected'] as const).map((tab) => {
+            const active = state === tab;
+            return (
+              <button
+                key={tab}
+                type="button"
+                onClick={() => onStateChange(tab)}
+                className={`rounded-md px-3 py-1.5 text-xs font-semibold transition ${
+                  active
+                    ? 'bg-[var(--color-surface)] text-[var(--color-sh-ink)] shadow-[0_1px_2px_rgba(0,0,0,0.06)]'
+                    : 'text-[var(--color-sh-ink-subtle)] hover:text-[var(--color-sh-ink)]'
+                }`}
+              >
+                {tab === 'pending' ? 'Pending' : 'Projected'}
+                <span className="ml-1 opacity-65">({stateCounts[tab]})</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="overflow-x-auto border-b border-[var(--color-sh-warm-border)] px-5 py-3 sm:px-6">
+        <div className="flex min-w-max items-center gap-1.5">
+          {PIPELINE_AUDIENCES.map((tab) => {
+            const active = audience === tab.key;
+            return (
+              <button
+                key={tab.key}
+                type="button"
+                onClick={() => onAudienceChange(tab.key)}
+                className={`rounded-full border px-3 py-1 text-xs font-semibold transition ${
+                  active
+                    ? 'border-transparent bg-[var(--color-sh-lime-soft)] text-[var(--color-sh-ink)] shadow-[inset_0_0_0_1px_var(--color-sh-ink)]'
+                    : 'border-[var(--color-sh-warm-border)] bg-[var(--color-surface)] text-[var(--color-sh-ink-muted)] hover:text-[var(--color-sh-ink)]'
+                }`}
+              >
+                {tab.label}
+                <span className={`ml-1 ${active ? 'opacity-75' : 'text-[var(--color-sh-ink-faint)]'}`}>
+                  {audienceCount(tab.key)}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {loading ? (
+        <div className="space-y-2 p-4">
+          {Array.from({ length: 2 }).map((_, index) => (
+            <div key={index} className="h-14 animate-pulse rounded-xl bg-[var(--color-sh-cream)]" />
+          ))}
+        </div>
+      ) : people.length === 0 ? (
+        <div className="px-6 py-10 text-center">
+          <p className="text-sm text-[var(--color-sh-ink-subtle)]">
+            No {state} {audience === 'all' ? 'recipients' : audience === 'Agencies' ? 'agencies' : `${PIPELINE_AUDIENCES.find((tab) => tab.key === audience)?.label.toLowerCase()} talents`}.
+          </p>
+        </div>
+      ) : (
+        <ul className="divide-y divide-[var(--color-sh-warm-border)]">
+          {people.map((person) => {
+            const tierLabel = person.kind === 'agency' ? 'Agency' : person.tiers.join(' · ') || 'Talent';
+            const content = (
+              <>
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[var(--color-sh-cream)] font-[family-name:var(--font-jakarta)] text-sm font-semibold text-[var(--color-sh-ink)] ring-1 ring-[var(--color-sh-warm-border)]">
+                  {initials(person.name)}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate font-[family-name:var(--font-jakarta)] text-[15px] font-semibold text-[var(--color-sh-ink)]">
+                    {person.name}
+                  </p>
+                  <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                    <span className="rounded-full bg-[var(--color-sh-cream)] px-2 py-0.5 text-[10px] font-semibold text-[var(--color-sh-ink-muted)]">
+                      {tierLabel}
+                    </span>
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                        state === 'pending'
+                          ? 'bg-amber-100 text-amber-700'
+                          : 'bg-sky-100 text-sky-700'
+                      }`}
+                    >
+                      {state === 'pending' ? 'Awaiting response' : 'Not sent'}
+                    </span>
+                  </div>
+                </div>
+                {person.kind === 'talent' && adminUrl && (
+                  <svg className="h-4 w-4 shrink-0 text-[var(--color-sh-ink-faint)]" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
+                  </svg>
+                )}
+              </>
+            );
+            return (
+              <li key={person.key} className="px-5 py-4 sm:px-6">
+                {person.kind === 'talent' && adminUrl ? (
+                  <a
+                    href={`${adminUrl}/admin/users/${person.id}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-3 transition-opacity hover:opacity-70 sm:gap-4"
+                    title="View this talent in SquadHire"
+                  >
+                    {content}
+                  </a>
+                ) : (
+                  <div className="flex items-center gap-3 sm:gap-4">{content}</div>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      )}
     </div>
   );
 }

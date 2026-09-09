@@ -22,6 +22,8 @@ export type PartnerRecipient = {
   selected_at?: string | null;
   selected_by?: string | null;
   passed_over_at?: string | null;
+  // NULL until a staged/projected agency recipient is actually broadcast.
+  broadcast_at?: string | null;
 };
 
 export type TalentRecipient = {
