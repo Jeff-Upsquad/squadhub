@@ -32,7 +32,7 @@ export type CardEventType =
   | 'deal_lost'
   | 'deal_lost_cleared';
 
-export type CardEventActorType = 'admin' | 'partner' | 'talent' | 'system';
+export type CardEventActorType = 'admin' | 'partner' | 'talent' | 'system' | 'business';
 
 export interface LogCardEventInput {
   cardId: string;
