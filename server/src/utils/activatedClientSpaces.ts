@@ -1,6 +1,7 @@
 import { supabaseAdmin } from '../supabase';
 import { generateCardCode } from './cardCode';
 import {
+  activatedClientChannelName,
   brandFolderName,
   templateListRows,
   templateSlugsForServiceType,
@@ -8,6 +9,7 @@ import {
 } from './activatedClientSpaceTypes';
 
 export {
+  activatedClientChannelName,
   brandFolderName,
   templateListRows,
   templateSlugsForServiceType,
@@ -18,6 +20,7 @@ export type ActivatedClientSpaceResult = {
   clientFolderId: string;
   childFolderIds: string[];
   linkedFolderId: string | null;
+  linkedChannelIds: string[];
 };
 
 async function resolveActorAndWorkspace(
@@ -243,6 +246,76 @@ async function grantFolders(userIds: string[], folderIds: string[], actorId: str
   if (error) throw new Error(error.message);
 }
 
+async function ensureLinkedFolderChannel(input: {
+  folderId: string;
+  workspaceId: string;
+  actorId: string;
+  brandName: string;
+  spaceName: string;
+}): Promise<string> {
+  const findExisting = async (): Promise<string | null> => {
+    const { data, error } = await supabaseAdmin
+      .from('channels')
+      .select('id')
+      .eq('linked_resource_type', 'folder')
+      .eq('linked_resource_id', input.folderId)
+      .is('deleted_at', null)
+      .limit(1)
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    return data?.id ?? null;
+  };
+
+  const existingId = await findExisting();
+  if (existingId) return existingId;
+
+  const { data: created, error } = await supabaseAdmin
+    .from('channels')
+    .insert({
+      workspace_id: input.workspaceId,
+      name: activatedClientChannelName(input.brandName, input.spaceName, input.folderId),
+      description: `Client work chat for ${input.brandName} — ${input.spaceName}`.slice(0, 250),
+      is_private: true,
+      created_by: input.actorId,
+      linked_resource_type: 'folder',
+      linked_resource_id: input.folderId,
+    })
+    .select('id')
+    .single();
+  if (!error && created?.id) return created.id;
+
+  // Concurrent/retried provisioning can race on the unique linked-container
+  // index. In that case the winning channel is the desired result.
+  if (error?.code === '23505') {
+    const racedId = await findExisting();
+    if (racedId) return racedId;
+  }
+  throw new Error(error?.message || `Failed to create chat for ${input.spaceName}`);
+}
+
+async function grantChannels(userIds: string[], channelIds: string[], actorId: string): Promise<void> {
+  const uniqueUsers = [...new Set(userIds.filter(Boolean))];
+  const uniqueChannels = [...new Set(channelIds.filter(Boolean))];
+  if (uniqueUsers.length === 0 || uniqueChannels.length === 0) return;
+  const { error } = await supabaseAdmin.from('resource_memberships').upsert(
+    uniqueUsers.flatMap((userId) =>
+      uniqueChannels.map((resourceId) => ({
+        resource_type: 'channel',
+        resource_id: resourceId,
+        user_id: userId,
+        access_level: 'member',
+        invited_by: actorId,
+      })),
+    ),
+    {
+      onConflict: 'resource_type,resource_id,user_id',
+      // Preserve the creator's manager access and any manually elevated member.
+      ignoreDuplicates: true,
+    },
+  );
+  if (error) throw new Error(error.message);
+}
+
 async function resolveClientIdForCard(card: any, supplied?: string | null): Promise<string | null> {
   if (supplied) return supplied;
 
@@ -334,7 +407,8 @@ async function resolveTalentUserId(cardId: string, recipientType: string | null,
 
 /**
  * Idempotently create the brand client folder, the service-specific child
- * spaces, link the activated card, and share them with the client and talent.
+ * spaces, link the activated card, create their chats, and share both resources
+ * with the client and talent.
  */
 export async function provisionActivatedClientSpaces(input: {
   cardId: string;
@@ -375,16 +449,21 @@ export async function provisionActivatedClientSpaces(input: {
   const missing = slugs.filter((slug) => !templateBySlug.has(slug));
   if (missing.length > 0) throw new Error(`Missing enabled client-space template(s): ${missing.join(', ')}`);
 
-  const childFolderIds: string[] = [];
+  const childSpaces: Array<{ folderId: string; name: string }> = [];
   for (const slug of slugs) {
-    childFolderIds.push(await ensureTemplateFolder({
-      clientId,
-      clientFolderId: clientFolder.id,
-      spaceId: clientFolder.spaceId,
-      actorId,
-      template: templateBySlug.get(slug),
-    }));
+    const template = templateBySlug.get(slug);
+    childSpaces.push({
+      folderId: await ensureTemplateFolder({
+        clientId,
+        clientFolderId: clientFolder.id,
+        spaceId: clientFolder.spaceId,
+        actorId,
+        template,
+      }),
+      name: template.name,
+    });
   }
+  const childFolderIds = childSpaces.map((space) => space.folderId);
 
   let linkedFolderId = card.linked_folder_id as string | null;
   if (!linkedFolderId && childFolderIds[0]) {
@@ -416,6 +495,18 @@ export async function provisionActivatedClientSpaces(input: {
   const allMemberIds = resolvedTalentId ? [...clientUserIds, resolvedTalentId] : clientUserIds;
   await grantFolders(allMemberIds, [clientFolder.id, ...childFolderIds], actorId);
 
+  const linkedChannelIds: string[] = [];
+  for (const childSpace of childSpaces) {
+    linkedChannelIds.push(await ensureLinkedFolderChannel({
+      folderId: childSpace.folderId,
+      workspaceId,
+      actorId,
+      brandName,
+      spaceName: childSpace.name,
+    }));
+  }
+  await grantChannels(allMemberIds, linkedChannelIds, actorId);
+
   if (resolvedTalentId) {
     await supabaseAdmin.from('partner_client_assignments').upsert(
       { user_id: resolvedTalentId, client_id: clientId, role: null },
@@ -423,7 +514,7 @@ export async function provisionActivatedClientSpaces(input: {
     );
   }
 
-  return { clientFolderId: clientFolder.id, childFolderIds, linkedFolderId };
+  return { clientFolderId: clientFolder.id, childFolderIds, linkedFolderId, linkedChannelIds };
 }
 
 /** Share every existing client folder/child space after a client user is provisioned. */
@@ -443,10 +534,21 @@ export async function syncClientFolderMemberships(clientId: string, userId: stri
     .in('parent_folder_id', rootIds)
     .not('client_space_template_id', 'is', null)
     .is('deleted_at', null);
-  await grantFolders(
+  const folderIds = [...rootIds, ...(children ?? []).map((row: any) => row.id as string)];
+  const actorId = (roots[0] as any).created_by as string;
+  await grantFolders([userId], folderIds, actorId);
+
+  const { data: channels, error: channelError } = await supabaseAdmin
+    .from('channels')
+    .select('id')
+    .eq('linked_resource_type', 'folder')
+    .in('linked_resource_id', folderIds)
+    .is('deleted_at', null);
+  if (channelError) throw new Error(channelError.message);
+  await grantChannels(
     [userId],
-    [...rootIds, ...(children ?? []).map((row: any) => row.id as string)],
-    (roots[0] as any).created_by as string,
+    (channels ?? []).map((row: any) => row.id as string),
+    actorId,
   );
 }
 

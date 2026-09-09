@@ -1,0 +1,56 @@
+import type { CSSProperties } from 'react';
+
+const paths = {
+  home: 'm3 10 7.7-6a2 2 0 0 1 2.6 0L21 10v8a3 3 0 0 1-3 3h-3v-6a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v6H6a3 3 0 0 1-3-3Z',
+  inbox: 'M4 4h16l2 11v5H2v-5Zm-2 11h6l2 3h4l2-3h6',
+  check: 'm5 12 4 4L19 6',
+  tasks: 'M9 5h11M9 12h11M9 19h11M3 5l1 1 2-3M3 12l1 1 2-3M3 19l1 1 2-3',
+  document: 'M14 2H5v20h14V7Zm0 0v6h5M8 12h8M8 16h6',
+  calendar: 'M4 5h16v16H4ZM8 2v6M16 2v6M4 11h16M8 15h2M14 15h2',
+  grid: 'M3 3h5v5H3ZM16 3h5v5h-5ZM3 16h5v5H3ZM16 16h5v5h-5Z',
+  resource: 'm2 8 10-5 10 5-10 5Zm4 3v6c4 3 8 3 12 0v-6M22 8v8',
+  clock: 'M12 8v5l3 2M22 12a10 10 0 1 1-20 0 10 10 0 0 1 20 0',
+  more: 'M5 12h.01M12 12h.01M19 12h.01',
+  search: 'M21 21l-5-5M18 10a8 8 0 1 1-16 0 8 8 0 0 1 16 0',
+  chevron: 'm9 5 7 7-7 7',
+  down: 'm6 9 6 6 6-6',
+  plus: 'M12 5v14M5 12h14',
+  close: 'm6 6 12 12M6 18 18 6',
+  arrow: 'M5 12h14m-6-6 6 6-6 6',
+  upRight: 'M6 18 18 6M6 6h12v12',
+  repeat: 'm17 2 4 4-4 4M3 11V6h18M7 22l-4-4 4-4m14-1v5H3',
+  circleCheck: 'm8 12 3 3 5-6M22 12a10 10 0 1 1-20 0 10 10 0 0 1 20 0',
+  video: 'M3 5h13v14H3Zm13 5 6-3v10l-6-3',
+  briefcase: 'M3 7h18v14H3ZM8 7V3h8v4M3 12c5 3 13 3 18 0M10 13v3h4v-3',
+  people: 'M16 21v-2a5 5 0 0 0-5-5H7a5 5 0 0 0-5 5v2M9 10a4 4 0 1 0 0-8 4 4 0 0 0 0 8M22 21v-2a5 5 0 0 0-4-5M17 2a4 4 0 0 1 0 8',
+  folder: 'M2 5h8l2 3h10v12H2Z',
+  layers: 'm12 3 10 5-10 5L2 8Zm-10 9 10 5 10-5M2 16l10 5 10-5',
+  star: 'm12 2 3 6 7 1-5 5 1 7-6-3-6 3 1-7-5-5 7-1Z',
+  help: 'M9 9a3 3 0 1 1 5 2c-2 1-2 2-2 3M12 18h.01M22 12a10 10 0 1 1-20 0 10 10 0 0 1 20 0',
+  settings: 'M9 3h6l1 3 3 1 2 5-2 5-3 1-1 3H9l-1-3-3-1-2-5 2-5 3-1Zm7 9a4 4 0 1 0-8 0 4 4 0 0 0 8 0',
+  bell: 'M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4',
+  panel: 'M3 3h18v18H3ZM9 3v18',
+  sun: 'M12 2V0M12 24v-2M2 12H0M24 12h-2M5 5 3 3M21 21l-2-2M5 19l-2 2M21 3l-2 2M17 12a5 5 0 1 1-10 0 5 5 0 0 1 10 0',
+  play: 'm8 5 11 7-11 7Z',
+  pause: 'M8 5v14M16 5v14',
+  stop: 'M6 6h12v12H6Z',
+  coffee: 'M3 5h13v10a5 5 0 0 1-5 5H8a5 5 0 0 1-5-5Zm13 1h2a4 4 0 0 1 0 8h-2M6 1v1M10 1v1M14 1v1M1 23h19',
+  warning: 'm12 3 10 18H2ZM12 9v5M12 17h.01',
+  flag: 'M4 22V3c5-4 11 4 16 0v10c-5 4-11-4-16 0',
+  filter: 'M3 6h18M6 12h12M10 18h4M7 4v4M17 10v4M12 16v4',
+  spark: 'm12 2 3 7 7 3-7 3-3 7-3-7-7-3 7-3Z',
+  edit: 'm14 5 5 5M3 21l5-1L21 7l-5-5L3 15ZM3 21h18',
+  recording: 'M20 12a8 8 0 1 1-16 0 8 8 0 0 1 16 0M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0',
+  chat: 'M21 11.5a8.5 8.5 0 0 1-8.5 8.5H7l-5 2 1.8-5.2A8.5 8.5 0 1 1 21 11.5Z',
+  hourglass: 'M6 2h12M6 22h12M8 2v4l4 6-4 6v4M16 2v4l-4 6 4 6v4',
+  moon: 'M21 14.5A8.5 8.5 0 1 1 9.5 3 7 7 0 0 0 21 14.5Z',
+  hash: 'M7 20 11 4M13 20l4-16M5 9h15M4 15h15',
+  at: 'M16 8v5a3 3 0 0 0 6 0v-1a10 10 0 1 0-4 8',
+  lifebuoy: 'M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20ZM12 16a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM4.9 4.9l4.2 4.2M14.9 14.9l4.2 4.2M14.9 9.1l4.2-4.2M4.9 19.1l4.2-4.2',
+} as const;
+
+export type IconName = keyof typeof paths;
+
+export default function Icon({ name, size = 18, className, style }: { name: IconName; size?: number; className?: string; style?: CSSProperties }) {
+  return <svg aria-hidden="true" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.65} strokeLinecap="round" strokeLinejoin="round" className={className} style={style}><path d={paths[name]} /></svg>;
+}

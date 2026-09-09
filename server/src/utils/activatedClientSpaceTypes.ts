@@ -35,6 +35,28 @@ export function brandFolderName(
   return company || brand || 'Client';
 }
 
+/**
+ * Stable, readable channel name for an activated client space. The folder id
+ * suffix keeps two clients with the same brand name unambiguous while making
+ * retries resolve to the same name.
+ */
+export function activatedClientChannelName(
+  brandName: string,
+  spaceName: string,
+  folderId: string,
+): string {
+  const suffix = folderId.replace(/[^a-z0-9]/gi, '').slice(0, 8).toLowerCase();
+  const base = `${brandName}-${spaceName}`
+    .toLowerCase()
+    .replace(/[^a-z0-9-]+/g, '-')
+    .replace(/^-+|-+$/g, '') || 'client-space';
+  const suffixLength = suffix ? suffix.length + 1 : 0;
+  const trimmedBase = base
+    .slice(0, 80 - suffixLength)
+    .replace(/-+$/g, '') || 'client-space';
+  return suffix ? `${trimmedBase}-${suffix}` : trimmedBase.slice(0, 80);
+}
+
 /** List rows for a client-space template. Omit default_view — production lists drifted and has no such column. */
 export function templateListRows(input: {
   spaceId: string;
