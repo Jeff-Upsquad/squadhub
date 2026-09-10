@@ -223,7 +223,7 @@ function AddDropdown({
       {open && (
         <div
           ref={menuRef}
-          className="fixed z-[100] w-56 rounded-lg border border-[var(--sh-hair)] bg-[var(--surface)] py-1 shadow-lg"
+          className="sh-float fixed z-[100] w-56 rounded-lg border border-[var(--sh-hair)] bg-[var(--surface)] py-1 shadow-lg"
           style={{ top: pos.top, left: pos.left }}
         >
           <div className="px-3 py-1.5 text-[10px] font-medium uppercase tracking-wider text-[var(--sh-ink-4)]">Create</div>
@@ -331,7 +331,7 @@ function ListItem({ list, isManager = false, myAccess, dnd }: { list: List; isMa
       {showSettings && typeof document !== 'undefined' && createPortal((
         <>
         <div className="fixed inset-0 z-40 bg-black/30" onClick={() => setShowSettings(false)} />
-        <div className="fixed inset-y-0 right-0 left-auto z-50 flex h-full w-[360px] shrink-0 flex-col border-l border-[var(--sh-hair)] bg-[var(--surface)] shadow-lg" onClick={(e) => e.stopPropagation()}>
+        <div className="sh-float fixed inset-y-0 right-0 left-auto z-50 flex h-full w-[360px] shrink-0 flex-col border-l border-[var(--sh-hair)] bg-[var(--surface)] shadow-lg" onClick={(e) => e.stopPropagation()}>
           <SettingsSlider type="list" id={list.id} name={list.name} spaceId={list.space_id} folderId={list.folder_id} groupTasks={list.group_tasks} autoAssigneeIds={list.auto_assignee_ids} myAccess={myAccess} onClose={() => setShowSettings(false)} />
         </div>
         </>
@@ -478,7 +478,7 @@ function FolderItem({ folder, spaceId, canAdd, canDelete, isManager, myAccess }:
       {showSettings && typeof document !== 'undefined' && createPortal((
         <>
         <div className="fixed inset-0 z-40 bg-black/30" onClick={() => setShowSettings(false)} />
-        <div className="fixed inset-y-0 right-0 left-auto z-50 flex h-full w-[360px] shrink-0 flex-col border-l border-[var(--sh-hair)] bg-[var(--surface)] shadow-lg" onClick={(e) => e.stopPropagation()}>
+        <div className="sh-float fixed inset-y-0 right-0 left-auto z-50 flex h-full w-[360px] shrink-0 flex-col border-l border-[var(--sh-hair)] bg-[var(--surface)] shadow-lg" onClick={(e) => e.stopPropagation()}>
           <SettingsSlider type="folder" id={folder.id} name={folder.name} spaceId={spaceId} groupTasks={folder.group_tasks} autoAssigneeIds={folder.auto_assignee_ids} myAccess={myAccess} onClose={() => setShowSettings(false)} />
         </div>
         </>
@@ -563,7 +563,7 @@ function ClientItem({ folder, childSpaces, spaceId, canAddLists, canAddSpaces, c
       {showSettings && typeof document !== 'undefined' && createPortal((
         <>
         <div className="fixed inset-0 z-40 bg-black/30" onClick={() => setShowSettings(false)} />
-        <div className="fixed inset-y-0 right-0 left-auto z-50 flex h-full w-[360px] shrink-0 flex-col border-l border-[var(--sh-hair)] bg-[var(--surface)] shadow-lg" onClick={(e) => e.stopPropagation()}>
+        <div className="sh-float fixed inset-y-0 right-0 left-auto z-50 flex h-full w-[360px] shrink-0 flex-col border-l border-[var(--sh-hair)] bg-[var(--surface)] shadow-lg" onClick={(e) => e.stopPropagation()}>
           <SettingsSlider type="folder" id={folder.id} name={folder.name} spaceId={spaceId} groupTasks={folder.group_tasks} autoAssigneeIds={folder.auto_assignee_ids} myAccess={myAccess} onClose={() => setShowSettings(false)} />
         </div>
         </>
@@ -765,7 +765,7 @@ function SpaceItem({ spaceId, initial }: { spaceId: string; initial?: Space }) {
       {showSettings && space && typeof document !== 'undefined' && createPortal((
         <>
         <div className="fixed inset-0 z-40 bg-black/30" onClick={() => setShowSettings(false)} />
-        <div className="fixed inset-y-0 right-0 left-auto z-50 flex h-full w-[360px] shrink-0 flex-col border-l border-[var(--sh-hair)] bg-[var(--surface)] shadow-lg" onClick={(e) => e.stopPropagation()}>
+        <div className="sh-float fixed inset-y-0 right-0 left-auto z-50 flex h-full w-[360px] shrink-0 flex-col border-l border-[var(--sh-hair)] bg-[var(--surface)] shadow-lg" onClick={(e) => e.stopPropagation()}>
           <SettingsSlider type="space" id={spaceId} name={space.name} description={space.description} groupTasks={space.group_tasks} autoAssigneeIds={space.auto_assignee_ids} myAccess={myAccess} onClose={() => setShowSettings(false)} />
         </div>
         </>

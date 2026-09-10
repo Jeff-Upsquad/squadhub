@@ -682,7 +682,7 @@ export default function SubscriptionCardDrawer({
                       {publishMenuOpen && (
                         <div
                           role="menu"
-                          className="absolute bottom-full right-0 mb-1 w-56 overflow-hidden rounded-md border border-[var(--sh-hair)] bg-[var(--surface)] shadow-lg"
+                          className="sh-float absolute bottom-full right-0 mb-1 w-56 overflow-hidden rounded-md border border-[var(--sh-hair)] bg-[var(--surface)] shadow-lg"
                         >
                           <button
                             role="menuitem"

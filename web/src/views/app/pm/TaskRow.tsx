@@ -525,7 +525,7 @@ export default function TaskRow({
           {moreOpen && (
             <>
               <div className="fixed inset-0 z-10" onClick={() => setMoreOpen(false)} />
-              <div className="absolute right-0 top-full z-20 mt-1 w-48 overflow-hidden rounded-lg border bg-[var(--surface)] shadow-lg" style={{ borderColor: 'var(--sh-hair)' }}>
+              <div className="sh-float absolute right-0 top-full z-20 mt-1 w-48 overflow-hidden rounded-lg border bg-[var(--surface)] shadow-lg" style={{ borderColor: 'var(--sh-hair)' }}>
                 <button
                   onClick={() => { setMoreOpen(false); setShowReport(true); }}
                   className="flex w-full items-center gap-2 px-3 py-2 text-left text-[12.5px] text-[var(--sh-ink)] hover:bg-[var(--sh-hair-3)]"

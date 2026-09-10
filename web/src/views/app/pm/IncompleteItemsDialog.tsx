@@ -70,7 +70,7 @@ export default function IncompleteItemsDialog({
       ref={panelRef}
       role="dialog"
       aria-label="Task has open items"
-      className="fixed z-[80] rounded-xl border border-[var(--sh-hair)] bg-[var(--surface)] p-3 shadow-2xl"
+      className="sh-float fixed z-[80] rounded-xl border border-[var(--sh-hair)] bg-[var(--surface)] p-3 shadow-2xl"
       style={style}
     >
       <p className="text-[13px] font-semibold text-[var(--sh-ink)]">Open items remain</p>

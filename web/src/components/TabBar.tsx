@@ -244,7 +244,7 @@ export default function TabBar() {
           <>
             <div className="fixed inset-0 z-[60]" onClick={() => setMenu(null)} onContextMenu={(e) => { e.preventDefault(); setMenu(null); }} />
             <div
-              className="fixed z-[61] min-w-[150px] rounded-[8px] border border-[var(--sh-hair)] bg-[var(--surface)] py-1 text-[12.5px] text-[var(--sh-ink-2)] shadow-lg"
+              className="sh-float fixed z-[61] min-w-[150px] rounded-[8px] border border-[var(--sh-hair)] bg-[var(--surface)] py-1 text-[12.5px] text-[var(--sh-ink-2)] shadow-lg"
               style={{ left: menu.x, top: menu.y }}
             >
               <button

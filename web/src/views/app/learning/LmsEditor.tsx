@@ -590,7 +590,7 @@ function PageAccessBar({ lesson, m }: { lesson: any; m: any }) {
         {open && (
           <>
             <div className="fixed inset-0 z-30" onClick={() => setOpen(false)} />
-            <div className="absolute left-0 top-full z-40 mt-1 w-72 rounded-xl border border-[var(--sh-hair)] bg-[var(--surface)] p-2 shadow-[0_12px_32px_rgba(16,24,40,.14)]">
+            <div className="sh-float absolute left-0 top-full z-40 mt-1 w-72 rounded-xl border border-[var(--sh-hair)] bg-[var(--surface)] p-2 shadow-[0_12px_32px_rgba(16,24,40,.14)]">
               <p className="px-1.5 pb-1.5 pt-1 text-[11px] leading-snug text-[var(--sh-ink-3)]">
                 Hide this page from specific roles or people. Everyone else who can see this content keeps access.
               </p>

@@ -148,7 +148,7 @@ export default function SopBreachReportModal({ targetUserId, targetUserName, sou
               className="w-full rounded-md border border-[var(--sh-hair)] bg-[var(--surface)] px-3 py-2 text-[13px] text-[var(--sh-ink)] placeholder:text-[var(--sh-ink-3)] focus:border-[var(--sh-ink)] focus:outline-none"
             />
             {userOpen && (
-              <div className="absolute left-0 right-0 top-full z-10 mt-1 max-h-48 overflow-auto rounded-md border border-[var(--sh-hair)] bg-[var(--surface)] shadow-lg">
+              <div className="sh-float absolute left-0 right-0 top-full z-10 mt-1 max-h-48 overflow-auto rounded-md border border-[var(--sh-hair)] bg-[var(--surface)] shadow-lg">
                 {userSearching && userResults.length === 0 ? (
                   <div className="px-3 py-2 text-[12px] text-[var(--sh-ink-3)]">Searching…</div>
                 ) : userResults.length === 0 ? (

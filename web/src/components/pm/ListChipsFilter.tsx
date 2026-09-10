@@ -383,7 +383,7 @@ export default function ListChipsFilter({
         <>
           <div className="fixed inset-0 z-40 bg-black/30" onClick={() => setSettingsList(null)} />
           <div
-            className="fixed inset-y-0 right-0 left-auto z-50 flex h-full w-[360px] shrink-0 flex-col border-l border-[var(--sh-hair)] bg-[var(--surface)] shadow-lg"
+            className="sh-float fixed inset-y-0 right-0 left-auto z-50 flex h-full w-[360px] shrink-0 flex-col border-l border-[var(--sh-hair)] bg-[var(--surface)] shadow-lg"
             onClick={(e) => e.stopPropagation()}
           >
             <SettingsSlider

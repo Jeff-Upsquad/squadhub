@@ -709,7 +709,7 @@ function MemberRow({
             </svg>
           </button>
           {menuOpen && (
-            <div className="absolute right-0 top-full z-20 mt-1 w-40 rounded-md border border-[#E2E8F0] bg-white py-1 shadow-lg">
+            <div className="sh-float absolute right-0 top-full z-20 mt-1 w-40 rounded-md border border-[var(--sh-hair)] bg-[var(--surface)] py-1 shadow-lg">
               <p className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-[#999999]">Change access</p>
               {(['manager', 'member', 'commenter', 'viewer'] as AccessLevel[]).map((lvl) => (
                 <button

@@ -351,7 +351,7 @@ export default function SearchPalette({ workspaceId, onClose, setHomeView }: Sea
         aria-hidden
       />
       <div
-        className="relative z-[1] w-full max-w-[640px] overflow-hidden rounded-xl border border-[var(--sh-hair)] bg-[var(--surface)] shadow-2xl"
+        className="sh-float relative z-[1] w-full max-w-[640px] overflow-hidden rounded-xl border border-[var(--sh-hair)] bg-[var(--surface)] shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Input row */}

@@ -74,7 +74,7 @@ export default function SalesPersonSelect({
       {open && (
         <div
           role="listbox"
-          className="absolute left-0 right-0 top-full z-10 mt-1 max-h-64 overflow-y-auto rounded-md border border-[var(--sh-hair)] bg-[var(--surface)] py-1 shadow-lg"
+          className="sh-float absolute left-0 right-0 top-full z-10 mt-1 max-h-64 overflow-y-auto rounded-md border border-[var(--sh-hair)] bg-[var(--surface)] py-1 shadow-lg"
         >
           {options.length === 0 ? (
             <div className="px-3 py-2 text-sm text-[var(--sh-ink-3)]">No options</div>

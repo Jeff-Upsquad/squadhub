@@ -40,7 +40,7 @@ function PageMenu({
   return (
     <>
       <div className="fixed inset-0 z-[59]" onClick={onClose} />
-      <div className="absolute right-0 top-9 z-[60] w-52 rounded-lg border border-[var(--sh-hair)] bg-[var(--surface)] p-2 shadow-lg">
+      <div className="sh-float absolute right-0 top-9 z-[60] w-52 rounded-lg border border-[var(--sh-hair)] bg-[var(--surface)] p-2 shadow-lg">
         <div className="px-1.5 pb-1 text-[10.5px] font-medium uppercase tracking-wider text-[var(--sh-ink-4)]">Text size</div>
         <div className="mb-2 flex gap-1">
           {(['small', 'normal', 'large'] as NoteTextSize[]).map((s) => (

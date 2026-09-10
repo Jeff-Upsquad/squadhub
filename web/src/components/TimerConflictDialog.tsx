@@ -56,7 +56,7 @@ export default function TimerConflictDialog() {
       onClick={() => setPending(null)}
     >
       <div
-        className="w-[min(460px,92vw)] rounded-2xl border shadow-2xl"
+        className="sh-float w-[min(460px,92vw)] rounded-2xl border shadow-2xl"
         style={{ borderColor: 'var(--sh-hair)', background: 'var(--surface)' }}
         onClick={(e) => e.stopPropagation()}
         role="dialog"

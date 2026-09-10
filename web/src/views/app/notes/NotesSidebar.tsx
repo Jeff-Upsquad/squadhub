@@ -43,7 +43,7 @@ function RowMenu({
   return (
     <>
       <div className="fixed inset-0 z-[59]" onClick={onClose} />
-      <div className="absolute right-1 top-7 z-[60] w-40 rounded-lg border border-[var(--sh-hair)] bg-[var(--surface)] py-1 shadow-lg">
+      <div className="sh-float absolute right-1 top-7 z-[60] w-40 rounded-lg border border-[var(--sh-hair)] bg-[var(--surface)] py-1 shadow-lg">
         <button className="sh-note-menu__item" onClick={onShare}>Share…</button>
         <button className="sh-note-menu__item" onClick={onRename}>Rename</button>
         <button className="sh-note-menu__item sh-note-menu__item--danger" onClick={onDelete}>Delete</button>

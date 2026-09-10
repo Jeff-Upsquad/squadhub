@@ -921,7 +921,7 @@ export default function TaskDetailPanel({
                 {moreMenuOpen && (
                   <>
                     <div className="fixed inset-0 z-10" onClick={() => setMoreMenuOpen(false)} />
-                    <div className="absolute right-0 top-full z-20 mt-1 w-44 overflow-hidden rounded-lg border shadow-lg" style={{ borderColor: 'var(--sh-hair)', background: 'var(--surface)' }}>
+                    <div className="sh-float absolute right-0 top-full z-20 mt-1 w-44 overflow-hidden rounded-lg border shadow-lg" style={{ borderColor: 'var(--sh-hair)', background: 'var(--surface)' }}>
                       {canEdit && workspaceId && (
                         <button onClick={() => { setMoreMenuOpen(false); setMovePickerOpen(true); }} className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm" style={{ color: 'var(--sh-ink)' }}>Move to another list</button>
                       )}

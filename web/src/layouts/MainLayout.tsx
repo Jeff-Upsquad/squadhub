@@ -1552,7 +1552,7 @@ export default function MainLayout() {
             </button>
 
             {profileOpen && (
-              <div className="absolute bottom-0 left-[calc(100%+10px)] w-[220px] rounded-lg bg-[var(--surface)] border border-[var(--sh-hair)] shadow-lg z-[90] overflow-hidden">
+              <div className="sh-float absolute bottom-0 left-[calc(100%+10px)] w-[220px] rounded-lg bg-[var(--surface)] border border-[var(--sh-hair)] shadow-lg z-[90] overflow-hidden">
                 <div className="px-3 py-3 border-b border-[var(--sh-hair)]">
                   <p className="text-[13px] font-medium text-[var(--foreground)] truncate">{user?.display_name || 'User'}</p>
                   <p className="text-[11px] text-[var(--foreground-dim)] truncate">{user?.email}</p>
