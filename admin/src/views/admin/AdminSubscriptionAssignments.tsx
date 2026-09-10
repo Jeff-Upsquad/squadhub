@@ -84,7 +84,8 @@ function currentMonthKey() {
 }
 
 function formatMoney(amount: number, currency: string | null) {
-  const cur = currency && currency !== 'UNKNOWN' ? currency : '';
+  // TEMP: force all payments/clients to INR (Rs) for now.
+  const cur = 'INR';
   if (cur === 'INR') return '₹' + (amount || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 });
   if (cur === 'USD') return '$' + (amount || 0).toLocaleString('en-US', { maximumFractionDigits: 0 });
   return `${cur ? cur + ' ' : ''}${(amount || 0).toLocaleString()}`;
@@ -108,10 +109,11 @@ function shiftMonth(key: string, delta: number) {
 }
 
 // Sum per-currency payment buckets across many payment lists into one total list.
+// TEMP: force all payments/clients to INR (Rs) for now — collapse to single bucket.
 function aggregatePayments(lists: { currency: string; amount: number }[][]) {
   const totals = new Map<string, number>();
   for (const list of lists) {
-    for (const p of list || []) totals.set(p.currency, (totals.get(p.currency) || 0) + p.amount);
+    for (const p of list || []) totals.set('INR', (totals.get('INR') || 0) + p.amount);
   }
   return [...totals.entries()]
     .map(([currency, amount]) => ({ currency, amount }))
@@ -251,7 +253,8 @@ function groupIntoClients(rows: PeriodInput[], keyOf: (r: PeriodInput) => string
     if (r.status === 'active') g.status = 'active';
     if (r.missing_partner_price) g.missing_partner_price = true;
     if (r.month_payment > 0) {
-      const cur = r.currency || 'UNKNOWN';
+      // TEMP: force INR.
+      const cur = 'INR';
       const existing = g.payments.find((p) => p.currency === cur);
       if (existing) existing.amount += r.month_payment;
       else g.payments.push({ currency: cur, amount: r.month_payment });
@@ -292,7 +295,8 @@ function combinePayments(
   currency: string | null,
 ) {
   if (!additionalPayment) return payments;
-  const cur = currency || 'UNKNOWN';
+  // TEMP: force INR.
+  const cur = 'INR';
   const out = payments.map((p) => ({ ...p }));
   const hit = out.find((p) => p.currency === cur);
   if (hit) hit.amount += additionalPayment;

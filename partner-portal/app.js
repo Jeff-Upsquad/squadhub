@@ -20,18 +20,17 @@
   }
 
   function formatMoney(amount, currency) {
-    var cur = currency && currency !== 'UNKNOWN' ? currency : '';
-    if (cur === 'INR') return '\u20B9' + (amount || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 });
-    if (cur === 'USD') return '$' + (amount || 0).toLocaleString('en-US', { maximumFractionDigits: 0 });
-    return (cur ? cur + ' ' : '') + (amount || 0).toLocaleString();
+    // TEMP: force all payments/clients to INR (Rs) for now.
+    return '₹' + (amount || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 });
   }
 
   function aggregatePayments(lists) {
     var totals = {};
     (lists || []).forEach(function (list) {
       (list || []).forEach(function (p) {
-        totals[p.currency] = (totals[p.currency] || 0) + p.amount;
+        totals['INR'] = (totals['INR'] || 0) + p.amount;
       });
+    });
     });
     return Object.keys(totals)
       .map(function (currency) {

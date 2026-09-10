@@ -196,7 +196,7 @@ router.get('/month', async (req: Request, res: Response) => {
         const activeDays = activeDaysInMonth(start, end, year, month, todayIso);
         const monthPayment = b ? prorateMonthly(b.partner_price, start, end, year, month, todayIso) : 0;
         if (monthPayment > 0) {
-          const cur = b?.currency || 'UNKNOWN';
+          const cur = b?.currency || 'INR';
           paymentByCurrency.set(cur, (paymentByCurrency.get(cur) || 0) + monthPayment);
         }
         if (activeDays > 0 && b?.weekly_hours != null && !weeklyCounted.has(t.card_id)) {
@@ -208,7 +208,7 @@ router.get('/month', async (req: Request, res: Response) => {
           additionalCounted.add(t.card_id);
           additionalHoursTotal += comp.additional_hours;
           if (comp.additional_partner_payment !== 0) {
-            const cur = b?.currency || 'UNKNOWN';
+            const cur = b?.currency || 'INR';
             paymentByCurrency.set(cur, (paymentByCurrency.get(cur) || 0) + comp.additional_partner_payment);
           }
         }
@@ -222,7 +222,7 @@ router.get('/month', async (req: Request, res: Response) => {
           end_date: end ? end.slice(0, 10) : null,
           plan_label: b?.plan_snapshot?.plan?.plan ?? null,
           plan_tier: b?.plan_snapshot?.plan?.tier ?? null,
-          currency: b?.currency ?? null,
+          currency: b?.currency ?? 'INR',
           month_active_days: activeDays,
           month_payment: monthPayment,
           committed_weekly_hours: b?.weekly_hours ?? null,
@@ -307,7 +307,7 @@ router.get('/history', async (req: Request, res: Response) => {
           committedWeekly += b.weekly_hours;
           weeklyCounted.add(t.card_id);
         }
-        const cur = b?.currency || 'UNKNOWN';
+        const cur = b?.currency || 'INR';
         const base = b ? prorateMonthly(b.partner_price, start, end, year, month, todayIso) : 0;
         let amount = base;
         const notes: string[] = [];

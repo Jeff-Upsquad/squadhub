@@ -72,17 +72,14 @@ const MONTHS_SHORT = [
 
 // Amounts are stored in whole currency units (matches the Partner Payments
 // view, which renders the same term prices) — do NOT divide by 100.
+// TEMP: force all payments/clients to INR (Rs) for now.
 function formatMoney(amount: number, currency: string | null): string {
-  const cur = currency || '';
-  if (cur === 'INR') return '₹' + (amount || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 });
-  if (cur === 'USD') return '$' + (amount || 0).toLocaleString('en-US', { maximumFractionDigits: 0 });
-  // Unresolved currency (un-finalized engagement): show the bare number, never
-  // the literal "UNKNOWN" — the row is flagged as an estimate elsewhere.
-  return (amount || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 });
+  return '₹' + (amount || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 });
 }
 
 function currencyLabel(currency: string): string {
-  return currency && currency !== 'UNKNOWN' ? currency : 'Unknown';
+  // TEMP: force all payments/clients to INR (Rs) for now.
+  return 'INR';
 }
 
 function formatPct(pct: number): string {
@@ -284,12 +281,7 @@ export default function GrossProfitModule() {
             <div key={s.currency} className="rounded-lg border border-divider bg-surface p-4">
               <div className="mb-3 flex items-center justify-between">
                 <span
-                  className={`font-[family-name:var(--font-mono)] rounded-md px-2 py-0.5 text-[11px] font-semibold ${
-                    s.currency === 'UNKNOWN'
-                      ? 'bg-[#FEF3C7] text-[#A16207]'
-                      : 'bg-[#EEF2FF] text-accent'
-                  }`}
-                  title={s.currency === 'UNKNOWN' ? 'Currency not set — figures are estimates' : undefined}
+                  className={`font-[family-name:var(--font-mono)] rounded-md px-2 py-0.5 text-[11px] font-semibold bg-[#EEF2FF] text-accent`}
                 >
                   {currencyLabel(s.currency)}
                 </span>
@@ -427,9 +419,7 @@ export default function GrossProfitModule() {
                           )}
                         </div>
                       </td>
-                      <td className="px-4 py-2.5 text-foreground-muted">
-                        {c.currency === 'UNKNOWN' ? '—' : c.currency}
-                      </td>
+                      <td className="px-4 py-2.5 text-foreground-muted">INR</td>
                       <td className="px-4 py-2.5 text-right text-foreground-muted">
                         {c.active_subscription_count}
                       </td>

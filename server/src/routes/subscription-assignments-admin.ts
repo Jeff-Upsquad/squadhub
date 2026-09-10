@@ -113,7 +113,7 @@ router.get('/', async (req: Request, res: Response) => {
           month_active_days: activeDays,
           month_payment: monthPayment,
           partner_price: b?.partner_price ?? null,
-          currency: b?.currency ?? null,
+          currency: b?.currency ?? 'INR',
           missing_partner_price: b?.missing_partner_price ?? true,
           committed_hours: {
             daily: b?.daily_hours ?? null,
@@ -342,7 +342,7 @@ router.get('/users', async (req: Request, res: Response) => {
         if (b.missing_partner_price) g.missing_pricing = true;
         const pay = prorateMonthly(b.partner_price, start, end, year, month, todayIso);
         if (pay > 0) {
-          const cur = b.currency || 'UNKNOWN';
+          const cur = b.currency || 'INR';
           g.payments.set(cur, (g.payments.get(cur) || 0) + pay);
         }
       }
@@ -354,7 +354,7 @@ router.get('/users', async (req: Request, res: Response) => {
         countedAdditionalCards.get(key)!.add(t.card_id);
         g.additional_hours += comp.additional_hours;
         if (comp.additional_partner_payment !== 0) {
-          const cur = b?.currency || 'UNKNOWN';
+          const cur = b?.currency || 'INR';
           g.payments.set(cur, (g.payments.get(cur) || 0) + comp.additional_partner_payment);
         }
       }
@@ -452,7 +452,7 @@ router.get('/users/:recipientType/:recipientId', async (req: Request, res: Respo
       const activeDays = activeDaysInMonth(start, end, year, month, todayIso);
       const monthPayment = b ? prorateMonthly(b.partner_price, start, end, year, month, todayIso) : 0;
       if (monthPayment > 0) {
-        const cur = b?.currency || 'UNKNOWN';
+        const cur = b?.currency || 'INR';
         paymentByCurrency.set(cur, (paymentByCurrency.get(cur) || 0) + monthPayment);
       }
       if (activeDays > 0 && b?.weekly_hours != null && !weeklyCounted.has(t.card_id)) {
@@ -464,7 +464,7 @@ router.get('/users/:recipientType/:recipientId', async (req: Request, res: Respo
         additionalCounted.add(t.card_id);
         totalAdditionalHours += comp.additional_hours;
         if (comp.additional_partner_payment !== 0) {
-          const cur = b?.currency || 'UNKNOWN';
+          const cur = b?.currency || 'INR';
           paymentByCurrency.set(cur, (paymentByCurrency.get(cur) || 0) + comp.additional_partner_payment);
         }
       }
@@ -481,7 +481,7 @@ router.get('/users/:recipientType/:recipientId', async (req: Request, res: Respo
         work_start_date: t.work_start_date,
         work_end_date: t.work_end_date,
         partner_price: b?.partner_price ?? null,
-        currency: b?.currency ?? null,
+        currency: b?.currency ?? 'INR',
         missing_partner_price: b?.missing_partner_price ?? true,
         month_active_days: activeDays,
         month_payment: monthPayment,
