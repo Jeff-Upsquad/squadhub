@@ -5,16 +5,16 @@
 // (the TARGET, mirrored read-only from the plan) against the hours actually
 // spent in the card's linked space -- tracked task time (task_time_entries) plus
 // elapsed idle-day time (elapsed_time_entries). Produces a signed "additional
-// hours" delta (+ overage / - shortfall) and the money it moves:
-//   - Partner Payments: payout += additional_hours * partner_hourly_rate
-//   - Gross Profit:      revenue += additional_hours * client_hourly_rate AND
-//                        partner cost += additional_hours * partner_hourly_rate
+// hours" delta (+ overage / - shortfall) and the money it moves (ONE-SIDED):
+//   - shortfall (additional_hours < 0): payout += additional_hours * partner_hourly_rate (deduction)
+//   - overage (additional_hours > 0): reported for visibility but moves NO money
+//   - Gross Profit mirrors the same one-sided rule on both revenue and cost
 // where hourly rate = monthly price / standard_monthly_hours (month-length
 // independent, since per-day-rate / daily-hours reduces to the same figure).
 //
-// PAUSED (Aug 2026): the delta + its money are switched off by
-// ADDITIONAL_HOURS_EFFECTIVE_FROM below — see the comment there for how to
-// re-enable from a chosen month without restating history.
+// ONE-SIDED (Sep 2026): less hours = less pay, more hours = no additional pay.
+// ADDITIONAL_HOURS_EFFECTIVE_FROM below gates from which month the shortfall
+// deduction applies — months BEFORE it stay permanently at base pay.
 //
 // Compute-on-view: the Partner Payments + Gross Profit handlers already resolve
 // each card's CardBilling for the chosen month, so they pass it in and we reuse
@@ -34,17 +34,16 @@ import { aggregateFolderTimeSummary, aggregateFolderElapsedSummary } from '../se
 const round2 = (n: number): number => Math.round(n * 100) / 100;
 
 // ------------------------------------------------------------
-// Additional-hours PAUSE switch
+// Additional-hours switch (ONE-SIDED)
 //
-// The signed additional-hours delta (+ overage / − shortfall) and the money it
-// moves are currently PAUSED: payouts and revenue are computed on base price
-// only, everywhere (Partner Payments admin/mini-app/portal + Gross Profit).
-// To re-enable from a given IST month onward, set this to 'YYYY-MM' (e.g.
-// '2027-01'). Months BEFORE that value stay permanently excluded — even when
-// re-viewed or recomputed later — so historical months are never restated with
-// the delta; that month and after include it again.
+// Only SHORTFALLS move money: payouts and revenue are reduced when actual <
+// target. Overages are still reported in additional_hours for visibility but
+// move NO money, everywhere (Partner Payments admin/mini-app/portal +
+// Gross Profit). Set to 'YYYY-MM' for the first month the deduction applies.
+// Months BEFORE that value stay permanently at base pay — even when re-viewed
+// or recomputed later — so history is never restated.
 // ------------------------------------------------------------
-export const ADDITIONAL_HOURS_EFFECTIVE_FROM: string | null = null;
+export const ADDITIONAL_HOURS_EFFECTIVE_FROM: string | null = '2026-05';
 
 /** True when the delta applies to an IST month ('YYYY-MM-01' or 'YYYY-MM'). */
 export function additionalHoursActiveForMonth(periodMonth: string): boolean {
@@ -152,13 +151,16 @@ export async function computeCardHoursCompletion(
 
   // Hourly rates. Undefined when the plan carries no monthly hours -> no money
   // moves (but the hours delta is still reported).
+  // ONE-SIDED: only shortfalls (additionalHours < 0) move money. Overages are
+  // reported but pay 0 — less hours = less pay, more hours = no additional pay.
   const hasRate = standardMonthly != null && standardMonthly > 0;
   const partnerHourly = hasRate && billing.partner_price != null ? billing.partner_price / standardMonthly! : null;
   const clientHourly = hasRate && billing.subscription_price != null ? billing.subscription_price / standardMonthly! : null;
+  const payableHours = additionalHours < 0 ? additionalHours : 0;
   const additionalPartnerPayment =
-    !targetUnresolved && partnerHourly != null ? Math.round(additionalHours * partnerHourly) : 0;
+    !targetUnresolved && partnerHourly != null ? Math.round(payableHours * partnerHourly) : 0;
   const additionalRevenue =
-    !targetUnresolved && clientHourly != null ? Math.round(additionalHours * clientHourly) : 0;
+    !targetUnresolved && clientHourly != null ? Math.round(payableHours * clientHourly) : 0;
 
   const result: HoursCompletion = {
     card_id: cardId,
