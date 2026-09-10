@@ -289,6 +289,8 @@ router.get('/users', async (req: Request, res: Response) => {
       active_card_count: number;
       committed_weekly_hours: number;
       payments: Map<string, number>; // currency -> prorated base + additional
+      base_payments: Map<string, number>; // currency -> prorated base only
+      additional_payment: number; // signed total of shortfall deductions (one-sided)
       missing_pricing: boolean;
       additional_hours: number; // net signed hours delta (once per card)
     };
@@ -320,6 +322,8 @@ router.get('/users', async (req: Request, res: Response) => {
           active_card_count: 0,
           committed_weekly_hours: 0,
           payments: new Map(),
+          base_payments: new Map(),
+          additional_payment: 0,
           missing_pricing: false,
           additional_hours: 0,
         };
@@ -344,6 +348,7 @@ router.get('/users', async (req: Request, res: Response) => {
         if (pay > 0) {
           const cur = b.currency || 'INR';
           g.payments.set(cur, (g.payments.get(cur) || 0) + pay);
+          g.base_payments.set(cur, (g.base_payments.get(cur) || 0) + pay);
         }
       }
       // Additional hours + payment: once per card, folded into the card's own
@@ -356,6 +361,7 @@ router.get('/users', async (req: Request, res: Response) => {
         if (comp.additional_partner_payment !== 0) {
           const cur = b?.currency || 'INR';
           g.payments.set(cur, (g.payments.get(cur) || 0) + comp.additional_partner_payment);
+          g.additional_payment += comp.additional_partner_payment;
         }
       }
     }
@@ -387,6 +393,8 @@ router.get('/users', async (req: Request, res: Response) => {
               ? Math.round((g.committed_weekly_hours / available_weekly_hours) * 100)
               : null,
           payments: [...g.payments.entries()].map(([currency, amount]) => ({ currency, amount })),
+          base_payments: [...g.base_payments.entries()].map(([currency, amount]) => ({ currency, amount })),
+          additional_payment: g.additional_payment,
           missing_pricing: g.missing_pricing,
           additional_hours: Math.round(g.additional_hours * 100) / 100,
         };
