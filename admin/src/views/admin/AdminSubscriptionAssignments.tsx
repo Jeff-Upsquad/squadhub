@@ -300,8 +300,8 @@ function combinePayments(
   return out.filter((p) => p.amount !== 0);
 }
 
-// Pay cell: the month's total (prorated base + signed additional-hours pay), with
-// a secondary line naming the overage/shortfall when present.
+// Pay cell: the month's total (prorated base + shortfall deduction, if any), with
+// a plain-words secondary line naming the shortfall when present.
 function PayCell({
   payments,
   additionalPayment,
@@ -319,9 +319,9 @@ function PayCell({
       <div>{formatPayments(combined)}</div>
       {additionalPayment !== 0 && (
         <div className={`text-[11px] ${additionalPayment > 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-          {additionalPayment > 0 ? '+' : '−'}
-          {formatMoney(Math.abs(additionalPayment), currency)} add’l ({additionalHours > 0 ? '+' : ''}
-          {additionalHours} hrs)
+          {additionalPayment > 0
+            ? `+${formatMoney(Math.abs(additionalPayment), currency)} · ${Math.abs(additionalHours)} hrs extra`
+            : `−${formatMoney(Math.abs(additionalPayment), currency)} · ${Math.abs(additionalHours)} hrs short`}
         </div>
       )}
     </div>
@@ -1089,7 +1089,9 @@ function UserDetailModal({
                   value={formatPayments(totals?.month_payments || [])}
                   hint={
                     totals?.additional_hours
-                      ? `incl. ${totals.additional_hours > 0 ? '+' : ''}${totals.additional_hours} hrs additional`
+                      ? totals.additional_hours > 0
+                        ? `incl. ${totals.additional_hours} hrs extra (no extra pay)`
+                        : `incl. ${Math.abs(totals.additional_hours)} hrs short`
                       : undefined
                   }
                 />
