@@ -7663,7 +7663,7 @@ ol.sqc-list {
 /* Compact inline chips: icon + label + count on one row, sized to content so
    there's no empty card space. */
 .hm-home .hm-stats-secondary .hm-stat { flex: 0 0 auto; max-width: none; display: flex; align-items: center; gap: 9px; padding: 7px 12px; background: var(--surface); border: 1px solid var(--sh-hair); border-radius: 10px; box-shadow: 0 1px 2px rgba(10, 10, 10, 0.02); }
-.hm-home .hm-stats-secondary .hm-stat + .hm-stat { border-left: 1px solid var(--sh-hair); }
+.hm-home .hm-stats-secondary .hm-stat + .hm-stat { border-left: none; }
 .hm-home .hm-stats-secondary .hm-stat .lbl { font-size: 9.5px; gap: 6px; }
 .hm-home .hm-stats-secondary .hm-stat .lbl svg { width: 12px; height: 12px; }
 .hm-home .hm-stats-secondary .hm-stat .val { font-size: 15px; margin-top: 0; line-height: 1; }
@@ -9235,6 +9235,21 @@ html[data-theme="frost"] .hm-home .hm-menu {
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
 }
+/* Overlays stay near-opaque for readability — page bleed-through would wash
+   out dense tables (New Tasks review queue) and floating panels. */
+html[data-theme="frost"] .nt-modal {
+  background: rgba(255,255,255,.9) !important;
+  backdrop-filter: blur(28px) saturate(180%);
+  -webkit-backdrop-filter: blur(28px) saturate(180%);
+}
+html[data-theme="frost"] .hm-home .hmp {
+  backdrop-filter: blur(24px) saturate(170%);
+  -webkit-backdrop-filter: blur(24px) saturate(170%);
+}
+html[data-theme="frost"] .td-panel-luma.apple.td-shell {
+  background: rgba(255,255,255,.8) !important;
+  border-color: rgba(255,255,255,.8) !important;
+}
 
 /* ── Noir ◑ — frosted blackish, app-wide (layered over `dark`) ── */
 html[data-theme="noir"] {
@@ -9300,3 +9315,18 @@ html[data-theme="noir"] .hm-home .hm-stats-secondary .hm-stat {
 html[data-theme="noir"] .hm-home .hm-stat:hover { background: rgba(26,32,43,.8) !important; }
 html[data-theme="noir"] .hm-home .hm-task:hover { background: rgba(255,255,255,.05); }
 html[data-theme="noir"] .hm-home .hm-menu { background: rgba(17,21,29,.94); border-color: rgba(255,255,255,.12); }
+/* Overlays stay near-opaque for readability (see Frost note above). */
+html[data-theme="noir"] .nt-modal {
+  background: rgba(15,19,27,.92) !important;
+  backdrop-filter: blur(28px) saturate(160%);
+  -webkit-backdrop-filter: blur(28px) saturate(160%);
+}
+html[data-theme="noir"] .nt-backdrop { background: rgba(0,0,0,.5); }
+html[data-theme="noir"] .hm-home .hmp {
+  backdrop-filter: blur(24px) saturate(160%);
+  -webkit-backdrop-filter: blur(24px) saturate(160%);
+}
+html[data-theme="noir"] .td-panel-luma.apple.td-shell {
+  background: rgba(19,24,33,.82) !important;
+  border-color: rgba(255,255,255,.12) !important;
+}

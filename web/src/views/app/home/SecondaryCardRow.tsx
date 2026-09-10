@@ -83,7 +83,7 @@ export default function SecondaryCardRow() {
 
   return (
     <>
-      <div className="hm-stats hm-stats-secondary">
+      <div className="hm-stats-secondary">
         {visible.map((c) => {
           const items = c.data.items;
           const hasOverdue = items.some((i) => i.overdue);
