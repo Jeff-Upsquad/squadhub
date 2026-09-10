@@ -105,6 +105,17 @@ export const MIcon = {
       <path d="M16.8 13.6A6.6 6.6 0 0 1 10.4 7.2 6.6 6.6 0 1 0 16.8 13.6z" />
     </svg>
   ),
+  frost: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 3.4v17.2M4.9 7.7l14.2 8.6M19.1 7.7L4.9 16.3" />
+    </svg>
+  ),
+  noir: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="8.2" />
+      <path d="M12 3.8a8.2 8.2 0 0 1 0 16.4z" fill="currentColor" stroke="none" />
+    </svg>
+  ),
   phone: (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
       <rect x="7.4" y="3.4" width="9.2" height="17.2" rx="2.2" />

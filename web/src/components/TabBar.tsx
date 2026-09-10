@@ -204,7 +204,7 @@ export default function TabBar() {
 
   // Hidden on mobile — the mobile layout keeps the single-view behavior.
   return (
-    <div className="hidden h-9 shrink-0 items-center gap-1 overflow-x-auto border-b border-[var(--sh-hair)] bg-[var(--sidebar)] px-2 md:flex">
+    <div className="sh-tabbar hidden h-9 shrink-0 items-center gap-1 overflow-x-auto border-b border-[var(--sh-hair)] bg-[var(--sidebar)] px-2 md:flex">
       {tabs.map((tab) => (
         <TabItem
           key={tab.id}

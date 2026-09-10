@@ -31,6 +31,25 @@ const OPTIONS: { value: ThemePreference; label: string; icon: React.ReactNode }[
       </svg>
     ),
   },
+  {
+    value: 'frost',
+    label: 'Frost',
+    icon: (
+      <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 3v18M4.2 7.5l15.6 9M19.8 7.5l-15.6 9" />
+      </svg>
+    ),
+  },
+  {
+    value: 'noir',
+    label: 'Noir',
+    icon: (
+      <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <circle cx="12" cy="12" r="8" />
+        <path d="M12 4a8 8 0 0 1 0 16z" fill="currentColor" stroke="none" />
+      </svg>
+    ),
+  },
 ];
 
 export default function ThemeToggle() {

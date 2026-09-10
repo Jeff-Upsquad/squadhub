@@ -123,7 +123,7 @@ export default function MobileMore({
   );
 }
 
-/** SettingsScreen.kt — Appearance (System / Light / Dark). */
+/** SettingsScreen.kt — Appearance (System / Light / Dark / Frost / Noir). */
 export function MobileSettings() {
   const theme = useThemeStore((s) => s.theme);
   const setTheme = useThemeStore((s) => s.setTheme);
@@ -132,6 +132,8 @@ export function MobileSettings() {
     { value: 'auto' as const, label: 'System default', subtitle: 'Match your device theme', icon: MIcon.phone },
     { value: 'light' as const, label: 'Light', icon: MIcon.sun },
     { value: 'dark' as const, label: 'Dark', icon: MIcon.moon },
+    { value: 'frost' as const, label: 'Frost', subtitle: 'Frosted glass', icon: MIcon.frost },
+    { value: 'noir' as const, label: 'Noir', subtitle: 'Frosted black', icon: MIcon.noir },
   ];
 
   return (

@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
-export type ThemePreference = 'light' | 'dark' | 'auto';
+export type ThemePreference = 'light' | 'dark' | 'auto' | 'frost' | 'noir';
 
 interface ThemeState {
   theme: ThemePreference;

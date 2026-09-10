@@ -9158,3 +9158,80 @@ button.sh-btn-ghost:hover:not(:disabled) {
   background-color: var(--surface-alt);
   border-color: #e2e8f0;
 }
+
+/* ════════════════════════════════════════════════════════════════════
+   FROST + NOIR — 4th/5th appearance options (frosted glass / frosted black).
+   Applied via `data-theme` on <html> (see ThemeProvider + layout anti-flicker).
+   Both themes restyle the Home canvas (--hm-canvas: #FBFBF9 in Original):
+   Frost is light-based; Noir rides on top of the `dark` class so every
+   dark-mode token applies as its base, with these rules layered above.
+   The icon rail + module sidebar stay near-black in all themes.
+   ════════════════════════════════════════════════════════════════════ */
+
+/* ── Frost ❄ — frosted-glass light ── */
+html[data-theme="frost"] .sh-tabbar {
+  background:
+    linear-gradient(180deg, rgba(244,246,250,.72), rgba(237,240,245,.72)) !important;
+  backdrop-filter: blur(18px) saturate(170%);
+  -webkit-backdrop-filter: blur(18px) saturate(170%);
+  border-bottom-color: rgba(255,255,255,.7) !important;
+}
+html[data-theme="frost"] .hm-home {
+  --hm-canvas: transparent;
+  background:
+    radial-gradient(900px 480px at 8% -4%, rgba(41,98,255,.12), transparent 60%),
+    radial-gradient(820px 500px at 92% 6%, rgba(249,168,212,.16), transparent 62%),
+    radial-gradient(1000px 700px at 50% 112%, rgba(45,212,191,.12), transparent 60%),
+    linear-gradient(180deg, #F4F6FA 0%, #EDF0F5 48%, #E8ECF2 100%);
+}
+html[data-theme="frost"] .hm-home .hm-timer,
+html[data-theme="frost"] .hm-home .hm-stats,
+html[data-theme="frost"] .hm-home .hm-card,
+html[data-theme="frost"] .hm-home .hm-stats-secondary .hm-stat {
+  background: rgba(255,255,255,.68) !important;
+  backdrop-filter: blur(20px) saturate(170%);
+  -webkit-backdrop-filter: blur(20px) saturate(170%);
+  border-color: rgba(255,255,255,.78) !important;
+  box-shadow: 0 8px 28px rgba(15,23,42,.09), inset 0 1px 0 rgba(255,255,255,.9) !important;
+}
+html[data-theme="frost"] .hm-home .hm-stat:hover { background: rgba(255,255,255,.85) !important; }
+html[data-theme="frost"] .hm-home .hm-task:hover { background: rgba(255,255,255,.6); }
+html[data-theme="frost"] .hm-home .hm-menu {
+  background: rgba(255,255,255,.9);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+
+/* ── Noir ◑ — frosted blackish (layered over `dark`) ── */
+html[data-theme="noir"] { color-scheme: dark; }
+html[data-theme="noir"] .sh-tabbar {
+  background: rgba(8,10,15,.72) !important;
+  backdrop-filter: blur(18px) saturate(160%);
+  -webkit-backdrop-filter: blur(18px) saturate(160%);
+  border-bottom-color: rgba(255,255,255,.07) !important;
+}
+html[data-theme="noir"] .hm-home {
+  --hm-canvas: transparent;
+  --sh-ink: #eef1f6; --sh-ink-2: #c3cad6; --sh-ink-3: #8a93a3; --sh-ink-4: #5b6472;
+  --sh-hair: rgba(255,255,255,.1); --sh-hair-2: rgba(255,255,255,.16); --sh-hair-3: rgba(255,255,255,.06);
+  --surface: rgba(19,24,33,.64); --hm-accent: #8cc4a6; --hm-red: #e08573;
+  background:
+    radial-gradient(900px 480px at 8% -4%, rgba(99,102,241,.18), transparent 62%),
+    radial-gradient(780px 480px at 92% 6%, rgba(45,212,191,.12), transparent 60%),
+    radial-gradient(1000px 700px at 50% 112%, rgba(249,168,212,.09), transparent 60%),
+    linear-gradient(180deg, #0b0e14 0%, #080a0f 55%, #06070b 100%);
+  color: var(--sh-ink);
+}
+html[data-theme="noir"] .hm-home .hm-timer,
+html[data-theme="noir"] .hm-home .hm-stats,
+html[data-theme="noir"] .hm-home .hm-card,
+html[data-theme="noir"] .hm-home .hm-stats-secondary .hm-stat {
+  background: rgba(19,24,33,.64) !important;
+  backdrop-filter: blur(22px) saturate(160%);
+  -webkit-backdrop-filter: blur(22px) saturate(160%);
+  border-color: rgba(255,255,255,.1) !important;
+  box-shadow: 0 12px 36px rgba(0,0,0,.4), inset 0 1px 0 rgba(255,255,255,.08) !important;
+}
+html[data-theme="noir"] .hm-home .hm-stat:hover { background: rgba(26,32,43,.8) !important; }
+html[data-theme="noir"] .hm-home .hm-task:hover { background: rgba(255,255,255,.05); }
+html[data-theme="noir"] .hm-home .hm-menu { background: rgba(17,21,29,.94); border-color: rgba(255,255,255,.12); }

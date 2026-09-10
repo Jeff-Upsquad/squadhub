@@ -37,8 +37,26 @@ export default function ThemeProvider({ children }: { children: React.ReactNode 
     const forced = forcedTheme();
     if (forced) {
       root.classList.toggle('dark', forced === 'dark');
+      delete root.dataset.theme;
       return;
     }
+
+    // Frost is light-based frosted glass; Noir is dark-based frosted black.
+    // Noir rides on top of the `dark` class so every dark-mode token applies
+    // as its base, with `data-theme` overrides layered above.
+    if (theme === 'frost') {
+      root.classList.remove('dark');
+      root.dataset.theme = 'frost';
+      return;
+    }
+
+    if (theme === 'noir') {
+      root.classList.add('dark');
+      root.dataset.theme = 'noir';
+      return;
+    }
+
+    delete root.dataset.theme;
 
     if (theme === 'dark') {
       root.classList.add('dark');
