@@ -9168,7 +9168,41 @@ button.sh-btn-ghost:hover:not(:disabled) {
    The icon rail + module sidebar stay near-black in all themes.
    ════════════════════════════════════════════════════════════════════ */
 
-/* ── Frost ❄ — frosted-glass light ── */
+/* ── Frost ❄ — frosted-glass light, app-wide ──
+   Token override makes every --surface panel translucent so the mesh canvas
+   shows through; blur lands on cards/headers/menus only (never on big scroll
+   containers — backdrop-filter would trap position:fixed descendants). */
+html[data-theme="frost"] {
+  --surface: rgba(255,255,255,.72);
+  --surface-alt: rgba(255,255,255,.5);
+}
+html[data-theme="frost"] body {
+  background-color: #EDF0F5;
+  background-image:
+    radial-gradient(900px 480px at 8% -4%, rgba(41,98,255,.12), transparent 60%),
+    radial-gradient(820px 500px at 92% 6%, rgba(249,168,212,.16), transparent 62%),
+    radial-gradient(1000px 700px at 50% 112%, rgba(45,212,191,.12), transparent 60%),
+    linear-gradient(180deg, #F4F6FA 0%, #EDF0F5 48%, #E8ECF2 100%);
+  background-attachment: fixed;
+}
+/* Sidebar + rail keep their solid near-black (scoped --surface restore). */
+html[data-theme="frost"] .sh-mod-side { --surface: #141616; --surface-alt: #1e2120; }
+html[data-theme="frost"] .sh-view .card,
+html[data-theme="frost"] .sh-view .task-table,
+html[data-theme="frost"] .sh-view .inbox-filter,
+html[data-theme="frost"] .sh-view .dp-list-head,
+html[data-theme="frost"] .sh-view .dp-cal-head,
+html[data-theme="frost"] .sh-view .dp-col-head,
+html[data-theme="frost"] .cal-palette-head,
+html[data-theme="frost"] .cal-head,
+html[data-theme="frost"] .cal-tt-head,
+html[data-theme="frost"] .hm-menu,
+html[data-theme="frost"] .cal-menu,
+html[data-theme="frost"] .sh-view .dp-snooze-menu,
+html[data-theme="frost"] .thc-emoji {
+  backdrop-filter: blur(20px) saturate(170%);
+  -webkit-backdrop-filter: blur(20px) saturate(170%);
+}
 html[data-theme="frost"] .sh-tabbar {
   background:
     linear-gradient(180deg, rgba(244,246,250,.72), rgba(237,240,245,.72)) !important;
@@ -9202,8 +9236,39 @@ html[data-theme="frost"] .hm-home .hm-menu {
   -webkit-backdrop-filter: blur(20px);
 }
 
-/* ── Noir ◑ — frosted blackish (layered over `dark`) ── */
-html[data-theme="noir"] { color-scheme: dark; }
+/* ── Noir ◑ — frosted blackish, app-wide (layered over `dark`) ── */
+html[data-theme="noir"] {
+  color-scheme: dark;
+  --surface: rgba(19,24,33,.66);
+  --surface-alt: rgba(255,255,255,.05);
+}
+html[data-theme="noir"] body {
+  background-color: #06070b;
+  background-image:
+    radial-gradient(900px 480px at 8% -4%, rgba(99,102,241,.18), transparent 62%),
+    radial-gradient(780px 480px at 92% 6%, rgba(45,212,191,.12), transparent 60%),
+    radial-gradient(1000px 700px at 50% 112%, rgba(249,168,212,.09), transparent 60%),
+    linear-gradient(180deg, #0b0e14 0%, #080a0f 55%, #06070b 100%);
+  background-attachment: fixed;
+}
+/* Sidebar + rail keep their solid near-black (scoped --surface restore). */
+html[data-theme="noir"] .sh-mod-side { --surface: #141616; --surface-alt: #1e2120; }
+html[data-theme="noir"] .sh-view .card,
+html[data-theme="noir"] .sh-view .task-table,
+html[data-theme="noir"] .sh-view .inbox-filter,
+html[data-theme="noir"] .sh-view .dp-list-head,
+html[data-theme="noir"] .sh-view .dp-cal-head,
+html[data-theme="noir"] .sh-view .dp-col-head,
+html[data-theme="noir"] .cal-palette-head,
+html[data-theme="noir"] .cal-head,
+html[data-theme="noir"] .cal-tt-head,
+html[data-theme="noir"] .hm-menu,
+html[data-theme="noir"] .cal-menu,
+html[data-theme="noir"] .sh-view .dp-snooze-menu,
+html[data-theme="noir"] .thc-emoji {
+  backdrop-filter: blur(22px) saturate(160%);
+  -webkit-backdrop-filter: blur(22px) saturate(160%);
+}
 html[data-theme="noir"] .sh-tabbar {
   background: rgba(8,10,15,.72) !important;
   backdrop-filter: blur(18px) saturate(160%);
