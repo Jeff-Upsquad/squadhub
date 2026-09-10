@@ -202,7 +202,19 @@ export default function InboxSlider({ onClose }: { onClose: () => void }) {
     if (target) {
       openInNewTab(buildChatSnapshot(target.id, target.kind));
       onClose();
+      return;
     }
+
+    // Anything without an external source (announcements, LMS updates,
+    // meetings, …) has nowhere else to go — open the full-page inbox
+    // deep-linked to this notification so its detail is selected.
+    // InboxView consumes the pending id on mount AND on items (re)load, so
+    // this also works when an inbox tab is already open (dedupe focuses it
+    // without remounting; the mark-read invalidation above triggers a refetch
+    // that picks the pending id up).
+    window.__pendingInboxNotificationId = n.id;
+    openInNewTab(buildHomeSnapshot('inbox'));
+    onClose();
   };
 
   return (

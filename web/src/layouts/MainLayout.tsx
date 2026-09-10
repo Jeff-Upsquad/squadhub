@@ -31,6 +31,7 @@ import CheckInWidget from '../views/app/checkin/CheckInWidget';
 import CheckInsPage from '../views/app/check-ins/CheckInsPage';
 import CandidatesPage from '../views/app/candidates/CandidatesPage';
 import PartnerPaymentsPage from '../views/app/partner-payments/PartnerPaymentsPage';
+import CrmTeamChatView from '../views/app/teamchat/CrmTeamChatView';
 import MeetingsView from '../views/app/meetings/MeetingsView';
 import GlobalMeetingPanel from '../views/app/meetings/GlobalMeetingPanel';
 import ExternalTabPane from '../components/ExternalTabPane';
@@ -93,7 +94,7 @@ import { canonicalKey, buildHomeSnapshot, type TabSnapshot } from '../lib/tabSna
 
 // ---- Types ----
 export type ActiveSection = 'home' | 'cal' | 'docs' | 'teams' | 'apps' | 'learning' | 'more';
-export type HomeView = 'hub' | 'chat' | 'tasks' | 'inbox' | 'my-tasks' | 'checkin' | 'checkin-partners' | 'check-ins' | 'candidates' | 'time-management' | 'sales-leads' | 'leads' | 'support-admin' | 'cashbook' | 'opportunities' | 'subscription-cards' | 'job-cards' | 'day-planner' | 'routines' | 'clips' | 'meetings' | 'partner-payments';
+export type HomeView = 'hub' | 'chat' | 'tasks' | 'inbox' | 'my-tasks' | 'checkin' | 'checkin-partners' | 'check-ins' | 'candidates' | 'time-management' | 'sales-leads' | 'leads' | 'support-admin' | 'cashbook' | 'opportunities' | 'subscription-cards' | 'job-cards' | 'day-planner' | 'routines' | 'clips' | 'meetings' | 'partner-payments' | 'teamchat-crm' | 'teamchat-shcrm';
 type RailPreviewKey = 'home' | 'inbox' | 'tasks' | 'docs' | 'cal' | 'apps' | 'learning' | 'more';
 
 const RAIL_PREVIEW_TARGETS: Record<RailPreviewKey, { section: ActiveSection; homeView?: HomeView }> = {
@@ -975,7 +976,7 @@ export default function MainLayout() {
   //   • embedded standalone apps (Squad Clips, Daily Check-In, Time Management,
   //     Sales Leads) — each renders its own header/actions; the global "+" was
   //     overlapping e.g. Squad Clips' "New recording ▾" dropdown chevron.
-  const EMBEDDED_APP_VIEWS: HomeView[] = ['clips', 'checkin', 'checkin-partners', 'check-ins', 'candidates', 'time-management', 'sales-leads', 'support-admin', 'partner-payments'];
+  const EMBEDDED_APP_VIEWS: HomeView[] = ['clips', 'checkin', 'checkin-partners', 'check-ins', 'candidates', 'time-management', 'sales-leads', 'support-admin', 'partner-payments', 'teamchat-crm', 'teamchat-shcrm'];
   // Day Planner gets the create button as a bottom-right floating FAB instead of
   // the top-right "+", which otherwise collides with the calendar's header.
   const onDayPlanner = activeSection === 'home' && homeView === 'day-planner';
@@ -1137,6 +1138,8 @@ export default function MainLayout() {
       if (hv === 'check-ins') return <CheckInsPage />;
       if (hv === 'candidates') return <CandidatesPage />;
       if (hv === 'partner-payments') return <PartnerPaymentsPage />;
+      if (hv === 'teamchat-crm') return <CrmTeamChatView source="crm" />;
+      if (hv === 'teamchat-shcrm') return <CrmTeamChatView source="shcrm" />;
       if (hv === 'time-management') return <TimeManagementPage />;
       if (hv === 'sales-leads') return <SalesLeadsPage />;
       if (hv === 'leads') return <LeadsPage />;
@@ -1185,6 +1188,8 @@ export default function MainLayout() {
     if (hv === 'check-ins') return <CheckInsPage />;
     if (hv === 'candidates') return <CandidatesPage />;
     if (hv === 'partner-payments') return <PartnerPaymentsPage />;
+    if (hv === 'teamchat-crm') return <CrmTeamChatView source="crm" />;
+    if (hv === 'teamchat-shcrm') return <CrmTeamChatView source="shcrm" />;
     if (hv === 'time-management') return <TimeManagementPage />;
     if (hv === 'sales-leads') return <SalesLeadsPage />;
     if (hv === 'leads') return <LeadsPage />;
@@ -1211,6 +1216,7 @@ export default function MainLayout() {
           canGoForward={nav.canGoForward}
           onNavBack={nav.goBack}
           onNavForward={nav.goForward}
+          onCloseSidebar={() => setSidebarOpen(false)}
         />
       );
     }
@@ -1239,6 +1245,7 @@ export default function MainLayout() {
         onOpenSearch={() => setSearchOpen(true)}
         onOpenApps={() => { setActiveSection('apps'); setMobileDrawerOpen(false); }}
         onLaunchApp={handleLaunchApp}
+        onCloseSidebar={() => setSidebarOpen(false)}
       />
     );
   };

@@ -42,6 +42,8 @@ const APP_VIEWS = new Set<string>([
   'candidates',
   'cashbook',
   'partner-payments',
+  'teamchat-crm',
+  'teamchat-shcrm',
 ]);
 
 /**

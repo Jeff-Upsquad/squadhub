@@ -7,6 +7,7 @@ import { useAppFavorites, useToggleAppFavorite } from '../../../hooks/useAppFavo
 import { useActiveTipAnchor } from '../../../stores/featureTipStore';
 import { useTabsStore } from '../../../stores/tabsStore';
 import { useCardsAttention } from '@/views/admin/useCardsAttention';
+import TeamChatAppBadge from '../teamchat/TeamChatAppBadge';
 import { wantsNewTab, buildAppSnapshot } from '../../../lib/tabSnapshots';
 
 // Module side menu bar shown when the Apps rail module is active. Lists the
@@ -23,6 +24,7 @@ interface AppsSidebarProps {
   canGoForward: boolean;
   onNavBack: () => void;
   onNavForward: () => void;
+  onCloseSidebar?: () => void;
 }
 
 // Category eyebrow header with collapse toggle — mirrors the home sidebar's.
@@ -86,6 +88,7 @@ export default function AppsSidebar({
   canGoForward,
   onNavBack,
   onNavForward,
+  onCloseSidebar,
 }: AppsSidebarProps) {
   const currentWorkspace = useWorkspaceStore((s) => s.currentWorkspace);
   const apps = useAvailableApps();
@@ -109,7 +112,7 @@ export default function AppsSidebar({
   const cardsAttention = useCardsAttention(hasCards);
 
   return (
-    <div className="flex h-full w-full flex-col text-[var(--sh-ink-2)]">
+    <div className="group/sidebar flex h-full w-full flex-col text-[var(--sh-ink-2)]">
       {/* Header — mirrors the home sidebar */}
       <div className="flex items-center justify-between border-b border-[var(--sh-hair)] px-4 py-3">
         <div className="flex items-center gap-2">
@@ -122,6 +125,7 @@ export default function AppsSidebar({
           <span className="text-[13.5px] font-semibold text-[var(--sh-ink)]">Apps</span>
         </div>
         <div className="flex items-center gap-[2px]">
+          <span className="flex items-center gap-[2px] opacity-0 transition-opacity duration-150 group-hover/sidebar:opacity-100 focus-within:opacity-100">
           <button
             onClick={onNavBack}
             disabled={!canGoBack}
@@ -144,6 +148,20 @@ export default function AppsSidebar({
               <path d="M5 12h14M12 5l7 7-7 7" />
             </svg>
           </button>
+          </span>
+          {onCloseSidebar && (
+            <button
+              onClick={onCloseSidebar}
+              className="grid h-[26px] w-[26px] place-items-center rounded-[6px] text-[var(--sh-ink-3)] hover:bg-[var(--sh-hair-3)] hover:text-[var(--sh-ink)] transition"
+              title="Close sidebar"
+              aria-label="Close sidebar"
+            >
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+                <path d="m11 7-5 5 5 5" />
+                <path d="m18 7-5 5 5 5" />
+              </svg>
+            </button>
+          )}
         </div>
       </div>
 
@@ -195,6 +213,8 @@ export default function AppsSidebar({
                             className={`h-[14px] w-[14px] shrink-0 ${active ? 'text-[var(--sh-ink)]' : 'text-[var(--sh-ink-3)]'}`}
                           />
                           <span className="flex-1 truncate">{app.name}</span>
+                          {app.slug === 'squadcrm-teamchat' && <TeamChatAppBadge source="crm" />}
+                          {app.slug === 'squadhire-teamchat' && <TeamChatAppBadge source="shcrm" />}
                           {app.slug === 'leads' && cardsAttention.total > 0 && (
                             <span
                               title={cardsAttention.parts.join(' · ')}

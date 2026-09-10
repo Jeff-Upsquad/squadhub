@@ -8,6 +8,13 @@ import './preview.css';
 type View = 'focus' | 'completed' | 'new' | 'today' | 'overdue' | 'tomorrow' | 'all' | 'recordings' | 'favorite';
 type Modal = 'search' | 'create' | 'customize' | 'profile' | 'help' | 'notifications' | null;
 type TimerMode = 'idle' | 'work' | 'break' | 'no_work';
+type PreviewVariant = 'original' | 'frost' | 'noir';
+
+function getInitialVariant(): PreviewVariant {
+  if (typeof window === 'undefined') return 'original';
+  const v = new URLSearchParams(window.location.search).get('v');
+  return v === 'frost' || v === 'noir' ? v : 'original';
+}
 
 function BrandMark({ small = false }: { small?: boolean }) {
   return <span className={`sp-brand-mark ${small ? 'sp-brand-small' : ''}`} aria-hidden="true">S</span>;
@@ -85,6 +92,7 @@ export default function SquadHomePreview() {
   const [breakSeconds, setBreakSeconds] = useState(0);
   const [timerNow, setTimerNow] = useState(Date.now());
   const [timerStarted, setTimerStarted] = useState<number | null>(null);
+  const [variant, setVariant] = useState<PreviewVariant>('original');
   const noteRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
@@ -96,6 +104,7 @@ export default function SquadHomePreview() {
       if (typeof saved?.compact === 'boolean') setCompact(saved.compact);
     } catch { /* A fresh preview also works when browser storage is unavailable. */ }
     setReady(true);
+    setVariant(getInitialVariant());
     if (window.innerWidth < 1000) setSidebarOpen(false);
   }, []);
 
@@ -190,8 +199,30 @@ export default function SquadHomePreview() {
   ];
 
   return (
-    <div data-ready={ready} className={`sp-root ${sidebarOpen ? '' : 'sp-sidebar-collapsed'} ${compact ? 'sp-compact' : ''}`}>
+    <div data-ready={ready} data-variant={variant === 'original' ? undefined : variant} className={`sp-root ${sidebarOpen ? '' : 'sp-sidebar-collapsed'} ${compact ? 'sp-compact' : ''}`}>
       <a className="sp-skip" href="#sp-main">Skip to content</a>
+      {/* Review-only switcher: Original vs Frost (light glass) vs Noir (frosted black).
+          Deep-linkable via ?v=frost or ?v=noir for design review. */}
+      <div className="sp-variant-switcher" role="radiogroup" aria-label="Design variant">
+        <span>Theme</span>
+        {(['original', 'frost', 'noir'] as const).map(v => (
+          <button
+            key={v}
+            role="radio"
+            aria-checked={variant === v}
+            data-active={variant === v}
+            onClick={() => {
+              setVariant(v);
+              const url = new URL(window.location.href);
+              if (v === 'original') url.searchParams.delete('v');
+              else url.searchParams.set('v', v);
+              window.history.replaceState(null, '', url.toString());
+            }}
+          >
+            {v === 'original' ? 'Original' : v === 'frost' ? 'Frost ❄' : 'Noir ◑'}
+          </button>
+        ))}
+      </div>
 
       <nav className="sp-rail" aria-label="Main navigation">
         <button className="sp-logo-button" aria-label="SquadHub home" onClick={() => navigate('focus')}><BrandMark /></button>

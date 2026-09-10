@@ -70,6 +70,7 @@ import subscriptionsAdminRoutes from './routes/subscriptions-admin';
 import assignmentCatalogAdminRoutes from './routes/assignments-admin';
 import subscriptionAssignmentsAdminRoutes from './routes/subscription-assignments-admin';
 import partnerPaymentsMiniAppRoutes from './routes/partner-payments-miniapp';
+import crmTeamchatRoutes from './routes/crm-teamchat';
 import countriesAdminRoutes from './routes/countries-admin';
 import grossProfitAdminRoutes from './routes/gross-profit-admin';
 import salesDashboardAdminRoutes from './routes/sales-dashboard-admin';
@@ -233,6 +234,7 @@ app.use('/admin/subscriptions', subscriptionsAdminRoutes);
 app.use('/admin/assignment-catalog', assignmentCatalogAdminRoutes);
 app.use('/admin/subscription-assignments', subscriptionAssignmentsAdminRoutes);
 app.use('/partner-payments', partnerPaymentsMiniAppRoutes);
+app.use('/crm-teamchat', crmTeamchatRoutes);
 app.use('/admin/subscriptions', subscriptionSquadhireProfilesAdminRoutes);
 // Job Cards (hiring service) — admin pipeline + onboarding profiles +
 // candidate proxies + offer templates, and the client-facing view.

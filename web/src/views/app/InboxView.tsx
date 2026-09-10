@@ -108,6 +108,16 @@ export function chatTargetFor(n: Notification): { id: string; kind: ChatKind } |
   return null;
 }
 
+// True when a notification has somewhere to open into (task overlay, SOP
+// resource, or chat conversation). Announcements and other sourceless updates
+// render inline in the detail pane instead — their "Open" button must stay
+// hidden, otherwise the click appears dead.
+export function hasOpenSource(n: Notification): boolean {
+  if (n.reference_type === 'task' && n.metadata?.task_id) return true;
+  if (sopTargetFromNotification(n)) return true;
+  return chatTargetFor(n) !== null;
+}
+
 // Slack-style context line — what the notification lives in ("Thread in a
 // direct message", "Task"), shown as the row's small header above the actor.
 function ctxLine(n: Notification): string {
@@ -274,21 +284,23 @@ export default function InboxView({
     },
   });
 
-  // Deep-link: desktop companion sets window.__pendingInboxNotificationId
+  // Deep-link: the inbox slider, desktop companion, and browser
+  // notifications set window.__pendingInboxNotificationId then navigate here.
+  // Consumed on mount AND whenever items (re)load, so it also works when this
+  // view is already mounted (e.g. the slider focuses an existing inbox tab,
+  // which dedupes without remounting — the mark-read invalidation triggers a
+  // refetch that picks the pending id up).
   const [pendingDeepLink, setPendingDeepLink] = useState<string | null>(null);
   useEffect(() => {
-    const pending = window.__pendingInboxNotificationId;
-    if (pending) {
+    const pending = pendingDeepLink || window.__pendingInboxNotificationId;
+    if (!pending) return;
+    if (pending !== pendingDeepLink) {
       setActiveId(pending);
       setPendingDeepLink(pending);
       delete window.__pendingInboxNotificationId;
     }
-  }, []);
-
-  // Once items load, mark the deep-linked notification as read
-  useEffect(() => {
-    if (!pendingDeepLink || items.length === 0) return;
-    const target = items.find((n) => n.id === pendingDeepLink);
+    if (items.length === 0) return;
+    const target = items.find((n) => n.id === pending);
     if (target && !target.is_read) {
       markRead.mutate(target.id);
     }
@@ -724,12 +736,16 @@ function DetailPane({ n, onOpen }: { n: Notification; onOpen: () => void }) {
             {n.actor?.display_name || 'System'} · {ctxLine(n)} · {timeAgo(n.created_at)}
           </div>
         </div>
-        <button type="button" className="top-btn ghost-border" onClick={onOpen}>
-          <svg width="12" height="12" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
-            <path d="M5 12h14M13 6l6 6-6 6" />
-          </svg>
-          Open
-        </button>
+        {/* Sourceless notifications (announcements, …) render inline — no
+            "Open" button, since there is nowhere to open into. */}
+        {hasOpenSource(n) && (
+          <button type="button" className="top-btn ghost-border" onClick={onOpen}>
+            <svg width="12" height="12" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+              <path d="M5 12h14M13 6l6 6-6 6" />
+            </svg>
+            Open
+          </button>
+        )}
       </div>
       <div className="th-scroll">
         {n.body ? (

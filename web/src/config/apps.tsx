@@ -150,6 +150,26 @@ export const APPS: AppDef[] = [
     ],
   },
   {
+    slug: 'squadcrm-teamchat',
+    name: 'SquadCRM TeamChat',
+    category: 'Sales',
+    description: 'Team discussions on SquadCRM leads, deals & contacts.',
+    view: 'teamchat-crm',
+    paths: [
+      'M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.86 9.86 0 01-4-.84L3 20l1.05-3.15A7.6 7.6 0 013 12c0-4.418 4.03-8 9-8s9 3.582 9 8z',
+    ],
+  },
+  {
+    slug: 'squadhire-teamchat',
+    name: 'SquadHireCRM TeamChat',
+    category: 'Hiring',
+    description: 'Team discussions on SquadHire leads, talent & contacts.',
+    view: 'teamchat-shcrm',
+    paths: [
+      'M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.86 9.86 0 01-4-.84L3 20l1.05-3.15A7.6 7.6 0 013 12c0-4.418 4.03-8 9-8s9 3.582 9 8z',
+    ],
+  },
+  {
     slug: 'squadbooks',
     name: 'SquadBooks',
     category: 'Finance',

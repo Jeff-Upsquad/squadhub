@@ -70,6 +70,7 @@ const nextConfig = {
       { source: '/partner/:path*', destination: `${API_URL}/partner/:path*` },
       // Partner Payments mini app
       { source: '/partner-payments/:path*', destination: `${API_URL}/partner-payments/:path*` },
+      { source: '/crm-teamchat/:path*', destination: `${API_URL}/crm-teamchat/:path*` },
       { source: '/cashbook/:path*', destination: `${API_URL}/cashbook/:path*` },
       { source: '/partner-app/:path+', destination: `${API_URL}/partner-app/:path+` },
       { source: '/internal-app/:path+', destination: `${API_URL}/internal-app/:path+` },
