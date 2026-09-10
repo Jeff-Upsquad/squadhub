@@ -4,6 +4,7 @@ import { Fragment, useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import api from '@/services/api';
 import { showToast } from '@/components/Toast';
+import PartnerPaymentsPreview from './PartnerPaymentsPreview';
 
 type Status = 'active' | 'ended' | 'all';
 
@@ -456,11 +457,14 @@ function PeriodBreakdown({
   );
 }
 
-type ViewMode = 'subscription' | 'user';
+type ViewMode = 'subscription' | 'user' | 'partner';
 
 export default function AdminSubscriptionAssignments() {
   const [view, setView] = useState<ViewMode>('user');
   const [month, setMonth] = useState<string>(currentMonthKey());
+  // Deep-link target when jumping from the By-user list into the Partner view
+  // preview (select a user → see exactly what that partner sees).
+  const [previewRecipientId, setPreviewRecipientId] = useState<string>('');
 
   return (
     <div className="space-y-6">
@@ -470,40 +474,44 @@ export default function AdminSubscriptionAssignments() {
           <p className="mt-1 text-sm text-foreground-muted">
             {view === 'user'
               ? 'Each partner / talent and the subscriptions they’re serving — with the monthly payment owed and an hours snapshot.'
-              : 'Each talent serving a client’s subscription in the selected month — active days (click for each start / stop period), the prorated pay owed, and the plan.'}
+              : view === 'partner'
+                ? 'Select a partner / talent to preview exactly what they see in the Partner Payments mini app — same data, same layout.'
+                : 'Each talent serving a client’s subscription in the selected month — active days (click for each start / stop period), the prorated pay owed, and the plan.'}
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <div className="flex items-center gap-1 rounded-md border border-divider bg-surface px-1 py-0.5">
-            <button
-              type="button"
-              onClick={() => setMonth(shiftMonth(month, -1))}
-              className="rounded px-1.5 py-1 text-sm text-foreground-muted hover:bg-canvas hover:text-foreground"
-              aria-label="Previous month"
-              title="Previous month"
-            >
-              ←
-            </button>
-            <input
-              type="month"
-              value={month}
-              onChange={(e) => setMonth(e.target.value || currentMonthKey())}
-              className="border-none bg-transparent px-1 py-1 text-sm outline-none focus:border-slate-400"
-              aria-label="Billing month"
-            />
-            <button
-              type="button"
-              onClick={() => setMonth(shiftMonth(month, 1))}
-              disabled={month >= currentMonthKey()}
-              className="rounded px-1.5 py-1 text-sm text-foreground-muted hover:bg-canvas hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
-              aria-label="Next month"
-              title={month >= currentMonthKey() ? 'Already at current month' : 'Next month'}
-            >
-              →
-            </button>
-          </div>
+          {view !== 'partner' && (
+            <div className="flex items-center gap-1 rounded-md border border-divider bg-surface px-1 py-0.5">
+              <button
+                type="button"
+                onClick={() => setMonth(shiftMonth(month, -1))}
+                className="rounded px-1.5 py-1 text-sm text-foreground-muted hover:bg-canvas hover:text-foreground"
+                aria-label="Previous month"
+                title="Previous month"
+              >
+                ←
+              </button>
+              <input
+                type="month"
+                value={month}
+                onChange={(e) => setMonth(e.target.value || currentMonthKey())}
+                className="border-none bg-transparent px-1 py-1 text-sm outline-none focus:border-slate-400"
+                aria-label="Billing month"
+              />
+              <button
+                type="button"
+                onClick={() => setMonth(shiftMonth(month, 1))}
+                disabled={month >= currentMonthKey()}
+                className="rounded px-1.5 py-1 text-sm text-foreground-muted hover:bg-canvas hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
+                aria-label="Next month"
+                title={month >= currentMonthKey() ? 'Already at current month' : 'Next month'}
+              >
+                →
+              </button>
+            </div>
+          )}
           <div className="flex gap-1 rounded-lg border border-divider bg-surface p-1">
-            {(['user', 'subscription'] as ViewMode[]).map((v) => (
+            {(['user', 'subscription', 'partner'] as ViewMode[]).map((v) => (
               <button
                 key={v}
                 onClick={() => setView(v)}
@@ -511,14 +519,26 @@ export default function AdminSubscriptionAssignments() {
                   view === v ? 'bg-slate-900 text-white' : 'text-foreground-muted hover:bg-canvas'
                 }`}
               >
-                {v === 'user' ? 'By user' : 'By subscription'}
+                {v === 'user' ? 'By user' : v === 'subscription' ? 'By subscription' : 'Partner view'}
               </button>
             ))}
           </div>
         </div>
       </div>
 
-      {view === 'user' ? <ByUserView month={month} /> : <BySubscriptionView month={month} />}
+      {view === 'user' ? (
+        <ByUserView
+          month={month}
+          onPreviewPartner={(recipientId) => {
+            setPreviewRecipientId(recipientId);
+            setView('partner');
+          }}
+        />
+      ) : view === 'partner' ? (
+        <PartnerPaymentsPreview initialRecipientId={previewRecipientId} onRecipientChange={setPreviewRecipientId} />
+      ) : (
+        <BySubscriptionView month={month} />
+      )}
     </div>
   );
 }
@@ -803,7 +823,7 @@ function UtilizationBadge({ pct }: { pct: number | null }) {
   return <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${tone}`}>{pct}%</span>;
 }
 
-function ByUserView({ month }: { month: string }) {
+function ByUserView({ month, onPreviewPartner }: { month: string; onPreviewPartner?: (recipientId: string) => void }) {
   const [statusFilter, setStatusFilter] = useState<Status>('active');
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<UserRow | null>(null);
@@ -929,6 +949,18 @@ function ByUserView({ month }: { month: string }) {
                   </td>
                   <td className="px-4 py-2.5 text-right">
                     <span className="text-xs font-medium text-indigo-600">Open →</span>
+                    {onPreviewPartner && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onPreviewPartner(u.recipient_id);
+                        }}
+                        className="ml-2 rounded border border-indigo-200 px-1.5 py-0.5 text-[11px] font-medium text-indigo-700 hover:bg-indigo-50"
+                        title="Preview exactly what this user sees in the mini app"
+                      >
+                        Partner view
+                      </button>
+                    )}
                   </td>
                 </tr>
               ))}

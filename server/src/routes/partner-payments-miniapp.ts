@@ -11,11 +11,11 @@ import { loadCardHoursCompletions } from '../utils/cardHoursCompletion';
 // derived monthly payouts series with commission status.
 //
 // Scoping: partner callers always see only their own rows
-// (recipient_type='partner' AND recipient_id = req.userId — terms are keyed by
-// the partner's user id, same key subscription-cards-partner.ts uses).
+// (recipient_id = req.userId — in this context talent and partner assignments
+// are treated as the same, so no recipient_type filter is applied anywhere).
 // Internal admins pass the mini-app gate automatically and may preview any
-// partner via ?recipient_id=; without it /me returns the full partner list so
-// the UI can offer a picker.
+// recipient via ?recipient_id=; without it /me returns every recipient that
+// has ever held a term (talent or partner) so the UI can offer a picker.
 
 const router = Router();
 router.use(requireAuth);
@@ -81,7 +81,6 @@ async function fetchTerms(recipientId: string): Promise<TermRow[]> {
   const { data, error } = await supabaseAdmin
     .from('subscription_assignment_terms')
     .select('*')
-    .eq('recipient_type', 'partner')
     .eq('recipient_id', recipientId)
     .order('assigned_date', { ascending: false });
   if (error) throw new Error(error.message);
@@ -110,7 +109,8 @@ async function cardLookup(cardIds: string[]) {
 
 // GET /partner-payments/me
 // Caller context for the UI: partners get their own identity; internal admins
-// get every partner that has ever held a term so they can preview each one.
+// get every recipient that has ever held a term (talent or partner) so they
+// can preview each one.
 router.get('/me', async (req: Request, res: Response) => {
   try {
     const userId = req.userId!;
@@ -118,8 +118,7 @@ router.get('/me', async (req: Request, res: Response) => {
     if (admin) {
       const { data, error } = await supabaseAdmin
         .from('subscription_assignment_terms')
-        .select('recipient_id, recipient_name')
-        .eq('recipient_type', 'partner');
+        .select('recipient_id, recipient_name');
       if (error) { res.status(500).json({ success: false, error: error.message }); return; }
       const byId = new Map<string, string | null>();
       (data || []).forEach((r: any) => {
@@ -155,7 +154,7 @@ router.get('/me', async (req: Request, res: Response) => {
 });
 
 // GET /partner-payments/month?month=YYYY-MM&recipient_id=
-// One month's detail for one partner: per-client cards (dates, plan, prorated
+// One month's detail for one recipient: per-client cards (dates, plan, prorated
 // pay incl. additional hours) + totals. Mirrors the admin module's math via
 // the same shared utils.
 router.get('/month', async (req: Request, res: Response) => {
@@ -252,9 +251,9 @@ router.get('/month', async (req: Request, res: Response) => {
 
 // GET /partner-payments/history?months=12&recipient_id=
 // Monthly payout series for the last N months (default 12). Commission status
-// is DERIVED here, not stored upstream: a month counts as paid once it has
-// passed, posted on the 1st of the following month; the running month stays
-// pending until it closes.
+// is pending by default: nothing is auto-marked paid because no payment
+// record exists upstream yet. Months flip to paid only once real
+// paid-tracking lands.
 router.get('/history', async (req: Request, res: Response) => {
   try {
     const scope = await resolveScope(req);
@@ -328,13 +327,14 @@ router.get('/history', async (req: Request, res: Response) => {
         }
       }
 
-      const isCurrent = key === currentKey;
       const nextMonth = shiftMonthKey(key, 1);
       return {
         month: key,
         payments: [...totals.entries()].map(([currency, amount]) => ({ currency, amount })),
-        commission_status: isCurrent ? ('pending' as const) : ('paid' as const),
-        post_date: isCurrent ? null : `${nextMonth}-01`,
+        // Pending by default — see route comment. post_date stays null until
+        // a month is actually marked paid.
+        commission_status: 'pending' as const,
+        post_date: null,
         expected_post_date: `${nextMonth}-01`,
         committed_weekly_hours: Math.round(committedWeekly * 100) / 100,
         lines,

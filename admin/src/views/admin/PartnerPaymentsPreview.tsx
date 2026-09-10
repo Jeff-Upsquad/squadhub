@@ -1,10 +1,22 @@
-import { useMemo, useState, type ReactNode } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import api from '../../../services/api';
+'use client';
 
-// Partner Payments mini app — assigned clients, monthly payouts and
-// commission status for the signed-in partner. Internal admins get a
-// partner picker so they can preview any partner's statement.
+import { useEffect, useState, type ReactNode } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import api from '@/services/api';
+
+// Admin "Partner view" preview for Partner Payments.
+//
+// This renders EXACTLY what a partner sees in the Partner Payments mini app
+// (web/src/views/app/partner-payments/PartnerPaymentsPage.tsx): same backend
+// routes (/partner-payments/me, /month, /history), same math, same layout.
+// There is deliberately no iframe/embed: the admin panel calls the same API
+// with an admin token (requireAnyMiniAppOrAdmin lets internal admins pass) and
+// renders the same UI, so any change to the mini app's data or to this file's
+// twin shows up in both places. When editing the partner UI, update both files
+// together — or extract them into a shared component.
+//
+// Usage: pick a partner from the dropdown (sourced from /me recipients), or
+// pass initialRecipientId to deep-link from the By-user list.
 
 type Payment = { currency: string; amount: number };
 
@@ -77,31 +89,31 @@ function monthShort(key: string) {
 
 function formatMoney(amount: number, currency: string | null) {
   const cur = currency && currency !== 'UNKNOWN' ? currency : '';
-  if (cur === 'INR') return '\u20B9' + (amount || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 });
+  if (cur === 'INR') return '₹' + (amount || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 });
   if (cur === 'USD') return '$' + (amount || 0).toLocaleString('en-US', { maximumFractionDigits: 0 });
   return `${cur ? cur + ' ' : ''}${(amount || 0).toLocaleString()}`;
 }
 
 function formatPayments(payments: Payment[]) {
-  if (!payments || payments.length === 0) return '\u2014';
+  if (!payments || payments.length === 0) return '—';
   return payments.map((p) => formatMoney(p.amount, p.currency)).join(' + ');
 }
 
 function fmtDate(d: string | null) {
-  if (!d) return '\u2014';
+  if (!d) return '—';
   return new Date(`${d}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
 function CommissionChip({ status }: { status: 'paid' | 'pending' }) {
   if (status === 'paid') {
     return (
-      <span className="inline-flex rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400">
+      <span className="inline-flex rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
         Paid
       </span>
     );
   }
   return (
-    <span className="inline-flex rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-800 dark:bg-amber-500/15 dark:text-amber-400">
+    <span className="inline-flex rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-800">
       Pending
     </span>
   );
@@ -110,23 +122,27 @@ function CommissionChip({ status }: { status: 'paid' | 'pending' }) {
 function ClientStatusChip({ c }: { c: ClientRow }) {
   if (c.card_paused_at)
     return (
-      <span className="inline-flex rounded-full bg-orange-100 px-2 py-0.5 text-[10px] font-semibold text-orange-700 dark:bg-orange-500/15 dark:text-orange-400">
+      <span className="inline-flex rounded-full bg-orange-100 px-2 py-0.5 text-[10px] font-semibold text-orange-700">
         Paused
       </span>
     );
   if (c.card_cancelled_at || c.card_state === 'closed')
     return (
-      <span className="inline-flex rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-semibold text-red-700 dark:bg-red-500/15 dark:text-red-400">
+      <span className="inline-flex rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-semibold text-red-700">
         Cancelled
       </span>
     );
   if (c.status === 'active')
     return (
-      <span className="inline-flex rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400">
+      <span className="inline-flex rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
         Active
       </span>
     );
-  return <span className="inline-flex rounded-full bg-well px-2 py-0.5 text-[10px] font-semibold text-foreground-muted">Ended</span>;
+  return (
+    <span className="inline-flex rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-500">
+      Ended
+    </span>
+  );
 }
 
 function EmptyState({ title, body }: { title: string; body: string }) {
@@ -139,35 +155,50 @@ function EmptyState({ title, body }: { title: string; body: string }) {
 }
 
 function Loading({ what }: { what: string }) {
-  return <div className="py-16 text-center text-sm text-foreground-muted">Loading {what}…</div>;
+  return <div className="py-16 text-center text-sm text-foreground-dim">Loading {what}…</div>;
 }
 
-export default function PartnerPaymentsPage() {
+export default function PartnerPaymentsPreview({
+  initialRecipientId,
+  onRecipientChange,
+}: {
+  initialRecipientId?: string;
+  onRecipientChange?: (id: string) => void;
+}) {
   const [tab, setTab] = useState<TabId>('overview');
 
   const me = useQuery<MeData>({
-    queryKey: ['partner-payments-me'],
+    queryKey: ['partner-payments-preview-me'],
     queryFn: async () => (await api.get<{ success: boolean; data: MeData }>('/partner-payments/me')).data.data,
   });
 
-  const isAdmin = me.data?.mode === 'admin';
   const recipients = me.data?.recipients ?? [];
-  const [selectedId, setSelectedId] = useState<string>('');
-  const recipientId = isAdmin ? selectedId || recipients[0]?.recipient_id || '' : me.data?.recipient_id || '';
-  const recipientName = isAdmin
-    ? recipients.find((r) => r.recipient_id === recipientId)?.recipient_name || 'Partner'
-    : me.data?.recipient_name || 'You';
+  const [selectedId, setSelectedId] = useState<string>(initialRecipientId ?? '');
+  useEffect(() => {
+    if (initialRecipientId) setSelectedId(initialRecipientId);
+  }, [initialRecipientId]);
+
+  const recipientId = selectedId || recipients[0]?.recipient_id || '';
+  const recipientName = recipients.find((r) => r.recipient_id === recipientId)?.recipient_name || 'Partner';
+
+  const pick = (id: string) => {
+    setSelectedId(id);
+    onRecipientChange?.(id);
+  };
 
   const month = useQuery<MonthData>({
-    queryKey: ['partner-payments-month', recipientId],
+    queryKey: ['partner-payments-preview-month', recipientId],
     queryFn: async () =>
-      (await api.get<{ success: boolean; data: MonthData }>('/partner-payments/month', { params: { recipient_id: recipientId } }))
-        .data.data,
+      (
+        await api.get<{ success: boolean; data: MonthData }>('/partner-payments/month', {
+          params: { recipient_id: recipientId },
+        })
+      ).data.data,
     enabled: !!recipientId,
   });
 
   const history = useQuery<HistoryData>({
-    queryKey: ['partner-payments-history', recipientId],
+    queryKey: ['partner-payments-preview-history', recipientId],
     queryFn: async () =>
       (
         await api.get<{ success: boolean; data: HistoryData }>('/partner-payments/history', {
@@ -180,48 +211,65 @@ export default function PartnerPaymentsPage() {
   const payouts = history.data?.payouts ?? [];
   const currentMonth = history.data?.current_month || currentMonthKey();
 
-  if (me.isLoading) return <Loading what="the app" />;
+  if (me.isLoading) return <Loading what="partners" />;
   if (me.isError) {
     const msg =
       (me.error as { response?: { data?: { error?: string } } }).response?.data?.error ||
-      'Ask an admin to grant your user the Partner Payments app.';
-    return <EmptyState title="Access denied" body={msg} />;
+      'Could not load partner list.';
+    return <EmptyState title="Could not load preview" body={msg} />;
   }
 
   return (
-    <div className="h-full overflow-y-auto">
-      <div className="mx-auto w-full max-w-6xl space-y-6 px-6 py-6">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h2 className="text-lg font-bold tracking-tight">Partner Payments</h2>
-            <p className="mt-0.5 text-xs text-foreground-muted">
-              {isAdmin
-                ? 'Preview any partner\u2019s payout statement.'
-                : `Assigned clients, payouts and commission status${me.data?.recipient_name ? ` \u00B7 ${me.data.recipient_name}` : ''}.`}
-            </p>
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-indigo-200 bg-indigo-50 px-4 py-3">
+        <div>
+          <div className="text-sm font-semibold text-indigo-900">
+            Partner view — exactly what they see in the mini app
           </div>
-          {isAdmin && recipients.length > 0 && (
-            <select
-              value={recipientId}
-              onChange={(e) => setSelectedId(e.target.value)}
-              className="rounded-lg border border-divider-strong bg-surface px-2.5 py-1.5 text-sm text-foreground"
-            >
-              {recipients.map((r) => (
-                <option key={r.recipient_id} value={r.recipient_id}>
-                  {r.recipient_name || r.recipient_id.slice(0, 8)}
-                </option>
-              ))}
-            </select>
-          )}
+          <div className="mt-0.5 text-xs text-indigo-700">
+            {recipientId ? (
+              <>
+                Same API, same data ({recipientName}
+                {history.data ? ` · ${monthLabel(currentMonth)}` : ''}). Read-only preview.
+              </>
+            ) : (
+              <>No recipients with assignments found in this environment. Read-only preview.</>
+            )}
+          </div>
         </div>
+        {recipients.length > 0 && (
+          <select
+            value={recipientId}
+            onChange={(e) => pick(e.target.value)}
+            className="rounded-lg border border-indigo-200 bg-white px-2.5 py-1.5 text-sm text-slate-900"
+            aria-label="Preview partner"
+          >
+            {recipients.map((r) => (
+              <option key={r.recipient_id} value={r.recipient_id}>
+                {r.recipient_name || r.recipient_id.slice(0, 8)}
+              </option>
+            ))}
+          </select>
+        )}
+      </div>
 
-        {!recipientId ? (
-          <EmptyState
-            title="No partner engagements yet"
-            body="Once a subscription is assigned to a partner, their payout statement appears here."
-          />
-        ) : (
-          <>
+      {!recipientId ? (
+        <EmptyState
+          title="No engagements yet"
+          body="No subscription has been assigned to a partner or talent in this environment yet. Once you assign one (Requirement Cards / By subscription tab), pick them above to preview exactly what they see in the mini app."
+        />
+      ) : (
+        <div className="rounded-xl border border-divider bg-canvas">
+          <div className="mx-auto w-full max-w-6xl space-y-6 px-6 py-6">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-bold tracking-tight">Partner Payments</h2>
+                <p className="mt-0.5 text-xs text-foreground-muted">
+                  Assigned clients, payouts and commission status · {recipientName}.
+                </p>
+              </div>
+            </div>
+
             <div className="flex items-end justify-between gap-3 border-b border-divider">
               <div className="flex gap-2">
                 {TABS.map((t) => (
@@ -230,7 +278,7 @@ export default function PartnerPaymentsPage() {
                     onClick={() => setTab(t.id)}
                     className={`-mb-px border-b-2 px-4 py-2 text-sm font-medium transition-colors ${
                       tab === t.id
-                        ? 'border-[var(--color-accent)] text-[var(--color-accent)]'
+                        ? 'border-indigo-600 text-indigo-600'
                         : 'border-transparent text-foreground-muted hover:text-foreground'
                     }`}
                   >
@@ -242,13 +290,18 @@ export default function PartnerPaymentsPage() {
             </div>
 
             {tab === 'overview' && (
-              <OverviewTab month={month.data} payouts={payouts} currentMonth={currentMonth} loading={month.isLoading || history.isLoading} />
+              <OverviewTab
+                month={month.data}
+                payouts={payouts}
+                currentMonth={currentMonth}
+                loading={month.isLoading || history.isLoading}
+              />
             )}
             {tab === 'clients' && <ClientsTab month={month.data} loading={month.isLoading} />}
             {tab === 'payouts' && <PayoutsTab payouts={payouts} loading={history.isLoading} currentMonth={currentMonth} />}
-          </>
-        )}
-      </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -298,7 +351,7 @@ function OverviewTab({
   const series = payouts.slice(-8);
   const maxVal = Math.max(1, ...series.map((p) => p.payments.find((x) => x.currency === 'INR')?.amount ?? 0));
 
-  if (loading) return <Loading what="your statement" />;
+  if (loading) return <Loading what="the statement" />;
 
   return (
     <div className="space-y-5">
@@ -344,11 +397,13 @@ function OverviewTab({
                 const isCurrent = p.month === currentMonth;
                 return (
                   <div key={p.month} className="flex min-w-0 flex-1 flex-col items-center justify-end self-stretch">
-                    <div className="mb-1 whitespace-nowrap text-[10.5px] text-foreground-muted">{v ? formatMoney(v, 'INR') : '\u2014'}</div>
+                    <div className="mb-1 whitespace-nowrap text-[10.5px] text-foreground-muted">
+                      {v ? formatMoney(v, 'INR') : '—'}
+                    </div>
                     <div className="flex h-full w-full max-w-[46px] items-end justify-center">
                       <div
                         title={`${monthLabel(p.month)}: ${formatPayments(p.payments)}`}
-                        className={`w-full rounded-md ${isCurrent ? 'bg-gradient-to-b from-[var(--color-accent)] to-[var(--color-accent-strong)]' : 'bg-well'}`}
+                        className={`w-full rounded-md ${isCurrent ? 'bg-gradient-to-b from-indigo-500 to-indigo-700' : 'bg-slate-200'}`}
                         style={{ height: `${pct}%` }}
                       />
                     </div>
@@ -370,7 +425,7 @@ function OverviewTab({
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="bg-surface-alt text-left text-[11px] uppercase tracking-wide text-foreground-muted">
+              <tr className="bg-slate-50 text-left text-[11px] uppercase tracking-wide text-foreground-muted">
                 <th className="px-4 py-2.5 font-semibold">Month</th>
                 <th className="px-4 py-2.5 text-right font-semibold">Gross payout</th>
                 <th className="px-4 py-2.5 font-semibold">Status</th>
@@ -408,14 +463,14 @@ function OverviewTab({
 function ClientsTab({ month, loading }: { month?: MonthData; loading: boolean }) {
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<'all' | 'active' | 'ended'>('all');
-  const rows = useMemo(() => {
+  const rows = (() => {
     let list = month?.clients ?? [];
     if (filter === 'active') list = list.filter((c) => c.status === 'active');
     if (filter === 'ended') list = list.filter((c) => c.status !== 'active');
     const q = search.trim().toLowerCase();
     if (q) list = list.filter((c) => `${c.business_name ?? ''} ${c.subscription_name ?? ''}`.toLowerCase().includes(q));
     return list;
-  }, [month, filter, search]);
+  })();
 
   if (loading) return <Loading what="clients" />;
 
@@ -423,13 +478,13 @@ function ClientsTab({ month, loading }: { month?: MonthData; loading: boolean })
     <div className="overflow-hidden rounded-xl border border-divider bg-surface">
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-divider px-4 py-3">
         <div className="flex flex-wrap items-center gap-2">
-          <div className="inline-flex overflow-hidden rounded-lg border border-divider-strong">
+          <div className="inline-flex overflow-hidden rounded-lg border border-divider">
             {(['all', 'active', 'ended'] as const).map((f) => (
               <button
                 key={f}
                 onClick={() => setFilter(f)}
                 className={`border-l border-divider px-3 py-1.5 text-xs font-semibold first:border-l-0 ${
-                  filter === f ? 'bg-[var(--color-accent)] text-white' : 'bg-surface text-foreground-muted hover:bg-surface-alt'
+                  filter === f ? 'bg-indigo-600 text-white' : 'bg-surface text-foreground-muted hover:bg-slate-50'
                 }`}
               >
                 {f[0].toUpperCase() + f.slice(1)}
@@ -440,7 +495,7 @@ function ClientsTab({ month, loading }: { month?: MonthData; loading: boolean })
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search clients…"
-            className="rounded-lg border border-divider-strong bg-surface px-3 py-1.5 text-sm text-foreground placeholder:text-foreground-dim"
+            className="rounded-lg border border-divider bg-surface px-3 py-1.5 text-sm text-foreground placeholder:text-foreground-dim"
           />
         </div>
         <span className="text-xs text-foreground-dim">{rows.length} shown</span>
@@ -448,27 +503,27 @@ function ClientsTab({ month, loading }: { month?: MonthData; loading: boolean })
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
-            <tr className="bg-surface-alt text-left text-[11px] uppercase tracking-wide text-foreground-muted">
+            <tr className="bg-slate-50 text-left text-[11px] uppercase tracking-wide text-foreground-muted">
               <th className="px-4 py-2.5 font-semibold">Client</th>
               <th className="px-4 py-2.5 font-semibold">Plan</th>
               <th className="px-4 py-2.5 font-semibold">Status</th>
               <th className="px-4 py-2.5 font-semibold">Start date</th>
               <th className="px-4 py-2.5 font-semibold">End date</th>
               <th className="px-4 py-2.5 text-right font-semibold">Commitment</th>
-              <th className="px-4 py-2.5 text-right font-semibold">{month ? `${monthLabel(month.month)} pay` : 'This month\u2019s pay'}</th>
+              <th className="px-4 py-2.5 text-right font-semibold">{month ? `${monthLabel(month.month)} pay` : 'This month’s pay'}</th>
             </tr>
           </thead>
           <tbody>
             {rows.map((c) => (
-              <tr key={c.term_id} className="border-t border-divider hover:bg-surface-alt">
+              <tr key={c.term_id} className="border-t border-divider hover:bg-slate-50">
                 <td className="px-4 py-3">
-                  <div className="font-medium">{c.business_name || '\u2014'}</div>
+                  <div className="font-medium">{c.business_name || '—'}</div>
                   {c.subscription_name && <div className="mt-0.5 text-xs text-foreground-muted">{c.subscription_name}</div>}
                 </td>
                 <td className="whitespace-nowrap px-4 py-3">
-                  {c.plan_label || '\u2014'}
+                  {c.plan_label || '—'}
                   {c.plan_tier && (
-                    <span className="ml-1.5 inline-block rounded border border-divider-strong px-1.5 align-middle text-[10.5px] font-semibold text-foreground-muted">
+                    <span className="ml-1.5 inline-block rounded border border-divider px-1.5 align-middle text-[10.5px] font-semibold text-foreground-muted">
                       {c.plan_tier}
                     </span>
                   )}
@@ -477,9 +532,9 @@ function ClientsTab({ month, loading }: { month?: MonthData; loading: boolean })
                   <ClientStatusChip c={c} />
                 </td>
                 <td className="whitespace-nowrap px-4 py-3">{fmtDate(c.start_date)}</td>
-                <td className="whitespace-nowrap px-4 py-3">{c.end_date ? fmtDate(c.end_date) : '\u2014'}</td>
+                <td className="whitespace-nowrap px-4 py-3">{c.end_date ? fmtDate(c.end_date) : '—'}</td>
                 <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums">
-                  {c.committed_weekly_hours != null ? `${c.committed_weekly_hours} h/wk` : '\u2014'}
+                  {c.committed_weekly_hours != null ? `${c.committed_weekly_hours} h/wk` : '—'}
                 </td>
                 <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums">
                   {c.month_payment > 0 ? (
@@ -487,12 +542,12 @@ function ClientsTab({ month, loading }: { month?: MonthData; loading: boolean })
                       <span className="font-medium">{formatMoney(c.month_payment, c.currency)}</span>
                       {c.additional_payment > 0 && (
                         <div className="whitespace-normal text-xs text-foreground-muted">
-                          +{formatMoney(c.additional_payment, c.currency)} · {c.additional_hours} add&rsquo;l hrs
+                          +{formatMoney(c.additional_payment, c.currency)} · {c.additional_hours} add’l hrs
                         </div>
                       )}
                     </>
                   ) : (
-                    '\u2014'
+                    '—'
                   )}
                 </td>
               </tr>
@@ -590,7 +645,7 @@ function PayoutMonthTable({
     <div className="overflow-x-auto">
       <table className="w-full text-sm">
         <thead>
-          <tr className="bg-surface-alt text-left text-[11px] uppercase tracking-wide text-foreground-muted">
+          <tr className="bg-slate-50 text-left text-[11px] uppercase tracking-wide text-foreground-muted">
             <th className="px-4 py-2.5 font-semibold">Payout month</th>
             <th className="px-4 py-2.5 text-right font-semibold">Gross payout</th>
             <th className="px-4 py-2.5 font-semibold">Commission status</th>
@@ -625,7 +680,7 @@ function PayoutRowGroup({
 }) {
   return (
     <>
-      <tr className="cursor-pointer hover:bg-surface-alt" onClick={onToggle} aria-expanded={open}>
+      <tr className="cursor-pointer hover:bg-slate-50" onClick={onToggle} aria-expanded={open}>
         <td className="px-4 py-3">
           <div className="font-medium">{monthLabel(row.month)}</div>
           <div className="mt-0.5 text-xs text-foreground-muted">
@@ -641,12 +696,12 @@ function PayoutRowGroup({
         </td>
       </tr>
       {open && (
-        <tr className="bg-surface-alt">
+        <tr className="bg-slate-50">
           <td colSpan={4} className="px-4 py-2">
             <ul className="py-1">
               {row.lines.map((l, i) => (
                 <li key={i} className="flex items-baseline justify-between gap-3 py-1 text-[13px]">
-                  <span className="font-medium">{l.client || '\u2014'}</span>
+                  <span className="font-medium">{l.client || '—'}</span>
                   {l.note && <span className="text-xs text-foreground-dim">{l.note}</span>}
                   <span className="whitespace-nowrap font-semibold tabular-nums">{formatMoney(l.amount, l.currency)}</span>
                 </li>

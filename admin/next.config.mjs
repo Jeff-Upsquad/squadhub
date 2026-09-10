@@ -34,6 +34,10 @@ const nextConfig = {
       { source: '/api/pm/:path*', destination: `${API_URL}/pm/:path*` },
       { source: '/api/memberships/:path*', destination: `${API_URL}/memberships/:path*` },
       { source: '/api/upload/:path*', destination: `${API_URL}/upload/:path*` },
+      // Partner Payments mini-app endpoints — the admin "Partner view" preview
+      // calls the same routes the partner-facing mini app uses (/me, /month,
+      // /history), so what an admin previews is exactly what the partner sees.
+      { source: '/api/partner-payments/:path*', destination: `${API_URL}/partner-payments/:path*` },
     ],
   }),
 
