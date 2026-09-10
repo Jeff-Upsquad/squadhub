@@ -32,6 +32,7 @@ import CheckInsPage from '../views/app/check-ins/CheckInsPage';
 import CandidatesPage from '../views/app/candidates/CandidatesPage';
 import PartnerPaymentsPage from '../views/app/partner-payments/PartnerPaymentsPage';
 import CrmTeamChatView from '../views/app/teamchat/CrmTeamChatView';
+import ShcrmTeamChatEmbedView from '../views/app/teamchat/ShcrmTeamChatEmbedView';
 import MeetingsView from '../views/app/meetings/MeetingsView';
 import GlobalMeetingPanel from '../views/app/meetings/GlobalMeetingPanel';
 import ExternalTabPane from '../components/ExternalTabPane';
@@ -1139,7 +1140,7 @@ export default function MainLayout() {
       if (hv === 'candidates') return <CandidatesPage />;
       if (hv === 'partner-payments') return <PartnerPaymentsPage />;
       if (hv === 'teamchat-crm') return <CrmTeamChatView source="crm" />;
-      if (hv === 'teamchat-shcrm') return <CrmTeamChatView source="shcrm" />;
+      if (hv === 'teamchat-shcrm') return <ShcrmTeamChatEmbedView />;
       if (hv === 'time-management') return <TimeManagementPage />;
       if (hv === 'sales-leads') return <SalesLeadsPage />;
       if (hv === 'leads') return <LeadsPage />;
@@ -1189,7 +1190,7 @@ export default function MainLayout() {
     if (hv === 'candidates') return <CandidatesPage />;
     if (hv === 'partner-payments') return <PartnerPaymentsPage />;
     if (hv === 'teamchat-crm') return <CrmTeamChatView source="crm" />;
-    if (hv === 'teamchat-shcrm') return <CrmTeamChatView source="shcrm" />;
+    if (hv === 'teamchat-shcrm') return <ShcrmTeamChatEmbedView />;
     if (hv === 'time-management') return <TimeManagementPage />;
     if (hv === 'sales-leads') return <SalesLeadsPage />;
     if (hv === 'leads') return <LeadsPage />;

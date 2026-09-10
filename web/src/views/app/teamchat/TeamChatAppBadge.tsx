@@ -1,12 +1,27 @@
 'use client';
 
 import { useCrmTeamChatUnread, type CrmTeamChatSource } from '../../../hooks/useCrmTeamChat';
+import { useTeamChatEmbedStore } from '../../../stores/teamchatEmbedStore';
 import { CRM_TEAMCHAT_META } from './CrmTeamChatView';
 
 /** Unread count pill for a CRM TeamChat mini-app row (Apps module + pinned sidebar). */
 export default function TeamChatAppBadge({ source }: { source: CrmTeamChatSource }) {
-  const { data } = useCrmTeamChatUnread(source);
-  const total = data?.total ?? 0;
+  return source === 'shcrm' ? <EmbedBadge /> : <NativeBadge />;
+}
+
+// SquadCRM shares SquadHub's database — polled directly via the proxy.
+function NativeBadge() {
+  const { data } = useCrmTeamChatUnread('crm');
+  return <Pill source="crm" total={data?.total ?? 0} />;
+}
+
+// SquadHireCRM lives in its own project — counts arrive via the iframe bridge.
+function EmbedBadge() {
+  const total = useTeamChatEmbedStore((s) => s.shcrmUnread);
+  return <Pill source="shcrm" total={total} />;
+}
+
+function Pill({ source, total }: { source: CrmTeamChatSource; total: number }) {
   if (total <= 0) return null;
   return (
     <span
