@@ -42,7 +42,7 @@ export type Notification = {
   actor: { id: string; display_name: string; email: string; avatar_url: string | null } | null;
 };
 
-type Filter = 'all' | 'mentions' | 'threads' | 'tasks';
+type Filter = 'all' | 'messages' | 'tasks' | 'updates';
 
 // Where to land in chat when opening a message notification: the exact
 // message, plus its thread root when it lives in a thread. ChatPanel scrolls
@@ -50,12 +50,34 @@ type Filter = 'all' | 'mentions' | 'threads' | 'tasks';
 // ThreadPanel flashes the reply).
 export type ChatJump = { messageId: string; parentId: string | null };
 
-function isMention(t: Notification['type']) {
-  return t === 'mention' || t === 'message_mention';
-}
-
 function isThread(n: Notification) {
   return n.reference_type === 'message' || n.reference_type === 'chat_message' || n.type === 'dm_received';
+}
+
+// Messages: all chat/message-related notifications — DMs, thread replies,
+// message mentions, and reactions. (Merges the old Mentions + Threads views
+// for anything that lives in chat.)
+function isMessage(n: Notification): boolean {
+  if (n.reference_type === 'message' || n.reference_type === 'chat_message') return true;
+  return (
+    n.type === 'message_mention' ||
+    n.type === 'thread_reply' ||
+    n.type === 'dm_received' ||
+    n.type === 'reaction_added'
+  );
+}
+
+// Tasks: same as before — anything tied to a task, including task mentions.
+function isTask(n: Notification): boolean {
+  if (n.reference_type === 'task') return true;
+  if (n.type === 'mention') return true;
+  return n.type.startsWith('task_');
+}
+
+// Updates: everything else — announcements, SOP flags/strikes, LMS/resource
+// updates, meetings, support tickets, backend admin broadcasts, etc.
+function isUpdate(n: Notification): boolean {
+  return !isMessage(n) && !isTask(n);
 }
 
 export function avatarFor(n: Notification): { initials: string; color: string } {
@@ -298,9 +320,9 @@ export default function InboxView({
     const q = searchQuery.trim().toLowerCase();
     return items.filter((it) => {
       if (unreadsOnly && it.is_read) return false;
-      if (filter === 'mentions' && !isMention(it.type)) return false;
-      if (filter === 'threads' && !isThread(it)) return false;
-      if (filter === 'tasks' && !(it.reference_type === 'task' || it.type === 'mention')) return false;
+      if (filter === 'messages' && !isMessage(it)) return false;
+      if (filter === 'tasks' && !isTask(it)) return false;
+      if (filter === 'updates' && !isUpdate(it)) return false;
       if (q) {
         const haystack = `${it.title || ''} ${it.body || ''} ${it.actor?.display_name || ''}`.toLowerCase();
         if (!haystack.includes(q)) return false;
@@ -359,18 +381,8 @@ export default function InboxView({
       ),
     },
     {
-      key: 'mentions',
-      label: 'Mentions',
-      icon: (
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-          <circle cx="12" cy="12" r="4" />
-          <path d="M16 8v5a3 3 0 0 0 6 0v-1a10 10 0 1 0-3.92 7.94" />
-        </svg>
-      ),
-    },
-    {
-      key: 'threads',
-      label: 'Threads',
+      key: 'messages',
+      label: 'Messages',
       icon: (
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
           <path d="M21 11.5a8.38 8.38 0 0 1-9 8.36 8.5 8.5 0 0 1-3.4-.7L3 20l.84-5.6A8.38 8.38 0 0 1 12 3.14a8.38 8.38 0 0 1 9 8.36z" />
@@ -384,6 +396,15 @@ export default function InboxView({
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
           <rect x="3" y="3" width="18" height="18" rx="4" />
           <path d="m8.5 12.5 2.5 2.5 4.5-5" />
+        </svg>
+      ),
+    },
+    {
+      key: 'updates',
+      label: 'Updates',
+      icon: (
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+          <path d="m3 11 18-8-8 18-2.5-7.5z" />
         </svg>
       ),
     },
@@ -537,9 +558,13 @@ export default function InboxView({
           <div className="ib-empty">
             {unreadsOnly
               ? 'You\u2019re all caught up.'
-              : filter === 'mentions'
-                ? 'No mentions yet.'
-                : 'No notifications yet.'}
+              : filter === 'messages'
+                ? 'No messages yet.'
+                : filter === 'tasks'
+                  ? 'No tasks yet.'
+                  : filter === 'updates'
+                    ? 'No updates yet.'
+                    : 'No notifications yet.'}
           </div>
         ) : (
           filtered.map((n) => (
