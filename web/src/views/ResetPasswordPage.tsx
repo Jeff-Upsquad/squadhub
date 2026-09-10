@@ -1,9 +1,15 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import Link from 'next/link';
 import axios from 'axios';
 import { useRouter } from 'next/navigation';
+import {
+  formatStoredPhone,
+  isValidNationalNumber,
+  normalizeNationalNumber,
+  splitStoredPhone,
+} from '@squadhub/shared';
 import api from '../services/api';
 import { useAuthStore } from '../stores/authStore';
 
@@ -32,6 +38,19 @@ const buttonCls =
 const ghostButtonCls =
   'h-11 w-full rounded-lg border border-[#E2E8F0] text-sm font-medium text-[#0F172B] transition hover:bg-[#F8FAFC] dark:border-divider dark:text-foreground dark:hover:bg-surface-alt';
 
+const COUNTRY_CODES = [
+  { code: '+91', flag: '🇮🇳' },
+  { code: '+1', flag: '🇺🇸' },
+  { code: '+44', flag: '🇬🇧' },
+  { code: '+971', flag: '🇦🇪' },
+  { code: '+65', flag: '🇸🇬' },
+  { code: '+61', flag: '🇦🇺' },
+  { code: '+49', flag: '🇩🇪' },
+  { code: '+33', flag: '🇫🇷' },
+  { code: '+81', flag: '🇯🇵' },
+  { code: '+86', flag: '🇨🇳' },
+];
+
 const SUPPORT_WHATSAPP_URLS = {
   // Talents, partner employees and internal team → UpSquad's main WhatsApp.
   upsquad: `https://wa.me/919995266385?text=${encodeURIComponent(
@@ -45,10 +64,14 @@ const SUPPORT_WHATSAPP_URLS = {
 
 export default function ResetPasswordPage() {
   const [step, setStep] = useState<Step>('phone');
-  const [phone, setPhone] = useState('');
+  const [countryCode, setCountryCode] = useState('+91');
+  const [nationalNumber, setNationalNumber] = useState('');
   const [maskedName, setMaskedName] = useState('');
   const [ticket, setTicket] = useState('');
-  const [tempPassword, setTempPassword] = useState('');
+  const [word1, setWord1] = useState('');
+  const [word2, setWord2] = useState('');
+  const word2Ref = useRef<HTMLInputElement>(null);
+  const word1Ref = useRef<HTMLInputElement>(null);
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [delivered, setDelivered] = useState<boolean | null>(null);
@@ -70,8 +93,17 @@ export default function ResetPasswordPage() {
   const submitPhone = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    if (!isValidNationalNumber(nationalNumber, countryCode)) {
+      setError(
+        countryCode === '+91'
+          ? 'Enter a valid 10-digit mobile number.'
+          : 'Enter a valid phone number.',
+      );
+      return;
+    }
     setLoading(true);
     try {
+      const phone = formatStoredPhone(countryCode, nationalNumber);
       const { data: res } = await api.post('/auth/password-reset/lookup', { phone });
       if (res.data?.found) {
         setMaskedName(res.data.masked_name || '');
@@ -87,6 +119,65 @@ export default function ResetPasswordPage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  // National-number input: also accepts a pasted full number ("+91 98765…")
+  // by splitting off a recognised country code.
+  const handleNationalChange = (value: string) => {
+    const trimmed = value.trim();
+    if (trimmed.startsWith('+')) {
+      const parts = splitStoredPhone(trimmed, countryCode);
+      if (COUNTRY_CODES.some((c) => c.code === parts.code)) {
+        setCountryCode(parts.code);
+      }
+      setNationalNumber(normalizeNationalNumber(parts.number, parts.code));
+      return;
+    }
+    setNationalNumber(normalizeNationalNumber(value, countryCode));
+  };
+
+  const handleCountryChange = (code: string) => {
+    setCountryCode(code);
+    setNationalNumber((prev) => normalizeNationalNumber(prev, code));
+  };
+
+  // Temp password is two words ("word-word"): one box per word. Typing a
+  // space/hyphen in the first box jumps to the second; pasting the whole
+  // code splits it across both boxes.
+  const cleanWord = (value: string) => value.toLowerCase().replace(/[^a-z]/g, '');
+
+  const splitPastedCode = (value: string): [string, string] | null => {
+    const parts = value
+      .toLowerCase()
+      .split(/[^a-z]+/)
+      .filter(Boolean);
+    if (parts.length < 2) return null;
+    return [cleanWord(parts[0]), cleanWord(parts.slice(1).join(''))];
+  };
+
+  const handleWord1Change = (value: string) => {
+    if (/[^a-zA-Z]/.test(value) && value.length > 0) {
+      const split = splitPastedCode(value);
+      if (split) {
+        setWord1(split[0]);
+        setWord2(split[1]);
+        word2Ref.current?.focus();
+        return;
+      }
+    }
+    const cleaned = cleanWord(value);
+    setWord1(cleaned);
+    if (/[\s-]/.test(value) && cleaned) word2Ref.current?.focus();
+  };
+
+  const handleWord2Change = (value: string) => {
+    const split = splitPastedCode(value);
+    if (split) {
+      setWord1(split[0]);
+      setWord2(split[1]);
+      return;
+    }
+    setWord2(cleanWord(value));
   };
 
   const sendCode = async () => {
@@ -106,11 +197,16 @@ export default function ResetPasswordPage() {
   const submitCode = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    if (!word1 || !word2) {
+      setError('Enter both words of the temporary password.');
+      (word1 ? word2Ref : word1Ref).current?.focus();
+      return;
+    }
     setLoading(true);
     try {
       const { data: res } = await api.post('/auth/password-reset/verify', {
         reset_ticket: ticket,
-        temp_password: tempPassword,
+        temp_password: `${word1}-${word2}`,
       });
       setTokens({
         access: res.data.access_token,
@@ -191,15 +287,30 @@ export default function ResetPasswordPage() {
           <form onSubmit={submitPhone} className="mt-6 space-y-4">
             <div>
               <label className={labelCls}>Phone number</label>
-              <input
-                type="tel"
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                required
-                autoFocus
-                className={inputCls}
-                placeholder="+91 98765 43210"
-              />
+              <div className="flex gap-2">
+                <select
+                  value={countryCode}
+                  onChange={(e) => handleCountryChange(e.target.value)}
+                  className={`${inputCls} max-w-[128px] shrink-0 cursor-pointer`}
+                  aria-label="Country code"
+                >
+                  {COUNTRY_CODES.map((c) => (
+                    <option key={c.code} value={c.code}>
+                      {c.flag} {c.code}
+                    </option>
+                  ))}
+                </select>
+                <input
+                  type="tel"
+                  inputMode="numeric"
+                  value={nationalNumber}
+                  onChange={(e) => handleNationalChange(e.target.value)}
+                  required
+                  autoFocus
+                  className={`${inputCls} flex-1`}
+                  placeholder="98765 43210"
+                />
+              </div>
             </div>
             <button type="submit" disabled={loading} className={buttonCls}>
               {loading ? 'Checking…' : 'Continue'}
@@ -260,20 +371,44 @@ export default function ResetPasswordPage() {
             )}
             <div>
               <label className={labelCls}>Temporary password</label>
-              <input
-                type="text"
-                value={tempPassword}
-                onChange={(e) => setTempPassword(e.target.value)}
-                required
-                autoFocus
-                autoCapitalize="none"
-                autoCorrect="off"
-                spellCheck={false}
-                className={inputCls}
-                placeholder="word-word"
-              />
+              <div className="flex items-center gap-2">
+                <input
+                  ref={word1Ref}
+                  type="text"
+                  value={word1}
+                  onChange={(e) => handleWord1Change(e.target.value)}
+                  required
+                  autoFocus
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  className={`${inputCls} flex-1 text-center tracking-wide`}
+                  placeholder="first"
+                  aria-label="First word of temporary password"
+                />
+                <span aria-hidden="true" className="text-lg font-semibold text-[#62748E]">
+                  -
+                </span>
+                <input
+                  ref={word2Ref}
+                  type="text"
+                  value={word2}
+                  onChange={(e) => handleWord2Change(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Backspace' && !word2) word1Ref.current?.focus();
+                  }}
+                  required
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  className={`${inputCls} flex-1 text-center tracking-wide`}
+                  placeholder="second"
+                  aria-label="Second word of temporary password"
+                />
+              </div>
               <p className="mt-1.5 text-xs text-[#62748E] dark:text-foreground-muted">
-                Two words joined by a hyphen, sent to you on WhatsApp.
+                Two words sent to you on WhatsApp — one per box. You can also paste the
+                whole code into either box.
               </p>
             </div>
             <button type="submit" disabled={loading} className={buttonCls}>
