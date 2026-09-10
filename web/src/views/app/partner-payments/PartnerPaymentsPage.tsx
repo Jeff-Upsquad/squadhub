@@ -76,8 +76,9 @@ function monthShort(key: string) {
 }
 
 function formatMoney(amount: number, currency: string | null) {
-  const cur = currency && currency !== 'UNKNOWN' ? currency : '';
-  if (cur === 'INR') return '\u20B9' + (amount || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 });
+  // TEMP: force all payments/clients to INR (Rs) for now.
+  const cur = 'INR';
+  if (cur === 'INR') return '₹' + (amount || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 });
   if (cur === 'USD') return '$' + (amount || 0).toLocaleString('en-US', { maximumFractionDigits: 0 });
   return `${cur ? cur + ' ' : ''}${(amount || 0).toLocaleString()}`;
 }

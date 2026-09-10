@@ -344,7 +344,8 @@ export async function computeGrossProfit(
     const latest = ordered[ordered.length - 1];
     const repBilling = resolveTermBilling(latest, cb);
 
-    const currency = repBilling.currency || 'UNKNOWN';
+    // TEMP: force all payments/clients to INR (Rs) for now.
+    const currency = 'INR';
     if (currencyFilter && currency !== currencyFilter) continue;
 
     const role = repBilling.plan_name || latest.subscription_name || null;

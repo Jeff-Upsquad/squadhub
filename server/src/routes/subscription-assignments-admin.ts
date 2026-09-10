@@ -113,7 +113,7 @@ router.get('/', async (req: Request, res: Response) => {
           month_active_days: activeDays,
           month_payment: monthPayment,
           partner_price: b?.partner_price ?? null,
-          currency: b?.currency ?? null,
+          currency: b?.currency ?? 'INR',
           missing_partner_price: b?.missing_partner_price ?? true,
           committed_hours: {
             daily: b?.daily_hours ?? null,
@@ -289,6 +289,8 @@ router.get('/users', async (req: Request, res: Response) => {
       active_card_count: number;
       committed_weekly_hours: number;
       payments: Map<string, number>; // currency -> prorated base + additional
+      base_payments: Map<string, number>; // currency -> prorated base only
+      additional_payment: number; // signed total of shortfall deductions (one-sided)
       missing_pricing: boolean;
       additional_hours: number; // net signed hours delta (once per card)
     };
@@ -320,6 +322,8 @@ router.get('/users', async (req: Request, res: Response) => {
           active_card_count: 0,
           committed_weekly_hours: 0,
           payments: new Map(),
+          base_payments: new Map(),
+          additional_payment: 0,
           missing_pricing: false,
           additional_hours: 0,
         };
@@ -342,8 +346,9 @@ router.get('/users', async (req: Request, res: Response) => {
         if (b.missing_partner_price) g.missing_pricing = true;
         const pay = prorateMonthly(b.partner_price, start, end, year, month, todayIso);
         if (pay > 0) {
-          const cur = b.currency || 'UNKNOWN';
+          const cur = b.currency || 'INR';
           g.payments.set(cur, (g.payments.get(cur) || 0) + pay);
+          g.base_payments.set(cur, (g.base_payments.get(cur) || 0) + pay);
         }
       }
       // Additional hours + payment: once per card, folded into the card's own
@@ -354,8 +359,9 @@ router.get('/users', async (req: Request, res: Response) => {
         countedAdditionalCards.get(key)!.add(t.card_id);
         g.additional_hours += comp.additional_hours;
         if (comp.additional_partner_payment !== 0) {
-          const cur = b?.currency || 'UNKNOWN';
+          const cur = b?.currency || 'INR';
           g.payments.set(cur, (g.payments.get(cur) || 0) + comp.additional_partner_payment);
+          g.additional_payment += comp.additional_partner_payment;
         }
       }
     }
@@ -387,6 +393,8 @@ router.get('/users', async (req: Request, res: Response) => {
               ? Math.round((g.committed_weekly_hours / available_weekly_hours) * 100)
               : null,
           payments: [...g.payments.entries()].map(([currency, amount]) => ({ currency, amount })),
+          base_payments: [...g.base_payments.entries()].map(([currency, amount]) => ({ currency, amount })),
+          additional_payment: g.additional_payment,
           missing_pricing: g.missing_pricing,
           additional_hours: Math.round(g.additional_hours * 100) / 100,
         };
@@ -452,7 +460,7 @@ router.get('/users/:recipientType/:recipientId', async (req: Request, res: Respo
       const activeDays = activeDaysInMonth(start, end, year, month, todayIso);
       const monthPayment = b ? prorateMonthly(b.partner_price, start, end, year, month, todayIso) : 0;
       if (monthPayment > 0) {
-        const cur = b?.currency || 'UNKNOWN';
+        const cur = b?.currency || 'INR';
         paymentByCurrency.set(cur, (paymentByCurrency.get(cur) || 0) + monthPayment);
       }
       if (activeDays > 0 && b?.weekly_hours != null && !weeklyCounted.has(t.card_id)) {
@@ -464,7 +472,7 @@ router.get('/users/:recipientType/:recipientId', async (req: Request, res: Respo
         additionalCounted.add(t.card_id);
         totalAdditionalHours += comp.additional_hours;
         if (comp.additional_partner_payment !== 0) {
-          const cur = b?.currency || 'UNKNOWN';
+          const cur = b?.currency || 'INR';
           paymentByCurrency.set(cur, (paymentByCurrency.get(cur) || 0) + comp.additional_partner_payment);
         }
       }
@@ -481,7 +489,7 @@ router.get('/users/:recipientType/:recipientId', async (req: Request, res: Respo
         work_start_date: t.work_start_date,
         work_end_date: t.work_end_date,
         partner_price: b?.partner_price ?? null,
-        currency: b?.currency ?? null,
+        currency: b?.currency ?? 'INR',
         missing_partner_price: b?.missing_partner_price ?? true,
         month_active_days: activeDays,
         month_payment: monthPayment,

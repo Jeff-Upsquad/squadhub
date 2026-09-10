@@ -147,7 +147,8 @@ export async function loadCardBilling(cardIds: string[]): Promise<Map<string, Ca
     const subId = planId ? subIdByPlan.get(planId) ?? null : null;
     out.set(card.id, {
       partner_price: partnerPrice,
-      currency: countryId ? currencyByCountry.get(countryId) ?? null : null,
+      // TEMP: force all payments/clients to INR (Rs) for now.
+      currency: 'INR',
       daily_hours: daily,
       weekly_hours: weekly,
       monthly_hours: monthly,
@@ -189,7 +190,8 @@ export function resolveTermBilling(
   const partnerPrice = term.partner_price != null ? term.partner_price : card?.partner_price ?? null;
   return {
     partner_price: partnerPrice,
-    currency: term.currency ?? card?.currency ?? null,
+    // TEMP: force all payments/clients to INR (Rs) for now.
+    currency: 'INR',
     daily_hours: daily,
     weekly_hours: weekly,
     monthly_hours: monthly,

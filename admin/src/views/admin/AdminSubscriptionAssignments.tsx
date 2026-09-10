@@ -1,6 +1,6 @@
 'use client';
 
-import { Fragment, useEffect, useState } from 'react';
+import { Fragment, useEffect, useState, type ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import api from '@/services/api';
 import { showToast } from '@/components/Toast';
@@ -85,7 +85,8 @@ function currentMonthKey() {
 }
 
 function formatMoney(amount: number, currency: string | null) {
-  const cur = currency && currency !== 'UNKNOWN' ? currency : '';
+  // TEMP: force all payments/clients to INR (Rs) for now.
+  const cur = 'INR';
   if (cur === 'INR') return '₹' + (amount || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 });
   if (cur === 'USD') return '$' + (amount || 0).toLocaleString('en-US', { maximumFractionDigits: 0 });
   return `${cur ? cur + ' ' : ''}${(amount || 0).toLocaleString()}`;
@@ -109,10 +110,11 @@ function shiftMonth(key: string, delta: number) {
 }
 
 // Sum per-currency payment buckets across many payment lists into one total list.
+// TEMP: force all payments/clients to INR (Rs) for now — collapse to single bucket.
 function aggregatePayments(lists: { currency: string; amount: number }[][]) {
   const totals = new Map<string, number>();
   for (const list of lists) {
-    for (const p of list || []) totals.set(p.currency, (totals.get(p.currency) || 0) + p.amount);
+    for (const p of list || []) totals.set('INR', (totals.get('INR') || 0) + p.amount);
   }
   return [...totals.entries()]
     .map(([currency, amount]) => ({ currency, amount }))
@@ -252,7 +254,8 @@ function groupIntoClients(rows: PeriodInput[], keyOf: (r: PeriodInput) => string
     if (r.status === 'active') g.status = 'active';
     if (r.missing_partner_price) g.missing_partner_price = true;
     if (r.month_payment > 0) {
-      const cur = r.currency || 'UNKNOWN';
+      // TEMP: force INR.
+      const cur = 'INR';
       const existing = g.payments.find((p) => p.currency === cur);
       if (existing) existing.amount += r.month_payment;
       else g.payments.push({ currency: cur, amount: r.month_payment });
@@ -293,7 +296,8 @@ function combinePayments(
   currency: string | null,
 ) {
   if (!additionalPayment) return payments;
-  const cur = currency || 'UNKNOWN';
+  // TEMP: force INR.
+  const cur = 'INR';
   const out = payments.map((p) => ({ ...p }));
   const hit = out.find((p) => p.currency === cur);
   if (hit) hit.amount += additionalPayment;
@@ -301,54 +305,120 @@ function combinePayments(
   return out.filter((p) => p.amount !== 0);
 }
 
-// Pay cell: the month's total (prorated base + signed additional-hours pay), with
-// a secondary line naming the overage/shortfall when present.
-function PayCell({
-  payments,
-  additionalPayment,
-  additionalHours,
-  currency,
-}: {
-  payments: { currency: string; amount: number }[];
-  additionalPayment: number;
-  additionalHours: number;
-  currency: string | null;
-}) {
-  const combined = combinePayments(payments, additionalPayment, currency);
-  return (
-    <div>
-      <div>{formatPayments(combined)}</div>
-      {additionalPayment !== 0 && (
-        <div className={`text-[11px] ${additionalPayment > 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-          {additionalPayment > 0 ? '+' : '−'}
-          {formatMoney(Math.abs(additionalPayment), currency)} add’l ({additionalHours > 0 ? '+' : ''}
-          {additionalHours} hrs)
-        </div>
-      )}
-    </div>
-  );
+// Plan details line shown below the client name (role · tier · d·w·m hours).
+// Replaces the old standalone Plan column — the table now carries:
+// Client (with plan below) · Active days · Partner price · Monthly total (base)
+// · Additional days/hours · Less hours/days · Final payout.
+function planDetailsLine(
+  role: string | null,
+  tier: string | null,
+  hours: { daily: number | null; weekly: number | null; monthly: number | null },
+) {
+  const head = role || tier || '—';
+  const tail = `${role && tier ? `${tier} · ` : ''}${hrs(hours.daily)} · ${hrs(hours.weekly)} · ${hrs(hours.monthly)} hrs d·w·m`;
+  return { head, tail };
 }
 
-// Plan cell: the role (Designer / Video Editor …) as the primary label, with
-// the tier + daily·weekly·monthly committed hours beneath.
-function PlanCell({
+function ClientCell({
+  business,
+  chip,
+  recipientLine,
   role,
   tier,
   hours,
 }: {
+  business: string;
+  chip?: ReactNode;
+  recipientLine?: string | null;
   role: string | null;
   tier: string | null;
   hours: { daily: number | null; weekly: number | null; monthly: number | null };
 }) {
+  const plan = planDetailsLine(role, tier, hours);
   return (
     <div>
-      <div className="font-medium text-foreground">{role || tier || '—'}</div>
-      <div className="text-xs text-foreground-dim">
-        {role && tier ? `${tier} · ` : ''}
-        {hrs(hours.daily)} · {hrs(hours.weekly)} · {hrs(hours.monthly)} hrs d·w·m
+      <div className="font-medium text-foreground">
+        {business}
+        {chip}
+      </div>
+      {recipientLine && <div className="text-xs text-foreground-dim">{recipientLine}</div>}
+      <div className="mt-0.5 text-xs text-foreground-dim">
+        {plan.head} · {plan.tail}
       </div>
     </div>
   );
+}
+
+// Split adjustment cell: hours (or days, when supplied) on line 1, the money
+// it moves on line 2. `direction="add"` renders only positive deltas, "less"
+// only negative ones — the other side shows a dash so the two columns read
+// as Additional days/hours | Less hours/days. Kept as a field even while
+// overages pay ₹0 (one-sided rule) for future use.
+function AdjustmentCell({
+  hours,
+  payment,
+  currency,
+  direction,
+  actual,
+  target,
+}: {
+  hours: number;
+  payment: number;
+  currency: string | null;
+  direction: 'add' | 'less';
+  actual?: number;
+  target?: number;
+}) {
+  const isAdd = direction === 'add';
+  const active = isAdd ? hours > 0 : hours < 0;
+  if (!active)
+    return <span className="text-foreground-dim">—</span>;
+  const absHrs = Math.abs(hours);
+  const absPay = Math.abs(payment);
+  const title =
+    actual != null && target != null ? `Actual ${actual} hrs vs target ${target} hrs` : undefined;
+  if (isAdd) {
+    return (
+      <div title={title}>
+        <div className="font-medium text-emerald-600">
+          +{absHrs} {absHrs === 1 ? 'hr' : 'hrs'}
+        </div>
+        <div
+          className={`text-[11px] tabular-nums ${absPay === 0 ? 'text-foreground-dim' : 'text-emerald-600'}`}
+          title={absPay === 0 ? 'Extra hours currently earn no additional pay' : undefined}
+        >
+          +{formatMoney(absPay, currency)}
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div title={title}>
+      <div className="font-medium text-red-600">
+        −{absHrs} {absHrs === 1 ? 'hr' : 'hrs'}
+      </div>
+      <div className="text-[11px] tabular-nums text-red-600">−{formatMoney(absPay, currency)}</div>
+    </div>
+  );
+}
+
+// Monthly total: the prorated base before any hours adjustment.
+function MonthlyTotalCell({ payments }: { payments: { currency: string; amount: number }[] }) {
+  return <div className="tabular-nums text-foreground-muted">{formatPayments(payments)}</div>;
+}
+
+// Final payout: base + adjustment (shortfall deduction, if any).
+function FinalPayoutCell({
+  payments,
+  additionalPayment,
+  currency,
+}: {
+  payments: { currency: string; amount: number }[];
+  additionalPayment: number;
+  currency: string | null;
+}) {
+  const combined = combinePayments(payments, additionalPayment, currency);
+  return <div className="font-medium tabular-nums text-foreground">{formatPayments(combined)}</div>;
 }
 
 // Clickable active-days button + count/period badge.
@@ -614,15 +684,16 @@ function BySubscriptionView({ month }: { month: string }) {
         </div>
       ) : (
         <div className="overflow-x-auto rounded-lg border border-divider bg-surface">
-          <table className="w-full min-w-[820px]">
+          <table className="w-full">
             <thead className="bg-surface-alt text-left text-xs font-medium uppercase tracking-wide text-foreground-muted">
               <tr>
-                <th className="px-4 py-2.5">Client · Talent</th>
+                <th className="px-4 py-2.5">Client name</th>
                 <th className="px-4 py-2.5">Active days</th>
                 <th className="px-4 py-2.5">Partner price</th>
-                <th className="px-4 py-2.5">Additional hrs</th>
-                <th className="px-4 py-2.5">{monthLabel(month)} pay</th>
-                <th className="px-4 py-2.5">Plan</th>
+                <th className="px-4 py-2.5">Monthly total</th>
+                <th className="px-4 py-2.5">Additional days/hours</th>
+                <th className="px-4 py-2.5">Less hours/days</th>
+                <th className="px-4 py-2.5">Final payout</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-sm text-foreground">
@@ -630,37 +701,53 @@ function BySubscriptionView({ month }: { month: string }) {
                 <Fragment key={g.key}>
                   <tr>
                     <td className="px-4 py-2.5">
-                      <div className="font-medium">
-                        {g.business_name || '—'}
-                        <CardLifecycleChip term={g} />
-                      </div>
-                      <div className="text-xs text-foreground-dim">
-                        {g.recipient_name || g.recipient_id || '—'}
-                        {g.recipient_type === 'partner' && <span className="ml-1">(partner)</span>}
-                      </div>
+                      <ClientCell
+                        business={g.business_name || '—'}
+                        chip={<CardLifecycleChip term={g} />}
+                        recipientLine={`${g.recipient_name || g.recipient_id || '—'}${g.recipient_type === 'partner' ? ' (partner)' : ''}`}
+                        role={g.plan_name}
+                        tier={g.subscription_name}
+                        hours={g.committed_hours}
+                      />
                     </td>
                     <td className="px-4 py-2.5">
                       <ActiveDaysButton group={g} expanded={expanded.has(g.key)} onToggle={() => toggle(g.key)} />
                     </td>
                     <td className="px-4 py-2.5 text-foreground-muted">{partnerPriceLabel(g)}</td>
                     <td className="px-4 py-2.5">
-                      <HoursDeltaChip hours={g.additional_hours} actual={g.actual_hours} target={g.target_hours} />
+                      <MonthlyTotalCell payments={g.payments} />
                     </td>
                     <td className="px-4 py-2.5">
-                      <PayCell
-                        payments={g.payments}
-                        additionalPayment={g.additional_payment}
-                        additionalHours={g.additional_hours}
+                      <AdjustmentCell
+                        hours={g.additional_hours}
+                        payment={g.additional_payment}
                         currency={g.currency}
+                        direction="add"
+                        actual={g.actual_hours}
+                        target={g.target_hours}
                       />
                     </td>
                     <td className="px-4 py-2.5">
-                      <PlanCell role={g.plan_name} tier={g.subscription_name} hours={g.committed_hours} />
+                      <AdjustmentCell
+                        hours={g.additional_hours}
+                        payment={g.additional_payment}
+                        currency={g.currency}
+                        direction="less"
+                        actual={g.actual_hours}
+                        target={g.target_hours}
+                      />
+                    </td>
+                    <td className="px-4 py-2.5">
+                      <FinalPayoutCell
+                        payments={g.payments}
+                        additionalPayment={g.additional_payment}
+                        currency={g.currency}
+                      />
                     </td>
                   </tr>
                   {expanded.has(g.key) && (
                     <tr>
-                      <td colSpan={6} className="px-4 pb-3 pt-0">
+                      <td colSpan={7} className="px-4 pb-3 pt-0">
                         <PeriodBreakdown
                           periods={g.periods}
                           onEdit={(termId) => setEditingId(termId)}
@@ -810,6 +897,9 @@ interface UserRow {
   available_weekly_hours: number | null;
   utilization_pct: number | null;
   payments: Payment[];
+  // Prorated base before hours adjustments (final = base + additional_payment).
+  base_payments: Payment[];
+  additional_payment: number;
   missing_pricing: boolean;
   // Net signed hours delta across the user's cards this month (payments already
   // include the money impact — this surfaces the hours behind it).
@@ -895,13 +985,15 @@ function ByUserView({ month, onPreviewPartner }: { month: string; onPreviewPartn
         </div>
       ) : (
         <div className="overflow-x-auto rounded-lg border border-divider bg-surface">
-          <table className="w-full min-w-[820px]">
+          <table className="w-full">
             <thead className="bg-surface-alt text-left text-xs font-medium uppercase tracking-wide text-foreground-muted">
               <tr>
                 <th className="px-4 py-2.5">Partner / Talent</th>
                 <th className="px-4 py-2.5">Active cards</th>
-                <th className="px-4 py-2.5">{monthLabel(month)} payment</th>
-                <th className="px-4 py-2.5">Additional hrs</th>
+                <th className="px-4 py-2.5">Monthly total</th>
+                <th className="px-4 py-2.5">Additional days/hours</th>
+                <th className="px-4 py-2.5">Less hours/days</th>
+                <th className="px-4 py-2.5">Final payout</th>
                 <th className="px-4 py-2.5">Committed hrs/wk</th>
                 <th className="px-4 py-2.5">Available hrs/wk</th>
                 <th className="px-4 py-2.5">Utilization</th>
@@ -926,7 +1018,7 @@ function ByUserView({ month, onPreviewPartner }: { month: string; onPreviewPartn
                     )}
                   </td>
                   <td className="px-4 py-2.5">
-                    {formatPayments(u.payments)}
+                    <MonthlyTotalCell payments={u.base_payments || []} />
                     {u.missing_pricing && (
                       <span className="ml-1 text-[11px] text-amber-600" title="One or more cards have no resolvable partner price">
                         ⚠
@@ -934,7 +1026,27 @@ function ByUserView({ month, onPreviewPartner }: { month: string; onPreviewPartn
                     )}
                   </td>
                   <td className="px-4 py-2.5">
-                    <HoursDeltaChip hours={u.additional_hours || 0} />
+                    <AdjustmentCell
+                      hours={u.additional_hours || 0}
+                      payment={u.additional_payment || 0}
+                      currency={u.payments[0]?.currency ?? 'INR'}
+                      direction="add"
+                    />
+                  </td>
+                  <td className="px-4 py-2.5">
+                    <AdjustmentCell
+                      hours={u.additional_hours || 0}
+                      payment={u.additional_payment || 0}
+                      currency={u.payments[0]?.currency ?? 'INR'}
+                      direction="less"
+                    />
+                  </td>
+                  <td className="px-4 py-2.5">
+                    <FinalPayoutCell
+                      payments={u.base_payments || []}
+                      additionalPayment={u.additional_payment || 0}
+                      currency={u.payments[0]?.currency ?? 'INR'}
+                    />
                   </td>
                   <td className="px-4 py-2.5 text-foreground-muted">{u.committed_weekly_hours || 0}</td>
                   <td className="px-4 py-2.5 text-foreground-muted">
@@ -1070,7 +1182,7 @@ function UserDetailModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
       <div
-        className="max-h-[88vh] w-full max-w-4xl overflow-hidden rounded-lg bg-surface shadow-xl"
+        className="max-h-[88vh] w-full max-w-6xl overflow-hidden rounded-lg bg-surface shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-start justify-between border-b border-divider px-6 py-4">
@@ -1121,7 +1233,9 @@ function UserDetailModal({
                   value={formatPayments(totals?.month_payments || [])}
                   hint={
                     totals?.additional_hours
-                      ? `incl. ${totals.additional_hours > 0 ? '+' : ''}${totals.additional_hours} hrs additional`
+                      ? totals.additional_hours > 0
+                        ? `incl. ${totals.additional_hours} hrs extra (no extra pay)`
+                        : `incl. ${Math.abs(totals.additional_hours)} hrs short`
                       : undefined
                   }
                 />
@@ -1152,15 +1266,16 @@ function UserDetailModal({
               )}
 
               <div className="overflow-x-auto rounded-lg border border-divider">
-                <table className="w-full min-w-[640px]">
+                <table className="w-full">
                   <thead className="bg-surface-alt text-left text-xs font-medium uppercase tracking-wide text-foreground-muted">
                     <tr>
                       <th className="px-3 py-2">Client name</th>
                       <th className="px-3 py-2">Active days</th>
                       <th className="px-3 py-2">Partner price</th>
-                      <th className="px-3 py-2">Additional hrs</th>
-                      <th className="px-3 py-2">{monthLabel(detailMonth)} pay</th>
-                      <th className="px-3 py-2">Plan</th>
+                      <th className="px-3 py-2">Monthly total</th>
+                      <th className="px-3 py-2">Additional days/hours</th>
+                      <th className="px-3 py-2">Less hours/days</th>
+                      <th className="px-3 py-2">Final payout</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 text-sm text-foreground">
@@ -1168,30 +1283,51 @@ function UserDetailModal({
                       <Fragment key={g.key}>
                         <tr>
                           <td className="px-3 py-2">
-                            <div className="font-medium">{g.business_name || '—'}</div>
+                            <ClientCell
+                              business={g.business_name || '—'}
+                              role={g.plan_name}
+                              tier={g.subscription_name}
+                              hours={g.committed_hours}
+                            />
                           </td>
                           <td className="px-3 py-2">
                             <ActiveDaysButton group={g} expanded={expanded.has(g.key)} onToggle={() => toggle(g.key)} />
                           </td>
                           <td className="px-3 py-2 text-foreground-muted">{partnerPriceLabel(g)}</td>
                           <td className="px-3 py-2">
-                            <HoursDeltaChip hours={g.additional_hours} actual={g.actual_hours} target={g.target_hours} />
+                            <MonthlyTotalCell payments={g.payments} />
                           </td>
                           <td className="px-3 py-2">
-                            <PayCell
-                              payments={g.payments}
-                              additionalPayment={g.additional_payment}
-                              additionalHours={g.additional_hours}
+                            <AdjustmentCell
+                              hours={g.additional_hours}
+                              payment={g.additional_payment}
                               currency={g.currency}
+                              direction="add"
+                              actual={g.actual_hours}
+                              target={g.target_hours}
                             />
                           </td>
                           <td className="px-3 py-2">
-                            <PlanCell role={g.plan_name} tier={g.subscription_name} hours={g.committed_hours} />
+                            <AdjustmentCell
+                              hours={g.additional_hours}
+                              payment={g.additional_payment}
+                              currency={g.currency}
+                              direction="less"
+                              actual={g.actual_hours}
+                              target={g.target_hours}
+                            />
+                          </td>
+                          <td className="px-3 py-2">
+                            <FinalPayoutCell
+                              payments={g.payments}
+                              additionalPayment={g.additional_payment}
+                              currency={g.currency}
+                            />
                           </td>
                         </tr>
                         {expanded.has(g.key) && (
                           <tr>
-                            <td colSpan={6} className="px-3 pb-3 pt-0">
+                            <td colSpan={7} className="px-3 pb-3 pt-0">
                               <PeriodBreakdown
                                 periods={g.periods}
                                 additionalHours={g.additional_hours}
