@@ -507,7 +507,20 @@ body {
 .sh-view .inbox-list { border-right: 1px solid var(--sh-hair); overflow-y: auto; background: var(--surface); }
 .sh-view .inbox-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 18px 16px 4px; }
 .sh-view .inbox-head h1 { margin: 0; font-family: 'Plus Jakarta Sans', 'Inter', sans-serif; font-size: 22px; font-weight: 700; letter-spacing: -0.01em; color: var(--sh-ink); }
-/* Unreads toggle switch */
+/* Inbox status tabs (Unread / Read) — full-width row, one shared sticky
+   container with the tools row below. Tabs split the width 50/50. */
+.sh-view .inbox-filter-col { position: sticky; top: 0; background: var(--surface); z-index: 2; border-bottom: 1px solid var(--sh-hair); }
+.sh-view .ib-status-row { display: flex; gap: 6px; padding: 8px 16px; }
+.sh-view .ib-status-row .ib-tab { flex: 1 1 0; justify-content: center; padding: 5px 10px; }
+.sh-view .ib-tools-row { display: flex; align-items: center; gap: 4px; padding: 0 16px 10px; font-size: 12px; }
+/* Minimal type filter — sits where the Unreads toggle was. Borderless
+   select with a chevron; native dropdown keeps it to a few lines. */
+.ib-typefilter { display: inline-flex; align-items: center; gap: 2px; padding: 4px 6px; border-radius: 7px; color: var(--sh-ink-3); cursor: pointer; }
+.ib-typefilter:hover { background: var(--sh-hair-3); color: var(--sh-ink); }
+.ib-typefilter select { appearance: none; -webkit-appearance: none; border: none; outline: none; background: transparent; color: inherit; font-size: 12.5px; font-weight: 500; cursor: pointer; padding: 0; }
+.ib-typefilter select option { color: #111; }
+.ib-typefilter svg { flex: none; pointer-events: none; }
+/* Unreads toggle switch (legacy, unused after Unread/Read section rework) */
 .ib-unreads { display: inline-flex; align-items: center; gap: 7px; padding: 2px; border: none; background: transparent; cursor: pointer; }
 .ib-unreads-lbl { font-size: 12px; font-weight: 500; color: var(--sh-ink-3); }
 .ib-switch { position: relative; width: 30px; height: 17px; border-radius: 999px; background: var(--sh-hair-2); transition: background .15s ease; flex: none; }
