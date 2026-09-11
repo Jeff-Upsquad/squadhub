@@ -570,8 +570,8 @@ router.get('/tasks/my', async (req: Request, res: Response) => {
     const tomorrowStr = fmt.format(new Date(now.getTime() + dayMs));
     const upcomingCutoffStr = fmt.format(new Date(now.getTime() + 7 * dayMs));
 
-    const buckets: Record<'overdue' | 'today' | 'tomorrow' | 'upcoming' | 'later' | 'focused' | 'in_progress_today' | 'day_planner', any[]> = {
-      overdue: [], today: [], tomorrow: [], upcoming: [], later: [], focused: [], in_progress_today: [], day_planner: [],
+    const buckets: Record<'overdue' | 'today' | 'tomorrow' | 'upcoming' | 'later' | 'focused' | 'in_progress_today' | 'day_planner' | 'unscheduled', any[]> = {
+      overdue: [], today: [], tomorrow: [], upcoming: [], later: [], focused: [], in_progress_today: [], day_planner: [], unscheduled: [],
     };
 
     // All three date fields are TIMESTAMPTZ (migration 034 promoted
@@ -602,6 +602,14 @@ router.get('/tasks/my', async (req: Request, res: Response) => {
       const isStartSoon    = startStr && (startStr === todayStr || startStr === tomorrowStr);
       if (!isSnoozed && (isDueOverdue || isWorkTodayOr || isFocusedRecent || isStartSoon)) {
         buckets.day_planner.push(t);
+      }
+
+      // Unscheduled: assigned + open tasks with no dates at all (no work, due,
+      // or start). These never match the day_planner rules above (unless
+      // focused, in which case they already appear there — so keep them out of
+      // here to avoid duplicates). Surfaced in the Day Planner bottom section.
+      if (!isSnoozed && !dueStr && !workStr && !startStr && !isFocusedRecent) {
+        buckets.unscheduled.push(t);
       }
 
       // Today and tomorrow take priority — so a task with work_date today but
