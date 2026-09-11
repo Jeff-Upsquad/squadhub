@@ -931,6 +931,11 @@ export default function MainLayout() {
   // Apply a saved snapshot to the live view — shared by the sidebar back/forward
   // history and the top tab strip (both restore a NavSnapshot). Setters used here
   // are stable (useState/zustand actions), so this is safe to memoize.
+  //
+  // The main content area renders from the tab strip's snapshots (not the live
+  // view), and the live-mirror below deliberately skips writes during a restore
+  // — so a history restore must ALSO sync the active tab here. Otherwise the
+  // sidebar follows back/forward while the content panel stays stale.
   const applySnapshot = useCallback((s: NavSnapshot) => {
     setExternalUrl(s.externalUrl ?? null);
     setExternalTitle(s.externalTitle ?? null);
@@ -939,9 +944,7 @@ export default function MainLayout() {
     // External tabs carry a benign home/hub base — no channel/pm state to restore.
     if (s.externalUrl) {
       setMobileDrawerOpen(false);
-      return;
-    }
-    if (s.section === 'home' && s.homeView === 'chat') {
+    } else if (s.section === 'home' && s.homeView === 'chat') {
       setActiveChannel(s.channelId, s.channelKind);
     } else if (s.section === 'home' && s.homeView === 'tasks') {
       // Raw setState: the individual pm setters clear sibling selections,
@@ -955,6 +958,42 @@ export default function MainLayout() {
         contextListId: s.listId,
         selectedTasks: [],
       });
+    } else {
+      setMobileDrawerOpen(false);
+    }
+    // Keep the content panel in sync: the destination may already be open in
+    // another tab (focus it, Chrome-like) or else replace the active tab's
+    // snapshot in place. No-op when this restore came FROM that tab itself
+    // (tab switch), where the snapshot already matches.
+    const tabSnap = s as TabSnapshot;
+    const key = canonicalKey(tabSnap);
+    const st = useTabsStore.getState();
+    const activeTab = st.tabs.find((t) => t.id === st.activeTabId) ?? null;
+    if (activeTab && canonicalKey(activeTab.snapshot) === key) {
+      if (JSON.stringify(activeTab.snapshot) !== JSON.stringify(tabSnap)) {
+        useTabsStore.setState((prev) => ({
+          tabs: prev.tabs.map((t) => (t.id === activeTab.id ? { ...t, snapshot: tabSnap } : t)),
+        }));
+      }
+    } else {
+      const existing = st.tabs.find((t) => canonicalKey(t.snapshot) === key);
+      if (existing) {
+        useTabsStore.setState((prev) => ({
+          tabs: prev.tabs.map((t) => (t.id === existing.id ? { ...t, snapshot: tabSnap } : t)),
+          activeTabId: existing.id,
+        }));
+        setMountedTabIds((prev) => {
+          if (prev.has(existing.id)) return prev;
+          const next = new Set(prev);
+          next.add(existing.id);
+          return next;
+        });
+      } else if (st.activeTabId) {
+        const activeId = st.activeTabId;
+        useTabsStore.setState((prev) => ({
+          tabs: prev.tabs.map((t) => (t.id === activeId ? { ...t, snapshot: tabSnap } : t)),
+        }));
+      }
     }
     setMobileDrawerOpen(false);
   }, [setActiveChannel]);
