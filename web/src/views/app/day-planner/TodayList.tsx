@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Task } from '@squadhub/shared';
 import { usePMStore } from '../../../stores/pmStore';
-import { useDayPlannerTasks, useDayPlans, useFocusTask, planDateKey } from '../../../hooks/useDayPlanner';
+import { useDayPlannerTasks, useUnscheduledTasks, useDayPlans, useFocusTask, planDateKey } from '../../../hooks/useDayPlanner';
 import { groupTasks, collapseGroupedTasks, isGroupedRow, type GroupBy } from '../../../lib/taskGrouping';
 import GroupedTaskRow from '../home/GroupedTaskRow';
 import SnoozeMenu from './SnoozeMenu';
@@ -55,6 +55,7 @@ function priorityChip(p: Task['priority']): { level: 'emg' | 'p0' | 'p1'; label:
 
 export default function TodayList() {
   const { data: tasks = [], isLoading } = useDayPlannerTasks();
+  const { data: unscheduled = [], isLoading: unscheduledLoading } = useUnscheduledTasks();
   const focusTask = useFocusTask();
   const setActiveTask = usePMStore((s) => s.setActiveTask);
 
@@ -74,6 +75,23 @@ export default function TodayList() {
   const [snoozeAnchor, setSnoozeAnchor] = useState<{ taskId: string; isSnoozed: boolean; left: number; top: number } | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const headActionsRef = useRef<HTMLDivElement>(null);
+
+  // Bottom "No date" section — off by default, persisted per browser.
+  const [showUnscheduled, setShowUnscheduled] = useState(() => {
+    try {
+      return localStorage.getItem('dp-show-unscheduled') === '1';
+    } catch {
+      return false;
+    }
+  });
+  const toggleUnscheduled = () => {
+    setShowUnscheduled((v) => {
+      try {
+        localStorage.setItem('dp-show-unscheduled', v ? '0' : '1');
+      } catch { /* ignore */ }
+      return !v;
+    });
+  };
 
   const tz = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC', []);
 
@@ -106,6 +124,10 @@ export default function TodayList() {
   const visibleTasks = useMemo(
     () => tasks.filter((t) => !scheduledTaskIds.has(t.id)),
     [tasks, scheduledTaskIds],
+  );
+  const visibleUnscheduled = useMemo(
+    () => unscheduled.filter((t) => !scheduledTaskIds.has(t.id)),
+    [unscheduled, scheduledTaskIds],
   );
 
   const groups = useMemo(
@@ -308,6 +330,87 @@ export default function TodayList() {
           </div>
         ))
       )}
+
+      {/* Dateless tasks assigned to you — hidden from the planner by design.
+          Collapsed by default; toggle persists in localStorage. Sticky bottom
+          bar so it's always visible, with a count pill so it can't be missed. */}
+      <div
+        className="hm-group"
+        style={{
+          position: 'sticky', bottom: 0, zIndex: 3,
+          borderTop: '1px solid var(--sh-hair-2)',
+          background: 'var(--surface)',
+          boxShadow: '0 -8px 20px rgba(0,0,0,0.08)',
+        }}
+      >
+        <button
+          type="button"
+          onClick={toggleUnscheduled}
+          aria-expanded={showUnscheduled}
+          title={showUnscheduled ? 'Hide tasks without dates' : 'Show tasks without dates'}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 10, width: '100%',
+            padding: '12px 16px', background: 'transparent', border: 'none',
+            cursor: 'pointer', fontFamily: "'Inter', sans-serif",
+            color: 'var(--sh-ink)', textAlign: 'left',
+          }}
+        >
+          <span
+            aria-hidden
+            style={{
+              display: 'grid', placeItems: 'center', width: 26, height: 26,
+              flex: 'none', borderRadius: 8,
+              background: 'var(--sh-hair-3)', color: 'var(--sh-ink-3)',
+            }}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="4.5" width="18" height="17" rx="3" />
+              <path d="M3 9.5h18M8 2.5v4M16 2.5v4" />
+              <path d="M9.5 15.5l1.2 1.2 2.8-2.8" />
+            </svg>
+          </span>
+          <span style={{ flex: 1, minWidth: 0 }}>
+            <span style={{ display: 'block', fontSize: 13.5, fontWeight: 650, lineHeight: 1.25 }}>
+              Tasks with no date
+            </span>
+            <span style={{ display: 'block', fontSize: 11.5, fontWeight: 450, color: 'var(--sh-ink-4)', marginTop: 1 }}>
+              {showUnscheduled ? 'Tap to hide · drag a task onto the calendar to schedule it' : 'Tap to review · set a work date to plan them'}
+            </span>
+          </span>
+          <span
+            aria-label={`${visibleUnscheduled.length} tasks with no date`}
+            style={{
+              flex: 'none', minWidth: 26, height: 22, padding: '0 8px',
+              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+              borderRadius: 999, fontSize: 11.5, fontWeight: 750,
+              background: visibleUnscheduled.length > 0 ? 'var(--sh-ink)' : 'var(--sh-hair-3)',
+              color: visibleUnscheduled.length > 0 ? 'var(--surface)' : 'var(--sh-ink-4)',
+            }}
+          >
+            {unscheduledLoading ? '…' : visibleUnscheduled.length}
+          </span>
+          <svg
+            width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round"
+            style={{
+              flex: 'none', color: 'var(--sh-ink-4)',
+              transform: showUnscheduled ? 'rotate(180deg)' : 'none',
+              transition: 'transform 0.15s ease',
+            }}
+          >
+            <path d="M6 9l6 6 6-6" />
+          </svg>
+        </button>
+        {showUnscheduled && (
+          unscheduledLoading && visibleUnscheduled.length === 0 ? (
+            <div className="dp-empty">Loading…</div>
+          ) : visibleUnscheduled.length === 0 ? (
+            <div className="dp-empty">No dateless tasks assigned to you.</div>
+          ) : (
+            renderRows(visibleUnscheduled)
+          )
+        )}
+      </div>
 
       {snoozeAnchor && (
         <SnoozeMenu

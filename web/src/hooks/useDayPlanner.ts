@@ -68,6 +68,7 @@ type MyTasksBuckets = {
   later: Task[];
   focused: Task[];
   day_planner: Task[];
+  unscheduled?: Task[];
 };
 
 // ---------- queries ----------
@@ -81,6 +82,21 @@ export function useDayPlannerTasks() {
       const res = await api.get(`/pm/tasks/my?${params.toString()}`);
       const buckets = (res.data?.data ?? {}) as Partial<MyTasksBuckets>;
       return buckets.day_planner ?? [];
+    },
+    staleTime: 30_000,
+    refetchInterval: 60_000,
+  });
+}
+
+export function useUnscheduledTasks() {
+  const tz = tzNow();
+  return useQuery<Task[]>({
+    queryKey: ['day-planner', 'unscheduled', tz],
+    queryFn: async () => {
+      const params = new URLSearchParams({ tz });
+      const res = await api.get(`/pm/tasks/my?${params.toString()}`);
+      const buckets = (res.data?.data ?? {}) as Partial<MyTasksBuckets>;
+      return buckets.unscheduled ?? [];
     },
     staleTime: 30_000,
     refetchInterval: 60_000,
