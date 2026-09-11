@@ -110,7 +110,24 @@ function Tab({ label, badge, active, onClick }: { label: string; badge?: number;
   );
 }
 
-export default function InboxSlider({ onClose }: { onClose: () => void }) {
+export default function InboxSlider({
+  onClose,
+  onHoverEnter,
+  onHoverLeave,
+  pinned = true,
+}: {
+  onClose: () => void;
+  /** Kept open while the pointer moves from the rail icon into the panel. */
+  onHoverEnter?: () => void;
+  onHoverLeave?: () => void;
+  /**
+   * Click-pinned panels render the transparent click-catcher for
+   * click-outside-to-close. Hover-opened panels (pinned=false) skip it: the
+   * catcher would mount directly under the cursor, steal hit-testing from the
+   * rail button, and immediately trigger its pointer-leave close timer.
+   */
+  pinned?: boolean;
+}) {
   const queryClient = useQueryClient();
   const setActiveTask = usePMStore((s) => s.setActiveTask);
   const [tab, setTab] = useState<'inbox' | 'all'>('inbox');
@@ -219,13 +236,15 @@ export default function InboxSlider({ onClose }: { onClose: () => void }) {
 
   return (
     <>
-      {/* Transparent click-catcher — the panel floats without dimming the view */}
-      <div className="fixed inset-0 z-40" onClick={onClose} aria-hidden="true" />
+      {/* Transparent click-catcher — only for pinned panels (see `pinned` above) */}
+      {pinned && <div className="fixed inset-0 z-40" onClick={onClose} aria-hidden="true" />}
 
       {/* Floating card next to the icon rail; full-width below the mobile top bar */}
       <div
         className="inbox-slider-panel sh-view fixed left-2 right-2 top-14 z-50 flex max-h-[calc(100dvh-72px)] flex-col overflow-hidden rounded-[14px] border border-[var(--sh-hair)] bg-[var(--surface)] md:left-[76px] md:right-auto md:top-3 md:max-h-[calc(100dvh-24px)] md:w-[520px]"
         style={{ boxShadow: '0 18px 50px rgba(10, 10, 10, 0.16), 0 2px 8px rgba(10, 10, 10, 0.06)' }}
+        onPointerEnter={onHoverEnter}
+        onPointerLeave={onHoverLeave}
       >
         {/* Header */}
         <div className="flex items-center gap-2.5 px-5 pb-3 pt-4">
