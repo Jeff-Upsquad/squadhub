@@ -59,6 +59,13 @@ services:
       - INTERNAL_RELEASE_MANIFEST_PATH=/data/internal-release-manifest.json
       # In-app updater manifest for the Business app (GET /business-app/version).
       - BUSINESS_RELEASE_MANIFEST_PATH=/data/business-release-manifest.json
+      # CRM TeamChat proxy (server/src/routes/crm-teamchat.ts). The browser can't
+      # call the CRM APIs directly (their CORS only allows the CRM web origins), so
+      # SquadHub forwards server-to-server. Without these the route falls back to
+      # http://localhost:4100 — which inside this container is nothing — and the
+      # TeamChat mini apps show "Couldn't reach the CRM".
+      - CRM_API_URL=${CRM_API_URL:-http://crm-server:4100}
+      - SHCRM_API_URL=${SHCRM_API_URL:-http://shcrm-server:4100}
       # SOP auto-generator (admin "Auto-generate" button): drive the in-network
       # web app with the system Chromium, screenshotting as this account.
       - SOP_GEN_BASE_URL=${SOP_GEN_BASE_URL:-http://web:3000}
