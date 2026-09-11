@@ -63,6 +63,7 @@ import GroupRunDetailPanel from '../views/app/pm/GroupRunDetailPanel';
 import EmergencyBanner from '../views/app/pm/EmergencyBanner';
 import InboxView from '../views/app/InboxView';
 import InboxSlider from '../components/InboxSlider';
+import TasksPreviewPanel from '../components/TasksPreviewPanel';
 import MyTasksView from '../views/app/MyTasksView';
 import DayPlannerView from '../views/app/DayPlannerView';
 import CalendarView from '../views/app/calendar/CalendarView';
@@ -480,6 +481,119 @@ export default function MainLayout() {
   const [timesheetOpen, setTimesheetOpen] = useState(false);
   const [timesheetAnchor, setTimesheetAnchor] = useState<DOMRect | null>(null);
   const [inboxSliderOpen, setInboxSliderOpen] = useState(false);
+  // True when the panel was opened (or pinned) by click — hover-leave must not
+  // close it. Hover opens leave this false so moving off icon + panel closes.
+  const [inboxPinned, setInboxPinned] = useState(false);
+  // Tasks quick-view — hover-only (click navigates to the section), so no pin
+  // state. Shares the inbox panel's screen slot; the two are mutually exclusive.
+  const [tasksPreviewOpen, setTasksPreviewOpen] = useState(false);
+  const tasksHoverOpenTimer = useRef<number | null>(null);
+  const tasksHoverCloseTimer = useRef<number | null>(null);
+
+  const cancelTasksHoverTimers = useCallback(() => {
+    if (tasksHoverOpenTimer.current != null) window.clearTimeout(tasksHoverOpenTimer.current);
+    if (tasksHoverCloseTimer.current != null) window.clearTimeout(tasksHoverCloseTimer.current);
+    tasksHoverOpenTimer.current = null;
+    tasksHoverCloseTimer.current = null;
+  }, []);
+
+  const closeTasksPreview = useCallback(() => {
+    cancelTasksHoverTimers();
+    setTasksPreviewOpen(false);
+  }, [cancelTasksHoverTimers]);
+
+  const inboxHoverOpenTimer = useRef<number | null>(null);
+  const inboxHoverCloseTimer = useRef<number | null>(null);
+  const inboxPinnedRef = useRef(false);
+  inboxPinnedRef.current = inboxPinned;
+
+  const cancelInboxHoverTimers = useCallback(() => {
+    if (inboxHoverOpenTimer.current != null) window.clearTimeout(inboxHoverOpenTimer.current);
+    if (inboxHoverCloseTimer.current != null) window.clearTimeout(inboxHoverCloseTimer.current);
+    inboxHoverOpenTimer.current = null;
+    inboxHoverCloseTimer.current = null;
+  }, []);
+
+  const closeInboxFully = useCallback(() => {
+    cancelInboxHoverTimers();
+    setInboxSliderOpen(false);
+    setInboxPinned(false);
+  }, [cancelInboxHoverTimers]);
+
+  const openInboxOnHover = useCallback(() => {
+    if (!window.matchMedia('(hover: hover) and (pointer: fine)').matches) return;
+    if (inboxHoverCloseTimer.current != null) window.clearTimeout(inboxHoverCloseTimer.current);
+    inboxHoverCloseTimer.current = null;
+    if (inboxHoverOpenTimer.current != null) return;
+    inboxHoverOpenTimer.current = window.setTimeout(() => {
+      closeRailPreviewNow();
+      closeTasksPreview();
+      setInboxSliderOpen(true);
+      inboxHoverOpenTimer.current = null;
+    }, 180);
+  }, [closeRailPreviewNow, closeTasksPreview]);
+
+  const scheduleInboxHoverClose = useCallback(() => {
+    if (inboxHoverOpenTimer.current != null) window.clearTimeout(inboxHoverOpenTimer.current);
+    inboxHoverOpenTimer.current = null;
+    if (inboxHoverCloseTimer.current != null) window.clearTimeout(inboxHoverCloseTimer.current);
+    inboxHoverCloseTimer.current = window.setTimeout(() => {
+      // Click-pinned panels stay until X / Escape / backdrop click / re-click.
+      if (inboxPinnedRef.current) return;
+      setInboxSliderOpen(false);
+      inboxHoverCloseTimer.current = null;
+    }, 260);
+  }, []);
+
+  const keepInboxHoverOpen = useCallback(() => {
+    if (inboxHoverOpenTimer.current != null) window.clearTimeout(inboxHoverOpenTimer.current);
+    inboxHoverOpenTimer.current = null;
+    if (inboxHoverCloseTimer.current != null) window.clearTimeout(inboxHoverCloseTimer.current);
+    inboxHoverCloseTimer.current = null;
+  }, []);
+
+  useEffect(() => () => cancelInboxHoverTimers(), [cancelInboxHoverTimers]);
+
+  const openTasksOnHover = useCallback(() => {
+    if (!window.matchMedia('(hover: hover) and (pointer: fine)').matches) return;
+    if (tasksHoverCloseTimer.current != null) window.clearTimeout(tasksHoverCloseTimer.current);
+    tasksHoverCloseTimer.current = null;
+    if (tasksHoverOpenTimer.current != null) return;
+    tasksHoverOpenTimer.current = window.setTimeout(() => {
+      closeRailPreviewNow();
+      closeInboxFully();
+      setTasksPreviewOpen(true);
+      tasksHoverOpenTimer.current = null;
+    }, 180);
+  }, [closeRailPreviewNow, closeInboxFully]);
+
+  const scheduleTasksHoverClose = useCallback(() => {
+    if (tasksHoverOpenTimer.current != null) window.clearTimeout(tasksHoverOpenTimer.current);
+    tasksHoverOpenTimer.current = null;
+    if (tasksHoverCloseTimer.current != null) window.clearTimeout(tasksHoverCloseTimer.current);
+    tasksHoverCloseTimer.current = window.setTimeout(() => {
+      setTasksPreviewOpen(false);
+      tasksHoverCloseTimer.current = null;
+    }, 260);
+  }, []);
+
+  const keepTasksHoverOpen = useCallback(() => {
+    if (tasksHoverOpenTimer.current != null) window.clearTimeout(tasksHoverOpenTimer.current);
+    tasksHoverOpenTimer.current = null;
+    if (tasksHoverCloseTimer.current != null) window.clearTimeout(tasksHoverCloseTimer.current);
+    tasksHoverCloseTimer.current = null;
+  }, []);
+
+  useEffect(() => () => cancelTasksHoverTimers(), [cancelTasksHoverTimers]);
+
+  const goToMyTasksSection = useCallback(() => {
+    closeRailPreviewNow();
+    closeInboxFully();
+    closeTasksPreview();
+    setMobileDrawerOpen(false);
+    setActiveSection('home');
+    setHomeView('my-tasks');
+  }, [closeRailPreviewNow, closeInboxFully, closeTasksPreview]);
   const [profileOpen, setProfileOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const profileRef = useRef<HTMLDivElement>(null);
@@ -1401,27 +1515,40 @@ export default function MainLayout() {
             badgeAlert={inboxAlert}
             badgePulse={inboxPulse}
             active={(activeSection === 'home' && homeView === 'inbox') || inboxSliderOpen}
-            previewing={railPreview === 'inbox'}
-            onPreviewEnter={(event) => openRailPreviewSoon('inbox', event)}
-            onPreviewLeave={closeRailPreviewSoon}
+            previewing={inboxSliderOpen && !inboxPinned}
+            onPreviewEnter={openInboxOnHover}
+            onPreviewLeave={scheduleInboxHoverClose}
             onClick={() => {
               closeRailPreviewNow();
-              // The rail always toggles the slide-over; the full inbox view is
-              // reached through the Home sidebar's Inbox item (or deep links).
+              cancelInboxHoverTimers();
+              closeTasksPreview();
+              // The rail toggles the quick-view slide-over; the full inbox view
+              // is reached through the Home sidebar's Inbox item (or deep links).
               if (activeSection === 'home' && homeView === 'inbox') return;
               setMobileDrawerOpen(false);
-              setInboxSliderOpen((v) => !v);
+              // Hover-opened panel: first click pins it (stays on mouse-leave).
+              // Pinned/open panel: click again closes. Closed: click opens pinned.
+              if (inboxSliderOpen && !inboxPinned) {
+                setInboxPinned(true);
+                return;
+              }
+              if (inboxSliderOpen && inboxPinned) {
+                closeInboxFully();
+                return;
+              }
+              setInboxSliderOpen(true);
+              setInboxPinned(true);
             }}
           />
           <RailBtn
             icon={ICON.tasks}
             label="Tasks"
             anchorKey="rail.tasks"
-            active={activeSection === 'home' && homeView === 'my-tasks'}
-            previewing={railPreview === 'tasks'}
-            onPreviewEnter={(event) => openRailPreviewSoon('tasks', event)}
-            onPreviewLeave={closeRailPreviewSoon}
-            onClick={() => { closeRailPreviewNow(); setActiveSection('home'); setHomeView('my-tasks'); }}
+            active={(activeSection === 'home' && homeView === 'my-tasks') || tasksPreviewOpen}
+            previewing={tasksPreviewOpen}
+            onPreviewEnter={openTasksOnHover}
+            onPreviewLeave={scheduleTasksHoverClose}
+            onClick={goToMyTasksSection}
           />
           {hasNotes && (
             <RailBtn
@@ -1710,9 +1837,25 @@ export default function MainLayout() {
           })}
       </div>
 
-      {/* Inbox panel — floating feed opened by the rail's inbox button */}
+      {/* Inbox panel — floating feed opened by hovering OR clicking the rail's inbox button */}
       {inboxSliderOpen && (
-        <InboxSlider onClose={() => setInboxSliderOpen(false)} />
+        <InboxSlider
+          onClose={closeInboxFully}
+          onHoverEnter={keepInboxHoverOpen}
+          onHoverLeave={scheduleInboxHoverClose}
+          pinned={inboxPinned}
+        />
+      )}
+
+      {/* Tasks quick-view — floating My Tasks preview opened by hovering the rail's tasks button */}
+      {tasksPreviewOpen && (
+        <TasksPreviewPanel
+          onClose={closeTasksPreview}
+          onHoverEnter={keepTasksHoverOpen}
+          onHoverLeave={scheduleTasksHoverClose}
+          onOpenSection={goToMyTasksSection}
+          pinned={false}
+        />
       )}
 
       {/* Global task detail panel — opens from any view when activeTaskId is set */}
