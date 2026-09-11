@@ -87,10 +87,12 @@ function detectMentionQuery(editor: Editor): string | null {
   const before = $from.parent.textBetween(0, $from.parentOffset, '\n', '￼');
   const at = before.lastIndexOf('@');
   if (at === -1) return null;
-  // Must start the line or follow whitespace; the token has no whitespace, ≤ 40 chars.
-  if (at > 0 && !/\s/.test(before[at - 1])) return null;
+  // Must start the line or follow whitespace / a hard-break (Shift+Enter
+  // inserts <br>, which textBetween renders as U+FFFC '￼' — not \s). Without
+  // this, @mentions on any line after a link + Shift+Enter never trigger.
+  if (at > 0 && !/[\s￼]/.test(before[at - 1])) return null;
   const token = before.slice(at + 1);
-  if (/\s/.test(token) || token.length > 40) return null;
+  if (/[\s￼]/.test(token) || token.length > 40) return null;
   return token;
 }
 
@@ -102,6 +104,21 @@ function reconcileMentions(text: string, mentions: string[], resolve: Map<string
     if (!name) return true;
     return text.includes(`@${name}`);
   });
+}
+
+// Pseudo-user for the @all channel broadcast. Never sent as a mention id —
+// selecting it sets mentionAllRef and inserts literal "@all" text instead.
+const MENTION_ALL_ID = '__all__';
+const MENTION_ALL_USER: MentionUser = {
+  id: MENTION_ALL_ID,
+  display_name: 'all',
+  avatar_url: null,
+  user_type: 'Everyone in this channel',
+};
+
+// True while the draft still contains "@all" (typed or picked).
+function hasAllMention(text: string): boolean {
+  return /(^|[\s￼])@all(?![\w])/.test(text);
 }
 
 function ToolBtn({
@@ -191,6 +208,11 @@ const MessageComposer = forwardRef<MessageComposerHandle, Props>(function Messag
   const [mentionLoading, setMentionLoading] = useState(false);
   const mentionsRef = useRef<string[]>([]);
   const resolveRef = useRef<Map<string, string>>(new Map());
+  // @all broadcast flag. Like mentionsRef it lives in a ref; unlike mentions
+  // it carries no user id — the server expands it to channel members. It is
+  // re-derived from the draft text on every edit/send, so deleting "@all"
+  // from the text automatically drops the broadcast.
+  const mentionAllRef = useRef(false);
   const mentionQueryRef = useRef<string | null>(null);
   const mentionResultsRef = useRef<MentionUser[]>([]);
   const mentionHighlightRef = useRef(0);
@@ -314,6 +336,7 @@ const MessageComposer = forwardRef<MessageComposerHandle, Props>(function Messag
       // @-mention: track the active @token and drop mentions whose name was edited out.
       setMentionQuery(detectMentionQuery(editor));
       mentionsRef.current = reconcileMentions(editor.getText(), mentionsRef.current, resolveRef.current);
+      mentionAllRef.current = hasAllMention(editor.getText());
     },
     onSelectionUpdate: ({ editor }) => {
       setEditorTick((t) => t + 1);
@@ -334,6 +357,7 @@ const MessageComposer = forwardRef<MessageComposerHandle, Props>(function Messag
     editor?.commands.clearContent(true);
     setHasText(false);
     mentionsRef.current = [];
+    mentionAllRef.current = false;
     setMentionQuery(null);
   }, [channelId, parentMessageId, editor]);
 
@@ -359,7 +383,12 @@ const MessageComposer = forwardRef<MessageComposerHandle, Props>(function Messag
         });
         if (cancel) return;
         const users: MentionUser[] = res.data.data || [];
-        setMentionResults(users);
+        // @all broadcast (channels only — a DM already reaches everyone).
+        // Shown first whenever the typed token could match "all".
+        const showAll =
+          kind !== 'dm' && 'all'.startsWith(mentionQuery.trim().toLowerCase());
+        const combined = showAll ? [MENTION_ALL_USER, ...users] : users;
+        setMentionResults(combined);
         setMentionHighlight(0);
         users.forEach((u) => resolveRef.current.set(u.id, u.display_name));
       } catch {
@@ -372,7 +401,7 @@ const MessageComposer = forwardRef<MessageComposerHandle, Props>(function Messag
       cancel = true;
       clearTimeout(t);
     };
-  }, [mentionQuery, channelId, idField]);
+  }, [mentionQuery, channelId, idField, kind]);
 
   // Mirror picker state into refs so the editor's captured keydown handler and
   // selectUser always read live values.
@@ -381,18 +410,25 @@ const MessageComposer = forwardRef<MessageComposerHandle, Props>(function Messag
   useEffect(() => { mentionHighlightRef.current = mentionHighlight; }, [mentionHighlight]);
 
   // Replace the typed `@token` with `@Name ` and record the user's id.
+  // Picking the @all entry inserts literal "@all " and arms the broadcast
+  // flag instead (it is not a user id and never enters mentionsRef).
   const selectUser = (u: MentionUser) => {
     if (!editor) return;
     const { $from } = editor.state.selection;
     const before = $from.parent.textBetween(0, $from.parentOffset, '\n', '￼');
     const at = before.lastIndexOf('@');
     if (at === -1) return;
-    resolveRef.current.set(u.id, u.display_name);
-    mentionsRef.current = Array.from(new Set([...mentionsRef.current, u.id]));
+    const insertion = u.id === MENTION_ALL_ID ? '@all ' : `@${u.display_name} `;
+    if (u.id === MENTION_ALL_ID) {
+      mentionAllRef.current = true;
+    } else {
+      resolveRef.current.set(u.id, u.display_name);
+      mentionsRef.current = Array.from(new Set([...mentionsRef.current, u.id]));
+    }
     editor
       .chain()
       .focus()
-      .insertContentAt({ from: $from.start() + at, to: $from.pos }, `@${u.display_name} `)
+      .insertContentAt({ from: $from.start() + at, to: $from.pos }, insertion)
       .run();
     setMentionQuery(null);
     setMentionResults([]);
@@ -403,21 +439,27 @@ const MessageComposer = forwardRef<MessageComposerHandle, Props>(function Messag
 
   const postMessage = async (extra: Record<string, unknown> = {}) => {
     const md = editor ? htmlToMarkdown(editor.getHTML()) : '';
+    const draftText = editor ? editor.getText() : '';
     const mentions = editor
-      ? reconcileMentions(editor.getText(), mentionsRef.current, resolveRef.current)
+      ? reconcileMentions(draftText, mentionsRef.current, resolveRef.current)
       : [];
+    // @all counts when the text still contains it — a hand-typed @all works
+    // without ever opening the picker, and deleting it disarms the broadcast.
+    const mention_all = kind !== 'dm' && hasAllMention(draftText);
     await api.post('/messages', {
       [idField]: channelId,
       content: md || null,
       type: extra.type || 'text',
       parent_message_id: parentMessageId,
       mentions,
+      ...(mention_all ? { mention_all: true } : {}),
       ...extra,
     });
     stopTyping();
     editor?.commands.clearContent(true);
     setHasText(false);
     mentionsRef.current = [];
+    mentionAllRef.current = false;
     setMentionQuery(null);
     onSend();
   };
@@ -431,7 +473,7 @@ const MessageComposer = forwardRef<MessageComposerHandle, Props>(function Messag
       $from.parentOffset > 0
         ? $from.parent.textBetween($from.parentOffset - 1, $from.parentOffset)
         : '';
-    editor.chain().focus().insertContent(prev && !/\s/.test(prev) ? ' @' : '@').run();
+    editor.chain().focus().insertContent(prev && !/[\s￼]/.test(prev) ? ' @' : '@').run();
   };
 
   const submitMessage = async (skipSoloGuard = false) => {
@@ -443,11 +485,13 @@ const MessageComposer = forwardRef<MessageComposerHandle, Props>(function Messag
     const draftMentions = editor
       ? reconcileMentions(editor.getText(), mentionsRef.current, resolveRef.current)
       : [];
+    const draftHasAll = editor ? hasAllMention(editor.getText()) : false;
     if (
       needsSoloConfirm &&
       !skipSoloGuard &&
       (hasText || !!pendingFile) &&
-      draftMentions.length === 0
+      draftMentions.length === 0 &&
+      !draftHasAll
     ) {
       setSoloPrompt({ onConfirm: () => void submitMessage(true) });
       return;
@@ -519,6 +563,7 @@ const MessageComposer = forwardRef<MessageComposerHandle, Props>(function Messag
       editor?.commands.clearContent(true);
       setHasText(false);
       mentionsRef.current = [];
+      mentionAllRef.current = false;
       setMentionQuery(null);
       setScheduledNote(`Scheduled for ${formatScheduledTime(isoUtc)}`);
       setTimeout(() => setScheduledNote(null), 4000);
