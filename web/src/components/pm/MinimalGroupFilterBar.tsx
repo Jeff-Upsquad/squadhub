@@ -3,7 +3,9 @@ import type { SpaceStatus, TaskPriority, TaskTag, User } from '@squadhub/shared'
 import {
   type TaskFilterState,
   type DueDatePreset,
+  type WorkDatePreset,
   DUE_DATE_PRESETS,
+  WORK_DATE_PRESETS,
   PRIORITY_OPTIONS,
   countActiveFilters,
   deriveStatusCategoryOptions,
@@ -297,12 +299,22 @@ export default function MinimalGroupFilterBar({
                   ))
                 )}
               </MgfSection>
-              <MgfSection title="Due date" last>
+              <MgfSection title="Due date">
                 {DUE_DATE_PRESETS.map((opt: { value: DueDatePreset; label: string }) => (
                   <MgfRow
                     key={opt.value}
                     checked={filters.dueDate?.includes(opt.value) ?? false}
                     onToggle={() => set({ dueDate: toggleArr(filters.dueDate, opt.value) })}
+                    label={opt.label}
+                  />
+                ))}
+              </MgfSection>
+              <MgfSection title="Work date" last>
+                {WORK_DATE_PRESETS.map((opt: { value: WorkDatePreset; label: string }) => (
+                  <MgfRow
+                    key={opt.value}
+                    checked={filters.workDate?.includes(opt.value) ?? false}
+                    onToggle={() => set({ workDate: toggleArr(filters.workDate, opt.value) })}
                     label={opt.label}
                   />
                 ))}

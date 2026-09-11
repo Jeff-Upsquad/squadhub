@@ -3,7 +3,9 @@ import type { SpaceStatus, TaskPriority, TaskTag, User } from '@squadhub/shared'
 import {
   type TaskFilterState,
   type DueDatePreset,
+  type WorkDatePreset,
   DUE_DATE_PRESETS,
+  WORK_DATE_PRESETS,
   PRIORITY_OPTIONS,
   countActiveFilters,
   deriveStatusCategoryOptions,
@@ -67,6 +69,7 @@ export default function FilterBar({ filters, onChange, statuses, assigneeOptions
   const toggleAssignee = (id: string) => onChange({ ...filters, assigneeIds: toggleArrayValue(filters.assigneeIds, id) });
   const toggleTag = (id: string) => onChange({ ...filters, tagIds: toggleArrayValue(filters.tagIds, id) });
   const toggleDue = (p: DueDatePreset) => onChange({ ...filters, dueDate: toggleArrayValue(filters.dueDate, p) });
+  const toggleWork = (p: WorkDatePreset) => onChange({ ...filters, workDate: toggleArrayValue(filters.workDate, p) });
   const clearAll = () => onChange({});
 
   return (
@@ -181,12 +184,23 @@ export default function FilterBar({ filters, onChange, statuses, assigneeOptions
             )}
           </Section>
 
-          <Section title="Due date" last>
+          <Section title="Due date">
             {DUE_DATE_PRESETS.map((opt) => (
               <CheckRow
                 key={opt.value}
                 checked={filters.dueDate?.includes(opt.value) ?? false}
                 onToggle={() => toggleDue(opt.value)}
+                label={opt.label}
+              />
+            ))}
+          </Section>
+
+          <Section title="Work date" last>
+            {WORK_DATE_PRESETS.map((opt) => (
+              <CheckRow
+                key={opt.value}
+                checked={filters.workDate?.includes(opt.value) ?? false}
+                onToggle={() => toggleWork(opt.value)}
                 label={opt.label}
               />
             ))}

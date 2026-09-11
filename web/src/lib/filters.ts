@@ -2,12 +2,20 @@ import type { Task, TaskPriority, SpaceStatus, User, TaskTag } from '@squadhub/s
 import { getTaskStatusCategory } from '@squadhub/shared';
 
 export type DueDatePreset = 'overdue' | 'today' | 'this_week' | 'no_date';
+export type WorkDatePreset = DueDatePreset;
 
 export const DUE_DATE_PRESETS: { value: DueDatePreset; label: string }[] = [
   { value: 'overdue', label: 'Overdue' },
   { value: 'today', label: 'Today' },
   { value: 'this_week', label: 'This week' },
   { value: 'no_date', label: 'No due date' },
+];
+
+export const WORK_DATE_PRESETS: { value: WorkDatePreset; label: string }[] = [
+  { value: 'overdue', label: 'Overdue' },
+  { value: 'today', label: 'Today' },
+  { value: 'this_week', label: 'This week' },
+  { value: 'no_date', label: 'No work date' },
 ];
 
 export const PRIORITY_OPTIONS: TaskPriority[] = ['emergency', 'urgent', 'high', 'normal', 'low', 'none'];
@@ -18,6 +26,7 @@ export interface TaskFilterState {
   assigneeIds?: string[];
   tagIds?: string[];
   dueDate?: DueDatePreset[];
+  workDate?: WorkDatePreset[];
 }
 
 export const EMPTY_FILTER: TaskFilterState = {};
@@ -29,7 +38,8 @@ export function countActiveFilters(f: TaskFilterState | undefined | null): numbe
     (f.priorities?.length ?? 0) +
     (f.assigneeIds?.length ?? 0) +
     (f.tagIds?.length ?? 0) +
-    (f.dueDate?.length ?? 0)
+    (f.dueDate?.length ?? 0) +
+    (f.workDate?.length ?? 0)
   );
 }
 
@@ -52,7 +62,15 @@ function ymd(d: Date, tz: string): string {
 }
 
 function matchesDueDate(t: Task, presets: DueDatePreset[], tz: string): boolean {
-  const due = t.due_date;
+  return matchesDatePreset(t.due_date, presets, tz);
+}
+
+function matchesWorkDate(t: Task, presets: WorkDatePreset[], tz: string): boolean {
+  return matchesDatePreset(t.work_date, presets, tz);
+}
+
+function matchesDatePreset(iso: string | null | undefined, presets: DueDatePreset[], tz: string): boolean {
+  const due = iso;
   const now = new Date();
   const todayKey = ymd(now, tz);
   const sevenDaysOut = ymd(new Date(now.getTime() + 7 * 86_400_000), tz);
@@ -98,6 +116,10 @@ export function filterTasks(tasks: Task[], filters: TaskFilterState | undefined 
 
     if (f.dueDate && f.dueDate.length > 0) {
       if (!matchesDueDate(t, f.dueDate, tz)) return false;
+    }
+
+    if (f.workDate && f.workDate.length > 0) {
+      if (!matchesWorkDate(t, f.workDate, tz)) return false;
     }
 
     return true;

@@ -491,6 +491,7 @@ export interface ListViewFilters {
   assigneeIds?: string[];
   tagIds?: string[];
   dueDate?: string[];
+  workDate?: string[];
 }
 
 export interface ListViewConfig {
