@@ -262,6 +262,11 @@ router.post('/', requireAuth, async (req: Request, res: Response) => {
       return;
     }
 
+    // Resolve mentions → mentioned_users so the sender's own bubble and all
+    // realtime recipients can highlight full "@First Last" spans immediately
+    // (history/thread fetches already attach these).
+    await attachMentionedUsers([message]);
+
     // If this is a thread reply, also insert into message_threads (legacy table).
     if (body.parent_message_id) {
       await supabaseAdmin.from('message_threads').insert({

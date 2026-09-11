@@ -221,6 +221,10 @@ export interface Message {
   mentions?: string[];
   // @all channel broadcast (messages table only; DMs ignore it).
   mention_all?: boolean;
+  // Resolved by the API (attachMentionedUsers) so renderers can highlight
+  // the full "@First Last" span — the body text alone can't tell where a
+  // multi-word display name ends.
+  mentioned_users?: { id: string; display_name: string; avatar_url?: string | null }[];
   unfurl?: MessageUnfurl | null;
   reply_count?: number;
   // When set, this message is an interactive meeting poll card — MessageBubble

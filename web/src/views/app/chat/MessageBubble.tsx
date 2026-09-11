@@ -22,15 +22,35 @@ const SELF_MENTIONS = new Set(['@channel', '@here', '@everyone', '@all']);
 // Inline markdown + @mentions + URLs. URL matching is shared with the rest of
 // the app via URL_PATTERN (which contributes no capture groups, so the outer
 // group below stays the single capture that String.split relies on).
-const INLINE_RE = new RegExp(
-  String.raw`(\*\*[^*\n]+\*\*|_[^_\n]+_|~~[^~\n]+~~|` +
-    '`[^`\\n]+`' +
-    String.raw`|\[[^\]\n]+\]\([^)\s]+\)|@\w+|${URL_PATTERN})`,
-  'gi',
-);
+//
+// Multi-word display names ("@Chindhoora pm") are matched via the message's
+// resolved mentioned_users: the full "@First Last" span becomes one mention
+// token instead of highlighting only "@First". Names are longest-first so
+// "@Ann Lee" wins over "@Ann", with a plain @\w+ fallback for anything else.
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
 
-function renderInline(text: string, keyPrefix: string) {
-  const parts = text.split(INLINE_RE);
+function buildInlineRe(mentionNames: string[]): RegExp {
+  const names = [...new Set(mentionNames.filter(Boolean))].sort((a, b) => b.length - a.length);
+  const mentionAlt = names.length > 0
+    ? `@(?:${names.map(escapeRegExp).join('|')})(?![\\w])|`
+    : '';
+  return new RegExp(
+    String.raw`(\*\*[^*\n]+\*\*|_[^_\n]+_|~~[^~\n]+~~|` +
+      '`[^`\\n]+`' +
+      String.raw`|\[[^\]\n]+\]\([^)\s]+\)|${mentionAlt}@\w+|${URL_PATTERN})`,
+    'gi',
+  );
+}
+
+// Resolved display names to highlight as mentions for a message.
+function mentionNamesOf(message: Message): string[] {
+  return (message.mentioned_users || []).map((u) => u.display_name).filter(Boolean);
+}
+
+function renderInline(text: string, keyPrefix: string, inlineRe: RegExp) {
+  const parts = text.split(inlineRe);
   return parts.map((part, i) => {
     const key = `${keyPrefix}-${i}`;
     if (!part) return null;
@@ -87,7 +107,8 @@ function isQuote(line: string) {
   return line.startsWith('> ') || line === '>';
 }
 
-function renderContent(text: string) {
+function renderContent(text: string, mentionNames: string[] = []) {
+  const inlineRe = buildInlineRe(mentionNames);
   const lines = text.split('\n');
   const blocks: React.ReactNode[] = [];
   let i = 0;
@@ -121,7 +142,7 @@ function renderContent(text: string) {
         <blockquote key={`b${bk++}`} className="sqc-quote">
           {items.map((l, j) => (
             <Fragment key={j}>
-              {renderInline(l, `q${bk}-${j}`)}
+              {renderInline(l, `q${bk}-${j}`, inlineRe)}
               {j < items.length - 1 && <br />}
             </Fragment>
           ))}
@@ -139,7 +160,7 @@ function renderContent(text: string) {
       }
       blocks.push(
         <ul key={`b${bk++}`} className="sqc-list">
-          {items.map((l, j) => <li key={j}>{renderInline(l, `ul${bk}-${j}`)}</li>)}
+          {items.map((l, j) => <li key={j}>{renderInline(l, `ul${bk}-${j}`, inlineRe)}</li>)}
         </ul>,
       );
       continue;
@@ -154,7 +175,7 @@ function renderContent(text: string) {
       }
       blocks.push(
         <ol key={`b${bk++}`} className="sqc-list">
-          {items.map((l, j) => <li key={j}>{renderInline(l, `ol${bk}-${j}`)}</li>)}
+          {items.map((l, j) => <li key={j}>{renderInline(l, `ol${bk}-${j}`, inlineRe)}</li>)}
         </ol>,
       );
       continue;
@@ -176,7 +197,7 @@ function renderContent(text: string) {
       <p key={`b${bk++}`} className="sqc-paragraph">
         {para.map((l, j) => (
           <Fragment key={j}>
-            {renderInline(l, `p${bk}-${j}`)}
+            {renderInline(l, `p${bk}-${j}`, inlineRe)}
             {j < para.length - 1 && <br />}
           </Fragment>
         ))}
@@ -270,7 +291,7 @@ export function ActivityRow({
       <div className="sqc-activity__body">
         <span className="sqc-activity__actor">{message.sender?.display_name || 'Someone'}</span>
         <span className="sqc-activity__text">
-          {renderContent(message.content || '').map((block, i) => (
+          {renderContent(message.content || '', mentionNamesOf(message)).map((block, i) => (
             <Fragment key={i}>
               {i > 0 ? ' ' : ''}
               {block}
@@ -1124,7 +1145,7 @@ function ChatMessageBubble({ message, onOpenThread, inThread, grouped, threadMet
         ) : (
           message.content && (
             <div className="sqc-msg__content">
-              {renderContent(message.content)}
+              {renderContent(message.content, mentionNamesOf(message))}
               {editedAt && (
                 <span className="sqc-msg__edited" title={`Edited ${new Date(editedAt).toLocaleString()}`}>
                   {' '}(edited)
