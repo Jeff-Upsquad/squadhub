@@ -3,6 +3,7 @@ import type { SpaceStatus, Task } from '@squadhub/shared';
 import { useTasks, useUpdateTask, useCreateTask, groupTasksByStatus } from '../../../hooks/useTasks';
 import { usePMStore } from '../../../stores/pmStore';
 import { filterTasks, EMPTY_FILTER, type TaskFilterState } from '../../../lib/filters';
+import { sortByCreationOrder } from '../../../lib/taskGrouping';
 import TaskPriorityBadge from './TaskPriorityBadge';
 
 function formatDate(dateStr: string | null | undefined) {
@@ -261,7 +262,7 @@ export default function BoardView({
   const tz = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone, []);
 
   const groups = useMemo(() => {
-    let arr = filterTasks(tasks ?? [], filters ?? EMPTY_FILTER, tz);
+    let arr = filterTasks(sortByCreationOrder(tasks ?? []), filters ?? EMPTY_FILTER, tz);
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
       arr = arr.filter((t) => t.title.toLowerCase().includes(q));

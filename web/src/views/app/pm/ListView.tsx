@@ -3,7 +3,7 @@ import type { SpaceStatus, Task } from '@squadhub/shared';
 import { useTasks, useUpdateTask, groupTasksByStatus } from '../../../hooks/useTasks';
 import { usePMStore, type ListGroupBy } from '../../../stores/pmStore';
 import { useAuthStore } from '../../../stores/authStore';
-import { groupTasks as groupTasksGeneric, partitionByCompletion, sortTasks, buildFocusTodayGroup, isTaskFocused, nestSubtasks, filterWithSubtasks, type SortBy } from '../../../lib/taskGrouping';
+import { groupTasks as groupTasksGeneric, partitionByCompletion, sortTasks, buildFocusTodayGroup, isTaskFocused, nestSubtasks, filterWithSubtasks, sortByCreationOrder, type SortBy } from '../../../lib/taskGrouping';
 import { filterTasks, countActiveFilters, EMPTY_FILTER, type TaskFilterState } from '../../../lib/filters';
 import { useIsMobile } from '../../../hooks/useIsMobile';
 import TaskGroupCard from './TaskGroupCard';
@@ -58,9 +58,9 @@ export default function ListView({
       return true;
     };
     let arr = filterWithSubtasks(tasks, matches);
-    if (sortBy !== 'manual') {
-      arr = sortTasks(arr, sortBy);
-    }
+    // Default (manual) is creation order — oldest first — so a newly added
+    // task lands at the bottom of its group. Explicit sorts take precedence.
+    arr = sortBy !== 'manual' ? sortTasks(arr, sortBy) : sortByCreationOrder(arr);
     return arr;
   }, [tasks, filters, searchQuery, myTasksOnly, currentUserId, tz, focusToday, sortBy]);
 

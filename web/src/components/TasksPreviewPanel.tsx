@@ -17,6 +17,7 @@ import {
   isTaskFocused,
   nestSubtasks,
   partitionByCompletion,
+  sortByCreationOrder,
   sortTasks,
   type SortBy,
 } from '../lib/taskGrouping';
@@ -203,7 +204,7 @@ export default function TasksPreviewPanel({
       return true;
     };
     let arr = filterWithSubtasks(tasks, matches);
-    if (sortBy !== 'manual') arr = sortTasks(arr, sortBy);
+    arr = sortBy !== 'manual' ? sortTasks(arr, sortBy) : sortByCreationOrder(arr);
     return arr;
   }, [tasks, filters, myTasksOnly, currentUserId, tz, focusToday, sortBy]);
 

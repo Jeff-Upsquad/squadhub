@@ -490,14 +490,16 @@ router.get('/tasks', async (req: Request, res: Response) => {
       query = query.is('parent_task_id', null);
     }
 
-    // Sort
+    // Sort — default is creation order (oldest first) so newly added tasks
+    // land at the bottom of their group in list / folder / area views. Explicit
+    // sorts (due_date, priority, etc.) still take precedence when requested.
     const sort = (req.query.sort as string) || 'created_at';
     if (sort === 'due_date') {
       query = query.order('due_date', { ascending: true, nullsFirst: false });
     } else if (sort === 'priority') {
-      query = query.order('priority').order('created_at', { ascending: false });
+      query = query.order('priority').order('created_at', { ascending: true });
     } else {
-      query = query.order('created_at', { ascending: false });
+      query = query.order('created_at', { ascending: true });
     }
 
     const { data, error } = await query;

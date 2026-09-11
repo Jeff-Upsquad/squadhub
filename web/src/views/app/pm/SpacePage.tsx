@@ -6,7 +6,7 @@ import { usePMStore } from '../../../stores/pmStore';
 import { useSpace } from '../../../hooks/useSpaces';
 import { useIsMobile } from '../../../hooks/useIsMobile';
 import TaskGroupCard from './TaskGroupCard';
-import { GROUP_BY_OPTIONS, groupTasks, partitionByCompletion, buildFocusTodayGroup, isTaskCompleted, type GroupBy } from '../../../lib/taskGrouping';
+import { GROUP_BY_OPTIONS, groupTasks, partitionByCompletion, buildFocusTodayGroup, isTaskCompleted, sortByCreationOrder, type GroupBy } from '../../../lib/taskGrouping';
 import MinimalGroupFilterBar from '../../../components/pm/MinimalGroupFilterBar';
 import ViewSearchInput from '../../../components/pm/ViewSearchInput';
 import ContainerChatButton from '../../../components/pm/ContainerChatButton';
@@ -141,7 +141,10 @@ export default function SpacePage({ spacePageId: propSpacePageId }: { spacePageI
   }, [allTasks, folderFilter, listFilter]);
 
   const filteredTasks = useMemo(() => {
-    let arr = filterTasks(tasksAfterPills, filters, tz);
+    // Default order is creation order (oldest first) so a newly added task
+    // lands at the bottom of its group. Explicit group-by buckets only reorder
+    // the groups themselves — tasks stay in creation order within each group.
+    let arr = filterTasks(sortByCreationOrder(tasksAfterPills), filters, tz);
     const q = searchQuery.trim().toLowerCase();
     if (q) arr = arr.filter((t) => t.title.toLowerCase().includes(q));
     return arr;

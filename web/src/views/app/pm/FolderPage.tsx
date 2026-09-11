@@ -6,7 +6,7 @@ import { usePMStore } from '../../../stores/pmStore';
 import { useSpace, useReorderLists } from '../../../hooks/useSpaces';
 import { useIsMobile } from '../../../hooks/useIsMobile';
 import TaskGroupCard from './TaskGroupCard';
-import { GROUP_BY_OPTIONS, groupTasks, partitionByCompletion, buildFocusTodayGroup, isTaskCompleted, type GroupBy } from '../../../lib/taskGrouping';
+import { GROUP_BY_OPTIONS, groupTasks, partitionByCompletion, buildFocusTodayGroup, isTaskCompleted, sortByCreationOrder, type GroupBy } from '../../../lib/taskGrouping';
 import MinimalGroupFilterBar from '../../../components/pm/MinimalGroupFilterBar';
 import ViewSearchInput from '../../../components/pm/ViewSearchInput';
 import ContainerChatButton from '../../../components/pm/ContainerChatButton';
@@ -109,7 +109,10 @@ export default function FolderPage({ folderId: propFolderId }: { folderId?: stri
   const tz = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC', []);
 
   const filteredTasks = useMemo(() => {
-    let arr = allTasks;
+    // Default order is creation order (oldest first) so a newly added task
+    // lands at the bottom of its group. Explicit group-by buckets only reorder
+    // the groups themselves — tasks stay in creation order within each group.
+    let arr = sortByCreationOrder(allTasks);
     if (listFilter !== 'all') arr = arr.filter((t) => t.list?.id === listFilter);
     arr = filterTasks(arr, filters, tz);
     const q = searchQuery.trim().toLowerCase();

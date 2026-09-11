@@ -37,6 +37,18 @@ export const SORT_BY_OPTIONS: { value: SortBy; label: string }[] = [
   { value: 'recent', label: 'Recently updated' },
 ];
 
+// Default order for grouped views: oldest first so newly added tasks land at
+// the bottom of their group. Used when no explicit sort (manual/none) is set —
+// explicit sorts (title, due date, priority, recent) still take precedence.
+export function sortByCreationOrder(tasks: Task[]): Task[] {
+  return [...tasks].sort((a, b) => {
+    const ax = a.created_at ? new Date(a.created_at).getTime() : 0;
+    const bx = b.created_at ? new Date(b.created_at).getTime() : 0;
+    if (ax !== bx) return ax - bx;
+    return (a.id || '').localeCompare(b.id || '');
+  });
+}
+
 export function sortTasks(tasks: Task[], by: SortBy): Task[] {
   if (by === 'manual') return tasks;
   const arr = [...tasks];
