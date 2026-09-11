@@ -219,6 +219,8 @@ export interface Message {
   duration_ms?: number | null;
   parent_message_id?: string | null;
   mentions?: string[];
+  // @all channel broadcast (messages table only; DMs ignore it).
+  mention_all?: boolean;
   unfurl?: MessageUnfurl | null;
   reply_count?: number;
   // When set, this message is an interactive meeting poll card — MessageBubble

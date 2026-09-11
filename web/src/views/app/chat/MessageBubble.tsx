@@ -17,7 +17,7 @@ import SopFlagDetailModal from '../../../components/sop/SopFlagDetailModal';
 //   **bold**, _italic_, ~~strike~~, `code`, [text](url),
 //   ```code fence```, > blockquote, - bullet list, 1. numbered list,
 //   plus @mentions and bare URLs.
-const SELF_MENTIONS = new Set(['@channel', '@here', '@everyone']);
+const SELF_MENTIONS = new Set(['@channel', '@here', '@everyone', '@all']);
 
 // Inline markdown + @mentions + URLs. URL matching is shared with the rest of
 // the app via URL_PATTERN (which contributes no capture groups, so the outer

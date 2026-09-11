@@ -28,6 +28,8 @@ const sendMessageSchema = z.object({
   duration_ms: z.number().int().nonnegative().optional(),
   parent_message_id: z.string().uuid().optional(), // for threads
   mentions: z.array(z.string().uuid()).max(100).optional(),
+  // @all channel broadcast: notify every channel member (DMs ignore it).
+  mention_all: z.boolean().optional(),
 }).refine(
   (data) => data.channel_id || data.dm_conversation_id,
   { message: 'Either channel_id or dm_conversation_id is required' },
@@ -239,6 +241,8 @@ router.post('/', requireAuth, async (req: Request, res: Response) => {
       type: body.type,
       file_url: body.file_url || null,
       mentions: body.mentions || [],
+      // Only channels support @all; DMs already notify every recipient.
+      mention_all: !!body.mention_all && !!body.channel_id,
     };
     if (body.file_name) insertRow.file_name = body.file_name;
     if (body.file_size) insertRow.file_size = body.file_size;
