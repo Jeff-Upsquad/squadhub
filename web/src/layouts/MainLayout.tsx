@@ -481,9 +481,8 @@ export default function MainLayout() {
   const [timesheetOpen, setTimesheetOpen] = useState(false);
   const [timesheetAnchor, setTimesheetAnchor] = useState<DOMRect | null>(null);
   const [inboxSliderOpen, setInboxSliderOpen] = useState(false);
-  // True when the panel was opened (or pinned) by click — hover-leave must not
-  // close it. Hover opens leave this false so moving off icon + panel closes.
-  const [inboxPinned, setInboxPinned] = useState(false);
+  // Both quick-views are hover-only (click navigates to the section), so no
+  // pin state. They share one screen slot and are mutually exclusive.
   // Tasks quick-view — hover-only (click navigates to the section), so no pin
   // state. Shares the inbox panel's screen slot; the two are mutually exclusive.
   const [tasksPreviewOpen, setTasksPreviewOpen] = useState(false);
@@ -504,8 +503,6 @@ export default function MainLayout() {
 
   const inboxHoverOpenTimer = useRef<number | null>(null);
   const inboxHoverCloseTimer = useRef<number | null>(null);
-  const inboxPinnedRef = useRef(false);
-  inboxPinnedRef.current = inboxPinned;
 
   const cancelInboxHoverTimers = useCallback(() => {
     if (inboxHoverOpenTimer.current != null) window.clearTimeout(inboxHoverOpenTimer.current);
@@ -517,7 +514,6 @@ export default function MainLayout() {
   const closeInboxFully = useCallback(() => {
     cancelInboxHoverTimers();
     setInboxSliderOpen(false);
-    setInboxPinned(false);
   }, [cancelInboxHoverTimers]);
 
   const openInboxOnHover = useCallback(() => {
@@ -538,8 +534,6 @@ export default function MainLayout() {
     inboxHoverOpenTimer.current = null;
     if (inboxHoverCloseTimer.current != null) window.clearTimeout(inboxHoverCloseTimer.current);
     inboxHoverCloseTimer.current = window.setTimeout(() => {
-      // Click-pinned panels stay until X / Escape / backdrop click / re-click.
-      if (inboxPinnedRef.current) return;
       setInboxSliderOpen(false);
       inboxHoverCloseTimer.current = null;
     }, 260);
@@ -593,6 +587,15 @@ export default function MainLayout() {
     setMobileDrawerOpen(false);
     setActiveSection('home');
     setHomeView('my-tasks');
+  }, [closeRailPreviewNow, closeInboxFully, closeTasksPreview]);
+
+  const goToInboxSection = useCallback(() => {
+    closeRailPreviewNow();
+    closeInboxFully();
+    closeTasksPreview();
+    setMobileDrawerOpen(false);
+    setActiveSection('home');
+    setHomeView('inbox');
   }, [closeRailPreviewNow, closeInboxFully, closeTasksPreview]);
   const [profileOpen, setProfileOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -1554,30 +1557,10 @@ export default function MainLayout() {
             badgeAlert={inboxAlert}
             badgePulse={inboxPulse}
             active={(activeSection === 'home' && homeView === 'inbox') || inboxSliderOpen}
-            previewing={inboxSliderOpen && !inboxPinned}
+            previewing={inboxSliderOpen}
             onPreviewEnter={openInboxOnHover}
             onPreviewLeave={scheduleInboxHoverClose}
-            onClick={() => {
-              closeRailPreviewNow();
-              cancelInboxHoverTimers();
-              closeTasksPreview();
-              // The rail toggles the quick-view slide-over; the full inbox view
-              // is reached through the Home sidebar's Inbox item (or deep links).
-              if (activeSection === 'home' && homeView === 'inbox') return;
-              setMobileDrawerOpen(false);
-              // Hover-opened panel: first click pins it (stays on mouse-leave).
-              // Pinned/open panel: click again closes. Closed: click opens pinned.
-              if (inboxSliderOpen && !inboxPinned) {
-                setInboxPinned(true);
-                return;
-              }
-              if (inboxSliderOpen && inboxPinned) {
-                closeInboxFully();
-                return;
-              }
-              setInboxSliderOpen(true);
-              setInboxPinned(true);
-            }}
+            onClick={goToInboxSection}
           />
           <RailBtn
             icon={ICON.tasks}
@@ -1876,13 +1859,13 @@ export default function MainLayout() {
           })}
       </div>
 
-      {/* Inbox panel — floating feed opened by hovering OR clicking the rail's inbox button */}
+      {/* Inbox panel — floating feed opened by hovering the rail's inbox button */}
       {inboxSliderOpen && (
         <InboxSlider
           onClose={closeInboxFully}
           onHoverEnter={keepInboxHoverOpen}
           onHoverLeave={scheduleInboxHoverClose}
-          pinned={inboxPinned}
+          pinned={false}
         />
       )}
 
