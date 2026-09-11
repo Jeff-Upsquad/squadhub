@@ -247,8 +247,8 @@ export default function InboxView({
   const setActiveChannel = useWorkspaceStore((s) => s.setActiveChannel);
   const requestMessageJump = useWorkspaceStore((s) => s.requestMessageJump);
 
-  const [unreadsOnly, setUnreadsOnly] = useState(true);
   const [filter, setFilter] = useState<Filter>('all');
+  const [tab, setTab] = useState<'unread' | 'read'>('unread');
   const [activeId, setActiveId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
@@ -304,6 +304,8 @@ export default function InboxView({
     if (target && !target.is_read) {
       markRead.mutate(target.id);
     }
+    // Land on the tab the deep-linked notification lives in.
+    if (target) setTab(target.is_read ? 'read' : 'unread');
     setPendingDeepLink(null);
   }, [pendingDeepLink, items]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -331,7 +333,6 @@ export default function InboxView({
   const filtered = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
     return items.filter((it) => {
-      if (unreadsOnly && it.is_read) return false;
       if (filter === 'messages' && !isMessage(it)) return false;
       if (filter === 'tasks' && !isTask(it)) return false;
       if (filter === 'updates' && !isUpdate(it)) return false;
@@ -341,9 +342,13 @@ export default function InboxView({
       }
       return true;
     });
-  }, [items, filter, unreadsOnly, searchQuery]);
+  }, [items, filter, searchQuery]);
 
-  const current = items.find((n) => n.id === activeId) || filtered[0] || null;
+  const unreadList = useMemo(() => filtered.filter((n) => !n.is_read), [filtered]);
+  const readList = useMemo(() => filtered.filter((n) => n.is_read), [filtered]);
+  const shown = tab === 'unread' ? unreadList : readList;
+
+  const current = items.find((n) => n.id === activeId) || shown[0] || null;
 
   const openSource = (n: Notification, jump?: ChatJump) => {
     if (n.reference_type === 'task' && n.metadata?.task_id) {
@@ -381,60 +386,88 @@ export default function InboxView({
     openSource(n);
   };
 
-  const TABS: { key: Filter; label: string; icon: ReactNode }[] = [
+  const TABS: { key: 'unread' | 'read'; label: string; icon: ReactNode }[] = [
     {
-      key: 'all',
-      label: 'All',
+      key: 'unread',
+      label: 'Unread',
       icon: (
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-          <path d="M8 6h13M8 12h13M8 18h13" />
-          <path d="M3 6h.01M3 12h.01M3 18h.01" />
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+          <circle cx="12" cy="12" r="5" />
         </svg>
       ),
     },
     {
-      key: 'messages',
-      label: 'Messages',
+      key: 'read',
+      label: 'Read',
       icon: (
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-          <path d="M21 11.5a8.38 8.38 0 0 1-9 8.36 8.5 8.5 0 0 1-3.4-.7L3 20l.84-5.6A8.38 8.38 0 0 1 12 3.14a8.38 8.38 0 0 1 9 8.36z" />
-        </svg>
-      ),
-    },
-    {
-      key: 'tasks',
-      label: 'Tasks',
-      icon: (
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-          <rect x="3" y="3" width="18" height="18" rx="4" />
-          <path d="m8.5 12.5 2.5 2.5 4.5-5" />
-        </svg>
-      ),
-    },
-    {
-      key: 'updates',
-      label: 'Updates',
-      icon: (
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-          <path d="m3 11 18-8-8 18-2.5-7.5z" />
+          <path d="m5 13 4 4L19 7" />
         </svg>
       ),
     },
   ];
 
-  const unreadsToggle = (
-    <button
-      type="button"
-      className="ib-unreads"
-      data-on={unreadsOnly}
-      role="switch"
-      aria-checked={unreadsOnly}
-      onClick={() => setUnreadsOnly((v) => !v)}
-    >
-      <span className="ib-unreads-lbl">Unreads</span>
-      <span className="ib-switch"><span className="ib-knob" /></span>
-    </button>
+  const FILTERS: { key: Filter; label: string }[] = [
+    { key: 'all', label: 'All' },
+    { key: 'messages', label: 'Messages' },
+    { key: 'tasks', label: 'Tasks' },
+    { key: 'updates', label: 'Updates' },
+  ];
+
+  // Minimal type filter — sits where the Unreads toggle used to be.
+  const typeFilter = (
+    <label className="ib-typefilter" title="Filter by type">
+      <select
+        value={filter}
+        onChange={(e) => setFilter(e.target.value as Filter)}
+        aria-label="Filter activity by type"
+      >
+        {FILTERS.map((f) => (
+          <option key={f.key} value={f.key}>
+            {f.label}
+          </option>
+        ))}
+      </select>
+      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+        <path d="m6 9 6 6 6-6" />
+      </svg>
+    </label>
   );
+
+  const renderRow = (n: Notification) =>
+    n.type === 'sop_flag' || n.type === 'sop_strike' ? (
+      <SopNotifCard
+        key={n.id}
+        n={n}
+        active={current?.id === n.id}
+        onSelect={() => onRowClick(n)}
+        onOpenSop={() => {
+          if (!n.is_read) markRead.mutate(n.id);
+          openSopFromNotification(n);
+        }}
+        onOpenSource={sopSourceFromNotification(n) ? () => {
+          if (!n.is_read) markRead.mutate(n.id);
+          openSopSource(n, { setHomeView });
+        } : undefined}
+      />
+    ) : (
+      <NotifRow
+        key={n.id}
+        n={n}
+        active={current?.id === n.id}
+        onClick={() => onRowClick(n)}
+        onMarkRead={() => markRead.mutate(n.id)}
+      />
+    );
+
+  const emptyForFilter =
+    filter === 'messages'
+      ? 'No messages yet.'
+      : filter === 'tasks'
+        ? 'No tasks yet.'
+        : filter === 'updates'
+          ? 'No updates yet.'
+          : 'No notifications yet.';
 
   return (
     <div className="sh-view inbox-view" data-detail={activeId ? 'true' : undefined}>
@@ -444,7 +477,7 @@ export default function InboxView({
         {isMobile ? (
           <div className="inbox-phone-head">
             <h1>Activity</h1>
-            {unreadsToggle}
+            {typeFilter}
             <button
               type="button"
               className="inbox-mark-all"
@@ -461,26 +494,26 @@ export default function InboxView({
         ) : (
           <div className="inbox-head">
             <h1>Activity</h1>
-            {unreadsToggle}
+            {typeFilter}
           </div>
         )}
-        <div className="inbox-filter">
-          {TABS.map((t) => (
-            <button
-              key={t.key}
-              type="button"
-              className="ib-tab"
-              data-active={filter === t.key}
-              onClick={() => setFilter(t.key)}
-            >
-              {t.icon}
-              {t.label}
-            </button>
-          ))}
-          {isMobile ? (
-            <div style={{ flex: 1 }} />
-          ) : (
-            <>
+        <div className="inbox-filter-col">
+          <div className="ib-status-row">
+            {TABS.map((t) => (
+              <button
+                key={t.key}
+                type="button"
+                className="ib-tab"
+                data-active={tab === t.key}
+                onClick={() => setTab(t.key)}
+              >
+                {t.icon}
+                {t.label}
+              </button>
+            ))}
+          </div>
+          {!isMobile && (
+            <div className="ib-tools-row">
               <div style={{ flex: 1 }} />
               {/* Collapsed search icon — expands into an input on click
                   (or via the global "/" shortcut, which focuses it). */}
@@ -547,7 +580,7 @@ export default function InboxView({
                 </svg>
                 Mark all read
               </button>
-            </>
+            </div>
           )}
         </div>
         {isMobile && (
@@ -567,44 +600,13 @@ export default function InboxView({
         {isLoading && filtered.length === 0 ? (
           <div style={{ padding: 16, fontSize: 13, color: 'var(--sh-ink-3)' }}>Loading…</div>
         ) : filtered.length === 0 ? (
+          <div className="ib-empty">{emptyForFilter}</div>
+        ) : shown.length === 0 ? (
           <div className="ib-empty">
-            {unreadsOnly
-              ? 'You\u2019re all caught up.'
-              : filter === 'messages'
-                ? 'No messages yet.'
-                : filter === 'tasks'
-                  ? 'No tasks yet.'
-                  : filter === 'updates'
-                    ? 'No updates yet.'
-                    : 'No notifications yet.'}
+            {tab === 'unread' ? 'You\u2019re all caught up.' : emptyForFilter}
           </div>
         ) : (
-          filtered.map((n) => (
-            n.type === 'sop_flag' || n.type === 'sop_strike' ? (
-              <SopNotifCard
-                key={n.id}
-                n={n}
-                active={current?.id === n.id}
-                onSelect={() => onRowClick(n)}
-                onOpenSop={() => {
-                  if (!n.is_read) markRead.mutate(n.id);
-                  openSopFromNotification(n);
-                }}
-                onOpenSource={sopSourceFromNotification(n) ? () => {
-                  if (!n.is_read) markRead.mutate(n.id);
-                  openSopSource(n, { setHomeView });
-                } : undefined}
-              />
-            ) : (
-              <NotifRow
-                key={n.id}
-                n={n}
-                active={current?.id === n.id}
-                onClick={() => onRowClick(n)}
-                onMarkRead={() => markRead.mutate(n.id)}
-              />
-            )
-          ))
+          shown.map(renderRow)
         )}
       </div>
 
