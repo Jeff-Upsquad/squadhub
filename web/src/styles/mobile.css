@@ -116,48 +116,64 @@
   -webkit-tap-highlight-color: transparent;
 }
 
-/* ── Work | Discover top switcher (full-width rectangle, smaller height) ─ */
+/* ── Work | Discover top tabs (Grok-style text tabs) ────────────────────
+   Centered text tabs over the carbon header: the active tab is bold white
+   with a short underline dash, inactive tabs are dimmed. No pill track. */
 .msh-surface-switch-wrap {
   flex: none;
   display: flex;
   justify-content: center;
-  padding: calc(var(--m-safe-top) + 8px) 12px 8px;
+  padding: calc(var(--m-safe-top) + 10px) 12px 6px;
   background: transparent;
 }
 .msh-surface-switch {
-  display: flex;
-  width: 100%;
-  max-width: 100%;
-  gap: 4px;
-  padding: 3px;
-  border-radius: 12px;
-  background: rgba(255,255,255,0.12);
-  backdrop-filter: blur(8px);
-  border: 1px solid rgba(255,255,255,0.12);
+  display: inline-flex;
+  align-items: center;
+  gap: 30px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  backdrop-filter: none;
 }
 .msh-surface-switch button {
   position: relative;
-  flex: 1 1 0;
+  flex: none;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 6px;
-  padding: 6px 12px;
+  padding: 10px 2px 12px;
   border: 0;
-  border-radius: 9px;
+  border-radius: 0;
   background: transparent;
-  color: rgba(255,255,255,0.75);
-  font-size: 13px;
-  font-weight: 600;
-  line-height: 1;
-  height: 30px;
+  color: rgba(255,255,255,0.55);
+  font-size: 17px;
+  font-weight: 500;
+  line-height: 1.2;
+  letter-spacing: 0.1px;
   cursor: pointer;
-  transition: background 0.18s ease, color 0.18s ease, box-shadow 0.18s ease;
+  transition: color 0.18s ease;
+}
+.msh-surface-switch button:hover {
+  color: rgba(255,255,255,0.85);
 }
 .msh-surface-switch button[data-on='true'] {
+  background: transparent;
+  color: #fff;
+  font-weight: 700;
+  box-shadow: none;
+}
+.msh-surface-switch button[data-on='true']::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: 3px;
+  width: 22px;
+  height: 3px;
+  border-radius: 999px;
+  transform: translateX(-50%);
   background: #fff;
-  color: #0a0a0a;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.18);
 }
 .msh-surface-switch button em {
   display: inline-flex;
