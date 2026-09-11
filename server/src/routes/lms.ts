@@ -7,6 +7,7 @@ import { getItemAccess } from '../services/lmsAccess';
 import { getUserRoleIds } from '../utils/roles';
 import { userTypeShareKeyToUuid } from '../utils/lmsShares';
 import type { UserType } from '@squadhub/shared';
+import { loadBlockVideos, withBlockVideos } from '../services/lmsBlockVideos';
 
 const router = Router();
 router.use(requireAuth);
@@ -621,12 +622,14 @@ router.get('/items/:id', async (req: Request, res: Response) => {
       questionsByBlock.set(q.block_id, list);
     }
 
+    const videosByBlock = await loadBlockVideos((blocks || []) as any[]);
+
     const blocksByLesson = new Map<string, any[]>();
     for (const b of blocks || []) {
       const list = blocksByLesson.get(b.lesson_id) || [];
       const block = b.type === 'quiz'
         ? { ...b, quiz_questions: questionsByBlock.get(b.id) || [] }
-        : b;
+        : withBlockVideos(b as any, videosByBlock);
       list.push(block);
       blocksByLesson.set(b.lesson_id, list);
     }

@@ -132,7 +132,15 @@ export function useEditorMutations(draftItemId: string) {
       api.put(`/lms/collab/lessons/${lessonId}/blocks/reorder`, { items }),
     onSuccess: invalidate,
   });
-  return { patchItem, publish, unpublish, addLesson, patchLesson, deleteLesson, setLessonAccess, addBlock, patchBlock, deleteBlock, reorderBlocks };
+  // Replace the whole per-language variant set on a video block. The editor
+  // always holds the complete list, so wholesale replacement keeps a removed
+  // language from lingering server-side.
+  const setBlockVideos = useMutation({
+    mutationFn: ({ id, videos }: { id: string; videos: unknown[] }) =>
+      api.put(`/lms/collab/blocks/${id}/videos`, { videos }),
+    onSuccess: invalidate,
+  });
+  return { patchItem, publish, unpublish, addLesson, patchLesson, deleteLesson, setLessonAccess, addBlock, patchBlock, deleteBlock, reorderBlocks, setBlockVideos };
 }
 
 // Read-only share list for an item (who has access, and at what level).

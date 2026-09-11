@@ -7,6 +7,8 @@ import { getItemAccess, meetsAccess, getItemApproverUserIds } from '../services/
 import { cloneItemForReview, notifyLms } from '../services/lmsAuthoring';
 import { createSend, listSendsForItem, recipientsForSend, type SendScope, type Principal } from '../services/lmsTaskSends';
 import { userTypeShareUuidToKey } from '../utils/lmsShares';
+import { loadBlockVideos, withBlockVideos } from '../services/lmsBlockVideos';
+import { syncItemToSquadhire } from '../services/squadhireTraining';
 
 // ============================================================
 // Collaborative (non-admin) LMS authoring + comments, gated by per-item
@@ -118,6 +120,8 @@ router.get('/items/:id/full', async (req: Request, res: Response) => {
       ? await supabaseAdmin.from('lms_quiz_questions').select('*').in('block_id', quizBlockIds).order('position', { ascending: true })
       : { data: [] as any[] };
 
+    const vByBlock = await loadBlockVideos((blocks || []) as any[]);
+
     const qByBlock = new Map<string, any[]>();
     for (const q of quizQuestions || []) {
       const list = qByBlock.get((q as any).block_id) || []; list.push(q); qByBlock.set((q as any).block_id, list);
@@ -125,7 +129,10 @@ router.get('/items/:id/full', async (req: Request, res: Response) => {
     const bByLesson = new Map<string, any[]>();
     for (const b of blocks || []) {
       const list = bByLesson.get((b as any).lesson_id) || [];
-      list.push((b as any).type === 'quiz' ? { ...(b as any), quiz_questions: qByBlock.get((b as any).id) || [] } : b);
+      const block = (b as any).type === 'quiz'
+        ? { ...(b as any), quiz_questions: qByBlock.get((b as any).id) || [] }
+        : withBlockVideos(b as any, vByBlock);
+      list.push(block);
       bByLesson.set((b as any).lesson_id, list);
     }
     // Per-page access overrides (who this page is hidden from), joined for display.
@@ -178,6 +185,9 @@ const itemPatchSchema = z.object({
   summary: z.string().max(2000).nullable().optional(),
   cover_image_url: z.string().nullable().optional(),
   category_id: z.string().uuid().nullable().optional(),
+  // Deliver this item to SquadHire as talent training. Who it reaches there
+  // and what it unlocks stays a SquadHire admin decision.
+  squadhire_audience: z.boolean().optional(),
 });
 
 router.patch('/items/:id', async (req: Request, res: Response) => {
@@ -186,12 +196,17 @@ router.patch('/items/:id', async (req: Request, res: Response) => {
     if (!(await gate(itemId, req.userId!, 'admin', res))) return;
     const body = itemPatchSchema.parse(req.body);
     const patch: Record<string, any> = {};
-    for (const k of ['title', 'summary', 'cover_image_url', 'category_id'] as const) {
+    for (const k of ['title', 'summary', 'cover_image_url', 'category_id', 'squadhire_audience'] as const) {
       if ((body as any)[k] !== undefined) patch[k] = (body as any)[k];
     }
     patch.updated_at = new Date().toISOString();
     const { data, error } = await supabaseAdmin.from('lms_items').update(patch).eq('id', itemId).select().single();
     if (error) { res.status(500).json({ success: false, error: error.message }); return; }
+    // Push on any content edit, and on the flag being turned off, so removing
+    // the audience actually withdraws the course from talents.
+    if ((data as any)?.squadhire_audience || body.squadhire_audience === false) {
+      syncItemToSquadhire(itemId);
+    }
     res.json({ success: true, data });
   } catch (err) {
     if (err instanceof z.ZodError) { res.status(400).json({ success: false, error: err.errors[0].message }); return; }
@@ -407,6 +422,75 @@ router.delete('/blocks/:blockId', async (req: Request, res: Response) => {
   res.json({ success: true });
 });
 
+// ---- Per-language video variants -------------------------------------------
+// The whole set is replaced in one call: the editor always holds the complete
+// list, and replace-wholesale means a removed language can't survive as a
+// stale row the way an incremental patch would let it.
+const blockVideosSchema = z.object({
+  videos: z
+    .array(
+      z.object({
+        language: z.string().min(2).max(10),
+        embed_url: z.string().url().nullable().optional(),
+        embed_provider: z.string().max(40).nullable().optional(),
+        file_url: z.string().url().nullable().optional(),
+        file_name: z.string().nullable().optional(),
+        file_size: z.number().int().nonnegative().nullable().optional(),
+        mime_type: z.string().nullable().optional(),
+      }).refine((v) => !!v.embed_url || !!v.file_url, {
+        message: 'Each language needs either a video link or an uploaded file',
+      }),
+    )
+    .max(20),
+});
+
+router.put('/blocks/:blockId/videos', async (req: Request, res: Response) => {
+  try {
+    const blockId = param(req.params.blockId);
+    const itemId = await itemIdForBlock(blockId);
+    if (!(await gate(itemId, req.userId!, 'admin', res))) return;
+
+    const { videos } = blockVideosSchema.parse(req.body);
+
+    const seen = new Set<string>();
+    for (const v of videos) {
+      if (seen.has(v.language)) {
+        res.status(400).json({ success: false, error: `Duplicate language: ${v.language}` });
+        return;
+      }
+      seen.add(v.language);
+    }
+
+    const { error: delErr } = await supabaseAdmin
+      .from('lms_content_block_videos').delete().eq('block_id', blockId);
+    if (delErr) { res.status(500).json({ success: false, error: delErr.message }); return; }
+
+    if (videos.length > 0) {
+      const { error: insErr } = await supabaseAdmin
+        .from('lms_content_block_videos')
+        .insert(videos.map((v) => ({
+          block_id: blockId,
+          language: v.language,
+          embed_url: v.embed_url ?? null,
+          embed_provider: v.embed_provider ?? null,
+          file_url: v.file_url ?? null,
+          file_name: v.file_name ?? null,
+          file_size: v.file_size ?? null,
+          mime_type: v.mime_type ?? null,
+        })));
+      if (insErr) { res.status(500).json({ success: false, error: insErr.message }); return; }
+    }
+
+    const { data } = await supabaseAdmin
+      .from('lms_content_block_videos').select('*').eq('block_id', blockId)
+      .order('language', { ascending: true });
+    res.json({ success: true, data: data ?? [] });
+  } catch (err) {
+    if (err instanceof z.ZodError) { res.status(400).json({ success: false, error: err.errors[0].message }); return; }
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
 router.put('/lessons/:lessonId/blocks/reorder', async (req: Request, res: Response) => {
   try {
     const lessonId = param(req.params.lessonId);
@@ -527,6 +611,7 @@ router.post('/items/:id/publish', async (req: Request, res: Response) => {
     if ((data as any).kind === 'post') {
       await supabaseAdmin.from('lms_lessons').update({ is_active: true }).eq('item_id', itemId);
     }
+    if ((data as any).squadhire_audience) syncItemToSquadhire(itemId);
     res.json({ success: true, data });
   } catch (err) {
     console.error('Collab publish error:', err);
@@ -547,6 +632,8 @@ router.post('/items/:id/unpublish', async (req: Request, res: Response) => {
     const { data, error } = await supabaseAdmin
       .from('lms_items').update({ status: 'draft', updated_at: new Date().toISOString() }).eq('id', itemId).select().single();
     if (error) { res.status(500).json({ success: false, error: error.message }); return; }
+    // Withdraw it from SquadHire too — unpublished here means unpublished there.
+    if ((data as any).squadhire_audience) syncItemToSquadhire(itemId);
     res.json({ success: true, data });
   } catch (err) {
     console.error('Collab unpublish error:', err);

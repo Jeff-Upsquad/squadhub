@@ -3018,6 +3018,12 @@ export interface LmsItem {
   created_by: string | null;
   created_at: string;
   updated_at: string;
+  // Delivered to SquadHire as talent training when true. Their admin decides
+  // who it reaches there and what it unlocks; publishing here only sends the
+  // content.
+  squadhire_audience?: boolean;
+  squadhire_synced_at?: string | null;
+  squadhire_last_error?: string | null;
   // Contributor "submit for review" flow (migration 165). When origin_item_id
   // is set this item is a draft CLONE proposing changes to that live item.
   origin_item_id?: string | null;
@@ -3083,6 +3089,72 @@ export interface LmsContentBlock {
   updated_at: string;
   // Only for quiz blocks
   quiz_questions?: LmsQuizQuestion[];
+  // Only for video blocks. Per-language alternates; the block's own
+  // embed_url/file_url is the default when the viewer's language isn't listed.
+  videos?: LmsBlockVideo[];
+}
+
+// A language alternate for a video block. Carries an embed (Loom / Squad Clips
+// / YouTube / Vimeo) or an R2 upload, mirroring the video_embed vs
+// video_upload split on the block itself.
+export interface LmsBlockVideo {
+  block_id: string;
+  language: string;
+  embed_url: string | null;
+  embed_provider: string | null;
+  file_url: string | null;
+  file_name: string | null;
+  file_size: number | null;
+  mime_type: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+// Languages a video block can be offered in. Sourced from the talent-facing
+// languages SquadHire already collects, so a variant authored here lines up
+// with the language a talent has set on their profile.
+export const LMS_VIDEO_LANGUAGES: readonly { code: string; label: string }[] = [
+  { code: 'en', label: 'English' },
+  { code: 'hi', label: 'Hindi' },
+  { code: 'ml', label: 'Malayalam' },
+  { code: 'ta', label: 'Tamil' },
+  { code: 'te', label: 'Telugu' },
+  { code: 'kn', label: 'Kannada' },
+  { code: 'bn', label: 'Bengali' },
+  { code: 'mr', label: 'Marathi' },
+  { code: 'gu', label: 'Gujarati' },
+  { code: 'pa', label: 'Punjabi' },
+] as const;
+
+export function lmsVideoLanguageLabel(code: string): string {
+  return LMS_VIDEO_LANGUAGES.find((l) => l.code === code)?.label ?? code.toUpperCase();
+}
+
+/**
+ * Pick the video source a viewer should see for a block, given their preferred
+ * language. Falls back to the block's own embed_url/file_url, which is what
+ * every pre-existing video block has and all a single-language block needs.
+ */
+export function resolveLmsBlockVideo(
+  block: Pick<LmsContentBlock, 'embed_url' | 'embed_provider' | 'file_url' | 'file_name' | 'mime_type' | 'videos'>,
+  language?: string | null,
+): { embed_url: string | null; embed_provider: string | null; file_url: string | null; language: string | null } {
+  const variants = block.videos ?? [];
+  const match = language ? variants.find((v) => v.language === language) : undefined;
+  if (match) {
+    return {
+      embed_url: match.embed_url,
+      embed_provider: match.embed_provider,
+      file_url: match.file_url,
+      language: match.language,
+    };
+  }
+  return {
+    embed_url: block.embed_url,
+    embed_provider: block.embed_provider,
+    file_url: block.file_url,
+    language: null,
+  };
 }
 
 // ---- Image annotations (markings on screenshots) ----

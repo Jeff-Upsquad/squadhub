@@ -9,6 +9,7 @@ import NotionEditor from './NotionEditor';
 import SendTaskModal from './SendTaskModal';
 import TaskSendsPanel from './TaskSendsPanel';
 import SopEnforcementEditor from '../../../components/sop/SopEnforcementEditor';
+import { LMS_VIDEO_LANGUAGES, type LmsBlockVideo } from '@squadhub/shared';
 
 type Props = {
   draftItemId: string;
@@ -105,6 +106,20 @@ export default function LmsEditor({ draftItemId, isClone, onExit, onSubmitted }:
                 Send as task
               </button>
             </>
+          )}
+          {!isClone && (
+            <label
+              className="flex items-center gap-1.5 rounded-md border border-[var(--sh-hair)] bg-white px-2.5 py-1 text-[12px] font-medium text-[var(--sh-ink-2)]"
+              title="Publish this to SquadHire talents. Their admin decides who it reaches and what it unlocks."
+            >
+              <input
+                type="checkbox"
+                checked={!!item.squadhire_audience}
+                onChange={(e) => m.patchItem.mutate({ squadhire_audience: e.target.checked })}
+                className="accent-[var(--sh-ink)]"
+              />
+              SquadHire talents
+            </label>
           )}
           {!isClone && item.status === 'published' ? (
             <button
@@ -309,6 +324,7 @@ export default function LmsEditor({ draftItemId, isClone, onExit, onSubmitted }:
                       m.reorderBlocks.mutate({ lessonId: activeLesson.id, items: arr.map((b, idx) => ({ id: b.id, position: idx })) });
                     }}
                     onPatch={(patch) => m.patchBlock.mutate({ id: block.id, ...patch })}
+                    onSetVideos={(videos) => m.setBlockVideos.mutate({ id: block.id, videos })}
                     onDelete={() => { if (confirm('Delete this block?')) m.deleteBlock.mutate(block.id); }}
                   />
                 ))}
@@ -382,6 +398,7 @@ function SopPageContent({ item, lesson, m }: { item: any; lesson: any; m: any })
                 });
               }}
               onPatch={(patch) => m.patchBlock.mutate({ id: block.id, ...patch })}
+              onSetVideos={(videos) => m.setBlockVideos.mutate({ id: block.id, videos })}
               onDelete={() => { if (confirm('Delete this block?')) m.deleteBlock.mutate(block.id); }}
             />
           ))}
@@ -393,12 +410,13 @@ function SopPageContent({ item, lesson, m }: { item: any; lesson: any; m: any })
 }
 
 /* ---- Block card ---- */
-function BlockCard({ block, canMoveUp, canMoveDown, onMove, onPatch, onDelete }: {
+function BlockCard({ block, canMoveUp, canMoveDown, onMove, onPatch, onSetVideos, onDelete }: {
   block: any;
   canMoveUp: boolean;
   canMoveDown: boolean;
   onMove: (dir: -1 | 1) => void;
   onPatch: (patch: Record<string, unknown>) => void;
+  onSetVideos?: (videos: { language: string; embed_url: string; embed_provider: string }[]) => void;
   onDelete: () => void;
 }) {
   return (
@@ -412,13 +430,137 @@ function BlockCard({ block, canMoveUp, canMoveDown, onMove, onPatch, onDelete }:
         </div>
       </div>
       <div className="p-3">
-        <BlockBody block={block} onPatch={onPatch} />
+        <BlockBody block={block} onPatch={onPatch} onSetVideos={onSetVideos} />
       </div>
     </div>
   );
 }
 
-function BlockBody({ block, onPatch }: { block: any; onPatch: (patch: Record<string, unknown>) => void }) {
+/**
+ * Per-language alternates for one video block. The block's own URL stays the
+ * default — these are the extras a viewer gets when their language matches.
+ * Edits are staged locally and written as one whole-set replacement on Save,
+ * so a half-typed URL never reaches the server.
+ */
+function LanguageVariants({
+  block,
+  onSave,
+}: {
+  block: any;
+  onSave: (videos: { language: string; embed_url: string; embed_provider: string }[]) => void;
+}) {
+  const saved: LmsBlockVideo[] = block.videos ?? [];
+  const [open, setOpen] = useState(saved.length > 0);
+  const [rows, setRows] = useState<{ language: string; embed_url: string }[]>(() =>
+    saved.map((v) => ({ language: v.language, embed_url: v.embed_url ?? '' })),
+  );
+
+  // Re-seed when the server sends a new set (another editor, or our own save).
+  const savedKey = saved.map((v) => `${v.language}:${v.embed_url ?? ''}`).join('|');
+  useEffect(() => {
+    setRows(saved.map((v) => ({ language: v.language, embed_url: v.embed_url ?? '' })));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [savedKey]);
+
+  const dirty =
+    rows.length !== saved.length ||
+    rows.some((r, i) => r.language !== saved[i]?.language || r.embed_url !== (saved[i]?.embed_url ?? ''));
+
+  const used = new Set(rows.map((r) => r.language));
+  const duplicate = used.size !== rows.length;
+  const incomplete = rows.some((r) => !r.embed_url.trim());
+
+  if (!open) {
+    return (
+      <button
+        onClick={() => setOpen(true)}
+        className="text-[11.5px] font-medium text-[var(--sh-ink-3)] underline-offset-2 hover:text-[var(--sh-ink)] hover:underline"
+      >
+        + Add another language
+      </button>
+    );
+  }
+
+  return (
+    <div className="space-y-2 rounded-md border border-[var(--sh-hair)] bg-[var(--surface)] p-2.5">
+      <p className="text-[11px] font-semibold uppercase tracking-wider text-[var(--sh-ink-3)]">
+        Other languages
+      </p>
+      {rows.map((row, i) => (
+        <div key={i} className="flex items-center gap-1.5">
+          <select
+            value={row.language}
+            onChange={(e) =>
+              setRows((rs) => rs.map((r, j) => (j === i ? { ...r, language: e.target.value } : r)))
+            }
+            className="w-[116px] shrink-0 rounded border border-[var(--sh-hair)] bg-[var(--sidebar)] px-1.5 py-1.5 text-[12px] outline-none"
+          >
+            {LMS_VIDEO_LANGUAGES.map((l) => (
+              <option key={l.code} value={l.code}>{l.label}</option>
+            ))}
+          </select>
+          <input
+            value={row.embed_url}
+            onChange={(e) =>
+              setRows((rs) => rs.map((r, j) => (j === i ? { ...r, embed_url: e.target.value } : r)))
+            }
+            placeholder="Video URL for this language"
+            className="min-w-0 flex-1 rounded border border-[var(--sh-hair)] bg-[var(--sidebar)] px-2 py-1.5 text-[12px] outline-none focus:border-[var(--sh-ink)]"
+          />
+          <button
+            onClick={() => setRows((rs) => rs.filter((_, j) => j !== i))}
+            aria-label={`Remove ${row.language}`}
+            className="shrink-0 rounded px-1.5 py-1 text-[13px] text-[var(--sh-ink-3)] hover:bg-[var(--sh-hair-3)] hover:text-[var(--sh-ink)]"
+          >
+            ×
+          </button>
+        </div>
+      ))}
+
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          onClick={() => {
+            const next = LMS_VIDEO_LANGUAGES.find((l) => !used.has(l.code));
+            if (next) setRows((rs) => [...rs, { language: next.code, embed_url: '' }]);
+          }}
+          disabled={rows.length >= LMS_VIDEO_LANGUAGES.length}
+          className="rounded border border-[var(--sh-hair)] px-2 py-1 text-[11.5px] text-[var(--sh-ink-2)] hover:bg-[var(--sh-hair-3)] disabled:opacity-40"
+        >
+          Add language
+        </button>
+        <button
+          onClick={() =>
+            onSave(
+              rows.map((r) => ({
+                language: r.language,
+                embed_url: r.embed_url.trim(),
+                embed_provider: providerOf(r.embed_url.trim()),
+              })),
+            )
+          }
+          disabled={!dirty || duplicate || incomplete}
+          className="rounded bg-[var(--sh-ink)] px-2.5 py-1 text-[11.5px] font-medium text-[var(--sh-bg)] disabled:opacity-40"
+        >
+          Save languages
+        </button>
+        {duplicate && <span className="text-[11px] text-red-600">One entry per language.</span>}
+        {!duplicate && incomplete && (
+          <span className="text-[11px] text-[var(--sh-ink-3)]">Every language needs a URL.</span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function BlockBody({
+  block,
+  onPatch,
+  onSetVideos,
+}: {
+  block: any;
+  onPatch: (patch: Record<string, unknown>) => void;
+  onSetVideos?: (videos: { language: string; embed_url: string; embed_provider: string }[]) => void;
+}) {
   if (block.type === 'text') {
     return <RichTextEditor value={block.text_content} onChange={(doc) => onPatch({ text_content: doc })} />;
   }
@@ -436,6 +578,7 @@ function BlockBody({ block, onPatch }: { block: any; onPatch: (patch: Record<str
           className="w-full rounded-md border border-[var(--sh-hair)] bg-[var(--surface)] px-3 py-2 text-[13px] outline-none focus:border-[var(--sh-ink)]"
         />
         {block.embed_url && <p className="truncate text-[11px] text-[var(--sh-ink-3)]">{block.embed_provider} · {block.embed_url}</p>}
+        {onSetVideos && <LanguageVariants block={block} onSave={onSetVideos} />}
       </div>
     );
   }

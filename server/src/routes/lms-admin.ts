@@ -24,6 +24,7 @@ import {
 } from '../utils/lmsShares';
 import { LMS_SHARE_USER_TYPES } from '@squadhub/shared';
 import type { UserType } from '@squadhub/shared';
+import { loadBlockVideos, withBlockVideos } from '../services/lmsBlockVideos';
 
 const router = Router();
 router.use(requireAuth);
@@ -419,12 +420,14 @@ router.get('/items/:id', async (req: Request, res: Response) => {
       questionsByBlock.set((q as any).block_id, list);
     }
 
+    const videosByBlock = await loadBlockVideos((blocks || []) as any[]);
+
     const blocksByLesson = new Map<string, any[]>();
     for (const b of blocks || []) {
       const list = blocksByLesson.get((b as any).lesson_id) || [];
       const block = (b as any).type === 'quiz'
         ? { ...(b as any), quiz_questions: questionsByBlock.get((b as any).id) || [] }
-        : b;
+        : withBlockVideos(b as any, videosByBlock);
       list.push(block);
       blocksByLesson.set((b as any).lesson_id, list);
     }

@@ -1,8 +1,9 @@
 'use client';
 import ReactPlayer from 'react-player';
-import type { LmsContentBlock } from '@squadhub/shared';
+import { resolveLmsBlockVideo, type LmsContentBlock } from '@squadhub/shared';
 import { useEffect, useRef, useState } from 'react';
 import { useClipsAuthBridge } from '../../../../hooks/useClipsAuthBridge';
+import VideoLanguagePicker from './VideoLanguagePicker';
 
 // Squad Clips links (clips.squadhub.in) point at a full, branded watch page —
 // ReactPlayer can't play it and the page chrome looks wrong inline. For
@@ -36,6 +37,9 @@ function clipEmbedSrc(rawUrl: string): { src: string; gated: boolean } | null {
 
 export default function VideoEmbedBlock({ block }: { block: LmsContentBlock }) {
   const [mounted, setMounted] = useState(false);
+  // null = the block's own (default) video. Set when the viewer picks one of
+  // the per-language alternates.
+  const [language, setLanguage] = useState<string | null>(null);
   useEffect(() => {
     setMounted(true);
   }, []);
@@ -46,9 +50,12 @@ export default function VideoEmbedBlock({ block }: { block: LmsContentBlock }) {
   // public clips and ReactPlayer URLs.
   const { sendAuth } = useClipsAuthBridge(iframeRef);
 
-  const clip = block.embed_url ? clipEmbedSrc(block.embed_url) : null;
+  const variants = block.videos ?? [];
+  const source = resolveLmsBlockVideo(block, language);
+  const embedUrl = source.embed_url;
+  const clip = embedUrl ? clipEmbedSrc(embedUrl) : null;
 
-  if (!block.embed_url) {
+  if (!embedUrl) {
     return (
       <div className="my-2 rounded-lg border border-dashed border-[var(--sh-hair)] bg-[var(--surface)] px-4 py-6 text-center text-[13px] text-[var(--sh-ink-3)]">
         Missing video embed URL
@@ -58,6 +65,7 @@ export default function VideoEmbedBlock({ block }: { block: LmsContentBlock }) {
 
   return (
     <figure className="my-2">
+      <VideoLanguagePicker videos={variants} value={language} onChange={setLanguage} />
       <div
         className="relative overflow-hidden rounded-lg border border-[var(--sh-hair)] bg-black"
         style={{ aspectRatio: '16 / 9' }}
@@ -65,6 +73,7 @@ export default function VideoEmbedBlock({ block }: { block: LmsContentBlock }) {
         {mounted &&
           (clip ? (
             <iframe
+              key={clip.src}
               ref={iframeRef}
               src={clip.src}
               title={block.caption || 'Squad Clip'}
@@ -78,7 +87,8 @@ export default function VideoEmbedBlock({ block }: { block: LmsContentBlock }) {
             />
           ) : (
             <ReactPlayer
-              src={block.embed_url}
+              key={embedUrl}
+              src={embedUrl}
               width="100%"
               height="100%"
               controls

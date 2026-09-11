@@ -1,6 +1,8 @@
 'use client';
-import type { ImageAnnotationData, LmsContentBlock } from '@squadhub/shared';
+import { useState } from 'react';
+import { resolveLmsBlockVideo, type ImageAnnotationData, type LmsContentBlock } from '@squadhub/shared';
 import AnnotationOverlay from './AnnotationOverlay';
+import VideoLanguagePicker from './VideoLanguagePicker';
 
 // Pull annotation overlay data out of the block's freeform metadata, tolerating
 // older/plain images (no annotations) and unknown future schema versions.
@@ -29,10 +31,18 @@ export function ImageBlock({ block }: { block: LmsContentBlock }) {
 }
 
 export function VideoUploadBlock({ block }: { block: LmsContentBlock }) {
-  if (!block.file_url) return <PlaceholderBlock>Missing video</PlaceholderBlock>;
+  // null = the block's own upload. Set when the viewer picks a language alternate.
+  const [language, setLanguage] = useState<string | null>(null);
+  const variants = block.videos ?? [];
+  const source = resolveLmsBlockVideo(block, language);
+  // A language alternate may be an embed rather than an upload; fall back to
+  // the block's own file so the picker can never blank the player out.
+  const fileUrl = source.file_url ?? block.file_url;
+  if (!fileUrl) return <PlaceholderBlock>Missing video</PlaceholderBlock>;
   return (
     <figure className="my-2">
-      <video src={block.file_url} controls className="w-full rounded-lg border border-[var(--sh-hair)] bg-black" />
+      <VideoLanguagePicker videos={variants} value={language} onChange={setLanguage} />
+      <video key={fileUrl} src={fileUrl} controls className="w-full rounded-lg border border-[var(--sh-hair)] bg-black" />
       {block.caption && <figcaption className="mt-2 text-center text-[13px] text-[var(--sh-ink-3)]">{block.caption}</figcaption>}
     </figure>
   );
