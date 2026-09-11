@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import api from '../../../services/api';
 import { connectSocket, subscribeToChannelRoom } from '../../../services/socket';
-import MessageComposer from '../chat/MessageComposer';
+import MessageComposer, { type MessageComposerHandle } from '../chat/MessageComposer';
+import { usePanelFileDrop } from '../pm/usePanelFileDrop';
 import ImageLightbox from '../chat/ImageLightbox';
 import TypingIndicator, { useTypingUsers } from '../chat/TypingIndicator';
 import type { Notification, ChatJump } from '../InboxView';
@@ -128,6 +129,12 @@ export default function InboxMessageDetail({
   const convId = data?.root?.channel_id || data?.root?.dm_conversation_id || null;
   const kind = data?.root?.channel_id ? 'channel' : 'dm';
   const typingUsers = useTypingUsers(convId || '', kind, rootId || undefined);
+  // Drag a file anywhere over the thread pane to stage it on the reply composer
+  // (mirrors ThreadPanel / ChatPanel behaviour).
+  const composerRef = useRef<MessageComposerHandle>(null);
+  const { dragActive, panelHandlers } = usePanelFileDrop((files) => {
+    composerRef.current?.addFiles(files);
+  });
   const [arrivingReplyIds, setArrivingReplyIds] = useState<Set<string>>(() => new Set());
   const arrivalTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
@@ -255,7 +262,12 @@ export default function InboxMessageDetail({
   };
 
   return (
-    <div className="th-pane">
+    <div className="th-pane" style={{ position: 'relative' }} {...panelHandlers}>
+      {dragActive && (
+        <div aria-hidden className="sqc-drop-overlay">
+          <div className="sqc-drop-overlay__label">Drop a file to attach</div>
+        </div>
+      )}
       <div className="th-head">
         <span className="th-glyph" aria-hidden>
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
@@ -300,6 +312,7 @@ export default function InboxMessageDetail({
           mentions) — posts into this thread via parentMessageId. */}
       <div className="th-compose th-compose--chat">
         <MessageComposer
+          ref={composerRef}
           channelId={convId}
           kind={kind}
           parentMessageId={root.id}
