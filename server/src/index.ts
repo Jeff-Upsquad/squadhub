@@ -130,12 +130,14 @@ import profileAccessAdminRoutes from './routes/profile-access-admin';
 import viewPreferencesRoutes from './routes/view-preferences';
 import meetingsRoutes from './routes/meetings';
 import meetingEventsRoutes from './routes/meetings_events';
+import huddlesRoutes from './routes/huddles';
 import featureTipsRoutes from './routes/feature-tips';
 import adminFeatureTipsRoutes from './routes/admin/feature-tips';
 import { startCheckInCron } from './cron/checkin-cron';
 import { startTimesheetCron } from './cron/timesheet-cron';
 import { startTimerCron } from './cron/timer-cron';
 import { startScheduledMessagesSweeper } from './cron/scheduled-messages-cron';
+import { startHuddleSweeper } from './cron/huddle-cron';
 import { startRoutineCron } from './cron/routine-cron';
 import { startTaskMirrorCron } from './cron/task-mirror-cron';
 import { startElapsedTimeCron } from './cron/elapsed-time-cron';
@@ -279,6 +281,7 @@ app.use('/sop-breaches', sopBreachesRoutes);
 app.use('/admin/clips-recovery', clipsRecoveryRoutes);
 app.use('/meetings', meetingsRoutes);
 app.use('/meeting-events', meetingEventsRoutes);
+app.use('/huddles', huddlesRoutes);
 
 // Squad Chat
 app.use('/chat/app', chatAppRoutes);
@@ -340,6 +343,7 @@ server.listen(config.port, () => {
     startTimesheetCron();
     startTimerCron();
     startScheduledMessagesSweeper(io);
+    startHuddleSweeper(io);
     startRoutineCron();
     startTaskMirrorCron();
     startElapsedTimeCron();

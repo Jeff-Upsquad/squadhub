@@ -100,6 +100,14 @@ export const config = {
   zoomAccountId: process.env.ZOOM_ACCOUNT_ID || '',
   zoomClientId: process.env.ZOOM_CLIENT_ID || '',
   zoomClientSecret: process.env.ZOOM_CLIENT_SECRET || '',
+
+  // Huddles (in-app calls) run on LiveKit. All three must be present for the
+  // feature to switch on; otherwise /huddles/config reports disabled and the
+  // start button stays hidden. LIVEKIT_URL is the client-facing wss:// URL
+  // (LiveKit Cloud project URL, or ws://localhost:7880 with `livekit-server --dev`).
+  livekitUrl: process.env.LIVEKIT_URL || '',
+  livekitApiKey: process.env.LIVEKIT_API_KEY || '',
+  livekitApiSecret: process.env.LIVEKIT_API_SECRET || '',
 } as const;
 
 // Validate required env vars at startup

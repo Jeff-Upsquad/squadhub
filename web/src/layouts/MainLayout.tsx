@@ -11,6 +11,8 @@ import type { Workspace, Channel } from '@squadhub/shared';
 import { connectSocket, disconnectSocket, getSocket } from '../services/socket';
 import { usePresenceStore } from '../stores/presenceStore';
 import ChatPanel from '../views/app/chat/ChatPanel';
+import HuddleDock from '../views/app/huddles/HuddleDock';
+import HuddleHeaderButton from '../views/app/huddles/HuddleHeaderButton';
 import SupportChannelView from '../views/app/support/SupportChannelView';
 import SupportAdminPage from '../views/app/support-admin/SupportAdminPage';
 import { useSupportOverview } from '../hooks/useSupport';
@@ -1215,6 +1217,7 @@ export default function MainLayout() {
               </button>
             )}
             <div className="sqc-header__actions">
+              <HuddleHeaderButton channelId={channelId} kind={kind} />
               <ChatSearch channelId={channelId} kind={kind} />
               {isDm && memberCount != null && memberCount > 0 && (
                 <span className="sqc-pill" title={`${memberCount} ${memberCount === 1 ? 'member' : 'members'}`}>
@@ -1443,6 +1446,7 @@ export default function MainLayout() {
         <ChatSidePanel />
         <GroupRunDetailPanel />
         <GlobalMeetingPanel />
+      <HuddleDock />
         <ToastContainer />
         {/* No <FeatureTipOverlay /> here on purpose: the admin-authored tips are
             anchored to desktop chrome (rail, sidebar, tab strip) that doesn't
@@ -1929,6 +1933,7 @@ export default function MainLayout() {
 
       {/* Meeting creation slide-over — opened from anywhere via the store */}
       <GlobalMeetingPanel />
+        <HuddleDock />
 
       {/* Floating draft tasks widget */}
       <DraftTasksWidget

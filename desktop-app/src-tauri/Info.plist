@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <!-- Merged into the bundle's Info.plist by tauri-build. Required for the
+       webview to prompt for mic/camera (Huddles); without these macOS denies
+       getUserMedia silently. Screen sharing (getDisplayMedia) is not
+       supported by WKWebView at all — users share from a browser instead. -->
+  <key>NSMicrophoneUsageDescription</key>
+  <string>SquadHub uses your microphone for huddles and voice notes.</string>
+  <key>NSCameraUsageDescription</key>
+  <string>SquadHub uses your camera for huddles.</string>
+</dict>
+</plist>

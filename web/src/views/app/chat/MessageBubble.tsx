@@ -8,6 +8,7 @@ import EmojiPicker from './EmojiPicker';
 import ImageLightbox from './ImageLightbox';
 import LinkUnfurlCard from './LinkUnfurlCard';
 import MeetingPollCard from './MeetingPollCard';
+import HuddleCard from './HuddleCard';
 import { URL_PATTERN, URL_TEST, splitTrailingPunct, toHref } from '../../../lib/urlPattern';
 import { openExternalUrl } from '../../../lib/openExternal';
 import SopBreachReportModal from '../../../components/sop/SopBreachReportModal';
@@ -1158,7 +1159,9 @@ function ChatMessageBubble({ message, onOpenThread, inThread, grouped, threadMet
             </div>
           </div>
         ) : (
-          message.content && (
+          // A huddle card's text is only a fallback for previews/notifications;
+          // the card itself says everything.
+          message.content && !message.huddle_id && (
             <div className="sqc-msg__content">
               {renderContent(message.content, mentionNamesOf(message))}
               {editedAt && (
@@ -1172,6 +1175,7 @@ function ChatMessageBubble({ message, onOpenThread, inThread, grouped, threadMet
         {actionError && !editing && <div className="sqc-msg__edit-error">{actionError}</div>}
 
         {message.meeting_event_id && <MeetingPollCard meetingEventId={message.meeting_event_id} />}
+        {message.huddle_id && <HuddleCard huddleId={message.huddle_id} />}
         {message.unfurl && <LinkUnfurlCard unfurl={message.unfurl} />}
         <AttachmentBlock message={message} />
 
