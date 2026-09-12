@@ -1,0 +1,206 @@
+/* Huddle call surface. Dark stage regardless of app theme (video looks
+   wrong on a light ground), SquadHub-shaped controls over LiveKit's tiles. */
+
+.hd-call {
+  --lk-bg: #141518;
+  --lk-bg2: #1d1e23;
+  --lk-fg: #f5f5f7;
+  --lk-accent-bg: #0a7d55;
+  --lk-border-color: rgba(255, 255, 255, 0.08);
+  --lk-grid-gap: 10px;
+  display: flex;
+  height: 100%;
+  min-height: 0;
+  width: 100%;
+  background: #141518;
+  color: #f5f5f7;
+  font-family: inherit;
+}
+.hd-main {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+}
+.hd-rail {
+  width: 380px;
+  flex: 0 0 380px;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid rgba(255, 255, 255, 0.08);
+  background: var(--surface, #fff);
+  color: var(--sh-ink, #0f172b);
+}
+@media (max-width: 900px) {
+  .hd-rail { display: none; }
+}
+
+.hd-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  flex: 0 0 auto;
+}
+.hd-live {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: #22c55e;
+  box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.6);
+  animation: hd-pulse 1.8s ease-out infinite;
+}
+@keyframes hd-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.55); }
+  70% { box-shadow: 0 0 0 8px rgba(34, 197, 94, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0); }
+}
+
+.hd-grid {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 0 16px;
+}
+.hd-call .lk-participant-tile {
+  border-radius: 14px;
+  background: #1d1e23;
+  overflow: hidden;
+}
+.hd-call .lk-participant-placeholder {
+  background: #26272e;
+}
+.hd-call .lk-participant-metadata-item {
+  background: rgba(0, 0, 0, 0.55);
+  border-radius: 8px;
+  font-size: 12px;
+}
+.hd-call .lk-participant-tile[data-lk-speaking='true'] {
+  outline: 2px solid #22c55e;
+  outline-offset: -2px;
+}
+
+.hd-controls {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px 16px;
+  flex: 0 0 auto;
+}
+.hd-ctl-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.hd-ctl {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.08);
+  color: #f5f5f7;
+  cursor: pointer;
+  transition: background 0.12s, transform 0.08s;
+}
+.hd-ctl:hover { background: rgba(255, 255, 255, 0.16); }
+.hd-ctl:active { transform: scale(0.96); }
+.hd-ctl:disabled { opacity: 0.5; cursor: default; }
+.hd-ctl.is-on {
+  background: #f5f5f7;
+  color: #141518;
+  border-color: transparent;
+}
+.hd-ctl.is-danger { background: #dc2626; border-color: transparent; }
+
+.hd-leave {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 42px;
+  padding: 0 18px;
+  border-radius: 999px;
+  border: 0;
+  background: #dc2626;
+  color: #fff;
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.hd-leave:hover { background: #b91c1c; }
+.hd-end {
+  height: 42px;
+  padding: 0 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: transparent;
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.hd-end:hover { background: rgba(255, 255, 255, 0.08); }
+
+.hd-notice {
+  position: absolute;
+  left: 50%;
+  top: -8px;
+  transform: translate(-50%, -100%);
+  padding: 6px 12px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.75);
+  color: #fff;
+  font-size: 12px;
+  white-space: nowrap;
+  max-width: 90%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ---- In-app dock (MainLayout) ---- */
+.hd-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 300;
+  display: flex;
+  background: #141518;
+}
+.hd-pill {
+  position: fixed;
+  left: 16px;
+  bottom: 16px;
+  z-index: 300;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px 8px 12px;
+  border-radius: 14px;
+  background: #1d1e23;
+  color: #f5f5f7;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
+}
+.hd-pill__avatars {
+  display: flex;
+}
+.hd-pill__avatars > span {
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  font-size: 11px;
+  font-weight: 700;
+  color: #fff;
+  overflow: hidden;
+  border: 2px solid #1d1e23;
+  margin-left: -6px;
+}
+.hd-pill__avatars > span:first-child { margin-left: 0; }
+.hd-pill__avatars img { width: 100%; height: 100%; object-fit: cover; }
+.hd-pill .hd-ctl { width: 34px; height: 34px; }
+.hd-pill .hd-ctl svg { width: 16px; height: 16px; }

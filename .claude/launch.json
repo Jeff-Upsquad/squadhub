@@ -190,6 +190,33 @@
         "cd '/Users/jeffzeena/squadhub web/.claude/worktrees/cooldock-ui/web' && INTERNAL_API_URL=http://localhost:4000 exec npx next dev -p 3020"
       ],
       "port": 3020
+    },
+    {
+      "name": "Huddles LiveKit",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": [
+        "-lc",
+        "exec livekit-server --dev --bind 0.0.0.0"
+      ],
+      "port": 7880
+    },
+    {
+      "name": "Huddles Server",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": [
+        "-lc",
+        "cd '/Users/jeffzeena/squadhub web/server' && PORT=4050 DISABLE_CRONS=true LIVEKIT_URL=ws://localhost:7880 LIVEKIT_API_KEY=devkey LIVEKIT_API_SECRET=secret exec npx tsx watch src/index.ts"
+      ],
+      "port": 4050
+    },
+    {
+      "name": "Huddles Web",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": [
+        "-lc",
+        "cd '/Users/jeffzeena/squadhub web/web' && INTERNAL_API_URL=http://localhost:4050 exec npx next dev -p 3050"
+      ],
+      "port": 3050
     }
   ]
 }

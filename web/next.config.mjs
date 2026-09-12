@@ -83,6 +83,7 @@ const nextConfig = {
       { source: '/sop-breaches/:path*', destination: `${API_URL}/sop-breaches/:path*` },
       { source: '/meetings/:path*', destination: `${API_URL}/meetings/:path*` },
       { source: '/meeting-events/:path*', destination: `${API_URL}/meeting-events/:path*` },
+      { source: '/huddles/:path*', destination: `${API_URL}/huddles/:path*` },
       { source: '/profile-access/:path*', destination: `${API_URL}/profile-access/:path*` },
       { source: '/view-preferences/:path*', destination: `${API_URL}/view-preferences/:path*` },
       { source: '/feature-tips/:path*', destination: `${API_URL}/feature-tips/:path*` },
