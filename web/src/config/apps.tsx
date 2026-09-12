@@ -1,5 +1,6 @@
 import type { HomeView } from '../layouts/MainLayout';
 import { getFreshAccessToken } from '../services/api';
+import { openExternalUrl } from '../lib/openExternal';
 
 // ---- App registry ----
 // Single source of truth for the in-app "Apps" (mini-apps). Both the Apps
@@ -213,7 +214,7 @@ async function launchSquadBooks(workspace: { id: string; name: string } | null |
   const url = `${SQUADBOOKS_URL}/sso#t=${encodeURIComponent(token)}&w=${encodeURIComponent(
     workspace.id,
   )}&wn=${encodeURIComponent(workspace.name)}`;
-  window.open(url, '_blank', 'noopener');
+  openExternalUrl(url);
 }
 
 /**

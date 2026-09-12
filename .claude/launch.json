@@ -181,6 +181,15 @@
       ],
       "port": 3011,
       "autoPort": true
+    },
+    {
+      "name": "CoolDock Web",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": [
+        "-lc",
+        "cd '/Users/jeffzeena/squadhub web/.claude/worktrees/cooldock-ui/web' && INTERNAL_API_URL=http://localhost:4000 exec npx next dev -p 3020"
+      ],
+      "port": 3020
     }
   ]
 }

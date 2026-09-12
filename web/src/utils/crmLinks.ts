@@ -1,4 +1,5 @@
 import type { CrmChatEntityType } from '@squadhub/shared';
+import { openExternalUrl } from '../lib/openExternal';
 
 /**
  * Deep links into Squad CRM from SquadHub (CRM Chat panel, etc.).
@@ -31,5 +32,5 @@ export function openCrmEntity(
   entityId: string | null | undefined,
 ): void {
   const url = crmEntityUrl(entityType, entityId) || SQUAD_CRM_URL;
-  window.open(url, '_blank', 'noopener,noreferrer');
+  openExternalUrl(url);
 }

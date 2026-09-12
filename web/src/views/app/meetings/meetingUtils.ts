@@ -1,6 +1,7 @@
 import type { MeetingSlot } from '@squadhub/shared';
 import { useTabsStore } from '../../../stores/tabsStore';
 import { buildExternalSnapshot } from '../../../lib/tabSnapshots';
+import { openExternalUrl } from '../../../lib/openExternal';
 
 // Meeting primary accent — the teal-green from the mockup.
 export const MEETING_ACCENT = '#0a7d55';
@@ -79,7 +80,7 @@ export function isFrameBlockedMeetingUrl(url: string): boolean {
 
 export function openMeetingLink(url: string, title?: string | null): void {
   if (isFrameBlockedMeetingUrl(url)) {
-    window.open(url, '_blank', 'noopener,noreferrer');
+    openExternalUrl(url);
     return;
   }
   useTabsStore.getState().openInNewTab(buildExternalSnapshot(url, title));

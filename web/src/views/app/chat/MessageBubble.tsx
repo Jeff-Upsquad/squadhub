@@ -9,6 +9,7 @@ import ImageLightbox from './ImageLightbox';
 import LinkUnfurlCard from './LinkUnfurlCard';
 import MeetingPollCard from './MeetingPollCard';
 import { URL_PATTERN, URL_TEST, splitTrailingPunct, toHref } from '../../../lib/urlPattern';
+import { openExternalUrl } from '../../../lib/openExternal';
 import SopBreachReportModal from '../../../components/sop/SopBreachReportModal';
 import SopFlagDetailModal from '../../../components/sop/SopFlagDetailModal';
 
@@ -69,7 +70,7 @@ function renderInline(text: string, keyPrefix: string, inlineRe: RegExp) {
     const linkM = part.match(/^\[([^\]]+)\]\(([^)\s]+)\)$/);
     if (linkM) {
       return (
-        <a key={key} href={linkM[2]} target="_blank" rel="noopener noreferrer" className="sqc-link">
+        <a key={key} href={linkM[2]} target="_blank" rel="noopener noreferrer" className="sqc-link" onClick={(e) => { e.preventDefault(); e.stopPropagation(); openExternalUrl(linkM[2]); }}>
           {linkM[1]}
         </a>
       );
@@ -86,7 +87,7 @@ function renderInline(text: string, keyPrefix: string, inlineRe: RegExp) {
       const { url, tail } = splitTrailingPunct(part);
       return (
         <Fragment key={key}>
-          <a href={toHref(url)} target="_blank" rel="noopener noreferrer" className="sqc-link">
+          <a href={toHref(url)} target="_blank" rel="noopener noreferrer" className="sqc-link" onClick={(e) => { e.preventDefault(); e.stopPropagation(); openExternalUrl(toHref(url)); }}>
             {url}
           </a>
           {tail}

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useTeamChatEmbedStore } from '../../../stores/teamchatEmbedStore';
+import { openExternalUrl } from '../../../lib/openExternal';
 import { CRM_TEAMCHAT_META } from './CrmTeamChatView';
 
 const SHCRM_URL =
@@ -69,7 +70,7 @@ export default function ShcrmTeamChatEmbedView() {
         </div>
         <button
           type="button"
-          onClick={() => window.open(`${shcrmOrigin()}/app/chat`, '_blank', 'noopener')}
+          onClick={() => openExternalUrl(`${shcrmOrigin()}/app/chat`)}
           title="Open in SquadHire CRM"
           className="flex shrink-0 items-center gap-1 rounded-[6px] border border-[var(--sh-hair)] px-2 py-1 text-[11.5px] font-medium text-[var(--sh-ink-2)] transition hover:bg-[var(--sh-hair-3)] hover:text-[var(--sh-ink)]"
         >
