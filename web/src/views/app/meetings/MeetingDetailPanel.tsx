@@ -1,9 +1,7 @@
 import { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useMeetingEvent, useMeetingActions } from '../../../hooks/useMeetingEvents';
-import { useTabsStore } from '../../../stores/tabsStore';
-import { buildExternalSnapshot } from '../../../lib/tabSnapshots';
-import { MEETING_ACCENT, avatarColor, initialOf } from './meetingUtils';
+import { MEETING_ACCENT, avatarColor, initialOf, openMeetingLink } from './meetingUtils';
 import MeetingSlotRow from './MeetingSlotRow';
 import MeetingAvailabilitySummary from './MeetingAvailabilitySummary';
 import SuggestSlotPopover from './SuggestSlotPopover';
@@ -85,7 +83,7 @@ export default function MeetingDetailPanel({
                 <button
                   type="button"
                   onClick={() => {
-                    useTabsStore.getState().openInNewTab(buildExternalSnapshot(detail.event.link_url!, detail.event.title));
+                    openMeetingLink(detail.event.link_url!, detail.event.title);
                     onClose();
                   }}
                   className="block w-full truncate rounded-lg border border-[#CAD5E2] bg-[#F8FAFC] px-3 py-2 text-left text-sm text-[#2962FF] hover:underline"
