@@ -510,7 +510,10 @@ router.get('/tasks', async (req: Request, res: Response) => {
     }
 
     const withAssignees = await hydrateAssignees(data || []);
-    const hydrated = await hydrateParents(withAssignees);
+    const withParents = await hydrateParents(withAssignees);
+    // Hydrate labels so list rows can render minimal tag pills without an
+    // extra fetch per row (same shape as GET /pm/tasks/my + detail).
+    const hydrated = await hydrateLabels(withParents);
     // Flag rows that are only in this view because they were ADDED to this list
     // (their primary list_id points elsewhere) so the UI can badge them.
     const linkedSet = new Set(linkedIds);

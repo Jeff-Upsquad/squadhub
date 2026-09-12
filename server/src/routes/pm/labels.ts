@@ -354,4 +354,69 @@ router.post('/label-requests', async (req: Request, res: Response) => {
   }
 });
 
+// PUT /pm/labels/:id — update a label's name/color (gated by can_create).
+// Lets members with label-create permission recolor labels inline from the
+// task picker without needing the admin panel. task_id anchors the workspace.
+const updateSchema = z.object({
+  task_id: z.string().uuid(),
+  name: z.string().trim().min(1).max(60).optional(),
+  color: z.string().regex(/^#[0-9a-fA-F]{6}$/, 'color must be a #rrggbb hex').optional(),
+});
+
+router.put('/labels/:id', async (req: Request, res: Response) => {
+  try {
+    const body = updateSchema.parse(req.body);
+    if (!body.name && !body.color) {
+      res.status(400).json({ success: false, error: 'Nothing to update' });
+      return;
+    }
+    const listId = await taskListId(body.task_id);
+    if (!listId) {
+      res.status(404).json({ success: false, error: 'Task not found' });
+      return;
+    }
+    const level = await checkResourceAccess(req.userId!, 'list', listId);
+    if (!level) {
+      res.status(403).json({ success: false, error: 'You do not have access to this task' });
+      return;
+    }
+    const workspaceId = await getWorkspaceIdForTask(body.task_id);
+    if (!workspaceId) {
+      res.status(500).json({ success: false, error: 'Cannot resolve workspace for task' });
+      return;
+    }
+    const isAdmin = await isPlatformAdmin(req.userId!);
+    if (!(await canCreateLabels(req.userId!, workspaceId, { isAdmin }))) {
+      res.status(403).json({ success: false, error: 'You do not have permission to edit labels' });
+      return;
+    }
+    const patch: Record<string, unknown> = {};
+    if (body.name) patch.name = body.name;
+    if (body.color) patch.color = body.color;
+    const { data, error } = await supabaseAdmin
+      .from('task_tags')
+      .update(patch)
+      .eq('id', req.params.id)
+      .eq('workspace_id', workspaceId)
+      .select(LABEL_COLUMNS)
+      .single();
+    if (error) {
+      if (error.code === '23505') {
+        res.status(409).json({ success: false, error: 'A label with that name already exists' });
+        return;
+      }
+      res.status(500).json({ success: false, error: error.message });
+      return;
+    }
+    res.json({ success: true, data });
+  } catch (err) {
+    if (err instanceof z.ZodError) {
+      res.status(400).json({ success: false, error: err.errors[0].message });
+      return;
+    }
+    console.error('Update label error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
 export default router;

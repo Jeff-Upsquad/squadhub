@@ -1,7 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useLabelPicker, useCreateLabel, useAttachLabel, useDetachLabel, useRequestLabel } from '../../../hooks/useLabels';
+import { useLabelPicker, useCreateLabel, useAttachLabel, useDetachLabel, useRequestLabel, useUpdateLabel } from '../../../hooks/useLabels';
 
 const DEFAULT_COLOR = '#6b7280';
+
+export const LABEL_COLORS = [
+  '#ef4444', '#f97316', '#f59e0b', '#84cc16',
+  '#22c55e', '#14b8a6', '#06b6d4', '#3b82f6',
+  '#8b5cf6', '#d946ef', '#ec4899', '#6b7280',
+];
 
 export default function LabelPicker({
   taskId,
@@ -19,9 +25,12 @@ export default function LabelPicker({
   const attachLabel = useAttachLabel(taskId);
   const detachLabel = useDetachLabel(taskId);
   const requestLabel = useRequestLabel(taskId);
+  const updateLabel = useUpdateLabel(taskId);
 
   const [query, setQuery] = useState('');
   const [requested, setRequested] = useState<string | null>(null);
+  const [newColor, setNewColor] = useState(LABEL_COLORS[7]);
+  const [recolorId, setRecolorId] = useState<string | null>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -72,7 +81,7 @@ export default function LabelPicker({
   const handleCreate = async () => {
     const name = query.trim();
     if (!name) return;
-    const label = await createLabel.mutateAsync({ name });
+    const label = await createLabel.mutateAsync({ name, color: newColor });
     if (label?.id) attachLabel.mutate(label.id);
     setQuery('');
   };
@@ -137,26 +146,97 @@ export default function LabelPicker({
             </div>
             {g.labels.map((l) => {
               const sel = attached.has(l.id);
+              const recoloring = recolorId === l.id;
               return (
-                <button type="button" key={l.id} className="ap-row" data-selected={sel} onClick={() => toggle(l.id)}>
-                  <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: l.color || DEFAULT_COLOR, width: 10, height: 10, borderRadius: 9999 }} aria-hidden />
-                  <span className="ap-label"><span className="ap-name">{l.name}</span></span>
-                  {sel && (
-                    <svg className="ap-check" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-                      <polyline points="20 6 9 17 4 12" />
-                    </svg>
+                <div key={l.id}>
+                  <div className="ap-row" data-selected={sel} style={{ cursor: 'default' }}>
+                    <button
+                      type="button"
+                      onClick={() => toggle(l.id)}
+                      className="h-2.5 w-2.5 shrink-0 rounded-full"
+                      style={{ background: l.color || DEFAULT_COLOR, width: 10, height: 10, borderRadius: 9999, border: 'none', padding: 0, cursor: 'pointer' }}
+                      aria-hidden
+                      tabIndex={-1}
+                    />
+                    <button
+                      type="button"
+                      className="ap-label"
+                      style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', textAlign: 'left', flex: 1 }}
+                      onClick={() => toggle(l.id)}
+                    >
+                      <span className="ap-name">{l.name}</span>
+                    </button>
+                    {canCreate && (
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); setRecolorId(recoloring ? null : l.id); }}
+                        title="Change color"
+                        aria-label={`Change color of ${l.name}`}
+                        style={{
+                          background: 'none', border: 'none', cursor: 'pointer', padding: '2px 4px',
+                          fontSize: 11, color: 'var(--sh-ink-4)', lineHeight: 1,
+                        }}
+                      >
+                        🎨
+                      </button>
+                    )}
+                    {sel && (
+                      <svg className="ap-check" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                        <polyline points="20 6 9 17 4 12" />
+                      </svg>
+                    )}
+                  </div>
+                  {recoloring && (
+                    <div style={{ display: 'flex', gap: 6, padding: '4px 10px 8px 30px', flexWrap: 'wrap' }}>
+                      {LABEL_COLORS.map((c) => (
+                        <button
+                          key={c}
+                          type="button"
+                          onClick={() => {
+                            updateLabel.mutate({ id: l.id, color: c }, { onSuccess: () => setRecolorId(null) });
+                          }}
+                          title={c}
+                          aria-label={`Set ${l.name} to ${c}`}
+                          style={{
+                            width: 18, height: 18, borderRadius: 9999, background: c, cursor: 'pointer',
+                            border: (l.color || DEFAULT_COLOR).toLowerCase() === c.toLowerCase()
+                              ? '2px solid var(--sh-ink)' : '2px solid transparent',
+                            outline: 'none', padding: 0,
+                          }}
+                        />
+                      ))}
+                    </div>
                   )}
-                </button>
+                </div>
               );
             })}
           </div>
         ))}
 
         {showCreateRow && (
-          <button type="button" className="ap-row" onClick={handleCreate} disabled={createLabel.isPending}>
-            <span style={{ fontSize: 14, width: 14, textAlign: 'center' }} aria-hidden>＋</span>
-            <span className="ap-label"><span className="ap-name">Create “{query.trim()}”</span></span>
-          </button>
+          <div style={{ padding: '4px 0' }}>
+            <div style={{ display: 'flex', gap: 6, padding: '6px 10px', flexWrap: 'wrap' }} aria-label="Pick a color">
+              {LABEL_COLORS.map((c) => (
+                <button
+                  key={c}
+                  type="button"
+                  onClick={() => setNewColor(c)}
+                  title={c}
+                  aria-label={`Use color ${c}`}
+                  style={{
+                    width: 18, height: 18, borderRadius: 9999, background: c, cursor: 'pointer',
+                    border: newColor.toLowerCase() === c.toLowerCase()
+                      ? '2px solid var(--sh-ink)' : '2px solid transparent',
+                    outline: 'none', padding: 0,
+                  }}
+                />
+              ))}
+            </div>
+            <button type="button" className="ap-row" onClick={handleCreate} disabled={createLabel.isPending}>
+              <span style={{ background: newColor, width: 10, height: 10, borderRadius: 9999, display: 'inline-block' }} aria-hidden />
+              <span className="ap-label"><span className="ap-name">Create “{query.trim()}”</span></span>
+            </button>
+          </div>
         )}
 
         {showRequestRow && (

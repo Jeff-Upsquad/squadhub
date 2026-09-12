@@ -15,9 +15,23 @@ export function useLabelPicker(taskId: string | null, enabled: boolean) {
 export function useCreateLabel(taskId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (vars: { name: string; group_id?: string }) =>
+    mutationFn: async (vars: { name: string; group_id?: string; color?: string }) =>
       (await api.post('/pm/labels', { ...vars, task_id: taskId })).data.data as TaskTag,
     onSuccess: () => qc.invalidateQueries({ queryKey: ['label-picker', taskId] }),
+  });
+}
+
+// Recolor / rename a label inline (gated server-side by can_create).
+export function useUpdateLabel(taskId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (vars: { id: string; name?: string; color?: string }) =>
+      (await api.put(`/pm/labels/${vars.id}`, { ...vars, task_id: taskId })).data.data as TaskTag,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['label-picker', taskId] });
+      qc.invalidateQueries({ queryKey: ['task', taskId] });
+      qc.invalidateQueries({ queryKey: ['tasks'] });
+    },
   });
 }
 
@@ -30,6 +44,9 @@ export function useAttachLabel(taskId: string) {
       qc.invalidateQueries({ queryKey: ['task', taskId] });
       qc.invalidateQueries({ queryKey: ['label-picker', taskId] });
       qc.invalidateQueries({ queryKey: ['task-activity', taskId] });
+      // List rows now render tag pills — refresh them so attach shows instantly.
+      qc.invalidateQueries({ queryKey: ['tasks'] });
+      qc.invalidateQueries({ queryKey: ['my-tasks'] });
     },
   });
 }
@@ -44,6 +61,8 @@ export function useDetachLabel(taskId: string) {
       qc.invalidateQueries({ queryKey: ['task', taskId] });
       qc.invalidateQueries({ queryKey: ['label-picker', taskId] });
       qc.invalidateQueries({ queryKey: ['task-activity', taskId] });
+      qc.invalidateQueries({ queryKey: ['tasks'] });
+      qc.invalidateQueries({ queryKey: ['my-tasks'] });
     },
   });
 }

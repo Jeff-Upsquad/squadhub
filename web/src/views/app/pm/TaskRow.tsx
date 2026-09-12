@@ -119,6 +119,9 @@ export default function TaskRow({
   const workWhen = formatWhen(task.work_date);
   const dueWhen = formatWhen(task.due_date);
   const assignees = task.assignees || [];
+  const tags = ((task as any).tags || []) as { id: string; name: string; color?: string | null }[];
+  const visibleTags = tags.slice(0, 2);
+  const overflowTags = tags.length - visibleTags.length;
 
   const recordCompletion = useRecordWorkBlockCompletion();
   const { data: activeGroupRun } = useActiveGroupRun();
@@ -388,6 +391,33 @@ export default function TaskRow({
             >
               {isFocused ? '★' : '☆'}
             </button>
+            {visibleTags.map((t) => (
+              <span
+                key={t.id}
+                className="inline-flex max-w-[110px] shrink-0 items-center gap-1 truncate rounded-full px-1.5 py-px text-[10px] font-medium leading-4"
+                style={{
+                  background: `${t.color || '#6b7280'}1a`,
+                  color: t.color || '#6b7280',
+                  border: `1px solid ${t.color || '#6b7280'}33`,
+                }}
+                title={t.name}
+              >
+                <span
+                  className="h-1.5 w-1.5 shrink-0 rounded-full"
+                  style={{ background: t.color || '#6b7280' }}
+                  aria-hidden
+                />
+                <span className="truncate">{t.name}</span>
+              </span>
+            ))}
+            {overflowTags > 0 && (
+              <span
+                className="shrink-0 rounded-full bg-[var(--sh-hair-3)] px-1.5 py-px text-[10px] font-medium leading-4 text-[color:var(--sh-ink-3)]"
+                title={tags.slice(2).map((t) => t.name).join(', ')}
+              >
+                +{overflowTags}
+              </span>
+            )}
           </div>
         </div>
 
