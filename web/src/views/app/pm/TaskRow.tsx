@@ -164,6 +164,11 @@ export default function TaskRow({
     }
     // Capture the anchor now — e.currentTarget is gone after the await below.
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    // Show the no-assignee choice immediately. The completion safety check
+    // below still runs, but waiting for the task + checklist requests before
+    // mounting this popover made a simple checkbox click feel laggy.
+    const needsAssigneePrompt = assignees.length === 0;
+    if (needsAssigneePrompt) setNoAssigneePrompt(rect);
     // Completion gate: a task with open subtasks or unchecked checklist items
     // can't be completed. List rows don't carry that data, so fetch it at
     // click time (cached under the same keys the detail panel uses). Fails
@@ -187,13 +192,18 @@ export default function TaskRow({
         .flatMap((c) => c.items || [])
         .filter((i) => !i.is_done).length;
       if (openSubtasks > 0 || openChecklist > 0) {
+        // If the fast no-assignee prompt was already shown, replace it with
+        // the more important blocking explanation once the check completes.
+        setNoAssigneePrompt(null);
         setIncompletePrompt({ rect, subtasks: openSubtasks, checklist: openChecklist });
         return;
       }
     } catch { /* fail open — the server-side gate still blocks */ }
     // Completing a task with nobody assigned: ask first (assign to me / someone
     // else / complete as-is) instead of silently closing it unassigned.
-    if (assignees.length === 0) {
+    if (needsAssigneePrompt) {
+      // Usually already mounted above; keep this as a fallback in case the
+      // prompt was dismissed while the async validation was in flight.
       setNoAssigneePrompt(rect);
       return;
     }
