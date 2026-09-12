@@ -4485,8 +4485,30 @@ body.sb-resizing { user-select: none; -webkit-user-select: none; cursor: col-res
 }
 .dark .td-panel-luma.apple.td-shell .td-title-hero { color: var(--sh-ink); }
 .td-panel-luma.apple.td-shell .td-title-hero[contenteditable], 
-input.td-title-hero {
+input.td-title-hero,
+textarea.td-title-hero {
   border-bottom-color: var(--sq-gray-900) !important;
+}
+/* Title + description edit boxes auto-grow to show full content */
+textarea.td-title-hero.td-title-edit {
+  resize: none;
+  overflow: hidden;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  line-height: 1.3;
+  min-height: 1.3em;
+  padding: 0 0 2px;
+}
+textarea.td-about.td-desc-edit {
+  resize: none;
+  overflow: hidden;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  min-height: 88px;
+  max-height: 60vh;
+  line-height: 1.55;
 }
 
 /* Big circular checkbox: gray-900 on done */

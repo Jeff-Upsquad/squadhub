@@ -400,6 +400,20 @@ export default function TaskDetailPanel({
 
   const [editing, setEditing] = useState<'title' | 'description' | null>(null);
   const [editValue, setEditValue] = useState('');
+  // Auto-growing edit boxes: title was a single-line <input> so long names
+  // were truncated while editing; description had a fixed rows={6}. Both now
+  // use textareas that expand to fit their full content.
+  const titleEditRef = useRef<HTMLTextAreaElement | null>(null);
+  const descEditRef = useRef<HTMLTextAreaElement | null>(null);
+  const autoGrow = useCallback((el: HTMLTextAreaElement | null) => {
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${el.scrollHeight}px`;
+  }, []);
+  useEffect(() => {
+    if (editing === 'title') autoGrow(titleEditRef.current);
+    else if (editing === 'description') autoGrow(descEditRef.current);
+  }, [editing, editValue, autoGrow]);
   const [commentText, setCommentText] = useState('');
   const [commentMentions, setCommentMentions] = useState<string[]>([]);
   const [showActivity, setShowActivity] = useState(false);
@@ -1274,16 +1288,21 @@ export default function TaskDetailPanel({
                   aria-label={isDone ? 'Mark incomplete' : 'Mark complete'}
                 />
                 {editing === 'title' ? (
-                  <input
+                  <textarea
+                    ref={titleEditRef}
                     autoFocus
                     value={editValue}
-                    onChange={(e) => setEditValue(e.target.value)}
+                    rows={1}
+                    onChange={(e) => {
+                      setEditValue(e.target.value);
+                      autoGrow(e.target);
+                    }}
                     onKeyDown={(e) => {
-                      if (e.key === 'Enter') handleSave('title');
+                      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSave('title'); }
                       if (e.key === 'Escape') setEditing(null);
                     }}
                     onBlur={() => handleSave('title')}
-                    className="td-title-hero flex-1 bg-transparent border-b outline-none m-0"
+                    className="td-title-hero td-title-edit flex-1 bg-transparent border-b outline-none m-0"
                     style={{ borderColor: 'var(--sh-accent)' }}
                   />
                 ) : (
@@ -1304,13 +1323,19 @@ export default function TaskDetailPanel({
                 <span className="td-desc-box-label">Description</span>
                 {editing === 'description' ? (
                   <textarea
+                    ref={descEditRef}
                     autoFocus
                     value={editValue}
-                    onChange={(e) => setEditValue(e.target.value)}
+                    onChange={(e) => {
+                      setEditValue(e.target.value);
+                      autoGrow(e.target);
+                    }}
                     onBlur={() => handleSave('description')}
                     onKeyDown={(e) => { if (e.key === 'Escape') setEditing(null); }}
-                    rows={6}
-                    className="td-about w-full resize-none bg-transparent outline-none"
+                    onClick={(e) => e.stopPropagation()}
+                    rows={1}
+                    placeholder="Click to add a description…"
+                    className="td-about td-desc-edit w-full bg-transparent outline-none"
                   />
                 ) : (
                   <div className={`td-about ${!task.description ? 'empty' : ''} ${canEdit ? 'cursor-text' : ''}`}>
