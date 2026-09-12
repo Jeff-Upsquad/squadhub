@@ -1108,8 +1108,19 @@ function ChatMessageBubble({ message, onOpenThread, inThread, grouped, threadMet
               className="sqc-msg__edit-input"
               value={draft}
               autoFocus
-              rows={Math.min(8, Math.max(1, draft.split('\n').length))}
-              onChange={(e) => setDraft(e.target.value)}
+              placeholder="Edit message…"
+              rows={3}
+              ref={(el) => {
+                if (el) {
+                  el.style.height = 'auto';
+                  el.style.height = `${Math.min(220, Math.max(64, el.scrollHeight))}px`;
+                }
+              }}
+              onChange={(e) => {
+                setDraft(e.target.value);
+                e.target.style.height = 'auto';
+                e.target.style.height = `${Math.min(220, Math.max(64, e.target.scrollHeight))}px`;
+              }}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && !e.shiftKey) {
                   e.preventDefault();
@@ -1121,8 +1132,11 @@ function ChatMessageBubble({ message, onOpenThread, inThread, grouped, threadMet
                 }
               }}
             />
+            {actionError && <div className="sqc-msg__edit-error sqc-msg__edit-error--inside">{actionError}</div>}
             <div className="sqc-msg__edit-actions">
-              <span className="sqc-msg__edit-hint">Enter to save · Esc to cancel</span>
+              <span className="sqc-msg__edit-hint">
+                <kbd>Enter</kbd> to save · <kbd>Esc</kbd> to cancel
+              </span>
               <button
                 type="button"
                 className="sqc-msg__edit-btn"
@@ -1139,7 +1153,7 @@ function ChatMessageBubble({ message, onOpenThread, inThread, grouped, threadMet
                 onClick={saveEdit}
                 disabled={busy || !draft.trim()}
               >
-                Save
+                {busy ? 'Saving…' : 'Save'}
               </button>
             </div>
           </div>
