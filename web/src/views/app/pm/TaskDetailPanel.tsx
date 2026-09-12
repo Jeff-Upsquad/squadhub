@@ -51,6 +51,7 @@ import {
 import { useParallelTimers } from '../../../hooks/useParallelTimers';
 import { useLearningStore } from '../../../stores/learningStore';
 import { useIsMobile } from '../../../hooks/useIsMobile';
+import FocusStarButton from '../../../components/pm/FocusStarButton';
 
 function parseTimeInput(input: string): number | null {
   const trimmed = input.trim().toLowerCase();
@@ -946,15 +947,12 @@ export default function TaskDetailPanel({
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6" /></svg>
               </button>
               <span style={{ flex: 1 }} />
-              <button
-                type="button"
+              <FocusStarButton
+                active={isFocused}
+                variant="mobile"
                 className="td-m-hero-icon"
-                data-on={isFocused ? 'true' : undefined}
-                aria-label={isFocused ? 'Unstar' : 'Star'}
-                onClick={() => focusTask.mutate({ id: task.id, focused: !isFocused })}
-              >
-                <svg width="20" height="20" viewBox="0 0 24 24" fill={isFocused ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="1.8"><path d="M12 2.8l2.7 5.5 6.1.9-4.4 4.3 1 6.1L12 16.8 6.6 19.6l1-6.1L3.2 9.2l6.1-.9z" /></svg>
-              </button>
+                onToggle={(focused) => focusTask.mutate({ id: task.id, focused })}
+              />
               <button type="button" className="td-m-hero-icon" aria-label="Copy link" onClick={handleCopyLink}>
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71" /><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71" /></svg>
               </button>
@@ -1118,16 +1116,12 @@ export default function TaskDetailPanel({
           )}
           <div className="flex-1" />
           {task && (
-            <button
-              type="button"
-              onClick={() => focusTask.mutate({ id: task.id, focused: !isFocused })}
+            <FocusStarButton
+              active={isFocused}
+              variant="panel"
               className="td-nav-btn td-focus-star"
-              data-active={isFocused}
-              title={isFocused ? 'Focused — click to remove' : 'Focus'}
-              aria-label={isFocused ? 'Focused' : 'Focus'}
-            >
-              <span style={{ fontSize: 14, lineHeight: 1 }}>{isFocused ? '★' : '☆'}</span>
-            </button>
+              onToggle={(focused) => focusTask.mutate({ id: task.id, focused })}
+            />
           )}
           <button type="button" onClick={handleCopyLink} className="td-nav-btn" title="Copy link">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">

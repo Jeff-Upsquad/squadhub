@@ -3321,6 +3321,101 @@ body.sb-resizing { user-select: none; -webkit-user-select: none; cursor: col-res
 .lv-card .lv-cell--assignee { justify-content: center !important; }
 .lv-card .lv-cell--date { justify-content: center !important; }
 
+/* Shared Focus Today star — the list and detail panel use the same small,
+   warm interaction. The burst only mounts after a deliberate click, so focused
+   tasks do not animate merely because a view was opened. */
+.focus-star-button {
+  --focus-star-gold: #f59e0b;
+  position: relative;
+  isolation: isolate;
+  overflow: visible;
+  -webkit-tap-highlight-color: transparent;
+}
+.focus-star-glyph {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 14px;
+  height: 14px;
+  transform-origin: 50% 54%;
+}
+.focus-star-glyph svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  filter: drop-shadow(0 0 0 transparent);
+  transition: fill 160ms ease, filter 180ms ease;
+}
+.focus-star-button[data-focus-variant="mobile"] .focus-star-glyph {
+  width: 20px;
+  height: 20px;
+}
+.focus-star-button[data-focus-motion="on"] .focus-star-glyph {
+  animation: focusStarGather 540ms cubic-bezier(.2, .9, .25, 1.3) both;
+}
+.focus-star-button[data-focus-motion="off"] .focus-star-glyph {
+  animation: focusStarRelease 260ms cubic-bezier(.4, 0, .2, 1) both;
+}
+.focus-star-button[data-active="true"] .focus-star-glyph svg {
+  filter: drop-shadow(0 1px 2px color-mix(in srgb, var(--focus-star-gold) 42%, transparent));
+}
+.focus-star-burst,
+.focus-star-burst::before,
+.focus-star-burst i {
+  position: absolute;
+  pointer-events: none;
+}
+.focus-star-burst {
+  z-index: 0;
+  inset: 50%;
+  color: var(--focus-star-gold);
+}
+.focus-star-burst::before {
+  content: '';
+  left: 0;
+  top: 0;
+  width: 5px;
+  height: 5px;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  transform: translate(-50%, -50%) scale(.4);
+  animation: focusStarHalo 460ms cubic-bezier(.2, .8, .2, 1) both;
+}
+.focus-star-burst i {
+  --focus-star-ray: 0deg;
+  --focus-star-delay: 0ms;
+  left: -1px;
+  top: -1px;
+  width: 2px;
+  height: 3px;
+  border-radius: 999px;
+  background: currentColor;
+  opacity: 0;
+  transform-origin: 1px 1px;
+  animation: focusStarRay 430ms cubic-bezier(.16, .84, .44, 1) var(--focus-star-delay) both;
+}
+@keyframes focusStarGather {
+  0%   { transform: scale(.76) rotate(-20deg); }
+  46%  { transform: scale(1.28) rotate(9deg); }
+  72%  { transform: scale(.94) rotate(-3deg); }
+  100% { transform: scale(1) rotate(0); }
+}
+@keyframes focusStarRelease {
+  0%   { transform: scale(1) rotate(0); }
+  45%  { transform: scale(.76) rotate(-10deg); }
+  100% { transform: scale(1) rotate(0); }
+}
+@keyframes focusStarHalo {
+  0%   { opacity: .72; transform: translate(-50%, -50%) scale(.4); }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(4.8); }
+}
+@keyframes focusStarRay {
+  0%   { opacity: 0; transform: rotate(var(--focus-star-ray)) translateY(-4px) scaleY(.5); }
+  28%  { opacity: .9; }
+  100% { opacity: 0; transform: rotate(var(--focus-star-ray)) translateY(-14px) scaleY(1); }
+}
+
 /* Task detail panel focus today star */
 .td-focus-star[data-active="true"] {
   color: #f59e0b !important;
@@ -3395,10 +3490,20 @@ body.sb-resizing { user-select: none; -webkit-user-select: none; cursor: col-res
   margin-left: 2px;
 }
 .lv-row:hover .lv-focus-star { opacity: 1; }
+.lv-focus-star:focus-visible { opacity: 1; }
 .lv-focus-star:hover { background: var(--sh-hair-3); color: #f59e0b; }
 .lv-focus-star[data-active="true"] {
   opacity: 1;
   color: #f59e0b;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .focus-star-glyph,
+  .focus-star-glyph svg {
+    animation: none !important;
+    transition: none;
+  }
+  .focus-star-burst { display: none; }
 }
 
 /* More button (6th column) */

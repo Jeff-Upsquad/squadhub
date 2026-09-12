@@ -18,6 +18,7 @@ import DatePicker from './DatePicker';
 import PriorityPicker, { PRIORITY_META } from './PriorityPicker';
 import SopBreachReportModal from '../../../components/sop/SopBreachReportModal';
 import SopFlagDetailModal from '../../../components/sop/SopFlagDetailModal';
+import FocusStarButton from '../../../components/pm/FocusStarButton';
 
 function fmtClock(seconds: number): string {
   const h = Math.floor(seconds / 3600);
@@ -381,16 +382,13 @@ export default function TaskRow({
                 {fmtClock(tickElapsed)}
               </span>
             )}
-            <button
-              type="button"
+            <FocusStarButton
+              active={isFocused}
+              variant="list"
               className="lv-focus-star"
-              data-active={isFocused}
-              onClick={(e) => { e.stopPropagation(); focusTask.mutate({ id: task.id, focused: !isFocused }); }}
-              aria-label={isFocused ? 'Focused for today — click to remove' : 'Focus today'}
-              title={isFocused ? 'Focused for today — click to remove' : 'Focus today'}
-            >
-              {isFocused ? '★' : '☆'}
-            </button>
+              stopPropagation
+              onToggle={(focused) => focusTask.mutate({ id: task.id, focused })}
+            />
             {visibleTags.map((t) => (
               <span
                 key={t.id}
