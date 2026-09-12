@@ -1130,6 +1130,9 @@
   width: auto !important;
   border-left: none;
 }
+.msh-pane .sqc-thread-resize {
+  display: none;
+}
 
 /* Inbox — tapping a notification drills in: the list swaps to a full-width
    reading screen with a back chip ([data-detail] is set by InboxView from
@@ -1263,6 +1266,14 @@
 }
 .msh-pane .inbox-mark-all:disabled { color: var(--m-ink-4); cursor: default; }
 .msh-pane .inbox-mark-all svg { flex: none; }
+/* Mark-all-read sits in its own right-aligned row under the full-width
+   Unread/Read tabs (the phone head keeps only Activity + type filter). */
+.msh-pane .inbox-phone-tools {
+  display: flex;
+  justify-content: flex-end;
+  padding: 0 16px 8px;
+  flex: none;
+}
 
 .msh-pane .sh-view .inbox-filter {
   flex-wrap: nowrap;

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import api from '../../../services/api';
 import { getSocket } from '../../../services/socket';
@@ -20,6 +20,13 @@ interface Props {
 // Slack-style thread side panel. Shows the parent message + replies fetched
 // via GET /messages/:id/thread. Reuses MessageComposer with `parentMessageId`
 // so replies post into the thread automatically.
+const THREAD_W_DEFAULT = 400;
+const THREAD_W_MIN = 320;
+const THREAD_W_MAX = 720;
+function threadWidthKey(userId?: string | null) {
+  return userId ? `sh-thread-width:${userId}` : 'sh-thread-width';
+}
+
 export default function ThreadPanel({ parentId, channelId, kind, onClose }: Props) {
   const queryClient = useQueryClient();
   const queryKey = ['thread', parentId];
@@ -29,6 +36,72 @@ export default function ThreadPanel({ parentId, channelId, kind, onClose }: Prop
   const dm = useWorkspaceStore((s) => s.dmConversations.find((d) => d.id === channelId));
   const meId = useAuthStore((s) => s.user?.id);
   const typingUsers = useTypingUsers(channelId, kind, parentId);
+  // Resizable width — shared across all chats/channels for this user.
+  // Persisted per user in localStorage; clamped to a usable range.
+  const [threadWidth, setThreadWidth] = useState(THREAD_W_DEFAULT);
+  const [resizingThread, setResizingThread] = useState(false);
+  const threadResize = useRef<{ startX: number; startW: number } | null>(null);
+  const threadWidthRef = useRef(THREAD_W_DEFAULT);
+  // Load the persisted width after mount — lazy-init from localStorage would
+  // diverge from the server render and trip hydration.
+  useEffect(() => {
+    try {
+      const stored =
+        Number(window.localStorage.getItem(threadWidthKey(meId))) ||
+        Number(window.localStorage.getItem('sh-thread-width'));
+      if (Number.isFinite(stored) && stored >= THREAD_W_MIN && stored <= THREAD_W_MAX) {
+        threadWidthRef.current = stored;
+        setThreadWidth(stored);
+      }
+    } catch {
+      /* non-critical — fall back to the default width */
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [meId]);
+  const beginThreadResize = (e: ReactPointerEvent<HTMLDivElement>) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    threadResize.current = { startX: e.clientX, startW: threadWidthRef.current };
+    setResizingThread(true);
+    e.currentTarget.setPointerCapture(e.pointerId);
+    document.body.classList.add('sb-resizing');
+  };
+  const moveThreadResize = (e: ReactPointerEvent<HTMLDivElement>) => {
+    const st = threadResize.current;
+    if (!st) return;
+    // Dragging the left edge leftwards widens the panel, rightwards narrows it.
+    const next = Math.min(THREAD_W_MAX, Math.max(THREAD_W_MIN, st.startW - (e.clientX - st.startX)));
+    threadWidthRef.current = next;
+    setThreadWidth(next);
+  };
+  const endThreadResize = (e: ReactPointerEvent<HTMLDivElement>) => {
+    if (!threadResize.current) return;
+    threadResize.current = null;
+    setResizingThread(false);
+    try {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    } catch {
+      /* pointer already released */
+    }
+    document.body.classList.remove('sb-resizing');
+    try {
+      window.localStorage.setItem(threadWidthKey(meId), String(threadWidthRef.current));
+      // Keep the legacy shared key in sync for accounts without an id yet.
+      window.localStorage.setItem('sh-thread-width', String(threadWidthRef.current));
+    } catch {
+      /* non-critical — width still applies for this session */
+    }
+  };
+  const resetThreadWidth = () => {
+    threadWidthRef.current = THREAD_W_DEFAULT;
+    setThreadWidth(THREAD_W_DEFAULT);
+    try {
+      window.localStorage.setItem(threadWidthKey(meId), String(THREAD_W_DEFAULT));
+      window.localStorage.setItem('sh-thread-width', String(THREAD_W_DEFAULT));
+    } catch {
+      /* ignore */
+    }
+  };
   const [arrivingReplyIds, setArrivingReplyIds] = useState<Set<string>>(() => new Set());
   const arrivalTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
   const dmOthers = (dm?.participants || []).filter((p) => p.id !== meId);
@@ -149,9 +222,23 @@ export default function ThreadPanel({ parentId, channelId, kind, onClose }: Prop
 
   return (
     <div
-      className="sqc-thread-panel relative flex w-[400px] shrink-0 flex-col border-l border-divider bg-white dark:bg-surface"
+      className="sqc-thread-panel relative flex shrink-0 flex-col border-l border-divider bg-white dark:bg-surface"
+      style={{ width: threadWidth }}
       {...panelHandlers}
     >
+      <div
+        className="sqc-thread-resize"
+        data-resizing={resizingThread}
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="Resize thread panel"
+        title="Drag to resize — double-click to reset"
+        onPointerDown={beginThreadResize}
+        onPointerMove={moveThreadResize}
+        onPointerUp={endThreadResize}
+        onPointerCancel={endThreadResize}
+        onDoubleClick={resetThreadWidth}
+      />
       {dragActive && (
         <div aria-hidden className="sqc-drop-overlay">
           <div className="sqc-drop-overlay__label">Drop a file to attach</div>

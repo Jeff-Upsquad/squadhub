@@ -765,6 +765,13 @@ body {
 .sb-resize:hover::after, .sb-resize[data-resizing='true']::after { background: var(--sh-hair-2); }
 body.sb-resizing { user-select: none; -webkit-user-select: none; cursor: col-resize; }
 
+/* ── Thread panel resize handle ───────────────────────────────────────── */
+/* Slim strip on the thread panel's left edge; mirrors the sidebar handle. */
+/* Double-click resets to the default width (handled in ThreadPanel). */
+.sqc-thread-resize { position: absolute; top: 0; left: 0; width: 6px; height: 100%; cursor: col-resize; z-index: 30; touch-action: none; }
+.sqc-thread-resize::after { content: ''; position: absolute; top: 0; left: 0; width: 2px; height: 100%; background: transparent; transition: background .12s ease; }
+.sqc-thread-resize:hover::after, .sqc-thread-resize[data-resizing='true']::after { background: var(--sh-hair-2); }
+
 /* ── Day Planner ────────── */
 .sh-view.day-planner-view { display: grid; grid-template-columns: 420px 1fr; height: 100%; }
 .sh-view .dp-list { border-right: 1px solid var(--sh-hair); overflow-y: auto; background: var(--surface); }

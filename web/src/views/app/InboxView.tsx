@@ -478,18 +478,6 @@ export default function InboxView({
           <div className="inbox-phone-head">
             <h1>Activity</h1>
             {typeFilter}
-            <button
-              type="button"
-              className="inbox-mark-all"
-              disabled={unreadCount === 0 || markAllRead.isPending}
-              onClick={() => markAllRead.mutate()}
-            >
-              <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24" aria-hidden>
-                <path d="m5 13 4 4L19 7" />
-                <path d="M9 13 13 17 20 9" opacity="0.55" />
-              </svg>
-              Mark all read
-            </button>
           </div>
         ) : (
           <div className="inbox-head">
@@ -512,6 +500,22 @@ export default function InboxView({
               </button>
             ))}
           </div>
+          {isMobile && (
+            <div className="inbox-phone-tools">
+              <button
+                type="button"
+                className="inbox-mark-all"
+                disabled={unreadCount === 0 || markAllRead.isPending}
+                onClick={() => markAllRead.mutate()}
+              >
+                <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24" aria-hidden>
+                  <path d="m5 13 4 4L19 7" />
+                  <path d="M9 13 13 17 20 9" opacity="0.55" />
+                </svg>
+                Mark all read
+              </button>
+            </div>
+          )}
           {!isMobile && (
             <div className="ib-tools-row">
               <div style={{ flex: 1 }} />
