@@ -389,7 +389,9 @@ body {
   to   { opacity: 1; transform: none; }
 }
 
-/* Conic progress ring with a soft hole + pulsing core dot */
+/* Conic progress ring with a soft hole + pulsing core dot.
+   The whole icon pulses while a timer runs (RailTimer only mounts when live,
+   so data-running is always true here) — outer ping ring + core glow. */
 .sh-rail-timer .rt-ring {
   position: relative; width: 30px; height: 30px; border-radius: 50%;
   display: grid; place-items: center;
@@ -401,6 +403,17 @@ body {
 .sh-rail-timer .rt-ring::before {
   content: ""; position: absolute; inset: 3px; border-radius: 50%;
   background: color-mix(in srgb, var(--rt-cur) 8%, var(--surface));
+}
+/* Expanding pulse ring around the timer icon — visible at a glance */
+.sh-rail-timer .rt-ring[data-running="true"] .rt-ping {
+  position: absolute; inset: 0; border-radius: 50%;
+  border: 2px solid color-mix(in srgb, var(--rt-cur) 65%, transparent);
+  animation: sh-rt-ring-ping 1.8s cubic-bezier(0, 0, 0.2, 1) infinite;
+  pointer-events: none;
+}
+@keyframes sh-rt-ring-ping {
+  0%        { transform: scale(0.85); opacity: 0.9; }
+  70%, 100% { transform: scale(1.45); opacity: 0; }
 }
 .sh-rail-timer .rt-core {
   position: relative; z-index: 1;
@@ -426,6 +439,7 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .sh-rail-timer { animation: none; }
   .sh-rail-timer .rt-core { animation: none; }
+  .sh-rail-timer .rt-ring[data-running="true"] .rt-ping { animation: none; opacity: 0; }
 }
 
 .sh-view .briefing h2 { font-family: 'Plus Jakarta Sans', 'Inter', sans-serif; font-size: 26px; line-height: 1.22; margin: 10px 0 14px; max-width: 58ch; color: var(--sh-ink); letter-spacing: -0.005em; font-weight: 400; }

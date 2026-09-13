@@ -99,12 +99,14 @@ export default function RailTimer({ onOpen }: { onOpen: () => void }) {
       type="button"
       className="sh-rail-timer"
       data-state={type}
+      data-running="true"
       style={{ '--rt-pct': pct } as React.CSSProperties}
       onClick={onOpen}
       title={tip}
       data-tip-anchor="rail.timer"
     >
-      <span className="rt-ring">
+      <span className="rt-ring" data-running="true">
+        <span className="rt-ping" aria-hidden />
         <span className="rt-core" />
       </span>
       <span className="rt-time">{fmtClock(elapsed)}</span>
