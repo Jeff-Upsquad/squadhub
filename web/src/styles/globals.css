@@ -10044,6 +10044,17 @@ html[data-theme="noir"] .inbox-slider-panel {
 .td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row[data-td="priority"]:not(:has(.td-prop-empty))::after,
 .td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row[data-td="labels"]:not(:has(.td-prop-empty))::after,
 .td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row[data-td="space"]:not(:has(.td-prop-empty))::after { opacity: 1; transform: none; }
+/* Empty first-row fields use the same floating-label motion on interaction. */
+.td-panel-luma.apple.td-shell .td-settings-row[data-td="status"]:has(.td-prop-empty):is(:hover, :focus-within, [data-open]) .k,
+.td-panel-luma.apple.td-shell .td-settings-row[data-td="type"]:has(.td-prop-empty):is(:hover, :focus-within, [data-open]) .k,
+.td-panel-luma.apple.td-shell .td-settings-row[data-td="priority"]:has(.td-prop-empty):is(:hover, :focus-within, [data-open]) .k,
+.td-panel-luma.apple.td-shell .td-settings-row[data-td="labels"]:has(.td-prop-empty):is(:hover, :focus-within, [data-open]) .k,
+.td-panel-luma.apple.td-shell .td-settings-row[data-td="space"]:has(.td-prop-empty):is(:hover, :focus-within, [data-open]) .k { opacity: 0; transform: translateY(-6px); max-width: 0; margin-right: -7px; }
+.td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row[data-td="status"]:has(.td-prop-empty):is(:hover, :focus-within, [data-open])::after,
+.td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row[data-td="type"]:has(.td-prop-empty):is(:hover, :focus-within, [data-open])::after,
+.td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row[data-td="priority"]:has(.td-prop-empty):is(:hover, :focus-within, [data-open])::after,
+.td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row[data-td="labels"]:has(.td-prop-empty):is(:hover, :focus-within, [data-open])::after,
+.td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row[data-td="space"]:has(.td-prop-empty):is(:hover, :focus-within, [data-open])::after { opacity: 1; transform: none; }
 /* Reserve each empty pill's expanded width before revealing its hint. */
 .td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row[data-td="status"]:has(.td-prop-empty) { width: 142px; }
 .td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row[data-td="type"]:has(.td-prop-empty) { width: 126px; }
