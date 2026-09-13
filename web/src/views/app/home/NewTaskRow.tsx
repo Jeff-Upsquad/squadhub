@@ -473,21 +473,21 @@ export default function NewTaskRow({
 
       {/* Due date — first of the dates: the deadline drives triage urgency */}
       <div className="nt-cell nt-c-date">
-        <button type="button" className="nt-cellbtn" onClick={(e) => openEditor('due', e)}>
+        <button type="button" className="nt-cellbtn" title={t.due_date ? `Due: ${fmtDateCell(t.due_date)}` : 'Set due date'} onClick={(e) => openEditor('due', e)}>
           {t.due_date ? <span>{fmtDateCell(t.due_date)}</span> : <span className="nt-placeholder">—</span>}
         </button>
       </div>
 
       {/* Start date */}
       <div className="nt-cell nt-c-date">
-        <button type="button" className="nt-cellbtn" onClick={(e) => openEditor('start', e)}>
+        <button type="button" className="nt-cellbtn" title={t.start_date ? `Start: ${fmtDateCell(t.start_date)}` : 'Set start date'} onClick={(e) => openEditor('start', e)}>
           {t.start_date ? <span>{fmtDateCell(t.start_date)}</span> : <span className="nt-placeholder">—</span>}
         </button>
       </div>
 
       {/* Work date */}
       <div className="nt-cell nt-c-date">
-        <button type="button" className="nt-cellbtn" onClick={(e) => openEditor('work', e)}>
+        <button type="button" className="nt-cellbtn" title={t.work_date ? `Work: ${fmtDateCell(t.work_date)}` : 'Set work date'} onClick={(e) => openEditor('work', e)}>
           {t.work_date ? <span>{fmtDateCell(t.work_date)}</span> : <span className="nt-placeholder">—</span>}
         </button>
       </div>

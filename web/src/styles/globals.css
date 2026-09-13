@@ -8244,11 +8244,18 @@ ol.sqc-list {
 .nt-table { min-width: 1120px; }
 
 /* Column order (left → right) follows the triage flow: decide → what → where →
-   who → how urgent → what state → when (due first) → how long. Widths are kept
-   tight so all ten columns fit the modal with no horizontal scroll. */
-.nt-row-grid, .nt-head-row { display: grid; grid-template-columns: 44px minmax(220px, 1fr) 132px 76px 100px 132px 108px 108px 108px 84px; align-items: center; gap: 4px; padding: 0 16px; }
+   who → how urgent → what state → when (due first) → how long. The Task column
+   takes all free space; the rest are sized to their content so all ten columns
+   fit the modal with no horizontal scroll. */
+.nt-row-grid, .nt-head-row { display: grid; grid-template-columns: 48px minmax(260px, 1fr) 132px 88px 100px 132px 108px 108px 108px 88px; align-items: center; gap: 4px; padding: 0 16px; }
 .nt-head-row { position: sticky; top: 0; z-index: 2; background: var(--surface); border-bottom: 1px solid var(--sh-hair-3); padding-top: 10px; padding-bottom: 10px; }
-.nt-col { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.07em; font-weight: 600; color: var(--sh-ink-4); }
+.nt-col { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.07em; font-weight: 600; color: var(--sh-ink-4); padding: 0 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Headers line up with their column's content: body cells add 4px cell padding
+   + 8px button padding before the text, so headers carry the same 12px inset.
+   Review is centered like its checkbox; Task aligns to its content block start
+   (the focus star + title stack). */
+.nt-head-row .nt-c-review { padding: 0; }
+.nt-head-row .nt-c-task { padding-left: 4px; }
 
 .nt-row { border-bottom: 1px solid var(--sh-hair-3); transition: opacity 0.42s ease, transform 0.42s cubic-bezier(0.4, 0, 0.7, 0.1); }
 .nt-row:hover .nt-row-grid { background: var(--sh-hair-3); }
@@ -8279,7 +8286,7 @@ ol.sqc-list {
 .nt-estimate-input:focus { border-color: var(--sh-ink-3); }
 .nt-estimate-hint { font-size: 10px; color: var(--sh-ink-4); margin-top: 6px; }
 
-.nt-cellbtn { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; padding: 4px 8px; border-radius: 7px; border: 1px solid transparent; background: transparent; color: var(--sh-ink-2); font-size: 12.5px; cursor: pointer; transition: background 0.12s, border-color 0.12s, box-shadow 0.12s; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.nt-cellbtn { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; padding: 4px 8px; border-radius: 7px; border: 1px solid transparent; background: transparent; color: var(--sh-ink-2); font-size: 12px; cursor: pointer; transition: background 0.12s, border-color 0.12s, box-shadow 0.12s; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .nt-cellbtn:hover { background: var(--surface); border-color: var(--sh-hair); box-shadow: var(--sh-shadow-sm); }
 .nt-placeholder { color: var(--sh-ink-4); }
 
@@ -8289,9 +8296,6 @@ ol.sqc-list {
 .nt-ava-more { background: var(--sh-hair-2); color: var(--sh-ink-3); }
 
 .nt-pri-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; border: 1px solid transparent; }
-
-/* Date cells run slightly smaller so "Sep 12 · 2:30 PM" fits their column. */
-.nt-c-date .nt-cellbtn { font-size: 12px; }
 
 .nt-skel-wrap { padding: 12px 16px; }
 .nt-skel { height: 40px; border-radius: 9px; margin: 6px 0; background: var(--sh-hair-3); animation: hm-pulse 1.5s ease-in-out infinite; }
