@@ -9998,7 +9998,8 @@ html[data-theme="noir"] .inbox-slider-panel {
 .td-panel-luma.apple.td-shell .td-settings-row[data-td="priority"] .td-prop-chip { background: transparent !important; border: 0 !important; box-shadow: none !important; padding: 0 !important; font-size: 13px; }
 
 /* Pill states.
-   Empty pill  — icon, label, and hint stay visible at a stable width.
+   Empty pill  — the hint fades in within a reserved-width shell, so the
+                 animation cannot reflow the surrounding flex row.
    Filled pill — the inline label collapses so the value sits at the left
                  edge, and a small plain caption (no chip) names the field
                  just above the pill. */
@@ -10011,7 +10012,7 @@ html[data-theme="noir"] .inbox-slider-panel {
 .td-panel-luma.apple.td-shell .td-settings-row[data-td="type"] .k,
 .td-panel-luma.apple.td-shell .td-settings-row[data-td="priority"] .k,
 .td-panel-luma.apple.td-shell .td-settings-row[data-td="labels"] .k,
-.td-panel-luma.apple.td-shell .td-settings-row[data-td="space"] .k { max-width: 120px; overflow: hidden; }
+.td-panel-luma.apple.td-shell .td-settings-row[data-td="space"] .k { max-width: 120px; overflow: hidden; transition: opacity .16s ease, transform .16s ease, max-width .22s cubic-bezier(0.22, 1, 0.36, 1), margin .22s cubic-bezier(0.22, 1, 0.36, 1); }
 /* caption */
 .td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row[data-td="status"]::after,
 .td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row[data-td="type"]::after,
@@ -10025,6 +10026,7 @@ html[data-theme="noir"] .inbox-slider-panel {
   padding: 0 4px; background: var(--td-well); border-radius: 3px;
   color: var(--sh-ink-3); white-space: nowrap;
   opacity: 0; transform: translateY(4px);
+  transition: opacity .18s ease, transform .22s cubic-bezier(0.22, 1, 0.36, 1);
 }
 .td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row[data-td="status"]::after { content: 'Status'; }
 .td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row[data-td="type"]::after { content: 'Type'; }
@@ -10042,12 +10044,21 @@ html[data-theme="noir"] .inbox-slider-panel {
 .td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row[data-td="priority"]:not(:has(.td-prop-empty))::after,
 .td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row[data-td="labels"]:not(:has(.td-prop-empty))::after,
 .td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row[data-td="space"]:not(:has(.td-prop-empty))::after { opacity: 1; transform: none; }
-/* Empty hints reserve their width so hovering cannot reflow the flex row. */
+/* Reserve each empty pill's expanded width before revealing its hint. */
+.td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row[data-td="status"]:has(.td-prop-empty) { width: 142px; }
+.td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row[data-td="type"]:has(.td-prop-empty) { width: 126px; }
+.td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row[data-td="priority"]:has(.td-prop-empty) { width: 118px; }
+.td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row[data-td="labels"]:has(.td-prop-empty) { width: 142px; }
 .td-panel-luma.apple.td-shell .td-settings-row[data-td="status"] .td-prop-empty,
 .td-panel-luma.apple.td-shell .td-settings-row[data-td="type"] .td-prop-empty,
 .td-panel-luma.apple.td-shell .td-settings-row[data-td="priority"] .td-prop-empty,
 .td-panel-luma.apple.td-shell .td-settings-row[data-td="labels"] .td-prop-empty,
-.td-panel-luma.apple.td-shell .td-settings-row[data-td="space"] .td-prop-empty { display: inline-block; max-width: 160px; opacity: 1; overflow: hidden; white-space: nowrap; margin-left: 0; }
+.td-panel-luma.apple.td-shell .td-settings-row[data-td="space"] .td-prop-empty { display: inline-block; max-width: 0; opacity: 0; overflow: hidden; white-space: nowrap; margin-left: -7px; transition: max-width .22s cubic-bezier(0.22, 1, 0.36, 1), opacity .16s ease, margin .22s cubic-bezier(0.22, 1, 0.36, 1); }
+.td-panel-luma.apple.td-shell .td-settings-row[data-td="status"]:is(:hover, :focus-within, [data-open]) .td-prop-empty,
+.td-panel-luma.apple.td-shell .td-settings-row[data-td="type"]:is(:hover, :focus-within, [data-open]) .td-prop-empty,
+.td-panel-luma.apple.td-shell .td-settings-row[data-td="priority"]:is(:hover, :focus-within, [data-open]) .td-prop-empty,
+.td-panel-luma.apple.td-shell .td-settings-row[data-td="labels"]:is(:hover, :focus-within, [data-open]) .td-prop-empty,
+.td-panel-luma.apple.td-shell .td-settings-row[data-td="space"]:is(:hover, :focus-within, [data-open]) .td-prop-empty { max-width: 160px; opacity: 1; margin-left: 0; }
 /* room above row 1 for the captions */
 .td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] { padding-top: 18px !important; }
 @media (prefers-reduced-motion: reduce) {
@@ -10073,12 +10084,18 @@ html[data-theme="noir"] .inbox-slider-panel {
 .td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row[data-td="time"] { order: 11; flex-basis: 50% !important; }
 .td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row[data-td="elapsed"] { order: 12; flex-basis: 25% !important; }
 .td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"]:has([data-td="elapsed"]) .td-settings-row[data-td="estimate"] { flex-basis: 25% !important; }
-/* Cell labels use a fixed two-line layout (caption + value). Keeping the
-   geometry unchanged on hover prevents pointer-triggered animation loops. */
+/* Cell labels float inside a fixed-height row, so the animation does not
+   change the hover target's geometry. */
 .td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row:is([data-td="work"], [data-td="due"], [data-td="start"], [data-td="repeat"], [data-td="estimate"], [data-td="time"], [data-td="elapsed"]) { position: relative; min-height: 60px; justify-content: flex-start !important; gap: 5px; }
-.td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row:is([data-td="work"], [data-td="due"], [data-td="start"], [data-td="repeat"], [data-td="estimate"], [data-td="time"], [data-td="elapsed"]) .k { transform: none; transform-origin: left center; font-size: 8.5px !important; font-weight: 600 !important; letter-spacing: 0.02em !important; color: var(--sh-ink-3) !important; }
-.td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row:is([data-td="work"], [data-td="due"], [data-td="start"], [data-td="repeat"], [data-td="estimate"], [data-td="time"], [data-td="elapsed"]) .v .td-prop-empty { opacity: 1; }
-.td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row:is([data-td="work"], [data-td="due"], [data-td="start"], [data-td="repeat"], [data-td="estimate"], [data-td="time"], [data-td="elapsed"]) .k svg { width: 11px; height: 11px; }
+.td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row:is([data-td="work"], [data-td="due"], [data-td="start"], [data-td="repeat"], [data-td="estimate"], [data-td="time"], [data-td="elapsed"]) .k { transform-origin: left center; transition: transform .22s cubic-bezier(0.22, 1, 0.36, 1), font-size .18s ease, color .18s ease, letter-spacing .18s ease; }
+.td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row:is([data-td="work"], [data-td="due"], [data-td="start"], [data-td="repeat"], [data-td="estimate"], [data-td="time"], [data-td="elapsed"]) .k svg { transition: width .18s ease, height .18s ease; }
+.td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row:is([data-td="work"], [data-td="due"], [data-td="start"], [data-td="repeat"], [data-td="estimate"], [data-td="time"], [data-td="elapsed"]):has(.td-prop-empty) .k { transform: translateY(21px); }
+.td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row:is([data-td="work"], [data-td="due"], [data-td="start"], [data-td="repeat"], [data-td="estimate"], [data-td="time"], [data-td="elapsed"]) .v .td-prop-empty { opacity: 0; transition: opacity .16s ease .06s; }
+.td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row:is([data-td="work"], [data-td="due"], [data-td="start"], [data-td="repeat"], [data-td="estimate"], [data-td="time"], [data-td="elapsed"]):is(:hover, :focus-within, [data-open]) .k,
+.td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row:is([data-td="work"], [data-td="due"], [data-td="start"], [data-td="repeat"], [data-td="estimate"], [data-td="time"], [data-td="elapsed"]):not(:has(.td-prop-empty)) .k { transform: none; font-size: 8.5px !important; font-weight: 600 !important; letter-spacing: 0.02em !important; color: var(--sh-ink-3) !important; }
+.td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row:is([data-td="work"], [data-td="due"], [data-td="start"], [data-td="repeat"], [data-td="estimate"], [data-td="time"], [data-td="elapsed"]):is(:hover, :focus-within, [data-open]) .k svg,
+.td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row:is([data-td="work"], [data-td="due"], [data-td="start"], [data-td="repeat"], [data-td="estimate"], [data-td="time"], [data-td="elapsed"]):not(:has(.td-prop-empty)) .k svg { width: 11px; height: 11px; }
+.td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row:is([data-td="work"], [data-td="due"], [data-td="start"], [data-td="repeat"], [data-td="estimate"], [data-td="time"], [data-td="elapsed"]):is(:hover, :focus-within, [data-open]) .v .td-prop-empty { opacity: 1; }
 
 /* Create panel: Estimate pairs with Block (design tasks) or stands alone */
 .td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row[data-td="block"] { order: 11; flex-basis: 50% !important; }
