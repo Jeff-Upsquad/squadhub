@@ -337,7 +337,7 @@ export default function TasksPreviewPanel({
                   )
                 : genericGroups?.map((g) => (
                     <div key={g.key}>
-                      <GroupHeader label={g.label} count={g.tasks.length} />
+                      <GroupHeader label={g.label} count={g.tasks.length} dotColor={g.color} />
                       {renderCapped(g.tasks)}
                     </div>
                   ))}

@@ -316,6 +316,9 @@ export default function TodayList() {
         groups.map((g) => (
           <div key={g.key} className="hm-group">
             <div className="hm-group-head">
+              {g.color && (
+                <span aria-hidden="true" style={{ width: 8, height: 8, borderRadius: 999, background: g.color, flex: 'none' }} />
+              )}
               <span>{g.label}</span>
               <span className="count">· {g.tasks.length}</span>
             </div>

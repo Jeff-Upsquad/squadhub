@@ -135,6 +135,9 @@ export default function MobileBucket() {
           groups.map((g) => (
             <div key={g.key}>
               <div className="mbk-group-head">
+                {g.color && (
+                  <span aria-hidden="true" style={{ width: 8, height: 8, borderRadius: 999, background: g.color, flex: 'none' }} />
+                )}
                 <b>{g.label}</b>
                 <span>{g.tasks.length}</span>
               </div>
