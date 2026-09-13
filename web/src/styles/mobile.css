@@ -1407,6 +1407,7 @@
  */
 .msh-pane div:has(> div > .lv-search) { display: none; }
 .msh-pane .lv-tabs-row { display: none; }
+.msh-pane .cd-workspace-tabbar { display: none; }
 .msh-pane .lv-subtoolbar { display: none; }
 
 /* Scope chips (TaskFilter.kt): pill row under the large title. Active chip
