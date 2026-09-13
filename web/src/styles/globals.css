@@ -8224,7 +8224,7 @@ ol.sqc-list {
 .nt-overlay { position: fixed; inset: 0; z-index: 85; display: flex; align-items: center; justify-content: center; padding: 28px; opacity: 0; transition: opacity 0.22s ease; }
 .nt-overlay[data-mounted] { opacity: 1; }
 .nt-backdrop { position: absolute; inset: 0; background: rgba(10, 10, 10, 0.34); backdrop-filter: blur(2px); }
-.nt-modal { position: relative; z-index: 1; display: flex; flex-direction: column; width: min(1180px, 100%); max-height: min(88vh, 920px); background: var(--surface); border: 1px solid var(--sh-hair); border-radius: 18px; box-shadow: 0 1px 2px rgba(10, 10, 10, 0.05), 0 18px 40px rgba(10, 10, 10, 0.12), 0 40px 90px rgba(10, 10, 10, 0.18); overflow: hidden; font-family: 'Inter', system-ui, sans-serif; color: var(--sh-ink); }
+.nt-modal { position: relative; z-index: 1; display: flex; flex-direction: column; width: min(1340px, 100%); max-height: min(88vh, 920px); background: var(--surface); border: 1px solid var(--sh-hair); border-radius: 18px; box-shadow: 0 1px 2px rgba(10, 10, 10, 0.05), 0 18px 40px rgba(10, 10, 10, 0.12), 0 40px 90px rgba(10, 10, 10, 0.18); overflow: hidden; font-family: 'Inter', system-ui, sans-serif; color: var(--sh-ink); }
 .dark .nt-modal { box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04), 0 18px 40px rgba(0, 0, 0, 0.45), 0 40px 100px rgba(0, 0, 0, 0.6); }
 
 .nt-head { display: flex; align-items: flex-start; gap: 12px; padding: 18px 20px 14px; border-bottom: 1px solid var(--sh-hair-3); flex: none; }
@@ -8241,9 +8241,11 @@ ol.sqc-list {
 .nt-close:hover { background: var(--sh-hair-3); color: var(--sh-ink); border-color: var(--sh-hair); }
 
 .nt-scroll { flex: 1; overflow: auto; }
-.nt-table { min-width: 1140px; }
+.nt-table { min-width: 1350px; }
 
-.nt-row-grid, .nt-head-row { display: grid; grid-template-columns: 64px minmax(300px, 3fr) 132px 120px 168px 100px 124px 124px 124px; align-items: center; gap: 4px; padding: 0 16px; }
+/* Column order (left → right) follows the triage flow: decide → what → where →
+   who → how urgent → what state → when (due first) → how long. */
+.nt-row-grid, .nt-head-row { display: grid; grid-template-columns: 52px minmax(280px, 2.6fr) 150px 122px 112px 150px 122px 122px 122px 92px; align-items: center; gap: 4px; padding: 0 16px; }
 .nt-head-row { position: sticky; top: 0; z-index: 2; background: var(--surface); border-bottom: 1px solid var(--sh-hair-3); padding-top: 10px; padding-bottom: 10px; }
 .nt-col { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.07em; font-weight: 600; color: var(--sh-ink-4); }
 

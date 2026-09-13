@@ -1,14 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useQueryClient } from '@tanstack/react-query';
-import { useUpdateTask } from '../../../hooks/useTasks';
+import { useAddTaskToLists, useUpdateTask } from '../../../hooks/useTasks';
 import { useReviewTask, type NewTask } from '../../../hooks/useNewTasks';
 import { useFocusTask } from '../../../hooks/useDayPlanner';
 import { isTaskFocused } from '../../../lib/taskGrouping';
 import { usePMStore } from '../../../stores/pmStore';
+import { useWorkspaceStore } from '../../../stores/workspaceStore';
 import AssigneePicker from '../pm/AssigneePicker';
 import TaskStatusPicker from '../pm/TaskStatusPicker';
 import DatePicker from '../pm/DatePicker';
+import ListPickerCombobox from '../pm/ListPickerCombobox';
 
 // ---- small display helpers (mirrors DashboardTaskRow's avatar logic) ----
 function hashHue(input: string): number {
@@ -187,7 +189,79 @@ function EstimateMenu({
   );
 }
 
-type Editor = null | 'assignee' | 'priority' | 'work' | 'start' | 'due' | 'estimate';
+type Editor = null | 'assignee' | 'priority' | 'work' | 'start' | 'due' | 'estimate' | 'listmenu' | 'movelist' | 'addlist';
+
+// The List column's two-option menu — "Move list" re-homes the task into another
+// list, "Add to another list" multi-homes it (primary list unchanged). Anchored
+// to the cell rect and portaled like PriorityMenu so table overflow never clips it.
+function ListMenu({
+  anchorRect,
+  onPick,
+  onClose,
+}: {
+  anchorRect: DOMRect | null;
+  onPick: (action: 'move' | 'add') => void;
+  onClose: () => void;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    const onDown = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
+    };
+    document.addEventListener('keydown', onKey);
+    document.addEventListener('mousedown', onDown);
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      document.removeEventListener('mousedown', onDown);
+    };
+  }, [onClose]);
+
+  if (!anchorRect || typeof document === 'undefined') return null;
+  const width = 208;
+  let left = anchorRect.left;
+  if (left + width > window.innerWidth - 8) left = window.innerWidth - width - 8;
+  const top = anchorRect.bottom + 4;
+
+  const item = (
+    action: 'move' | 'add',
+    title: string,
+    hint: string,
+    icon: React.ReactNode,
+  ) => (
+    <button
+      key={action}
+      type="button"
+      className="nt-menu-item"
+      style={{ alignItems: 'flex-start' }}
+      onClick={() => onPick(action)}
+    >
+      <span style={{ marginTop: 1, display: 'inline-flex', color: 'var(--sh-ink-3)' }}>{icon}</span>
+      <span style={{ minWidth: 0 }}>
+        <span style={{ display: 'block', fontSize: 13 }}>{title}</span>
+        <span style={{ display: 'block', fontSize: 11, color: 'var(--sh-ink-4)', marginTop: 1 }}>{hint}</span>
+      </span>
+    </button>
+  );
+
+  return createPortal(
+    <div ref={ref} className="nt-menu" style={{ position: 'fixed', top, left, width, zIndex: 100 }}>
+      {item(
+        'move',
+        'Move list',
+        'Move to another list',
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M13 6l6 6-6 6" /></svg>,
+      )}
+      {item(
+        'add',
+        'Add to another list',
+        'Also show in another list',
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12h14" /></svg>,
+      )}
+    </div>,
+    document.body,
+  );
+}
 
 export default function NewTaskRow({
   task,
@@ -200,6 +274,8 @@ export default function NewTaskRow({
   const updateTask = useUpdateTask(null);
   const reviewTask = useReviewTask();
   const focusTask = useFocusTask();
+  const workspaceId = useWorkspaceStore((s) => s.currentWorkspace?.id);
+  const addToLists = useAddTaskToLists(task.id);
   // Opening a task sets activeTaskId → the global TaskDetailPanel renders on top of
   // this popup (which stays mounted underneath). See z-index note in globals.css.
   const setActiveTask = usePMStore((s) => s.setActiveTask);
@@ -215,6 +291,8 @@ export default function NewTaskRow({
   const priority = (t.priority as string) || 'none';
   const priDef = PRIORITIES.find((p) => p.key === priority);
   const breadcrumb = [t.space?.name, t.folder?.name, t.list?.name].filter(Boolean).join(' / ') || '';
+  const listName = (t.list?.name as string | undefined) || '';
+  const primaryListId = (t.list_id as string | undefined) || (t.list?.id as string | undefined) || null;
   const isFocused = isTaskFocused(task);
   const isSubtask = !!t.parent_task_id;
 
@@ -327,6 +405,26 @@ export default function NewTaskRow({
         </div>
       </div>
 
+      {/* List — current home list; menu offers Move list / Add to another list */}
+      <div className="nt-cell nt-c-list">
+        <button
+          type="button"
+          className="nt-cellbtn"
+          title={breadcrumb ? `List: ${breadcrumb}` : 'Choose list action'}
+          onClick={(e) => openEditor('listmenu', e)}
+        >
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden style={{ flex: 'none', color: 'var(--sh-ink-4)' }}>
+            <path d="M9 11l3 3L22 4" />
+            <path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11" />
+          </svg>
+          {listName ? (
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{listName}</span>
+          ) : (
+            <span className="nt-placeholder">List</span>
+          )}
+        </button>
+      </div>
+
       {/* Assignee */}
       <div className="nt-cell nt-c-assignee">
         <button type="button" className="nt-cellbtn" onClick={(e) => openEditor('assignee', e)}>
@@ -373,17 +471,10 @@ export default function NewTaskRow({
         />
       </div>
 
-      {/* Estimate */}
-      <div className="nt-cell nt-c-estimate">
-        <button type="button" className="nt-cellbtn" onClick={(e) => openEditor('estimate', e)}>
-          {t.time_estimate ? <span>{formatMinutes(t.time_estimate)}</span> : <span className="nt-placeholder">Estimate</span>}
-        </button>
-      </div>
-
-      {/* Work date */}
+      {/* Due date — first of the dates: the deadline drives triage urgency */}
       <div className="nt-cell nt-c-date">
-        <button type="button" className="nt-cellbtn" onClick={(e) => openEditor('work', e)}>
-          {t.work_date ? <span>{fmtDateCell(t.work_date)}</span> : <span className="nt-placeholder">—</span>}
+        <button type="button" className="nt-cellbtn" onClick={(e) => openEditor('due', e)}>
+          {t.due_date ? <span>{fmtDateCell(t.due_date)}</span> : <span className="nt-placeholder">—</span>}
         </button>
       </div>
 
@@ -394,10 +485,17 @@ export default function NewTaskRow({
         </button>
       </div>
 
-      {/* Due date */}
+      {/* Work date */}
       <div className="nt-cell nt-c-date">
-        <button type="button" className="nt-cellbtn" onClick={(e) => openEditor('due', e)}>
-          {t.due_date ? <span>{fmtDateCell(t.due_date)}</span> : <span className="nt-placeholder">—</span>}
+        <button type="button" className="nt-cellbtn" onClick={(e) => openEditor('work', e)}>
+          {t.work_date ? <span>{fmtDateCell(t.work_date)}</span> : <span className="nt-placeholder">—</span>}
+        </button>
+      </div>
+
+      {/* Estimate — last: useful metadata once what/where/who/when is settled */}
+      <div className="nt-cell nt-c-estimate">
+        <button type="button" className="nt-cellbtn" onClick={(e) => openEditor('estimate', e)}>
+          {t.time_estimate ? <span>{formatMinutes(t.time_estimate)}</span> : <span className="nt-placeholder">Estimate</span>}
         </button>
       </div>
 
@@ -437,6 +535,53 @@ export default function NewTaskRow({
       )}
       {editor === 'due' && (
         <DatePicker anchorRect={anchorRect} value={t.due_date ?? null} mode="datetime" onChange={(v) => applyEdit({ due_date: v })} onClose={closeEditor} />
+      )}
+      {editor === 'listmenu' && (
+        <ListMenu
+          anchorRect={anchorRect}
+          onPick={(action) => {
+            if (!anchorRect) { closeEditor(); return; }
+            setEditor(action === 'move' ? 'movelist' : 'addlist');
+          }}
+          onClose={closeEditor}
+        />
+      )}
+      {editor === 'movelist' && workspaceId && anchorRect && typeof document !== 'undefined' && createPortal(
+        <div style={{ position: 'fixed', top: anchorRect.bottom + 4, left: Math.min(anchorRect.left, window.innerWidth - 352), zIndex: 100 }}>
+          <ListPickerCombobox
+            workspaceId={workspaceId}
+            selectedListId={primaryListId}
+            selectedListName={listName || null}
+            initialSpaceId={null}
+            open
+            onOpenChange={(open) => { if (!open) closeEditor(); }}
+            onChange={(newListId) => {
+              if (newListId !== primaryListId) applyEdit({ list_id: newListId });
+              closeEditor();
+            }}
+            renderTrigger={() => <span aria-hidden className="block h-0 w-0" />}
+          />
+        </div>,
+        document.body,
+      )}
+      {editor === 'addlist' && workspaceId && anchorRect && typeof document !== 'undefined' && createPortal(
+        <div style={{ position: 'fixed', top: anchorRect.bottom + 4, left: Math.min(anchorRect.left, window.innerWidth - 352), zIndex: 100 }}>
+          <ListPickerCombobox
+            workspaceId={workspaceId}
+            selectedListId={null}
+            selectedListName={null}
+            initialSpaceId={null}
+            open
+            onOpenChange={(open) => { if (!open) closeEditor(); }}
+            onChange={(newListId) => {
+              if (newListId === primaryListId) { closeEditor(); return; }
+              addToLists.mutate([newListId]);
+              closeEditor();
+            }}
+            renderTrigger={() => <span aria-hidden className="block h-0 w-0" />}
+          />
+        </div>,
+        document.body,
       )}
     </div>
   );

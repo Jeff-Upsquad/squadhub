@@ -158,13 +158,14 @@ export default function NewTasksPanel() {
             <div className="nt-head-row">
               <div className="nt-col nt-c-review">Review</div>
               <div className="nt-col nt-c-task">Task</div>
+              <div className="nt-col nt-c-list">List</div>
               <div className="nt-col nt-c-assignee">Assignee</div>
               <div className="nt-col nt-c-priority">Priority</div>
               <div className="nt-col nt-c-status">Status</div>
-              <div className="nt-col nt-c-estimate">Estimate</div>
-              <div className="nt-col nt-c-date">Work date</div>
-              <div className="nt-col nt-c-date">Start date</div>
               <div className="nt-col nt-c-date">Due date</div>
+              <div className="nt-col nt-c-date">Start date</div>
+              <div className="nt-col nt-c-date">Work date</div>
+              <div className="nt-col nt-c-estimate">Estimate</div>
             </div>
 
             {isLoading ? (
