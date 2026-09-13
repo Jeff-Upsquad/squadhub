@@ -227,7 +227,7 @@ export async function deleteSend(sendId: string): Promise<void> {
 
 // ---- tracking ---------------------------------------------------------------
 
-const DONE_STATUSES = new Set(['done', 'closed']);
+const DONE_STATUSES = new Set(['done', 'closed', 'cancelled']);
 
 // Sends for an item with completed/total counts (for the tracker list).
 export async function listSendsForItem(itemId: string): Promise<any[]> {

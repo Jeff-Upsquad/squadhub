@@ -548,7 +548,7 @@ router.get('/tasks/my', async (req: Request, res: Response) => {
       .is('recurrence', null);
 
     if (!includeDone) {
-      query = query.not('status', 'in', '(done,closed)');
+      query = query.not('status', 'in', '(done,closed,cancelled)');
     }
 
     const { data, error } = await query.order('due_date', { ascending: true, nullsFirst: false });
@@ -653,7 +653,7 @@ router.get('/tasks/my', async (req: Request, res: Response) => {
         .eq('created_by', req.userId!);
       let extra = (createdFocused ?? []).filter((t: any) => !existingIds.has(t.id) && isFocused(t));
       if (!includeDone) {
-        extra = extra.filter((t: any) => t.status !== 'done' && t.status !== 'closed');
+        extra = extra.filter((t: any) => t.status !== 'done' && t.status !== 'closed' && t.status !== 'cancelled');
       }
       const hydratedExtra = await hydrateSubtasks(await hydrateLabels(await hydrateParents(await hydrateLists(await hydrateAssignees(extra)))));
       buckets.focused = [...fromExisting, ...hydratedExtra];
@@ -692,7 +692,7 @@ router.get('/tasks/my', async (req: Request, res: Response) => {
           .in('id', missingWorked);
         const filtered = includeDone
           ? (extraRows ?? [])
-          : (extraRows ?? []).filter((t: any) => t.status !== 'done' && t.status !== 'closed');
+          : (extraRows ?? []).filter((t: any) => t.status !== 'done' && t.status !== 'closed' && t.status !== 'cancelled');
         workedExtras = await hydrateSubtasks(await hydrateParents(await hydrateLists(await hydrateAssignees(filtered))));
       }
       const workedById = new Map<string, any>([
@@ -723,7 +723,7 @@ router.get('/tasks/new', async (req: Request, res: Response) => {
     const userId = req.userId!;
     const includeReviewed = req.query.include_reviewed === 'true';
 
-    // Same base shape as /tasks/my: skip routine templates and done/closed tasks.
+    // Same base shape as /tasks/my: skip routine templates and done/closed/cancelled tasks.
     // Also skip mirrored Course/Meeting tasks — they're auto-materialised, not
     // something the user needs to "review" as a freshly-assigned task.
     const base = () =>
@@ -732,7 +732,7 @@ router.get('/tasks/new', async (req: Request, res: Response) => {
         .select('*')
         .is('recurrence', null)
         .is('source_kind', null)
-        .not('status', 'in', '(done,closed)');
+        .not('status', 'in', '(done,closed,cancelled)');
 
     // (A) Assigned to me.
     const assignedRes = await base().contains('assignee_ids', [userId]);
@@ -773,8 +773,8 @@ router.get('/tasks/new', async (req: Request, res: Response) => {
     let hydrated = await hydrateParents(await hydrateLists(await hydrateAssignees(rows)));
 
     // Drop tasks completed under a custom (space) status whose category is done/closed.
-    // Catalog (task_type='task') completes resolve to 'closed' and were already removed by
-    // the status NOT IN (done,closed) filter above; this catches custom task types whose
+    // Catalog (task_type='task') completes resolve to 'closed'/'cancelled' and were already removed by
+    // the status NOT IN (done,closed,cancelled) filter above; this catches custom task types whose
     // "done" status is a space-specific name (e.g. "Delivered", "Shipped").
     const spaceIds = Array.from(new Set(hydrated.map((t: any) => t.space?.id).filter(Boolean)));
     if (spaceIds.length > 0) {
@@ -811,7 +811,7 @@ router.get('/tasks/emergency', async (req: Request, res: Response) => {
       .from('tasks')
       .select('*')
       .eq('priority', 'emergency')
-      .not('status', 'in', '(done,closed)')
+      .not('status', 'in', '(done,closed,cancelled)')
       .is('parent_task_id', null)
       .is('recurrence', null)
       .order('created_at', { ascending: false });
@@ -1314,7 +1314,9 @@ router.put('/tasks/:id', async (req: Request, res: Response) => {
     // Completion gate: only fires on the transition INTO a done/closed status —
     // tasks already complete can be re-saved (or moved between done states)
     // freely. Rejects with structured counts so clients can explain the bounce.
-    if (body.status !== undefined) {
+    // 'cancelled' bypasses the gate: cancelling is precisely how you abandon a
+    // task with work left undone.
+    if (body.status !== undefined && body.status !== 'cancelled') {
       const doneNames = await getSpaceDoneStatusNames(listId);
       const isDoneStatus = (st: string | null | undefined): boolean => {
         if (!st) return false;

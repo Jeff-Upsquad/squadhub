@@ -33,7 +33,7 @@ function invalidateTaskLists(qc: QueryClient, listId: string | null) {
 // custom status NAME — resolved against any cached space_statuses.
 function statusMeansComplete(qc: QueryClient, status: string | undefined): boolean {
   if (!status) return false;
-  if (status === 'done' || status === 'closed') return true;
+  if (status === 'done' || status === 'closed' || status === 'cancelled') return true;
   const cat = getTaskStatusCategory(status);
   if (cat === 'done' || cat === 'closed') return true;
   const spaceHasDoneStatus = (space: unknown): boolean => {

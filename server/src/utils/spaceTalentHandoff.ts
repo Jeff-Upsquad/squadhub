@@ -156,8 +156,8 @@ export async function handOffSpaceToNewTalent(input: HandoffInput): Promise<void
       .contains('assignee_ids', [oldUserId]);
 
     for (const t of (tasks || []) as any[]) {
-      // Skip completed tasks: 'closed' catalog key or a done/closed space status.
-      if (t.status === 'closed' || doneNames.has(t.status)) continue;
+      // Skip completed tasks: 'closed'/'cancelled' catalog keys or a done/closed space status.
+      if (t.status === 'closed' || t.status === 'cancelled' || doneNames.has(t.status)) continue;
       const ids: string[] = Array.isArray(t.assignee_ids) ? t.assignee_ids : [];
       const updated = ids.filter((uid) => uid !== oldUserId);
       if (newUserId && !updated.includes(newUserId)) updated.push(newUserId);

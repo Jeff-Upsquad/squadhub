@@ -202,7 +202,7 @@ export default function SearchPalette({ workspaceId, onClose, setHomeView }: Sea
       // fall back to the raw status string for catalog types with no category.
       const done = t.category
         ? t.category === 'done' || t.category === 'closed'
-        : t.status === 'done' || t.status === 'closed';
+        : t.status === 'done' || t.status === 'closed' || t.status === 'cancelled';
       const tr: TaskResult = { key: `task:${t.id}`, kind: 'task', label: t.title, hint, task: t, done };
       (done ? doneTasks : openTasks).push(tr);
     }
