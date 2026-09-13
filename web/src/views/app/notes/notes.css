@@ -124,11 +124,11 @@
 .sh-slash-item__sub { font-size: 11px; color: var(--sh-ink-4); }
 
 /* ---- bubble toolbar ---- */
-.sh-note-bubble { display: flex; align-items: center; gap: 1px; background: var(--sh-ink); color: #fff; border-radius: 8px; padding: 3px; box-shadow: 0 6px 20px rgba(0,0,0,.25); }
-.sh-note-bubble__btn { display: grid; place-items: center; min-width: 26px; height: 26px; padding: 0 6px; border: 0; background: transparent; color: #fff; border-radius: 5px; cursor: pointer; font-size: 13px; }
-.sh-note-bubble__btn:hover { background: rgba(255,255,255,.16); }
-.sh-note-bubble__btn.is-active { background: rgba(255,255,255,.30); }
-.sh-note-bubble__sep { width: 1px; height: 18px; background: rgba(255,255,255,.25); margin: 0 2px; }
+.sh-note-bubble { display: flex; align-items: center; gap: 1px; background: var(--sh-ink); color: var(--surface); border: 1px solid var(--sh-hair); border-radius: 8px; padding: 3px; box-shadow: 0 6px 20px rgba(0,0,0,.25); }
+.sh-note-bubble__btn { display: grid; place-items: center; min-width: 26px; height: 26px; padding: 0 6px; border: 0; background: transparent; color: inherit; border-radius: 5px; cursor: pointer; font-size: 13px; }
+.sh-note-bubble__btn:hover { background: color-mix(in srgb, currentColor 16%, transparent); }
+.sh-note-bubble__btn.is-active { background: color-mix(in srgb, currentColor 28%, transparent); }
+.sh-note-bubble__sep { width: 1px; height: 18px; background: color-mix(in srgb, currentColor 25%, transparent); margin: 0 2px; }
 .sh-note-bubble__swatch { display: block; width: 14px; height: 14px; border-radius: 3px; border: 1px solid rgba(0,0,0,.2); }
 
 /* ---- url paste chooser ---- */
