@@ -502,6 +502,59 @@ export default function InboxView({
           </div>
           {isMobile && (
             <div className="inbox-phone-tools">
+              {/* Collapsed search icon — expands into an input on click
+                  (or via the global "/" shortcut, which focuses it). */}
+              <div className="ib-search" data-open={searchOpen}>
+                <button
+                  type="button"
+                  className="ib-search-btn"
+                  aria-label={searchOpen ? 'Close search' : 'Search activity'}
+                  title="Search"
+                  onClick={() => {
+                    if (searchOpen && !searchQuery) {
+                      setSearchOpen(false);
+                    } else {
+                      setSearchOpen(true);
+                      requestAnimationFrame(() => searchInputRef.current?.focus());
+                    }
+                  }}
+                >
+                  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" aria-hidden>
+                    <circle cx="11" cy="11" r="7" />
+                    <path d="m20 20-3.8-3.8" />
+                  </svg>
+                </button>
+                <input
+                  ref={searchInputRef}
+                  data-view-search="true"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onFocus={() => setSearchOpen(true)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Escape') {
+                      setSearchQuery('');
+                      setSearchOpen(false);
+                      e.currentTarget.blur();
+                    }
+                  }}
+                  placeholder="Search activity…"
+                  className="ib-search-input"
+                  aria-hidden={!searchOpen}
+                  tabIndex={searchOpen ? 0 : -1}
+                />
+                {searchOpen && searchQuery && (
+                  <button
+                    type="button"
+                    className="ib-search-clear"
+                    aria-label="Clear search"
+                    onClick={() => { setSearchQuery(''); searchInputRef.current?.focus(); }}
+                  >
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" aria-hidden>
+                      <path d="M6 18 18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                )}
+              </div>
               <button
                 type="button"
                 className="inbox-mark-all"
@@ -587,19 +640,6 @@ export default function InboxView({
             </div>
           )}
         </div>
-        {isMobile && (
-          <label className="inbox-phone-search">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.9} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-              <circle cx="11" cy="11" r="6.5" />
-              <path d="m16 16 4 4" />
-            </svg>
-            <input
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search activity"
-            />
-          </label>
-        )}
 
         {isLoading && filtered.length === 0 ? (
           <div style={{ padding: 16, fontSize: 13, color: 'var(--sh-ink-3)' }}>Loading…</div>

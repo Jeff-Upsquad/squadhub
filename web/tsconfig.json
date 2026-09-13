@@ -32,11 +32,12 @@
     "allowJs": true
   },
   "include": [
-    "next-env.d.ts",
     "**/*.ts",
     "**/*.tsx",
+    ".next-ui-preview/types/**/*.ts",
     ".next/types/**/*.ts",
-    ".next-ui-preview/types/**/*.ts"
+    "next-env.d.ts",
+    ".next-local-3007/types/**/*.ts"
   ],
   "exclude": [
     "node_modules"

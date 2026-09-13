@@ -1270,8 +1270,35 @@
    Unread/Read tabs (the phone head keeps only Activity + type filter). */
 .msh-pane .inbox-phone-tools {
   display: flex;
-  justify-content: flex-end;
-  padding: 0 16px 8px;
+  align-items: center;
+  gap: 8px;
+  padding: 0 16px 10px;
+  flex: none;
+}
+/* Expanding search icon on the same row: collapsed it's a black icon
+   button; tapped, it fills the row next to Mark all read. */
+.msh-pane .inbox-phone-tools .ib-search {
+  flex: none;
+  width: 36px;
+  height: 36px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  background: transparent;
+}
+.msh-pane .inbox-phone-tools .ib-search[data-open='true'] {
+  flex: 1 1 auto;
+  width: auto;
+  min-width: 0;
+  border-color: var(--m-hair-2);
+  background: var(--m-surface);
+}
+.msh-pane .inbox-phone-tools .ib-search-btn {
+  width: 34px;
+  height: 34px;
+  color: #000;
+}
+.msh-pane .inbox-phone-tools .inbox-mark-all {
+  margin-left: auto;
   flex: none;
 }
 
