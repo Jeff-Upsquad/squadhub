@@ -1,4 +1,7 @@
 import type { MeetingSlot } from '@squadhub/shared';
+import { useTabsStore } from '../../../stores/tabsStore';
+import { buildExternalSnapshot } from '../../../lib/tabSnapshots';
+import { openExternalUrl } from '../../../lib/openExternal';
 
 // Meeting primary accent — the teal-green from the mockup.
 export const MEETING_ACCENT = '#0a7d55';
@@ -59,4 +62,26 @@ export function durationLabel(min: number): string {
   if (min < 60) return `${min} min`;
   const h = min / 60;
   return Number.isInteger(h) ? `${h} hr` : `${Math.floor(min / 60)} hr ${min % 60} min`;
+}
+
+// Providers that send X-Frame-Options / CSP frame-ancestors and therefore
+// can't be embedded in an in-app tab — Chrome renders its own "refused to
+// connect" page, which our iframe can't detect (it still fires onLoad). Send
+// these straight to the system browser; everything else (Jitsi) opens in-app.
+const FRAME_BLOCKED_HOSTS = ['meet.google.com', 'zoom.us', 'teams.microsoft.com', 'teams.live.com'];
+export function isFrameBlockedMeetingUrl(url: string): boolean {
+  try {
+    const host = new URL(url).hostname.toLowerCase();
+    return FRAME_BLOCKED_HOSTS.some((h) => host === h || host.endsWith(`.${h}`));
+  } catch {
+    return false;
+  }
+}
+
+export function openMeetingLink(url: string, title?: string | null): void {
+  if (isFrameBlockedMeetingUrl(url)) {
+    openExternalUrl(url);
+    return;
+  }
+  useTabsStore.getState().openInNewTab(buildExternalSnapshot(url, title));
 }

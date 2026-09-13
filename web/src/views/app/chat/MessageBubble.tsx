@@ -8,7 +8,9 @@ import EmojiPicker from './EmojiPicker';
 import ImageLightbox from './ImageLightbox';
 import LinkUnfurlCard from './LinkUnfurlCard';
 import MeetingPollCard from './MeetingPollCard';
+import HuddleCard from './HuddleCard';
 import { URL_PATTERN, URL_TEST, splitTrailingPunct, toHref } from '../../../lib/urlPattern';
+import { openExternalUrl } from '../../../lib/openExternal';
 import SopBreachReportModal from '../../../components/sop/SopBreachReportModal';
 import SopFlagDetailModal from '../../../components/sop/SopFlagDetailModal';
 
@@ -68,9 +70,25 @@ function renderInline(text: string, keyPrefix: string, inlineRe: RegExp) {
     }
     const linkM = part.match(/^\[([^\]]+)\]\(([^)\s]+)\)$/);
     if (linkM) {
+      const label = linkM[1];
+      const href = linkM[2];
+      // Legacy bleed: composer once stored "[url trailing](url)" because the
+      // autolink mark was inclusive. Render only the URL as a link and keep
+      // the trailing prose plain so old messages self-heal.
+      if (label.length > href.length && label.startsWith(href) && /^[\s>]/.test(label.slice(href.length))) {
+        const trailing = label.slice(href.length);
+        return (
+          <Fragment key={key}>
+            <a href={href} target="_blank" rel="noopener noreferrer" className="sqc-link" onClick={(e) => { e.preventDefault(); e.stopPropagation(); openExternalUrl(href); }}>
+              {href}
+            </a>
+            <span>{trailing}</span>
+          </Fragment>
+        );
+      }
       return (
-        <a key={key} href={linkM[2]} target="_blank" rel="noopener noreferrer" className="sqc-link">
-          {linkM[1]}
+        <a key={key} href={href} target="_blank" rel="noopener noreferrer" className="sqc-link" onClick={(e) => { e.preventDefault(); e.stopPropagation(); openExternalUrl(href); }}>
+          {label}
         </a>
       );
     }
@@ -86,7 +104,7 @@ function renderInline(text: string, keyPrefix: string, inlineRe: RegExp) {
       const { url, tail } = splitTrailingPunct(part);
       return (
         <Fragment key={key}>
-          <a href={toHref(url)} target="_blank" rel="noopener noreferrer" className="sqc-link">
+          <a href={toHref(url)} target="_blank" rel="noopener noreferrer" className="sqc-link" onClick={(e) => { e.preventDefault(); e.stopPropagation(); openExternalUrl(toHref(url)); }}>
             {url}
           </a>
           {tail}
@@ -1107,8 +1125,19 @@ function ChatMessageBubble({ message, onOpenThread, inThread, grouped, threadMet
               className="sqc-msg__edit-input"
               value={draft}
               autoFocus
-              rows={Math.min(8, Math.max(1, draft.split('\n').length))}
-              onChange={(e) => setDraft(e.target.value)}
+              placeholder="Edit message…"
+              rows={3}
+              ref={(el) => {
+                if (el) {
+                  el.style.height = 'auto';
+                  el.style.height = `${Math.min(220, Math.max(64, el.scrollHeight))}px`;
+                }
+              }}
+              onChange={(e) => {
+                setDraft(e.target.value);
+                e.target.style.height = 'auto';
+                e.target.style.height = `${Math.min(220, Math.max(64, e.target.scrollHeight))}px`;
+              }}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && !e.shiftKey) {
                   e.preventDefault();
@@ -1120,8 +1149,11 @@ function ChatMessageBubble({ message, onOpenThread, inThread, grouped, threadMet
                 }
               }}
             />
+            {actionError && <div className="sqc-msg__edit-error sqc-msg__edit-error--inside">{actionError}</div>}
             <div className="sqc-msg__edit-actions">
-              <span className="sqc-msg__edit-hint">Enter to save · Esc to cancel</span>
+              <span className="sqc-msg__edit-hint">
+                <kbd>Enter</kbd> to save · <kbd>Esc</kbd> to cancel
+              </span>
               <button
                 type="button"
                 className="sqc-msg__edit-btn"
@@ -1138,12 +1170,14 @@ function ChatMessageBubble({ message, onOpenThread, inThread, grouped, threadMet
                 onClick={saveEdit}
                 disabled={busy || !draft.trim()}
               >
-                Save
+                {busy ? 'Saving…' : 'Save'}
               </button>
             </div>
           </div>
         ) : (
-          message.content && (
+          // A huddle card's text is only a fallback for previews/notifications;
+          // the card itself says everything.
+          message.content && !message.huddle_id && (
             <div className="sqc-msg__content">
               {renderContent(message.content, mentionNamesOf(message))}
               {editedAt && (
@@ -1157,6 +1191,7 @@ function ChatMessageBubble({ message, onOpenThread, inThread, grouped, threadMet
         {actionError && !editing && <div className="sqc-msg__edit-error">{actionError}</div>}
 
         {message.meeting_event_id && <MeetingPollCard meetingEventId={message.meeting_event_id} />}
+        {message.huddle_id && <HuddleCard huddleId={message.huddle_id} />}
         {message.unfurl && <LinkUnfurlCard unfurl={message.unfurl} />}
         <AttachmentBlock message={message} />
 

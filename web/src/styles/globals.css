@@ -487,7 +487,9 @@ body {
   to   { opacity: 1; transform: none; }
 }
 
-/* Conic progress ring with a soft hole + pulsing core dot */
+/* Conic progress ring with a soft hole + pulsing core dot.
+   The whole icon pulses while a timer runs (RailTimer only mounts when live,
+   so data-running is always true here) — outer ping ring + core glow. */
 .sh-rail-timer .rt-ring {
   position: relative; width: 30px; height: 30px; border-radius: 50%;
   display: grid; place-items: center;
@@ -499,6 +501,17 @@ body {
 .sh-rail-timer .rt-ring::before {
   content: ""; position: absolute; inset: 3px; border-radius: 50%;
   background: color-mix(in srgb, var(--rt-cur) 8%, var(--surface));
+}
+/* Expanding pulse ring around the timer icon — visible at a glance */
+.sh-rail-timer .rt-ring[data-running="true"] .rt-ping {
+  position: absolute; inset: 0; border-radius: 50%;
+  border: 2px solid color-mix(in srgb, var(--rt-cur) 65%, transparent);
+  animation: sh-rt-ring-ping 1.8s cubic-bezier(0, 0, 0.2, 1) infinite;
+  pointer-events: none;
+}
+@keyframes sh-rt-ring-ping {
+  0%        { transform: scale(0.85); opacity: 0.9; }
+  70%, 100% { transform: scale(1.45); opacity: 0; }
 }
 .sh-rail-timer .rt-core {
   position: relative; z-index: 1;
@@ -525,6 +538,7 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .sh-rail-timer { animation: none; }
   .sh-rail-timer .rt-core { animation: none; }
+  .sh-rail-timer .rt-ring[data-running="true"] .rt-ping { animation: none; opacity: 0; }
 }
 
 .sh-view .briefing h2 { font-family: 'Plus Jakarta Sans', 'Inter', sans-serif; font-size: 26px; line-height: 1.22; margin: 10px 0 14px; max-width: 58ch; color: var(--sh-ink); letter-spacing: -0.005em; font-weight: 400; }
@@ -863,6 +877,13 @@ body {
 .sb-resize::after { content: ''; position: absolute; top: 0; right: 0; width: 2px; height: 100%; background: transparent; transition: background .12s ease; }
 .sb-resize:hover::after, .sb-resize[data-resizing='true']::after { background: var(--sh-hair-2); }
 body.sb-resizing { user-select: none; -webkit-user-select: none; cursor: col-resize; }
+
+/* ── Thread panel resize handle ───────────────────────────────────────── */
+/* Slim strip on the thread panel's left edge; mirrors the sidebar handle. */
+/* Double-click resets to the default width (handled in ThreadPanel). */
+.sqc-thread-resize { position: absolute; top: 0; left: 0; width: 6px; height: 100%; cursor: col-resize; z-index: 30; touch-action: none; }
+.sqc-thread-resize::after { content: ''; position: absolute; top: 0; left: 0; width: 2px; height: 100%; background: transparent; transition: background .12s ease; }
+.sqc-thread-resize:hover::after, .sqc-thread-resize[data-resizing='true']::after { background: var(--sh-hair-2); }
 
 /* ── Day Planner ────────── */
 .sh-view.day-planner-view { display: grid; grid-template-columns: 420px 1fr; height: 100%; }
@@ -1410,6 +1431,26 @@ body.sb-resizing { user-select: none; -webkit-user-select: none; cursor: col-res
 }
 .td-pill-btn:hover { background: var(--sh-hair-3); color: var(--sh-ink); border-color: var(--sh-hair-2); }
 .td-pill-btn svg { opacity: 0.7; }
+
+/* Running task-timer pill — pulse ring while the timer runs so the live
+   state reads at a glance (desktop header pill). */
+.td-pill-btn[data-running="true"] {
+  position: relative;
+  border-color: color-mix(in srgb, #ef4444 45%, var(--sh-hair-3));
+}
+.td-pill-btn[data-running="true"]::after {
+  content: ""; position: absolute; inset: -1px; border-radius: 10px;
+  border: 2px solid color-mix(in srgb, #ef4444 55%, transparent);
+  animation: td-pill-ping 1.8s cubic-bezier(0, 0, 0.2, 1) infinite;
+  pointer-events: none;
+}
+@keyframes td-pill-ping {
+  0%        { transform: scale(0.96); opacity: 0.9; }
+  70%, 100% { transform: scale(1.12); opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .td-pill-btn[data-running="true"]::after { animation: none; opacity: 0; }
+}
 
 .td-nav-btn {
   display: grid;
@@ -3420,6 +3461,101 @@ body.sb-resizing { user-select: none; -webkit-user-select: none; cursor: col-res
 .lv-card .lv-cell--assignee { justify-content: center !important; }
 .lv-card .lv-cell--date { justify-content: center !important; }
 
+/* Shared Focus Today star — the list and detail panel use the same small,
+   warm interaction. The burst only mounts after a deliberate click, so focused
+   tasks do not animate merely because a view was opened. */
+.focus-star-button {
+  --focus-star-gold: #f59e0b;
+  position: relative;
+  isolation: isolate;
+  overflow: visible;
+  -webkit-tap-highlight-color: transparent;
+}
+.focus-star-glyph {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 14px;
+  height: 14px;
+  transform-origin: 50% 54%;
+}
+.focus-star-glyph svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  filter: drop-shadow(0 0 0 transparent);
+  transition: fill 160ms ease, filter 180ms ease;
+}
+.focus-star-button[data-focus-variant="mobile"] .focus-star-glyph {
+  width: 20px;
+  height: 20px;
+}
+.focus-star-button[data-focus-motion="on"] .focus-star-glyph {
+  animation: focusStarGather 540ms cubic-bezier(.2, .9, .25, 1.3) both;
+}
+.focus-star-button[data-focus-motion="off"] .focus-star-glyph {
+  animation: focusStarRelease 260ms cubic-bezier(.4, 0, .2, 1) both;
+}
+.focus-star-button[data-active="true"] .focus-star-glyph svg {
+  filter: drop-shadow(0 1px 2px color-mix(in srgb, var(--focus-star-gold) 42%, transparent));
+}
+.focus-star-burst,
+.focus-star-burst::before,
+.focus-star-burst i {
+  position: absolute;
+  pointer-events: none;
+}
+.focus-star-burst {
+  z-index: 0;
+  inset: 50%;
+  color: var(--focus-star-gold);
+}
+.focus-star-burst::before {
+  content: '';
+  left: 0;
+  top: 0;
+  width: 5px;
+  height: 5px;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  transform: translate(-50%, -50%) scale(.4);
+  animation: focusStarHalo 460ms cubic-bezier(.2, .8, .2, 1) both;
+}
+.focus-star-burst i {
+  --focus-star-ray: 0deg;
+  --focus-star-delay: 0ms;
+  left: -1px;
+  top: -1px;
+  width: 2px;
+  height: 3px;
+  border-radius: 999px;
+  background: currentColor;
+  opacity: 0;
+  transform-origin: 1px 1px;
+  animation: focusStarRay 430ms cubic-bezier(.16, .84, .44, 1) var(--focus-star-delay) both;
+}
+@keyframes focusStarGather {
+  0%   { transform: scale(.76) rotate(-20deg); }
+  46%  { transform: scale(1.28) rotate(9deg); }
+  72%  { transform: scale(.94) rotate(-3deg); }
+  100% { transform: scale(1) rotate(0); }
+}
+@keyframes focusStarRelease {
+  0%   { transform: scale(1) rotate(0); }
+  45%  { transform: scale(.76) rotate(-10deg); }
+  100% { transform: scale(1) rotate(0); }
+}
+@keyframes focusStarHalo {
+  0%   { opacity: .72; transform: translate(-50%, -50%) scale(.4); }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(4.8); }
+}
+@keyframes focusStarRay {
+  0%   { opacity: 0; transform: rotate(var(--focus-star-ray)) translateY(-4px) scaleY(.5); }
+  28%  { opacity: .9; }
+  100% { opacity: 0; transform: rotate(var(--focus-star-ray)) translateY(-14px) scaleY(1); }
+}
+
 /* Task detail panel focus today star */
 .td-focus-star[data-active="true"] {
   color: #f59e0b !important;
@@ -3494,10 +3630,20 @@ body.sb-resizing { user-select: none; -webkit-user-select: none; cursor: col-res
   margin-left: 2px;
 }
 .lv-row:hover .lv-focus-star { opacity: 1; }
+.lv-focus-star:focus-visible { opacity: 1; }
 .lv-focus-star:hover { background: var(--sh-hair-3); color: #f59e0b; }
 .lv-focus-star[data-active="true"] {
   opacity: 1;
   color: #f59e0b;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .focus-star-glyph,
+  .focus-star-glyph svg {
+    animation: none !important;
+    transition: none;
+  }
+  .focus-star-burst { display: none; }
 }
 
 /* More button (6th column) */
@@ -4584,8 +4730,30 @@ body.sb-resizing { user-select: none; -webkit-user-select: none; cursor: col-res
 }
 .dark .td-panel-luma.apple.td-shell .td-title-hero { color: var(--sh-ink); }
 .td-panel-luma.apple.td-shell .td-title-hero[contenteditable], 
-input.td-title-hero {
+input.td-title-hero,
+textarea.td-title-hero {
   border-bottom-color: var(--sq-gray-900) !important;
+}
+/* Title + description edit boxes auto-grow to show full content */
+textarea.td-title-hero.td-title-edit {
+  resize: none;
+  overflow: hidden;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  line-height: 1.3;
+  min-height: 1.3em;
+  padding: 0 0 2px;
+}
+textarea.td-about.td-desc-edit {
+  resize: none;
+  overflow: hidden;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  min-height: 88px;
+  max-height: 60vh;
+  line-height: 1.55;
 }
 
 /* Big circular checkbox: gray-900 on done */
@@ -6280,6 +6448,9 @@ textarea.td-input-shell {
   --sh-brand-deep: #D9410D;
   --sh-brand-soft: #FFE6DA;
   --sh-accent: #C8F560;
+  --sh-accent-hov: #B4E84B;
+  --sh-accent-active: #A3D93E;
+  --sh-accent-ink: #1A220B;
   --sh-live: #19C37D;
 
   /* Search-jump highlight (light). Steady tint the row keeps after landing,
@@ -6798,45 +6969,114 @@ textarea.td-input-shell {
 .sqc-msg__menu-item:hover { background: var(--sh-bg-hover, var(--sh-bg-soft)); }
 .sqc-msg__menu-item--danger { color: #e01e5a; }
 .sqc-msg__menu-item--danger:hover { background: rgba(224, 30, 90, 0.08); }
-/* inline edit */
-.sqc-msg__edit { display: flex; flex-direction: column; gap: 6px; }
+/* inline edit — card styled like the composer so editing feels intentional,
+   not like a raw textarea dropped into the flow. Focus ring uses the lime
+   accent; the Save button uses dark ink on lime for contrast (white on lime
+   is unreadable). Actions sit in a soft footer bar so the hint + buttons
+   never collide, even in the narrow thread panel. */
+.sqc-msg__edit {
+  display: flex;
+  flex-direction: column;
+  margin-top: 4px;
+  border: 1px solid var(--sh-border);
+  border-radius: 10px;
+  background: var(--sh-bg);
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  transition: border-color 0.12s, box-shadow 0.12s;
+}
+.sqc-msg__edit:focus-within {
+  border-color: rgba(29, 28, 29, 0.45);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--sh-accent) 45%, transparent);
+}
+.dark .sqc-msg__edit:focus-within {
+  border-color: var(--sh-accent);
+  box-shadow: 0 0 0 3px rgba(200, 245, 96, 0.22);
+}
 .sqc-msg__edit-input {
   width: 100%;
-  resize: vertical;
-  padding: 8px 10px;
-  font-size: 15px;
-  line-height: 1.46;
+  border: 0;
+  resize: none;
+  padding: 10px 12px;
+  min-height: 64px;
+  max-height: 220px;
+  font-family: var(--sh-font);
+  font-size: 13.5px;
+  line-height: 1.55;
   color: var(--sh-text);
-  background: var(--sh-bg);
-  border: 1px solid var(--sh-border);
-  border-radius: 8px;
+  background: transparent;
   outline: none;
+  overflow-y: auto;
+  overflow-wrap: anywhere;
 }
-.sqc-msg__edit-input:focus { border-color: var(--sh-accent, #2962ff); }
-.sqc-msg__edit-actions { display: flex; align-items: center; gap: 8px; }
-.sqc-msg__edit-hint { font-size: 11px; color: var(--sh-text-2); margin-right: auto; }
+.sqc-msg__edit-input::placeholder { color: var(--sh-text-3); }
+.sqc-msg__edit-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 6px 8px 6px 12px;
+  background: var(--sh-bg-soft);
+  border-top: 1px solid var(--sh-border-soft);
+}
+.sqc-msg__edit-hint {
+  font-size: 11.5px;
+  color: var(--sh-text-2);
+  margin-right: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+.sqc-msg__edit-hint kbd {
+  font-family: var(--sh-font);
+  font-size: 10.5px;
+  font-weight: 600;
+  line-height: 1;
+  padding: 3px 5px;
+  border-radius: 4px;
+  border: 1px solid var(--sh-border);
+  background: var(--sh-bg);
+  color: var(--sh-text-2);
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.06);
+  white-space: nowrap;
+}
 .sqc-msg__edit-btn {
-  padding: 4px 12px;
-  font-size: 13px;
-  font-weight: 500;
-  border-radius: 6px;
+  padding: 6px 14px;
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.2;
+  border-radius: 7px;
   border: 1px solid var(--sh-border);
   color: var(--sh-text);
   background: var(--sh-bg);
   cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.12s, border-color 0.12s;
 }
-.sqc-msg__edit-btn:hover { background: var(--sh-bg-soft); }
+.sqc-msg__edit-btn:hover { background: var(--sh-bg-hover); border-color: rgba(29, 28, 29, 0.25); }
 .sqc-msg__edit-btn--primary {
-  border-color: var(--sh-accent, #2962ff);
-  background: var(--sh-accent, #2962ff);
-  color: #fff;
+  border-color: transparent;
+  background: var(--sh-accent);
+  color: var(--sh-accent-ink, #1A220B);
 }
-.sqc-msg__edit-btn--primary:hover { background: var(--sh-accent-hov, #1f4fd6); }
+.sqc-msg__edit-btn--primary:hover { background: var(--sh-accent-hov, #B4E84B); border-color: transparent; }
+.sqc-msg__edit-btn--primary:active { background: var(--sh-accent-active, #A3D93E); }
 .sqc-msg__edit-btn:disabled { opacity: 0.5; cursor: default; }
+.sqc-msg__edit-btn:focus-visible,
+.sqc-msg__edit-input:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--sh-accent) 70%, #000 10%);
+  outline-offset: 1px;
+}
 .sqc-msg__edit-error {
   font-size: 12px;
   color: #e01e5a;
   margin-top: 2px;
+}
+.sqc-msg__edit-error--inside {
+  margin: 0;
+  padding: 6px 12px 8px;
+  background: var(--sh-bg-soft);
 }
 .sqc-inline-code {
   background: var(--sh-bg-soft);
@@ -7601,6 +7841,9 @@ ol.sqc-list {
     -10px 0 22px -12px rgba(0, 0, 0, 0.6),
     -1px 0 0 0 rgba(255, 255, 255, 0.06);
 }
+/* Inside the SquadUp call rail the host draws the frame. */
+.sqc-thread-panel--embedded,
+.dark .sqc-thread-panel--embedded { box-shadow: none; width: 100%; }
 
 /* Dark mode tweaks */
 .dark .squadhub-chat,
@@ -8151,7 +8394,7 @@ ol.sqc-list {
 .nt-overlay { position: fixed; inset: 0; z-index: 85; display: flex; align-items: center; justify-content: center; padding: 28px; opacity: 0; transition: opacity 0.22s ease; }
 .nt-overlay[data-mounted] { opacity: 1; }
 .nt-backdrop { position: absolute; inset: 0; background: rgba(10, 10, 10, 0.34); backdrop-filter: blur(2px); }
-.nt-modal { position: relative; z-index: 1; display: flex; flex-direction: column; width: min(1180px, 100%); max-height: min(88vh, 920px); background: var(--surface); border: 1px solid var(--sh-hair); border-radius: 18px; box-shadow: 0 1px 2px rgba(10, 10, 10, 0.05), 0 18px 40px rgba(10, 10, 10, 0.12), 0 40px 90px rgba(10, 10, 10, 0.18); overflow: hidden; font-family: 'Inter', system-ui, sans-serif; color: var(--sh-ink); }
+.nt-modal { position: relative; z-index: 1; display: flex; flex-direction: column; width: min(1340px, 100%); max-height: min(88vh, 920px); background: var(--surface); border: 1px solid var(--sh-hair); border-radius: 18px; box-shadow: 0 1px 2px rgba(10, 10, 10, 0.05), 0 18px 40px rgba(10, 10, 10, 0.12), 0 40px 90px rgba(10, 10, 10, 0.18); overflow: hidden; font-family: 'Inter', system-ui, sans-serif; color: var(--sh-ink); }
 .dark .nt-modal { box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04), 0 18px 40px rgba(0, 0, 0, 0.45), 0 40px 100px rgba(0, 0, 0, 0.6); }
 
 .nt-head { display: flex; align-items: flex-start; gap: 12px; padding: 18px 20px 14px; border-bottom: 1px solid var(--sh-hair-3); flex: none; }
@@ -8167,12 +8410,37 @@ ol.sqc-list {
 .nt-close { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 8px; border: 1px solid transparent; background: transparent; color: var(--sh-ink-3); cursor: pointer; transition: background 0.13s, color 0.13s, border-color 0.13s; }
 .nt-close:hover { background: var(--sh-hair-3); color: var(--sh-ink); border-color: var(--sh-hair); }
 
-.nt-scroll { flex: 1; overflow: auto; }
-.nt-table { min-width: 1140px; }
+/* Group-by pill + menu reuse the Home "hm" classnames, but those rules are
+   scoped to .hm-home / .day-planner-view while this modal portals to <body> —
+   without this the menu renders unstyled with its options run together. */
+.nt-modal .hm-pill { display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 9px; border-radius: 7px; border: 1px solid var(--sh-hair); background: transparent; font-family: inherit; font-size: 11.5px; font-weight: 500; color: color-mix(in srgb, var(--sh-ink) 65%, transparent); cursor: pointer; transition: background 0.13s ease, color 0.13s ease, border-color 0.13s ease; white-space: nowrap; }
+.nt-modal .hm-pill:hover { background: var(--sh-hair-3); color: var(--sh-ink); border-color: var(--sh-hair-2); }
+.nt-modal .hm-pill .dim { color: var(--sh-ink-4); }
+.nt-modal .hm-pill svg { opacity: 0.7; }
+.nt-modal .hm-menu { position: absolute; top: calc(100% + 6px); right: 0; min-width: 168px; z-index: 40; background: var(--surface); border: 1px solid var(--sh-hair); border-radius: 10px; box-shadow: 0 10px 28px rgba(10, 10, 10, 0.10); padding: 4px; }
+.nt-modal .hm-menu-item { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; padding: 6px 10px; border-radius: 7px; border: none; background: transparent; font-family: inherit; font-size: 12.5px; font-weight: 450; color: color-mix(in srgb, var(--sh-ink) 65%, transparent); text-align: left; cursor: pointer; white-space: nowrap; }
+.nt-modal .hm-menu-item:hover { background: var(--sh-hair-3); color: var(--sh-ink); }
+.nt-modal .hm-menu-item[data-active="true"] { color: var(--sh-ink); font-weight: 600; }
 
-.nt-row-grid, .nt-head-row { display: grid; grid-template-columns: 64px minmax(300px, 3fr) 132px 120px 168px 100px 124px 124px 124px; align-items: center; gap: 4px; padding: 0 16px; }
+.nt-scroll { flex: 1; overflow: auto; }
+
+/* One shared track set for the whole table: Task is fixed-width, the eight
+   content columns are content-sized (auto). Every row below renders as a
+   subgrid of these tracks, so each column sizes ONCE from the entire column's
+   content — rows can never drift out of alignment. */
+.nt-table { display: grid; grid-template-columns: 48px 340px repeat(8, auto); column-gap: 2px; padding: 0 16px; min-width: 1000px; }
+.nt-head-row, .nt-row, .nt-row-grid { display: grid; grid-template-columns: subgrid; grid-column: 1 / -1; align-items: center; }
+/* Group-by wrapper must not create a box — its header + rows join the table grid. */
+.nt-group { display: contents; }
+.nt-skel-wrap, .nt-empty { grid-column: 1 / -1; }
 .nt-head-row { position: sticky; top: 0; z-index: 2; background: var(--surface); border-bottom: 1px solid var(--sh-hair-3); padding-top: 10px; padding-bottom: 10px; }
-.nt-col { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.07em; font-weight: 600; color: var(--sh-ink-4); }
+.nt-col { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.07em; font-weight: 600; color: var(--sh-ink-4); padding: 0 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+/* Headers line up with their column's content: body cells add 4px cell padding
+   + 8px button padding before the text, so headers carry the same 12px inset.
+   Review is centered like its checkbox; Task aligns to its content block start
+   (the focus star + title stack). */
+.nt-head-row .nt-c-review { padding: 0; }
+.nt-head-row .nt-c-task { padding-left: 4px; }
 
 .nt-row { border-bottom: 1px solid var(--sh-hair-3); transition: opacity 0.42s ease, transform 0.42s cubic-bezier(0.4, 0, 0.7, 0.1); }
 .nt-row:hover .nt-row-grid { background: var(--sh-hair-3); }
@@ -8203,7 +8471,7 @@ ol.sqc-list {
 .nt-estimate-input:focus { border-color: var(--sh-ink-3); }
 .nt-estimate-hint { font-size: 10px; color: var(--sh-ink-4); margin-top: 6px; }
 
-.nt-cellbtn { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; padding: 4px 8px; border-radius: 7px; border: 1px solid transparent; background: transparent; color: var(--sh-ink-2); font-size: 12.5px; cursor: pointer; transition: background 0.12s, border-color 0.12s, box-shadow 0.12s; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.nt-cellbtn { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; padding: 4px 8px; border-radius: 7px; border: 1px solid transparent; background: transparent; color: var(--sh-ink-2); font-size: 12px; cursor: pointer; transition: background 0.12s, border-color 0.12s, box-shadow 0.12s; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .nt-cellbtn:hover { background: var(--surface); border-color: var(--sh-hair); box-shadow: var(--sh-shadow-sm); }
 .nt-placeholder { color: var(--sh-ink-4); }
 

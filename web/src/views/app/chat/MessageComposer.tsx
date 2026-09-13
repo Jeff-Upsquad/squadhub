@@ -16,6 +16,17 @@ import ScreenRecorder from './ScreenRecorder';
 import { ScheduleSendModal, ScheduledStrip, formatScheduledTime } from './ScheduleSend';
 import { useScheduleMessage } from '../../../hooks/useScheduledMessages';
 
+// TipTap's Link mark is inclusive when autolink is on (see extension-link:
+// inclusive() returns options.autolink), so typing a space + text after a URL
+// extends the link to cover the trailing text. That stores
+// "[url trailing](url)" markdown, which the bubble renderer then shows as one
+// big hyperlink. A non-inclusive mark keeps trailing text plain.
+const ComposerLink = Link.extend({
+  inclusive() {
+    return false;
+  },
+});
+
 // ---- Convert Tiptap HTML output → markdown (matches the renderer in MessageBubble) ----
 function htmlToMarkdown(html: string): string {
   if (!html || html === '<p></p>') return '';
@@ -48,6 +59,17 @@ function htmlToMarkdown(html: string): string {
         return `\n\`\`\`\n${inner}\n\`\`\`\n`;
       case 'a': {
         const href = el.getAttribute('href') || '';
+        // Defensive: if an inclusive link mark slipped trailing prose into the
+        // anchor (e.g. <a href="https://x/install">https://x/install > foo</a>),
+        // keep only the URL inside the link and emit the rest as plain text.
+        // Otherwise we'd store "[url trailing](url)" and the whole line renders
+        // as one hyperlink.
+        if (href && inner.length > href.length && inner.startsWith(href)) {
+          const trailing = inner.slice(href.length);
+          if (/^[\s>]/.test(trailing)) {
+            return `[${href}](${href})${trailing}`;
+          }
+        }
         return `[${inner}](${href})`;
       }
       case 'blockquote':
@@ -282,7 +304,7 @@ const MessageComposer = forwardRef<MessageComposerHandle, Props>(function Messag
         // make the winning config undefined and warn on every mount).
         link: false,
       }),
-      Link.configure({
+      ComposerLink.configure({
         openOnClick: false,
         autolink: true,
         HTMLAttributes: { class: 'sqc-link' },

@@ -282,6 +282,7 @@ export default function FolderPage({ folderId: propFolderId }: { folderId?: stri
                   key={g.key}
                   groupKey={`fl:${g.key}`}
                   label={g.label}
+                  dotColor={g.color}
                   tasks={g.tasks}
                   allStatuses={spaceStatuses}
                   listId={null}

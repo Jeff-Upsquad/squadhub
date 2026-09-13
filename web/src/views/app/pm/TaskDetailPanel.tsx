@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { useQueryClient, useQuery } from '@tanstack/react-query';
 import { usePMStore } from '../../../stores/pmStore';
@@ -36,6 +36,8 @@ import TaskAttachments, { type TaskAttachmentsHandle } from './TaskAttachments';
 import { useTaskAttachments, useDeleteTaskAttachment } from '../../../hooks/useTaskAttachments';
 import { usePanelFileDrop } from './usePanelFileDrop';
 import { linkifyText } from '../../../lib/linkify';
+import { URL_PATTERN, splitTrailingPunct, toHref } from '../../../lib/urlPattern';
+import { openExternalUrl } from '../../../lib/openExternal';
 import SopBreachReportModal from '../../../components/sop/SopBreachReportModal';
 import SopFlagDetailModal from '../../../components/sop/SopFlagDetailModal';
 import WorkBlockSections from './WorkBlockSections';
@@ -49,6 +51,7 @@ import {
 import { useParallelTimers } from '../../../hooks/useParallelTimers';
 import { useLearningStore } from '../../../stores/learningStore';
 import { useIsMobile } from '../../../hooks/useIsMobile';
+import FocusStarButton from '../../../components/pm/FocusStarButton';
 
 function parseTimeInput(input: string): number | null {
   const trimmed = input.trim().toLowerCase();
@@ -400,6 +403,26 @@ export default function TaskDetailPanel({
 
   const [editing, setEditing] = useState<'title' | 'description' | null>(null);
   const [editValue, setEditValue] = useState('');
+  // Auto-growing edit boxes: title was a single-line <input> so long names
+  // were truncated while editing; description had a fixed rows={6}. Both now
+  // use textareas that expand to fit their full content.
+  const titleEditRef = useRef<HTMLTextAreaElement | null>(null);
+  const descEditRef = useRef<HTMLTextAreaElement | null>(null);
+  const autoGrow = useCallback((el: HTMLTextAreaElement | null) => {
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${el.scrollHeight}px`;
+  }, []);
+  useEffect(() => {
+    if (editing === 'title') autoGrow(titleEditRef.current);
+    else if (editing === 'description') autoGrow(descEditRef.current);
+  }, [editing, editValue, autoGrow]);
+  // Two-step task-title links (detail title only): a title that contains a URL
+  // renders its links inert until armed. First click on a link arms (reveals
+  // the Edit option + hint, no navigation); second click opens the link.
+  // Disarms on task change, click elsewhere, or Escape.
+  const [titleLinksArmed, setTitleLinksArmed] = useState(false);
+  const titleWrapRef = useRef<HTMLDivElement | null>(null);
   const [commentText, setCommentText] = useState('');
   const [commentMentions, setCommentMentions] = useState<string[]>([]);
   const [showActivity, setShowActivity] = useState(false);
@@ -459,6 +482,11 @@ export default function TaskDetailPanel({
     if (!effectiveTaskId) return undefined;
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
+      // Armed title links disarm first — Escape resets to safe, doesn't close.
+      if (titleLinksArmed) {
+        setTitleLinksArmed(false);
+        return;
+      }
       const el = document.activeElement as HTMLElement | null;
       const tag = el?.tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || el?.isContentEditable) return;
@@ -466,7 +494,24 @@ export default function TaskDetailPanel({
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [effectiveTaskId, setActiveTask]);
+  }, [effectiveTaskId, setActiveTask, titleLinksArmed]);
+
+  // Disarm title links when switching tasks.
+  useEffect(() => {
+    setTitleLinksArmed(false);
+  }, [effectiveTaskId]);
+
+  // Disarm title links on click elsewhere.
+  useEffect(() => {
+    if (!titleLinksArmed) return undefined;
+    const onDown = (e: MouseEvent) => {
+      if (titleWrapRef.current && !titleWrapRef.current.contains(e.target as Node)) {
+        setTitleLinksArmed(false);
+      }
+    };
+    document.addEventListener('mousedown', onDown);
+    return () => document.removeEventListener('mousedown', onDown);
+  }, [titleLinksArmed]);
 
   const currentType = useMemo<TaskType | null>(() => {
     if (!task || !taskTypes) return null;
@@ -595,7 +640,7 @@ export default function TaskDetailPanel({
       : statuses.find((s) => s.name === taskStatusCategory) || statuses.find((s) => s.category === taskStatusCategory)
     : undefined;
   const matchedStatus = !isTaskType ? (statuses.find((s) => s.name === taskStatusCategory) || statuses.find((s) => s.category === taskStatusCategory)) : null;
-  const isDone = catalogDef?.category === 'closed' || taskStatusCategory === 'done' || taskStatusCategory === 'closed' || matchedStatus?.category === 'done' || matchedStatus?.category === 'closed';
+  const isDone = catalogDef?.category === 'closed' || taskStatusCategory === 'done' || taskStatusCategory === 'closed' || taskStatusCategory === 'cancelled' || matchedStatus?.category === 'done' || matchedStatus?.category === 'closed';
 
   // Normalize legacy status for design/video tasks when the drawer opens
   useEffect(() => {
@@ -714,7 +759,7 @@ export default function TaskDetailPanel({
   // errors — the server enforces the same rule as a backstop.
   const handleSubtaskToggle = async (st: any, e: React.MouseEvent) => {
     if (!canEdit) return;
-    const stDone = st.status === 'done' || st.status === 'closed';
+    const stDone = st.status === 'done' || st.status === 'closed' || st.status === 'cancelled';
     // Re-opening a completed subtask: flip straight back, no prompt.
     if (stDone) {
       updateTask.mutate({ id: st.id, status: 'todo' } as any);
@@ -838,7 +883,7 @@ export default function TaskDetailPanel({
   const nonAudioAttachments = attachmentsData.filter((a) => !a.mime_type?.startsWith('audio/'));
   const attachmentCount = nonAudioAttachments.length;
   const subtasks = task?.subtasks || [];
-  const subtaskDone = subtasks.filter((s: any) => s.status === 'done' || s.status === 'closed').length;
+  const subtaskDone = subtasks.filter((s: any) => s.status === 'done' || s.status === 'closed' || s.status === 'cancelled').length;
   const checklistItems = (checklists || []).flatMap((c) => c.items || []);
   const progressTotal = subtasks.length + checklistItems.length;
   const progressDone = subtaskDone + checklistItems.filter((i) => i.is_done).length;
@@ -902,15 +947,12 @@ export default function TaskDetailPanel({
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6" /></svg>
               </button>
               <span style={{ flex: 1 }} />
-              <button
-                type="button"
+              <FocusStarButton
+                active={isFocused}
+                variant="mobile"
                 className="td-m-hero-icon"
-                data-on={isFocused ? 'true' : undefined}
-                aria-label={isFocused ? 'Unstar' : 'Star'}
-                onClick={() => focusTask.mutate({ id: task.id, focused: !isFocused })}
-              >
-                <svg width="20" height="20" viewBox="0 0 24 24" fill={isFocused ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="1.8"><path d="M12 2.8l2.7 5.5 6.1.9-4.4 4.3 1 6.1L12 16.8 6.6 19.6l1-6.1L3.2 9.2l6.1-.9z" /></svg>
-              </button>
+                onToggle={(focused) => focusTask.mutate({ id: task.id, focused })}
+              />
               <button type="button" className="td-m-hero-icon" aria-label="Copy link" onClick={handleCopyLink}>
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71" /><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71" /></svg>
               </button>
@@ -971,7 +1013,7 @@ export default function TaskDetailPanel({
             <div className="td-m-hero-cmds">
               {canEdit && (
                 isAnyRunningForThisTask ? (
-                  <button type="button" className="td-m-cmd is-running" onClick={handleStopTimer}>
+                  <button type="button" className="td-m-cmd is-running" data-running="true" onClick={handleStopTimer}>
                     <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="1" /></svg>
                     {formatSeconds(isWorkBlockRunForThisTask ? timerElapsed : (task.time_tracked || 0) + timerElapsed)}
                   </button>
@@ -1074,16 +1116,12 @@ export default function TaskDetailPanel({
           )}
           <div className="flex-1" />
           {task && (
-            <button
-              type="button"
-              onClick={() => focusTask.mutate({ id: task.id, focused: !isFocused })}
+            <FocusStarButton
+              active={isFocused}
+              variant="panel"
               className="td-nav-btn td-focus-star"
-              data-active={isFocused}
-              title={isFocused ? 'Focused — click to remove' : 'Focus'}
-              aria-label={isFocused ? 'Focused' : 'Focus'}
-            >
-              <span style={{ fontSize: 14, lineHeight: 1 }}>{isFocused ? '★' : '☆'}</span>
-            </button>
+              onToggle={(focused) => focusTask.mutate({ id: task.id, focused })}
+            />
           )}
           <button type="button" onClick={handleCopyLink} className="td-nav-btn" title="Copy link">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
@@ -1152,7 +1190,7 @@ export default function TaskDetailPanel({
           </div>
           {task && canEdit && (
             isAnyRunningForThisTask ? (
-              <button type="button" onClick={handleStopTimer} className="td-pill-btn" title="Stop timer">
+              <button type="button" onClick={handleStopTimer} className="td-pill-btn" data-running="true" title="Stop timer">
                 <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor">
                   <rect x="6" y="6" width="12" height="12" rx="1" />
                 </svg>
@@ -1274,26 +1312,129 @@ export default function TaskDetailPanel({
                   aria-label={isDone ? 'Mark incomplete' : 'Mark complete'}
                 />
                 {editing === 'title' ? (
-                  <input
+                  <textarea
+                    ref={titleEditRef}
                     autoFocus
                     value={editValue}
-                    onChange={(e) => setEditValue(e.target.value)}
+                    rows={1}
+                    onChange={(e) => {
+                      setEditValue(e.target.value);
+                      autoGrow(e.target);
+                    }}
                     onKeyDown={(e) => {
-                      if (e.key === 'Enter') handleSave('title');
+                      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSave('title'); }
                       if (e.key === 'Escape') setEditing(null);
                     }}
                     onBlur={() => handleSave('title')}
-                    className="td-title-hero flex-1 bg-transparent border-b outline-none m-0"
+                    className="td-title-hero td-title-edit flex-1 bg-transparent border-b outline-none m-0"
                     style={{ borderColor: 'var(--sh-accent)' }}
                   />
-                ) : (
-                  <h1
-                    onClick={canEdit ? () => { setEditing('title'); setEditValue(task.title); } : undefined}
-                    className={`td-title-hero flex-1 m-0 ${canEdit ? 'cursor-text' : ''} ${isDone ? 'line-through opacity-60' : ''}`}
-                  >
-                    {task.title}
-                  </h1>
-                )}
+                ) : (() => {
+                  // Two-step title links: plain titles keep click-to-edit; titles
+                  // containing a URL render links inert until armed (1st click
+                  // arms + reveals Edit, 2nd click opens via openExternalUrl).
+                  let hasLink = false;
+                  try {
+                    hasLink = new RegExp(URL_PATTERN, 'i').test(task.title);
+                  } catch {
+                    hasLink = false;
+                  }
+                  if (!hasLink) {
+                    return (
+                      <h1
+                        onClick={canEdit ? () => { setEditing('title'); setEditValue(task.title); } : undefined}
+                        className={`td-title-hero flex-1 m-0 ${canEdit ? 'cursor-text' : ''} ${isDone ? 'line-through opacity-60' : ''}`}
+                      >
+                        {task.title}
+                      </h1>
+                    );
+                  }
+                  const segs: ReactNode[] = [];
+                  let last = 0;
+                  let ki = 0;
+                  const re = new RegExp(URL_PATTERN, 'gi');
+                  for (const m of task.title.matchAll(re)) {
+                    const start = m.index ?? 0;
+                    if (start > last) {
+                      const text = task.title.slice(last, start);
+                      segs.push(
+                        <span
+                          key={`t${ki++}`}
+                          onClick={canEdit ? () => { setEditing('title'); setEditValue(task.title); } : undefined}
+                          className={canEdit ? 'cursor-text' : undefined}
+                        >
+                          {text}
+                        </span>
+                      );
+                    }
+                    const { url, tail } = splitTrailingPunct(m[0]);
+                    const href = toHref(url);
+                    segs.push(
+                      <a
+                        key={`l${ki++}`}
+                        href={href}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          e.preventDefault();
+                          if (!titleLinksArmed) {
+                            setTitleLinksArmed(true);
+                            return;
+                          }
+                          openExternalUrl(href);
+                        }}
+                        title={titleLinksArmed ? `Open link: ${href}` : 'Click once to enable this link, again to open'}
+                        className={titleLinksArmed
+                          ? 'underline text-[var(--sh-accent)] hover:opacity-80 cursor-pointer'
+                          : 'underline decoration-dotted cursor-pointer hover:text-[var(--sh-accent)]'}
+                      >
+                        {url}
+                      </a>
+                    );
+                    if (tail) segs.push(<span key={`p${ki++}`}>{tail}</span>);
+                    last = start + m[0].length;
+                  }
+                  if (last < task.title.length) {
+                    const text = task.title.slice(last);
+                    segs.push(
+                      <span
+                        key={`t${ki++}`}
+                        onClick={canEdit ? () => { setEditing('title'); setEditValue(task.title); } : undefined}
+                        className={canEdit ? 'cursor-text' : undefined}
+                      >
+                        {text}
+                      </span>
+                    );
+                  }
+                  return (
+                    <div ref={titleWrapRef} className="flex-1 min-w-0">
+                      <h1
+                        className={`td-title-hero m-0 ${isDone ? 'line-through opacity-60' : ''}`}
+                      >
+                        {segs}
+                      </h1>
+                      {titleLinksArmed ? (
+                        <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] leading-4 text-[var(--sh-ink-3)]">
+                          <span>Link ready — click it again to open. Click elsewhere or Esc to cancel.</span>
+                          {canEdit && (
+                            <button
+                              type="button"
+                              onClick={(e) => { e.stopPropagation(); setEditing('title'); setEditValue(task.title); }}
+                              className="rounded-md border border-[var(--sh-hair)] px-2 py-0.5 font-medium text-[var(--sh-ink-2)] transition hover:bg-[var(--sh-hair-3)] hover:text-[var(--sh-ink)]"
+                            >
+                              Edit title
+                            </button>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="mt-1 text-[11px] leading-4 text-[var(--sh-ink-4)]">
+                          Title contains a link — click it once to enable, again to open.
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
               </div>
 
               {/* Description — boxed right under title */}
@@ -1304,13 +1445,19 @@ export default function TaskDetailPanel({
                 <span className="td-desc-box-label">Description</span>
                 {editing === 'description' ? (
                   <textarea
+                    ref={descEditRef}
                     autoFocus
                     value={editValue}
-                    onChange={(e) => setEditValue(e.target.value)}
+                    onChange={(e) => {
+                      setEditValue(e.target.value);
+                      autoGrow(e.target);
+                    }}
                     onBlur={() => handleSave('description')}
                     onKeyDown={(e) => { if (e.key === 'Escape') setEditing(null); }}
-                    rows={6}
-                    className="td-about w-full resize-none bg-transparent outline-none"
+                    onClick={(e) => e.stopPropagation()}
+                    rows={1}
+                    placeholder="Click to add a description…"
+                    className="td-about td-desc-edit w-full bg-transparent outline-none"
                   />
                 ) : (
                   <div className={`td-about ${!task.description ? 'empty' : ''} ${canEdit ? 'cursor-text' : ''}`}>
@@ -1999,7 +2146,7 @@ export default function TaskDetailPanel({
               {(subtasks.length > 0 || canEdit) && (
                 <div className="td-subtask-list">
                   {subtasks.map((st: any) => {
-                    const stDone = st.status === 'done' || st.status === 'closed';
+                    const stDone = st.status === 'done' || st.status === 'closed' || st.status === 'cancelled';
                     const stPerson = st.assignees?.[0];
                     return (
                       <button

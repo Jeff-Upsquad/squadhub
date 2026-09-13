@@ -2,23 +2,16 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Task } from '@squadhub/shared';
 import { usePMStore } from '../../../stores/pmStore';
 import { useDayPlannerTasks, useUnscheduledTasks, useDayPlans, useFocusTask, planDateKey } from '../../../hooks/useDayPlanner';
-import { groupTasks, collapseGroupedTasks, isGroupedRow, type GroupBy } from '../../../lib/taskGrouping';
+import { groupTasks, collapseGroupedTasks, isGroupedRow, GROUP_BY_OPTIONS, type GroupBy } from '../../../lib/taskGrouping';
 import GroupedTaskRow from '../home/GroupedTaskRow';
 import SnoozeMenu from './SnoozeMenu';
 
 type Badge = 'overdue' | 'today' | 'focus' | 'starts';
 
-// Group-by options for the planner palette. Mirrors Home's Focus list, plus
-// "Work date" since planning is fundamentally about when you'll do the work.
-const GROUP_OPTIONS: { value: GroupBy; label: string }[] = [
-  { value: 'none', label: 'None' },
-  { value: 'priority', label: 'Priority' },
-  { value: 'work_date', label: 'Work date' },
-  { value: 'due_date', label: 'Due date' },
-  { value: 'status', label: 'Status' },
-  { value: 'space', label: 'Space' },
-  { value: 'list', label: 'List' },
-];
+// Group-by options mirror Home's Focus list plus Space/Folder/List, so the
+// planner palette groups exactly like every other surface. "Work date" stays
+// because planning is fundamentally about when you'll do the work.
+const GROUP_OPTIONS = GROUP_BY_OPTIONS;
 
 // Persisted under its own scope key so the planner's grouping is independent of
 // Home's Focus list (both ride the shared, server-synced groupByScope map).
@@ -323,6 +316,9 @@ export default function TodayList() {
         groups.map((g) => (
           <div key={g.key} className="hm-group">
             <div className="hm-group-head">
+              {g.color && (
+                <span aria-hidden="true" style={{ width: 8, height: 8, borderRadius: 999, background: g.color, flex: 'none' }} />
+              )}
               <span>{g.label}</span>
               <span className="count">· {g.tasks.length}</span>
             </div>

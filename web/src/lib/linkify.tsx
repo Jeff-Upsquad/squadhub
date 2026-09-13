@@ -1,5 +1,6 @@
 import React from 'react';
 import { URL_PATTERN, splitTrailingPunct, toHref } from './urlPattern';
+import { openExternalUrl } from './openExternal';
 
 const URL_RE = new RegExp(URL_PATTERN, 'gi');
 
@@ -19,7 +20,11 @@ export function linkifyText(text: string): React.ReactNode {
         href={href}
         target="_blank"
         rel="noopener noreferrer"
-        onClick={(e) => e.stopPropagation()}
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          openExternalUrl(href);
+        }}
         className="underline text-[var(--sh-accent)] hover:opacity-80"
       >
         {url}

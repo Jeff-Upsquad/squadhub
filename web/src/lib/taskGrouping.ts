@@ -6,7 +6,7 @@ import type { Task } from '@squadhub/shared';
 // keep a task in its pre-fade bucket while the slide-out animation plays.
 export const EMPTY_FADING_MAP: ReadonlyMap<string, string> = new Map();
 
-export type GroupBy = 'none' | 'status' | 'work_date' | 'due_date' | 'priority' | 'space' | 'folder' | 'list';
+export type GroupBy = 'none' | 'status' | 'work_date' | 'due_date' | 'priority' | 'space' | 'folder' | 'list' | 'label';
 
 export const GROUP_BY_OPTIONS: { value: GroupBy; label: string }[] = [
   { value: 'none', label: 'None' },
@@ -17,6 +17,7 @@ export const GROUP_BY_OPTIONS: { value: GroupBy; label: string }[] = [
   { value: 'space', label: 'Space' },
   { value: 'folder', label: 'Folder' },
   { value: 'list', label: 'List' },
+  { value: 'label', label: 'Label' },
 ];
 
 export const LIST_GROUP_BY_OPTIONS: { value: GroupBy; label: string }[] = [
@@ -25,6 +26,10 @@ export const LIST_GROUP_BY_OPTIONS: { value: GroupBy; label: string }[] = [
   { value: 'work_date', label: 'Work date' },
   { value: 'due_date', label: 'Due date' },
   { value: 'priority', label: 'Priority' },
+  { value: 'space', label: 'Space' },
+  { value: 'folder', label: 'Folder' },
+  { value: 'list', label: 'List' },
+  { value: 'label', label: 'Label' },
 ];
 
 export type SortBy = 'manual' | 'title' | 'due_date' | 'priority' | 'recent';
@@ -114,7 +119,7 @@ export const PRIORITY_LABELS: Record<string, string> = {
   none: 'No priority',
 };
 
-export type Group = { key: string; label: string; sort: number | string; tasks: Task[] };
+export type Group = { key: string; label: string; sort: number | string; tasks: Task[]; color?: string };
 
 // A synthetic "Grouped tasks under {name}" row. Produced by collapseGroupedTasks
 // when a task's server-resolved `group_container` is non-null (the nearest
@@ -188,7 +193,7 @@ export function isTaskCompleted(t: Task): boolean {
   if (s && typeof s === 'object') {
     return s.category === 'done' || s.category === 'closed';
   }
-  if (typeof s === 'string') return s === 'closed' || s === 'done';
+  if (typeof s === 'string') return s === 'closed' || s === 'done' || s === 'cancelled';
   return false;
 }
 
@@ -327,6 +332,36 @@ export function groupByNamedRef(
   return [...map.values()].sort((a, b) => (a.sort as string).localeCompare(b.sort as string));
 }
 
+// A task can carry several labels, so (unlike space/folder/list) it appears
+// under EVERY label it has — mirroring how multi-homing renders a task inside
+// each of its groups. Untagged tasks collect under "No label" (sorted last).
+export function groupByLabel(tasks: Task[]): Group[] {
+  const map = new Map<string, Group>();
+  for (const t of tasks) {
+    const tags = t.tags ?? [];
+    if (tags.length === 0) {
+      const k = '__none__';
+      if (!map.has(k)) map.set(k, { key: k, label: 'No label', sort: '\uffff', tasks: [] });
+      map.get(k)!.tasks.push(t);
+      continue;
+    }
+    for (const tag of tags) {
+      const key = tag.id || tag.name;
+      if (!map.has(key)) {
+        map.set(key, {
+          key,
+          label: tag.name || 'Unnamed label',
+          sort: (tag.name || '').toLowerCase(),
+          tasks: [],
+          color: tag.color,
+        });
+      }
+      map.get(key)!.tasks.push(t);
+    }
+  }
+  return [...map.values()].sort((a, b) => (a.sort as string).localeCompare(b.sort as string));
+}
+
 // `fadingMap` is REQUIRED so callers can't accidentally drop the snapshot when
 // `by === 'status'`. The other group-by paths don't read `task.status`, so the
 // value is unused for them — but the type guard keeps the call site honest.
@@ -355,6 +390,8 @@ export function groupTasks(
       );
     case 'list':
       return groupByNamedRef(tasks, (t) => t.list ?? null, 'No list');
+    case 'label':
+      return groupByLabel(tasks);
     default:
       return [];
   }

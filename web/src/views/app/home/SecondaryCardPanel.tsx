@@ -1,19 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { usePMStore } from '../../../stores/pmStore';
-import { groupTasks, type GroupBy } from '../../../lib/taskGrouping';
+import { groupTasks, GROUP_BY_OPTIONS } from '../../../lib/taskGrouping';
 import type { SecondaryCardItem } from '../../../hooks/useSecondaryCards';
 import type { SecondaryCardConfig } from './SecondaryCardRow';
 
-const GROUP_OPTIONS: { value: GroupBy; label: string }[] = [
-  { value: 'none', label: 'None' },
-  { value: 'priority', label: 'Priority' },
-  { value: 'due_date', label: 'Due date' },
-  { value: 'work_date', label: 'Work date' },
-  { value: 'status', label: 'Status' },
-  { value: 'space', label: 'Space' },
-  { value: 'folder', label: 'Folder' },
-  { value: 'list', label: 'List' },
-];
+// Shared full group-by set (None, Work date, Due date, Priority, Status,
+// Space, Folder, List) — same options as the Focus list, Home tabs and
+// Space/Folder views.
+const GROUP_OPTIONS = GROUP_BY_OPTIONS;
 
 // Slide-in list opened when a Home "disappearing card" is clicked. Mirrors
 // DashboardListPanel's mount / Escape / backdrop behaviour and reuses its
@@ -71,7 +65,7 @@ export default function SecondaryCardPanel({ card }: { card: SecondaryCardConfig
     if (groupBy === 'none') return null;
     const byId = new Map(items.map((it) => [it.id, it] as const));
     return groupTasks(items.map((it) => it.task), groupBy, tz, fadingTaskIds)
-      .map((g) => ({ key: g.key, label: g.label, items: g.tasks.map((t) => byId.get(t.id)).filter(Boolean) as SecondaryCardItem[] }));
+      .map((g) => ({ key: g.key, label: g.label, color: g.color, items: g.tasks.map((t) => byId.get(t.id)).filter(Boolean) as SecondaryCardItem[] }));
   }, [items, groupBy, tz, fadingTaskIds]);
 
   if (!card) return null;
@@ -177,6 +171,9 @@ export default function SecondaryCardPanel({ card }: { card: SecondaryCardConfig
             groups.map((g) => (
               <div key={g.key} className="hm-group">
                 <div className="hm-group-head">
+                  {g.color && (
+                    <span aria-hidden="true" style={{ width: 8, height: 8, borderRadius: 999, background: g.color, flex: 'none' }} />
+                  )}
                   <span>{g.label}</span>
                   <span className="count">· {g.items.length}</span>
                 </div>

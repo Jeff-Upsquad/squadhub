@@ -165,6 +165,9 @@ router.get('/', requireAuth, async (req: Request, res: Response) => {
 // POST /channels — create a new channel (requires can_create_channels permission)
 router.post('/', requireAuth, requirePermission('can_create_channels'), async (req: Request, res: Response) => {
   try {
+    if (typeof req.body?.name === 'string') {
+      req.body.name = normalizeChannelName(req.body.name);
+    }
     const body = createChannelSchema.parse(req.body);
 
     const { data, error } = await supabaseAdmin
@@ -260,7 +263,14 @@ router.put('/:id', requireAuth, async (req: Request, res: Response) => {
     }
 
     const updates: Record<string, unknown> = {};
-    if (req.body.name !== undefined) updates.name = req.body.name;
+    if (req.body.name !== undefined) {
+      const normalized = typeof req.body.name === 'string' ? normalizeChannelName(req.body.name) : '';
+      if (!normalized) {
+        res.status(400).json({ success: false, error: 'Channel name must be lowercase letters, numbers, and hyphens only' });
+        return;
+      }
+      updates.name = normalized;
+    }
     if (req.body.description !== undefined) updates.description = req.body.description;
 
     if (Object.keys(updates).length === 0) {
@@ -338,11 +348,25 @@ const unlinkSchema = z.object({
 function slugifyChannelName(name: string): string {
   const slug = name
     .toLowerCase()
+    .replace(/[\s_]+/g, '-')
     .replace(/[^a-z0-9-]+/g, '-')
     .replace(/^-+|-+$/g, '')
     .slice(0, 80)
     .replace(/-+$/g, '');
   return slug || 'channel';
+}
+
+// Normalize user-supplied channel names (spaces/underscores -> hyphens) before
+// validation so "sales team" becomes "sales-team" instead of being rejected.
+function normalizeChannelName(name: string): string {
+  return name
+    .toLowerCase()
+    .trim()
+    .replace(/[\s_]+/g, '-')
+    .replace(/[^a-z0-9-]/g, '')
+    .replace(/-+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 80);
 }
 
 // GET /channels/linked?resource_type=&resource_id= — the active linked channel

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { openExternalUrl } from '../lib/openExternal';
 
 // Renders an external web page (e.g. a meeting link) inside the app as a tab
 // pane. Most links — including our default Jitsi meetings — embed cleanly in an
@@ -27,7 +28,7 @@ export default function ExternalTabPane({ url, title }: { url: string; title?: s
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [url, nonce]);
 
-  const openExternal = () => window.open(url, '_blank', 'noopener,noreferrer');
+  const openExternal = () => openExternalUrl(url);
   const label = title || (() => {
     try {
       return new URL(url).hostname;

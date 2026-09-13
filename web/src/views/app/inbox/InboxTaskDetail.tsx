@@ -93,7 +93,7 @@ export default function InboxTaskDetail({
   const t: any = task;
   const assignees: any[] = t.assignees || [];
   const status = t.status || 'todo';
-  const isDone = ['done', 'closed', 'completed'].includes(String(status).toLowerCase());
+  const isDone = ['done', 'closed', 'cancelled', 'completed'].includes(String(status).toLowerCase());
 
   return (
     <div className="th-pane">

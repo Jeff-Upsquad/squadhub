@@ -6,7 +6,7 @@ import { isFilterEmpty } from '../lib/filters';
 
 export type ViewMode = 'list' | 'board' | 'whiteboard';
 export type DashboardTab = 'today' | 'overdue' | 'tomorrow' | 'all';
-export type ListGroupBy = Extract<GroupBy, 'status' | 'none' | 'work_date' | 'due_date' | 'priority'>;
+export type ListGroupBy = GroupBy;
 export type TodayListView = 'list' | 'calendar';
 // Calendar app view mode + which weekday the Week/Month grids start on (0=Sun…6=Sat).
 // Synced cross-device via the view-preferences payload.

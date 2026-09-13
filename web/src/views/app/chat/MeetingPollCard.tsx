@@ -1,9 +1,7 @@
 import { useState } from 'react';
 import { useAuthStore } from '../../../stores/authStore';
 import { useMeetingEvent, useMeetingActions } from '../../../hooks/useMeetingEvents';
-import { useTabsStore } from '../../../stores/tabsStore';
-import { buildExternalSnapshot } from '../../../lib/tabSnapshots';
-import { MEETING_ACCENT } from '../meetings/meetingUtils';
+import { MEETING_ACCENT, openMeetingLink } from '../meetings/meetingUtils';
 import MeetingSlotRow from '../meetings/MeetingSlotRow';
 import MeetingDetailPanel from '../meetings/MeetingDetailPanel';
 
@@ -41,7 +39,7 @@ export default function MeetingPollCard({ meetingEventId }: { meetingEventId: st
       {detail.event.link_url && detail.event.status === 'confirmed' && (
         <button
           type="button"
-          onClick={() => useTabsStore.getState().openInNewTab(buildExternalSnapshot(detail.event.link_url!, detail.event.title))}
+          onClick={() => openMeetingLink(detail.event.link_url!, detail.event.title)}
           className="mb-2 block w-full truncate text-left text-xs text-[#2962FF] hover:underline"
         >
           {detail.event.link_url}

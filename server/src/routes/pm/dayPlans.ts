@@ -256,7 +256,7 @@ router.get('/day-plans', async (req: Request, res: Response) => {
         .from('tasks')
         .select('id, work_date, due_date, start_date, time_estimate, snoozed_until')
         .contains('assignee_ids', [req.userId!])
-        .not('status', 'in', '(done,closed)')
+        .not('status', 'in', '(done,closed,cancelled)')
         .or([win('work_date'), win('due_date'), win('start_date')].join(','));
       if (dateErr) {
         console.error('[dayPlans GET] date-task lookup failed:', dateErr);

@@ -230,6 +230,9 @@ export interface Message {
   // When set, this message is an interactive meeting poll card — MessageBubble
   // renders <MeetingPollCard> instead of text content (see migration 139).
   meeting_event_id?: string | null;
+  // When set, this message is a live huddle card — MessageBubble renders
+  // <HuddleCard> (see migration 20260912120000_huddles).
+  huddle_id?: string | null;
   // System sidecar — e.g. crm_activity marks CRM-mirrored activity lines.
   metadata?: MessageMetadata | null;
   created_at: string;
@@ -309,7 +312,7 @@ export type TaskStatusKey =
   | 'active' | 'in_progress' | 'time_tracked' | 'active_daily'
   | 'routines' | 'imp_routines'
   | 'on_hold' | 'waiting_on_dependency' | 'follow_ups' | 'help' | 'unblocked'
-  | 'closed';
+  | 'closed' | 'cancelled';
 
 export type TaskStatusGroup =
   | 'not_started'
@@ -373,6 +376,7 @@ export const TASK_STATUS_CATALOG: TaskStatusDef[] = [
 
   // Closed → closed
   { key: 'closed', label: 'CLOSED', description: 'Completed and archived.', group: 'done', groupLabel: 'Closed', groupEmoji: '✅', category: 'closed', color: '#10b981' },
+  { key: 'cancelled', label: 'CANCELLED', description: 'No longer needed; closed without completing.', group: 'done', groupLabel: 'Closed', groupEmoji: '✅', category: 'closed', color: '#6b7280' },
 ];
 
 const TASK_STATUS_BY_KEY: Record<string, TaskStatusDef> = TASK_STATUS_CATALOG.reduce(
@@ -1252,6 +1256,52 @@ export interface MeetingLinkProviderInfo {
   label: string;
 }
 
+// ---- Huddles (in-app LiveKit calls attached to a channel / DM) ----
+export interface Huddle {
+  id: string;
+  code: string; // public share slug: /huddle/<code>
+  room_name: string;
+  channel_id: string | null;
+  dm_conversation_id: string | null;
+  topic: string | null;
+  started_by: string;
+  started_at: string;
+  ended_at: string | null;
+  allow_guests: boolean;
+}
+
+export interface HuddleParticipant {
+  id: string;
+  huddle_id: string;
+  identity: string; // "user:<uuid>" | "guest:<rand>"
+  user_id: string | null;
+  display_name: string;
+  avatar_url: string | null;
+  joined_at: string;
+  left_at: string | null;
+}
+
+// Full payload from GET /huddles/:id and the huddle_updated socket push.
+export interface HuddleDetail {
+  huddle: Huddle;
+  starter: { id: string; display_name: string; avatar_url: string | null } | null;
+  // Currently in the call (left_at IS NULL).
+  participants: HuddleParticipant[];
+  participant_count: number;
+  // The "started a SquadUp" card message in the conversation — the in-call
+  // chat rail is a thread on it, so call-time chatter stays with the call.
+  card_message_id: string | null;
+}
+
+// Returned by the join-token endpoints; `url` is the LiveKit server the
+// client connects to (so the web build needs no LiveKit env of its own).
+export interface HuddleJoinCredentials {
+  token: string;
+  url: string;
+  identity: string;
+  huddle: HuddleDetail;
+}
+
 // ---- Socket.io Events ----
 export interface ServerToClientEvents {
   new_message: (message: Message) => void;
@@ -1286,6 +1336,9 @@ export interface ServerToClientEvents {
   // Live meeting state (votes/suggestions/status) pushed to everyone in the
   // meeting:{id} room — keeps the mini-app detail and every in-chat card synced.
   meeting_event_updated: (detail: MeetingEventDetail) => void;
+  // Pushed to the conversation room (channel id / dm id) on start, join,
+  // leave, topic change and end — drives the chat card + header pill.
+  huddle_updated: (detail: HuddleDetail) => void;
   // Support ticket activity, pushed to the support_ticket:{id} room.
   support_ticket_message: (data: { ticket_id: string; message: Message }) => void;
   support_ticket_updated: (data: { ticket_id: string; status?: string; assigned_to?: string | null }) => void;

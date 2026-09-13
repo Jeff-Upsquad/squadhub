@@ -7,6 +7,14 @@ export default function CreateChannelModal({ workspaceId, onClose }: { workspace
   const [error, setError] = useState('');
   const queryClient = useQueryClient();
 
+  // Slack-style: spaces and underscores become hyphens so "sales team" -> "sales-team"
+  const formatChannelName = (value: string) =>
+    value
+      .toLowerCase()
+      .replace(/[\s_]+/g, '-')
+      .replace(/[^a-z0-9-]/g, '')
+      .replace(/-{2,}/g, '-');
+
   const mutation = useMutation({
     mutationFn: (channelName: string) =>
       api.post('/channels', { workspace_id: workspaceId, name: channelName }),
@@ -25,17 +33,21 @@ export default function CreateChannelModal({ workspaceId, onClose }: { workspace
         <input
           type="text"
           value={name}
-          onChange={(e) => setName(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))}
-          placeholder="channel-name"
-          className="mb-4 w-full rounded-md border border-[#CAD5E2] bg-[#ffffff] px-3 py-2 text-[#0F172B] placeholder-[#999999] focus:border-[#2962FF] focus:outline-none focus:ring-1 focus:ring-[#2962FF]"
+          onChange={(e) => setName(formatChannelName(e.target.value))}
+          placeholder="sales-team"
+          className="mb-1 w-full rounded-md border border-[#CAD5E2] bg-[#ffffff] px-3 py-2 text-[#0F172B] placeholder-[#999999] focus:border-[#2962FF] focus:outline-none focus:ring-1 focus:ring-[#2962FF]"
         />
+        <p className="mb-4 text-xs text-[#999999]">Spaces become hyphens automatically.</p>
         <div className="flex justify-end gap-2">
           <button onClick={onClose} className="rounded-md border border-[#CAD5E2] px-4 py-2 text-sm text-[#666666] transition hover:border-[#999999] hover:text-[#0F172B]">
             Cancel
           </button>
           <button
-            onClick={() => name && mutation.mutate(name)}
-            disabled={!name || mutation.isPending}
+            onClick={() => {
+              const clean = name.replace(/^-+|-+$/g, '');
+              if (clean) mutation.mutate(clean);
+            }}
+            disabled={!name.replace(/^-+|-+$/g, '') || mutation.isPending}
             className="rounded-md bg-[#0F172B] px-4 py-2 text-sm font-medium text-white transition hover:bg-[#1D293D] disabled:opacity-50"
           >
             Create

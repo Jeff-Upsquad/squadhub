@@ -11,7 +11,6 @@ import {
   getWorkspaceIdForTask,
   getWorkspaceIdForList,
   visibleGroupIds,
-  canCreateLabels,
   isPlatformAdmin,
   getDefaultGroupId,
 } from '../../utils/labels';
@@ -97,7 +96,12 @@ router.get('/labels', async (req: Request, res: Response) => {
       labels: labelsByGroup.get(g.id) || [],
     }));
 
-    const can_create = await canCreateLabels(req.userId!, workspaceId, { isAdmin });
+    // Picker buttons (create / rename / recolor) are manager-only: the list
+    // share level must be manager. Platform admins bypass via the manager
+    // level that checkResourceAccess grants workspace admins/creators, plus
+    // the explicit isAdmin fallback below.
+    const can_create =
+      (level ? meetsAccessLevel(level, 'manager') : false) || isAdmin;
     const data: LabelPickerData = { groups: pickerGroups, can_create };
     res.json({ success: true, data });
   } catch (err) {
@@ -106,7 +110,7 @@ router.get('/labels', async (req: Request, res: Response) => {
   }
 });
 
-// POST /pm/labels — inline-create a label (gated by can_create).
+// POST /pm/labels — inline-create a label (managers only).
 // Non-admins always create into the default "General" group; admins may target
 // any group in the task's workspace.
 const createSchema = z.object({
@@ -137,8 +141,8 @@ router.post('/labels', async (req: Request, res: Response) => {
     }
 
     const isAdmin = await isPlatformAdmin(req.userId!);
-    if (!(await canCreateLabels(req.userId!, workspaceId, { isAdmin }))) {
-      res.status(403).json({ success: false, error: 'You do not have permission to create labels' });
+    if (!meetsAccessLevel(level, 'manager') && !isAdmin) {
+      res.status(403).json({ success: false, error: 'Only managers can create labels' });
       return;
     }
 
@@ -354,6 +358,70 @@ router.post('/label-requests', async (req: Request, res: Response) => {
       return;
     }
     console.error('Create label request error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// PUT /pm/labels/:id — update a label's name/color (managers only).
+// task_id anchors the workspace.
+const updateSchema = z.object({
+  task_id: z.string().uuid(),
+  name: z.string().trim().min(1).max(60).optional(),
+  color: z.string().regex(/^#[0-9a-fA-F]{6}$/, 'color must be a #rrggbb hex').optional(),
+});
+
+router.put('/labels/:id', async (req: Request, res: Response) => {
+  try {
+    const body = updateSchema.parse(req.body);
+    if (!body.name && !body.color) {
+      res.status(400).json({ success: false, error: 'Nothing to update' });
+      return;
+    }
+    const listId = await taskListId(body.task_id);
+    if (!listId) {
+      res.status(404).json({ success: false, error: 'Task not found' });
+      return;
+    }
+    const level = await checkResourceAccess(req.userId!, 'list', listId);
+    if (!level) {
+      res.status(403).json({ success: false, error: 'You do not have access to this task' });
+      return;
+    }
+    const workspaceId = await getWorkspaceIdForTask(body.task_id);
+    if (!workspaceId) {
+      res.status(500).json({ success: false, error: 'Cannot resolve workspace for task' });
+      return;
+    }
+    const isAdmin = await isPlatformAdmin(req.userId!);
+    if (!meetsAccessLevel(level, 'manager') && !isAdmin) {
+      res.status(403).json({ success: false, error: 'Only managers can edit labels' });
+      return;
+    }
+    const patch: Record<string, unknown> = {};
+    if (body.name) patch.name = body.name;
+    if (body.color) patch.color = body.color;
+    const { data, error } = await supabaseAdmin
+      .from('task_tags')
+      .update(patch)
+      .eq('id', req.params.id)
+      .eq('workspace_id', workspaceId)
+      .select(LABEL_COLUMNS)
+      .single();
+    if (error) {
+      if (error.code === '23505') {
+        res.status(409).json({ success: false, error: 'A label with that name already exists' });
+        return;
+      }
+      res.status(500).json({ success: false, error: error.message });
+      return;
+    }
+    res.json({ success: true, data });
+  } catch (err) {
+    if (err instanceof z.ZodError) {
+      res.status(400).json({ success: false, error: err.errors[0].message });
+      return;
+    }
+    console.error('Update label error:', err);
     res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });

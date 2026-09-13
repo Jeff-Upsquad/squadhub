@@ -18,6 +18,7 @@ import DatePicker from './DatePicker';
 import PriorityPicker, { PRIORITY_META } from './PriorityPicker';
 import SopBreachReportModal from '../../../components/sop/SopBreachReportModal';
 import SopFlagDetailModal from '../../../components/sop/SopFlagDetailModal';
+import FocusStarButton from '../../../components/pm/FocusStarButton';
 
 function fmtClock(seconds: number): string {
   const h = Math.floor(seconds / 3600);
@@ -111,7 +112,7 @@ export default function TaskRow({
   const isSelected = selectedTasks.includes(task.id);
 
   const statusCategory = (task as any).status as string | undefined;
-  const isDone = statusCategory === 'done' || statusCategory === 'closed';
+  const isDone = statusCategory === 'done' || statusCategory === 'closed' || statusCategory === 'cancelled';
   const isFading = fadingTaskIds.has(task.id);
   const displayDone = isDone || isFading;
   const priority = (task.priority || 'none') as TaskPriority;
@@ -119,6 +120,9 @@ export default function TaskRow({
   const workWhen = formatWhen(task.work_date);
   const dueWhen = formatWhen(task.due_date);
   const assignees = task.assignees || [];
+  const tags = ((task as any).tags || []) as { id: string; name: string; color?: string | null }[];
+  const visibleTags = tags.slice(0, 2);
+  const overflowTags = tags.length - visibleTags.length;
 
   const recordCompletion = useRecordWorkBlockCompletion();
   const { data: activeGroupRun } = useActiveGroupRun();
@@ -160,6 +164,11 @@ export default function TaskRow({
     }
     // Capture the anchor now — e.currentTarget is gone after the await below.
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    // Show the no-assignee choice immediately. The completion safety check
+    // below still runs, but waiting for the task + checklist requests before
+    // mounting this popover made a simple checkbox click feel laggy.
+    const needsAssigneePrompt = assignees.length === 0;
+    if (needsAssigneePrompt) setNoAssigneePrompt(rect);
     // Completion gate: a task with open subtasks or unchecked checklist items
     // can't be completed. List rows don't carry that data, so fetch it at
     // click time (cached under the same keys the detail panel uses). Fails
@@ -183,13 +192,18 @@ export default function TaskRow({
         .flatMap((c) => c.items || [])
         .filter((i) => !i.is_done).length;
       if (openSubtasks > 0 || openChecklist > 0) {
+        // If the fast no-assignee prompt was already shown, replace it with
+        // the more important blocking explanation once the check completes.
+        setNoAssigneePrompt(null);
         setIncompletePrompt({ rect, subtasks: openSubtasks, checklist: openChecklist });
         return;
       }
     } catch { /* fail open — the server-side gate still blocks */ }
     // Completing a task with nobody assigned: ask first (assign to me / someone
     // else / complete as-is) instead of silently closing it unassigned.
-    if (assignees.length === 0) {
+    if (needsAssigneePrompt) {
+      // Usually already mounted above; keep this as a fallback in case the
+      // prompt was dismissed while the async validation was in flight.
       setNoAssigneePrompt(rect);
       return;
     }
@@ -378,16 +392,40 @@ export default function TaskRow({
                 {fmtClock(tickElapsed)}
               </span>
             )}
-            <button
-              type="button"
+            <FocusStarButton
+              active={isFocused}
+              variant="list"
               className="lv-focus-star"
-              data-active={isFocused}
-              onClick={(e) => { e.stopPropagation(); focusTask.mutate({ id: task.id, focused: !isFocused }); }}
-              aria-label={isFocused ? 'Focused for today — click to remove' : 'Focus today'}
-              title={isFocused ? 'Focused for today — click to remove' : 'Focus today'}
-            >
-              {isFocused ? '★' : '☆'}
-            </button>
+              stopPropagation
+              onToggle={(focused) => focusTask.mutate({ id: task.id, focused })}
+            />
+            {visibleTags.map((t) => (
+              <span
+                key={t.id}
+                className="inline-flex max-w-[110px] shrink-0 items-center gap-1 truncate rounded-full px-1.5 py-px text-[10px] font-medium leading-4"
+                style={{
+                  background: `${t.color || '#6b7280'}1a`,
+                  color: t.color || '#6b7280',
+                  border: `1px solid ${t.color || '#6b7280'}33`,
+                }}
+                title={t.name}
+              >
+                <span
+                  className="h-1.5 w-1.5 shrink-0 rounded-full"
+                  style={{ background: t.color || '#6b7280' }}
+                  aria-hidden
+                />
+                <span className="truncate">{t.name}</span>
+              </span>
+            ))}
+            {overflowTags > 0 && (
+              <span
+                className="shrink-0 rounded-full bg-[var(--sh-hair-3)] px-1.5 py-px text-[10px] font-medium leading-4 text-[color:var(--sh-ink-3)]"
+                title={tags.slice(2).map((t) => t.name).join(', ')}
+              >
+                +{overflowTags}
+              </span>
+            )}
           </div>
         </div>
 

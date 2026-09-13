@@ -193,6 +193,7 @@ export default function ListView({
                 key={g.key}
                 groupKey={`gg:${g.key}`}
                 label={g.label}
+                dotColor={g.color}
                 tasks={g.tasks}
                 allStatuses={statuses}
                 listId={listId}

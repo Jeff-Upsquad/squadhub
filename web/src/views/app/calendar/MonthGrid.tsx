@@ -24,7 +24,7 @@ const MAX_CHIPS = 3;
 
 function isDone(status?: string | null): boolean {
   if (!status) return false;
-  if (status === 'done' || status === 'closed') return true;
+  if (status === 'done' || status === 'closed' || status === 'cancelled') return true;
   return getTaskStatusCategory(status) === 'closed';
 }
 
