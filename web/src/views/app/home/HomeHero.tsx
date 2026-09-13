@@ -20,7 +20,7 @@ export default function HomeHero({ greetingPrefix, aside }: { greetingPrefix?: s
     const quarter = Math.floor(now.getMonth() / 3) + 1;
     const name = (user?.display_name || user?.email || 'there').split(/[@ ]/)[0];
     return {
-      eyebrow: `${day}, ${dt} · Week ${weekNum} · Q${quarter}`,
+      eyebrow: `${day}, ${dt}  ·  Week ${weekNum}  ·  Q${quarter}`,
       firstName: name.charAt(0).toUpperCase() + name.slice(1),
     };
   }, [user]);

@@ -158,12 +158,12 @@ function TabItem({
         }
       }}
       onContextMenu={onContextMenu}
-      className={`group relative flex h-[28px] min-w-[92px] max-w-[190px] shrink-0 cursor-default items-center gap-1.5 rounded-[7px] pl-2.5 pr-1.5 text-[12.5px] transition ${
+      data-active={active}
+      className={`sh-tab group relative flex h-[30px] min-w-[92px] max-w-[190px] shrink-0 cursor-default items-center gap-1.5 pl-3 pr-1.5 text-[12.5px] transition ${
         active
-          ? 'border border-[var(--sh-hair)] bg-[var(--surface)] font-medium text-[var(--sh-ink)]'
-          : 'border border-transparent text-[var(--sh-ink-3)] hover:bg-[var(--sh-hair-3)] hover:text-[var(--sh-ink)]'
+          ? 'font-semibold text-[var(--sh-ink)]'
+          : 'text-[var(--sh-ink-3)] hover:bg-[rgba(255,255,255,.5)] hover:text-[var(--sh-ink)] dark:hover:bg-[rgba(255,255,255,.05)]'
       }`}
-      style={active ? { boxShadow: 'var(--sh-shadow-sm)' } : undefined}
     >
       <span className={active ? 'text-[var(--sh-ink)]' : 'text-[var(--sh-ink-4)]'}>
         <TabIcon s={tab.snapshot} />
@@ -204,7 +204,7 @@ export default function TabBar() {
 
   // Hidden on mobile — the mobile layout keeps the single-view behavior.
   return (
-    <div className="sh-tabbar hidden h-9 shrink-0 items-center gap-1 overflow-x-auto border-b border-[var(--sh-hair)] bg-[var(--sidebar)] px-2 md:flex">
+    <div className="sh-tabbar hidden h-10 shrink-0 items-center gap-1 overflow-x-auto px-1 pb-1 md:flex">
       {tabs.map((tab) => (
         <TabItem
           key={tab.id}

@@ -9,6 +9,7 @@ import { checkResourceAccess, meetsAccessLevel } from '../../middleware/permissi
 import { logTaskActivity } from '../../utils/taskActivity';
 import {
   getWorkspaceIdForTask,
+  getWorkspaceIdForList,
   visibleGroupIds,
   canCreateLabels,
   isPlatformAdmin,
@@ -33,14 +34,17 @@ async function taskListId(taskId: string): Promise<string | null> {
 
 // GET /pm/labels?task_id=xxx — visible groups + their labels + can_create.
 // task_id anchors the workspace (and gates on the viewer's access to the task).
+// Scoped by `task_id` (an existing task) or `list_id` (a task being created —
+// the picker needs the list's workspace before the task row exists).
 router.get('/labels', async (req: Request, res: Response) => {
   try {
-    const taskId = req.query.task_id as string;
-    if (!taskId) {
-      res.status(400).json({ success: false, error: 'task_id is required' });
+    const taskId = req.query.task_id as string | undefined;
+    const listParam = req.query.list_id as string | undefined;
+    if (!taskId && !listParam) {
+      res.status(400).json({ success: false, error: 'task_id or list_id is required' });
       return;
     }
-    const listId = await taskListId(taskId);
+    const listId = taskId ? await taskListId(taskId) : listParam!;
     if (!listId) {
       res.status(404).json({ success: false, error: 'Task not found' });
       return;
@@ -50,7 +54,7 @@ router.get('/labels', async (req: Request, res: Response) => {
       res.status(403).json({ success: false, error: 'You do not have access to this task' });
       return;
     }
-    const workspaceId = await getWorkspaceIdForTask(taskId);
+    const workspaceId = taskId ? await getWorkspaceIdForTask(taskId) : await getWorkspaceIdForList(listId);
     if (!workspaceId) {
       res.status(500).json({ success: false, error: 'Cannot resolve workspace for task' });
       return;

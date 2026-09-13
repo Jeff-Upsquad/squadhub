@@ -1413,17 +1413,19 @@ export default function TaskDetailPanel({
                     <button
                       type="button"
                       className="reassign"
+                      title="Remove assignee — click the row to pick someone else"
                       onClick={(e) => {
                         e.stopPropagation();
-                        setAssigneeAnchorRect((e.currentTarget.parentElement as HTMLElement).getBoundingClientRect());
-                        setAssigneePickerOpen(v => !v);
+                        if (!task) return;
+                        updateTask.mutate({ id: task.id, assignee_ids: [] });
                       }}
                     >
                       <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                         <circle cx="12" cy="8" r="4" />
                         <path d="M4 21a8 8 0 0116 0" />
+                        <path d="M17 3l4 4M21 3l-4 4" />
                       </svg>
-                      Reassign
+                      Unassign
                     </button>
                   ) : (
                     <button
@@ -1579,7 +1581,7 @@ export default function TaskDetailPanel({
                       {task.work_date ? (
                         isMobile ? formatPlanDate(task.work_date) : formatDueRelative(task.work_date).text
                       ) : (
-                        <span className="td-prop-empty">{isMobile ? 'Set date' : 'Set work date'}</span>
+                        <span className="td-prop-empty">Set date</span>
                       )}
                     </span>
                     {canEdit && (
@@ -1624,7 +1626,7 @@ export default function TaskDetailPanel({
                       {task.start_date ? (
                         isMobile ? formatPlanDate(task.start_date) : formatDueRelative(task.start_date).text
                       ) : (
-                        <span className="td-prop-empty">{isMobile ? 'Set date' : 'Set start date'}</span>
+                        <span className="td-prop-empty">Set date</span>
                       )}
                     </span>
                     {canEdit && (
@@ -1668,10 +1670,21 @@ export default function TaskDetailPanel({
                     <span className="td-date-text">
                       {task.due_date ? (
                         <span style={{ color: due.accent ? 'oklch(0.55 0.18 25)' : 'var(--sh-ink)' }}>
-                          {isMobile ? formatPlanDate(task.due_date) : `${due.text}${due.accent ? ' · Overdue' : ''}`}
+                          {isMobile ? formatPlanDate(task.due_date) : (() => {
+                            // Date on the first line; time + overdue flag on a second,
+                            // so a full due stamp doesn't spread across the row.
+                            const [day, time] = due.text.split(' · ');
+                            const sub = [time, due.accent ? 'Overdue' : ''].filter(Boolean).join(' · ');
+                            return (
+                              <>
+                                <span className="td-date-main">{day}</span>
+                                {sub && <span className="td-date-sub">{sub}</span>}
+                              </>
+                            );
+                          })()}
                         </span>
                       ) : (
-                        <span className="td-prop-empty">{isMobile ? 'Set date' : 'Set due date'}</span>
+                        <span className="td-prop-empty">Set date</span>
                       )}
                     </span>
                     {canEdit && (
@@ -1777,7 +1790,7 @@ export default function TaskDetailPanel({
                     ) : task.time_estimate ? (
                       <span>{formatMinutes(task.time_estimate)}</span>
                     ) : (
-                      <span className="td-prop-empty">Add estimate</span>
+                      <span className="td-prop-empty">Not set</span>
                     )}
                   </span>
                 </div>
@@ -1853,7 +1866,7 @@ export default function TaskDetailPanel({
                         {formatTracked(isTimerForThisTask ? ((task.time_tracked || 0) + timerElapsed) : task.time_tracked) || '0m'}
                       </span>
                     ) : (
-                      <span className="td-prop-empty">{isMobile ? '0m' : '0h logged'}</span>
+                      <span className="td-prop-empty">0h</span>
                     )}
                   </span>
                 </div>
@@ -1910,7 +1923,7 @@ export default function TaskDetailPanel({
                         </span>
                       ))
                     ) : (
-                      <span className="td-prop-empty">+ Add label</span>
+                      <span className="td-prop-empty">+ Add</span>
                     )}
                   </span>
                 </div>
@@ -2111,13 +2124,13 @@ export default function TaskDetailPanel({
                     const done = items.filter((i) => i.is_done).length;
                     const pct = items.length ? (done / items.length) * 100 : 0;
                     return (
-                      <div key={cl.id}>
-                        <div className="flex items-center gap-2 mb-1.5">
-                          <span className="text-[12.5px] font-semibold text-[color:var(--sh-ink-2)] flex-1">{cl.title}</span>
-                          <span className="rounded h-[3px] overflow-hidden" style={{ width: 50, background: 'var(--surface-alt)' }}>
+                      <div key={cl.id} className="td-cl-card">
+                        <div className="td-cl-head flex items-center gap-2 mb-1.5">
+                          <span className="td-cl-title text-[12.5px] font-semibold text-[color:var(--sh-ink-2)] flex-1">{cl.title}</span>
+                          <span className="td-cl-bar rounded h-[3px] overflow-hidden" style={{ width: 50, background: 'var(--surface-alt)' }}>
                             <span className="block h-full transition-all" style={{ width: `${pct}%`, background: 'var(--td-accent)' }} />
                           </span>
-                          <span className="td-mono text-[10.5px] font-semibold text-[color:var(--sh-ink-4)]">{done}/{items.length}</span>
+                          <span className="td-cl-count td-mono text-[10.5px] font-semibold text-[color:var(--sh-ink-4)]">{done}/{items.length}</span>
                           {canEdit && (
                             <button
                               onClick={() => { if (confirm(`Delete checklist "${cl.title}"?`)) deleteChecklist.mutate(cl.id); }}
@@ -2130,7 +2143,7 @@ export default function TaskDetailPanel({
                         </div>
                         <ul className="flex flex-col">
                           {items.map((item) => (
-                            <li key={item.id} className="group flex items-center gap-2.5 py-1">
+                            <li key={item.id} className="td-cl-item group flex items-center gap-2.5 py-1">
                               <button
                                 type="button"
                                 onClick={() => updateChecklistItem.mutate({ id: item.id, is_done: !item.is_done })}

@@ -123,18 +123,24 @@ export default function HomeTimer() {
     else startTimer.mutate(type);
   };
 
+  // Ring = share of the day's commitment already worked (or of everything
+  // tracked so far when no commitment is set), so it always has something
+  // to show once a timer has run.
+  const ringPct = Math.round(hasCommitment ? workPct : tracked > 0 ? (work / tracked) * 100 : 0);
+
   return (
-    <div className="hm-timer" data-state={activeType || 'idle'}>
-      {/* Readout row — worked total · live progress bar · commitment + status */}
-      <div className="hm-timer-meter">
-        <span className="worked">
-          {fmtDur(work)}
-          <em>worked</em>
-        </span>
-        <div className="hm-timer-bar" data-running={!!activeSession}>
-          <div className="seg work" data-live={activeType === 'work'} style={{ width: `${workPct}%` }} />
-          <div className="seg break" data-live={activeType === 'break'} style={{ width: `${breakPct}%` }} />
-          <div className="seg nowork" data-live={activeType === 'no_work'} style={{ width: `${noWorkPct}%` }} />
+    <div className="hm-timer" data-state={activeType || 'idle'} style={{ '--tmr-pct': ringPct } as React.CSSProperties}>
+      <div className="hm-timer-ring" aria-hidden>
+        <span className="pct">{ringPct}<small>%</small></span>
+      </div>
+
+      <div className="hm-timer-body">
+        {/* Readout — worked total · commitment + status · segmented day bar */}
+        <div className="hm-timer-meter">
+          <span className="worked">
+            {fmtDur(work)}
+            <em>worked</em>
+          </span>
         </div>
         <div className="hm-timer-readout">
           {hasCommitment && (
@@ -147,6 +153,11 @@ export default function HomeTimer() {
             <span className="hm-timer-dot" />
             {activeSession ? STATUS_TEXT[activeType as TimerType] : 'Not tracking'}
           </span>
+        </div>
+        <div className="hm-timer-bar" data-running={!!activeSession}>
+          <div className="seg work" data-live={activeType === 'work'} style={{ width: `${workPct}%` }} />
+          <div className="seg break" data-live={activeType === 'break'} style={{ width: `${breakPct}%` }} />
+          <div className="seg nowork" data-live={activeType === 'no_work'} style={{ width: `${noWorkPct}%` }} />
         </div>
       </div>
 
@@ -163,6 +174,7 @@ export default function HomeTimer() {
               disabled={busy}
               onClick={() => handleClick(cfg.type)}
               title={on ? `Stop ${cfg.label.toLowerCase()}` : `Start ${cfg.label.toLowerCase()}`}
+              aria-label={on ? `Stop ${cfg.label.toLowerCase()} (${fmtClock(elapsed)})` : `Start ${cfg.label.toLowerCase()}`}
             >
               <span className="ic">
                 <CtrlIcon running={on} />

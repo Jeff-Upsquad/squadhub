@@ -1,8 +1,6 @@
 import { useMyTasksSummary } from '../../../hooks/useMyTasksSummary';
 import { useNewTasks } from '../../../hooks/useNewTasks';
 import { usePMStore } from '../../../stores/pmStore';
-import DashboardListPanel from './DashboardListPanel';
-import NewTasksPanel from './NewTasksPanel';
 
 const icoProps = {
   width: 12,
@@ -26,10 +24,11 @@ function truncate(s: string, n = 32) {
   return s.length > n ? `${s.slice(0, n - 1)}…` : s;
 }
 
-// onOpenInbox is still passed by every role-home caller, but the Inbox now lives only
-// in the sidebar — the leading dashboard card is "New Tasks". Kept in the signature to
-// avoid churning all six callers.
-export default function DashboardStatRow({ onOpenInbox: _onOpenInbox }: { onOpenInbox: () => void }) {
+// The counter tiles inside the Home dock. The slide-over panels they open
+// (DashboardListPanel / NewTasksPanel) are mounted by Home, outside the dock:
+// the dock animates its transform, which would otherwise become the containing
+// block for their position:fixed wrappers and trap them inside it.
+export default function DashboardStatRow() {
   const setActiveDashboardTab = usePMStore((s) => s.setActiveDashboardTab);
   const setNewTasksOpen = usePMStore((s) => s.setNewTasksOpen);
   const { data: buckets, isLoading: tasksLoading } = useMyTasksSummary();
@@ -87,7 +86,6 @@ export default function DashboardStatRow({ onOpenInbox: _onOpenInbox }: { onOpen
   const loadingVal = '—';
 
   return (
-    <>
       <div className="hm-stats">
         <div
           className="hm-stat"
@@ -171,9 +169,5 @@ export default function DashboardStatRow({ onOpenInbox: _onOpenInbox }: { onOpen
           <GoArrow />
         </div>
       </div>
-
-      <DashboardListPanel />
-      <NewTasksPanel />
-    </>
   );
 }

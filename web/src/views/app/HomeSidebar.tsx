@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import type { Channel, DmConversation, SubscriptionCardRecipient } from '@squadhub/shared';
 import type { HomeView } from '../../layouts/MainLayout';
@@ -119,14 +119,14 @@ function NavItem({
   return (
     <button
       onClick={onClick}
-      className={`flex w-full items-center gap-[9px] rounded-[6px] px-2 py-[5px] text-left text-[13px] transition ${
+      data-active={active || undefined}
+      className={`sb-nav flex w-full items-center gap-[10px] rounded-[11px] px-[10px] py-[7px] text-left text-[13px] transition ${
         active
-          ? 'bg-[var(--surface)] text-[var(--sh-ink)] font-medium border border-[var(--sh-hair)]'
+          ? 'bg-[var(--sh-ink)] text-[var(--sidebar)] font-semibold'
           : 'text-[var(--sh-ink-2)] hover:bg-[var(--sh-hair-3)] hover:text-[var(--sh-ink)]'
       }`}
-      style={active ? { boxShadow: 'var(--sh-shadow-sm)' } : undefined}
     >
-      <span className={active ? 'text-[var(--sh-ink)]' : 'text-[var(--sh-ink-3)]'}>{icon}</span>
+      <span className={active ? 'text-[var(--sidebar)]' : 'text-[var(--sh-ink-3)]'}>{icon}</span>
       <span className="flex-1 truncate">{label}</span>
       {count != null && count > 0 && (
         <span className="relative grid place-items-center">
@@ -138,12 +138,14 @@ function NavItem({
             />
           )}
           <span
-            className={`relative text-[10.5px] font-semibold rounded-full px-[6px] py-[1px] leading-none ${
+            className={`relative text-[10.5px] font-bold rounded-full px-[6px] py-[2px] leading-none ${
               alert
                 ? 'text-white'
-                : unread
-                  ? 'bg-[var(--sh-ink)] text-[var(--sidebar)]'
-                  : 'bg-[var(--sh-hair-3)] text-[var(--sh-ink-3)]'
+                : active
+                  ? 'bg-white/20 text-[var(--sidebar)]'
+                  : unread
+                    ? 'bg-[var(--sh-ink)] text-[var(--sidebar)]'
+                    : 'bg-[var(--sh-hair-3)] text-[var(--sh-ink-3)]'
             }`}
             style={{
               fontFamily: 'var(--font-mono, Inter, sans-serif)',
@@ -171,7 +173,7 @@ function SectionHeader({
   action?: React.ReactNode;
 }) {
   return (
-    <div className="group flex items-center justify-between px-2 pt-3 pb-1">
+    <div className="group flex items-center justify-between px-2 pt-4 pb-1">
       <div className="flex items-center gap-1">
         <button
           onClick={onToggle}
@@ -188,7 +190,7 @@ function SectionHeader({
         </button>
         <button
           onClick={onToggle}
-          className="text-[10.5px] uppercase tracking-[0.08em] font-semibold text-[var(--sh-ink-4)] hover:text-[var(--sh-ink)] whitespace-nowrap transition-colors"
+          className="sb-section text-[var(--sh-ink-3)] hover:text-[var(--sh-ink)] whitespace-nowrap transition-colors"
         >
           {title}
         </button>
@@ -302,44 +304,17 @@ export default function HomeSidebar({
     setExpandedSections((prev) => ({ ...prev, [key]: !prev[key] }));
   };
 
-  // Search is icon-only by default; clicking expands the full bar with a
-  // width/opacity animation. Collapses on outside click or Escape.
-  const [searchExpanded, setSearchExpanded] = useState(false);
-  const searchWrapRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!searchExpanded) return;
-    const onPointerDown = (e: PointerEvent) => {
-      if (searchWrapRef.current && !searchWrapRef.current.contains(e.target as Node)) {
-        setSearchExpanded(false);
-      }
-    };
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setSearchExpanded(false);
-    };
-    document.addEventListener('pointerdown', onPointerDown);
-    document.addEventListener('keydown', onKeyDown);
-    return () => {
-      document.removeEventListener('pointerdown', onPointerDown);
-      document.removeEventListener('keydown', onKeyDown);
-    };
-  }, [searchExpanded]);
-
   return (
     <div className="group/sidebar flex h-full w-full flex-col text-[var(--sh-ink-2)]">
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-[var(--sh-hair)] px-4 py-3">
+      <div className="flex items-center justify-between px-4 pt-4 pb-2">
         {/* Brand lockup — "SquadHub" with a "Powered by UpSquad" subtitle,
             matching the squadhire/login lockup style. */}
-        <div className="flex items-center gap-2">
-          <span
-            className="grid h-[22px] w-[22px] place-items-center rounded-[6px] bg-[var(--sh-ink)] text-[var(--sidebar)]"
-            style={{ fontFamily: 'var(--font-serif, Plus Jakarta Sans, sans-serif)', fontSize: 10, fontWeight: 700, letterSpacing: '-0.02em' }}
-          >
-            SH
-          </span>
+        <div className="flex items-center gap-[10px]">
+          <span className="sb-brand" aria-hidden="true" />
           <div className="flex flex-col leading-tight">
-            <span className="text-[13.5px] font-semibold text-[var(--sh-ink)]">SquadHub</span>
-            <span className="text-[10.5px] text-[var(--sh-ink-3)]">Powered by UpSquad</span>
+            <span className="sb-wordmark text-[var(--sh-ink)]">SquadHub</span>
+            <span className="sb-tagline text-[var(--sh-ink-4)]">Powered by UpSquad</span>
           </div>
         </div>
         <div className="flex items-center gap-[2px]">
@@ -384,49 +359,24 @@ export default function HomeSidebar({
         </div>
       </div>
 
-      {/* Search — icon-only by default, expands with animation on click */}
-      <div className="px-3 pt-2 pb-2 border-b border-[var(--sh-hair)]">
-        <div
-          ref={searchWrapRef}
-          className={`flex items-center overflow-hidden transition-all duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] ${
-            searchExpanded ? 'w-full' : 'w-[30px]'
-          }`}
+      {/* Search — a grey pill that opens the workspace palette */}
+      <div className="px-3 pt-1 pb-2">
+        <button
+          type="button"
+          onClick={onOpenSearch}
+          className="flex h-[36px] w-full items-center gap-[9px] rounded-full bg-[var(--sh-hair-3)] pl-[13px] pr-[6px] text-left text-[12.5px] font-medium text-[var(--sh-ink-4)] transition hover:bg-[var(--sh-hair)] hover:text-[var(--sh-ink-3)]"
+          title="Search (⌘K)"
+          aria-label="Open workspace search"
         >
-          {!searchExpanded ? (
-            <button
-              type="button"
-              onClick={() => setSearchExpanded(true)}
-              className="grid h-[30px] w-[30px] shrink-0 place-items-center rounded-[8px] text-[var(--sh-ink-3)] hover:bg-[var(--sh-hair-3)] hover:text-[var(--sh-ink)] transition"
-              title="Search (⌘K)"
-              aria-label="Expand search"
-            >
-              <svg className="h-[15px] w-[15px]" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
-                <circle cx="11" cy="11" r="7" />
-                <path d="m21 21-4.3-4.3" />
-              </svg>
-            </button>
-          ) : (
-            <div className="relative w-full origin-left animate-[sh-search-expand_0.3s_cubic-bezier(0.32,0.72,0,1)]">
-              <svg className="absolute left-[10px] top-1/2 -translate-y-1/2 h-[13px] w-[13px] text-[var(--sh-ink-4)] pointer-events-none z-[1]" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
-                <circle cx="11" cy="11" r="7" />
-                <path d="m21 21-4.3-4.3" />
-              </svg>
-              <button
-                type="button"
-                onClick={onOpenSearch}
-                className="w-full pl-[30px] pr-10 py-[4px] bg-[var(--surface)] border border-[var(--sh-hair)] rounded-lg text-[12.5px] text-left text-[var(--sh-ink-4)] outline-none hover:border-[var(--sh-ink-4)] focus:border-[var(--sh-ink-4)] transition whitespace-nowrap"
-                aria-label="Open workspace search"
-              >
-                Search or jump to…
-              </button>
-              <span
-                className="absolute right-[18px] top-1/2 -translate-y-1/2 text-[10px] text-[var(--sh-ink-4)] bg-[var(--sh-hair-3)] border border-[var(--sh-hair)] rounded px-[4px] py-[1px] pointer-events-none"
-                style={{ fontFamily: 'var(--font-mono, Inter, sans-serif)' }}
-              >⌘K</span>
-              <style>{`@keyframes sh-search-expand { from { opacity: 0; transform: translateX(-10px) scaleX(0.7); } to { opacity: 1; transform: translateX(0) scaleX(1); } }`}</style>
-            </div>
-          )}
-        </div>
+          <svg className="h-[14px] w-[14px] shrink-0" fill="none" stroke="currentColor" strokeWidth={1.9} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+            <circle cx="11" cy="11" r="7" />
+            <path d="m21 21-4.3-4.3" />
+          </svg>
+          <span className="flex-1 truncate">Search or jump to…</span>
+          <span
+            className="grid h-[22px] min-w-[26px] place-items-center rounded-full bg-[var(--sidebar)] px-[6px] text-[10px] font-semibold text-[var(--sh-ink-3)] shadow-[inset_1px_1px_1px_0_rgba(255,255,255,.9)] dark:shadow-[inset_0_0_0_1px_rgba(255,255,255,.08)]"
+          >⌘K</span>
+        </button>
       </div>
 
       {/* Scrollable content */}
@@ -529,7 +479,7 @@ export default function HomeSidebar({
                       <button
                         key={`channel-${entry.channel.id}`}
                         onClick={() => onSelectChannel(entry.channel.id)}
-                        className="mb-[1px] flex w-full items-center rounded-[6px] px-2 py-[5px] text-left text-[13px] text-[var(--sh-ink-2)] transition hover:bg-[var(--sh-hair-3)] hover:text-[var(--sh-ink)]"
+                        className="mb-[1px] flex w-full items-center rounded-[10px] px-[10px] py-[6px] text-left text-[13px] text-[var(--sh-ink-2)] transition hover:bg-[var(--sh-hair-3)] hover:text-[var(--sh-ink)]"
                       >
                         <span className="mr-[6px] text-[var(--sh-ink-4)]">#</span>
                         <span className="flex-1 truncate">{entry.channel.name}</span>
@@ -607,7 +557,7 @@ export default function HomeSidebar({
                             onLaunchApp(app);
                           }}
                           onAuxClick={(e) => { if (e.button === 1 && app.view) { e.preventDefault(); useTabsStore.getState().openInNewTab(buildAppSnapshot(app.view, 'home'), { background: true }); } }}
-                          className={`mb-[1px] flex w-full items-center gap-[9px] rounded-[6px] px-2 py-[5px] text-left text-[13px] transition ${
+                          className={`mb-[1px] flex w-full items-center gap-[9px] rounded-[10px] px-[10px] py-[6px] text-left text-[13px] transition ${
                             active
                               ? 'bg-[var(--surface)] text-[var(--sh-ink)] font-medium border border-[var(--sh-hair)]'
                               : 'text-[var(--sh-ink-2)] hover:bg-[var(--sh-hair-3)] hover:text-[var(--sh-ink)]'
@@ -704,7 +654,7 @@ export default function HomeSidebar({
                   <button
                     onClick={openFav}
                     onAuxClick={(e) => { if (e.button === 1) openFav(e); }}
-                    className="flex flex-1 items-center gap-[9px] rounded-[6px] px-2 py-[5px] text-left text-[13px] text-[var(--sh-ink-2)] transition hover:bg-[var(--sh-hair-3)] hover:text-[var(--sh-ink)]"
+                    className="flex flex-1 items-center gap-[9px] rounded-[10px] px-[10px] py-[6px] text-left text-[13px] text-[var(--sh-ink-2)] transition hover:bg-[var(--sh-hair-3)] hover:text-[var(--sh-ink)]"
                   >
                     <FavoriteIcon type={fav.item_type} />
                     <span className="truncate">{fav.item_name}</span>
@@ -765,7 +715,7 @@ export default function HomeSidebar({
                         onChangeView('tasks');
                       }}
                       onAuxClick={(e) => { if (e.button === 1 && item.resource_type === 'list') { e.preventDefault(); useTabsStore.getState().openInNewTab(buildListSnapshot(item.space_id, item.resource_id), { background: true }); } }}
-                      className="flex w-full items-center gap-[9px] rounded-[6px] px-2 py-[5px] text-left text-[13px] text-[var(--sh-ink-2)] transition hover:bg-[var(--sh-hair-3)] hover:text-[var(--sh-ink)]"
+                      className="flex w-full items-center gap-[9px] rounded-[10px] px-[10px] py-[6px] text-left text-[13px] text-[var(--sh-ink-2)] transition hover:bg-[var(--sh-hair-3)] hover:text-[var(--sh-ink)]"
                     >
                       <FavoriteIcon type={item.resource_type} />
                       <span className="truncate">{item.resource_name}</span>
@@ -893,7 +843,7 @@ export default function HomeSidebar({
                     <button
                       key={ch.id}
                       onClick={() => onSelectChannel(ch.id)}
-                      className={`mb-[1px] flex w-full items-center rounded-[6px] px-2 py-[5px] text-left text-[13px] transition ${
+                      className={`mb-[1px] flex w-full items-center rounded-[10px] px-[10px] py-[6px] text-left text-[13px] transition ${
                         isActive
                           ? 'bg-[var(--surface)] text-[var(--sh-ink)] font-medium border border-[var(--sh-hair)]'
                           : 'text-[var(--sh-ink-2)] hover:bg-[var(--sh-hair-3)] hover:text-[var(--sh-ink)]'
@@ -910,7 +860,7 @@ export default function HomeSidebar({
               {/* Add channels */}
               <button
                 onClick={onCreateChannel}
-                className="flex w-full items-center gap-[9px] rounded-[6px] px-2 py-[5px] text-left text-[13px] text-[var(--sh-ink-4)] transition hover:bg-[var(--sh-hair-3)] hover:text-[var(--sh-ink)]"
+                className="flex w-full items-center gap-[9px] rounded-[10px] px-[10px] py-[6px] text-left text-[13px] text-[var(--sh-ink-4)] transition hover:bg-[var(--sh-hair-3)] hover:text-[var(--sh-ink)]"
               >
                 <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -962,7 +912,7 @@ export default function HomeSidebar({
               {canSendDms && (
                 <button
                   onClick={() => setShowNewDm(true)}
-                  className="flex w-full items-center gap-[9px] rounded-[6px] px-2 py-[5px] text-left text-[13px] text-[var(--sh-ink-4)] transition hover:bg-[var(--sh-hair-3)] hover:text-[var(--sh-ink)]"
+                  className="flex w-full items-center gap-[9px] rounded-[10px] px-[10px] py-[6px] text-left text-[13px] text-[var(--sh-ink-4)] transition hover:bg-[var(--sh-hair-3)] hover:text-[var(--sh-ink)]"
                 >
                   <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -1069,7 +1019,7 @@ function PartnerOpportunitiesLink({
   return (
     <button
       onClick={onClick}
-      className={`flex w-full items-center gap-[9px] rounded-[6px] px-2 py-[5px] text-left text-[13px] transition ${
+      className={`flex w-full items-center gap-[9px] rounded-[10px] px-[10px] py-[6px] text-left text-[13px] transition ${
         active
           ? 'bg-[var(--surface)] text-[var(--sh-ink)] font-medium border border-[var(--sh-hair)]'
           : 'text-[var(--sh-ink-2)] hover:bg-[var(--sh-hair-3)] hover:text-[var(--sh-ink)]'

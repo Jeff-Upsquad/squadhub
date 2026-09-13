@@ -11,6 +11,16 @@ export function useLabelPicker(taskId: string | null, enabled: boolean) {
   });
 }
 
+// Same picker data scoped by list — for a task that doesn't exist yet (the
+// create panel picks labels before the row exists, then attaches them).
+export function useListLabelPicker(listId: string | null, enabled: boolean) {
+  return useQuery<LabelPickerData>({
+    queryKey: ['label-picker', 'list', listId],
+    queryFn: async () => (await api.get('/pm/labels', { params: { list_id: listId } })).data.data,
+    enabled: !!listId && enabled,
+  });
+}
+
 // Inline-create a label (gated server-side by can_create).
 export function useCreateLabel(taskId: string) {
   const qc = useQueryClient();

@@ -1,24 +1,39 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useLabelPicker, useCreateLabel, useAttachLabel, useDetachLabel, useRequestLabel } from '../../../hooks/useLabels';
+import type { TaskTag } from '@squadhub/shared';
+import { useLabelPicker, useListLabelPicker, useCreateLabel, useAttachLabel, useDetachLabel, useRequestLabel } from '../../../hooks/useLabels';
 
 const DEFAULT_COLOR = '#6b7280';
 
+/**
+ * Two modes. Task mode (`taskId`): toggles attach/detach on the server. Draft
+ * mode (`listId` + `onDraftToggle`): the task doesn't exist yet — labels are
+ * listed by the list's workspace and selection is kept by the caller, which
+ * attaches them once the task is created. Draft mode can't create or request
+ * labels (both need a task).
+ */
 export default function LabelPicker({
   taskId,
+  listId,
   attachedTagIds,
   anchorRect,
   onClose,
+  onDraftToggle,
 }: {
-  taskId: string;
+  taskId?: string;
+  listId?: string;
   attachedTagIds: string[];
   anchorRect: DOMRect | null;
   onClose: () => void;
+  onDraftToggle?: (tag: TaskTag) => void;
 }) {
-  const { data, isLoading } = useLabelPicker(taskId, true);
-  const createLabel = useCreateLabel(taskId);
-  const attachLabel = useAttachLabel(taskId);
-  const detachLabel = useDetachLabel(taskId);
-  const requestLabel = useRequestLabel(taskId);
+  const draftMode = !taskId;
+  const taskQuery = useLabelPicker(taskId ?? null, !draftMode);
+  const listQuery = useListLabelPicker(listId ?? null, draftMode);
+  const { data, isLoading } = draftMode ? listQuery : taskQuery;
+  const createLabel = useCreateLabel(taskId ?? '');
+  const attachLabel = useAttachLabel(taskId ?? '');
+  const detachLabel = useDetachLabel(taskId ?? '');
+  const requestLabel = useRequestLabel(taskId ?? '');
 
   const [query, setQuery] = useState('');
   const [requested, setRequested] = useState<string | null>(null);
@@ -60,13 +75,14 @@ export default function LabelPicker({
     return (data?.groups || []).some((g) => g.labels.some((l) => l.name.toLowerCase() === q));
   }, [data, q]);
 
-  const canCreate = !!data?.can_create;
+  const canCreate = !!data?.can_create && !draftMode;
   const showCreateRow = q.length > 0 && !exactMatch && canCreate;
-  const showRequestRow = q.length > 0 && !exactMatch && !canCreate;
+  const showRequestRow = q.length > 0 && !exactMatch && !canCreate && !draftMode;
 
-  const toggle = (tagId: string) => {
-    if (attached.has(tagId)) detachLabel.mutate(tagId);
-    else attachLabel.mutate(tagId);
+  const toggle = (tag: TaskTag) => {
+    if (draftMode) { onDraftToggle?.(tag); return; }
+    if (attached.has(tag.id)) detachLabel.mutate(tag.id);
+    else attachLabel.mutate(tag.id);
   };
 
   const handleCreate = async () => {
@@ -138,7 +154,7 @@ export default function LabelPicker({
             {g.labels.map((l) => {
               const sel = attached.has(l.id);
               return (
-                <button type="button" key={l.id} className="ap-row" data-selected={sel} onClick={() => toggle(l.id)}>
+                <button type="button" key={l.id} className="ap-row" data-selected={sel} onClick={() => toggle(l)}>
                   <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: l.color || DEFAULT_COLOR, width: 10, height: 10, borderRadius: 9999 }} aria-hidden />
                   <span className="ap-label"><span className="ap-name">{l.name}</span></span>
                   {sel && (
