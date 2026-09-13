@@ -15,7 +15,7 @@
 
 /* ── Theme tokens ───────────────────────────────────────── */
 :root {
-  --canvas:           #F0F2F5;
+  --canvas:           #EDECEB;
   --surface:          #ffffff;
   --surface-alt:      #F1F5F9;
   --divider:          rgba(29,28,29,0.13);
@@ -34,18 +34,18 @@
   --sh-ink-2:         #2A2A2A;
   --sh-ink-3:         #6A6A6A;
   --sh-ink-4:         #A0A0A0;
-  --sh-hair:          #E6E6E6;
-  --sh-hair-2:        #D0D0D0;
-  --sh-hair-3:        #F0F0F0;
+  --sh-hair:          #E6E4E2;
+  --sh-hair-2:        #D3D0CD;
+  --sh-hair-3:        #F3F2F0;
   --sh-badge-alert:   #EF4444;
   --sh-done:          #7c3aed; /* completed-task indicator (checkboxes, ticks) */
   --sh-shadow-sm:     0 1px 0 rgba(26,24,21,0.04), 0 1px 2px rgba(26,24,21,0.03);
-  --sh-rail-inset:    inset -6px 0 10px -6px rgba(0,0,0,0.08);
-  --sh-sidebar-drop:  4px 0 14px -6px rgba(0,0,0,0.1);
+  --sh-rail-inset:    none;
+  --sh-sidebar-drop:  inset 1px 1px 1px 0 rgba(255,255,255,0.9);
 }
 
 .dark {
-  --canvas:           #0f1117;
+  --canvas:           #0E0F11;
   --surface:          #161b22;
   --surface-alt:      #1c2030;
   --divider:          #21262d;
@@ -70,8 +70,8 @@
   --sh-badge-alert:   #FB5A5A;
   --sh-done:          #8b5cf6; /* completed-task indicator — lighter violet for dark surfaces */
   --sh-shadow-sm:     0 1px 0 rgba(0,0,0,0.4), 0 1px 2px rgba(0,0,0,0.3);
-  --sh-rail-inset:    inset -6px 0 10px -6px rgba(0,0,0,0.6);
-  --sh-sidebar-drop:  4px 0 14px -6px rgba(0,0,0,0.6);
+  --sh-rail-inset:    none;
+  --sh-sidebar-drop:  inset 0 0 0 1px rgba(255,255,255,0.06);
 }
 
 /* Expose as Tailwind utilities */
@@ -239,70 +239,168 @@ body {
 .sh-rail-item:hover .sh-rail-lb { color: var(--sh-ink-3); }
 .sh-rail-item[data-active="true"] .sh-rail-lb { color: var(--sh-ink-2); font-weight: 600; }
 
-/* ── Black icon rail — ClickUp shape, black instead of green.
-   Active = white squircle behind the icon only. Label stays on the rail
-   (light text), badge sits on the tile corner. */
-.sh-rail-bar {
-  --rail-badge: #eb3d76;
-  --rail-badge-text: #ffffff;
-  --rail-badge-ring: #080909;
-  background: #080909;
-  border-radius: 12px;
+/* ── Shell type system ────────────────────────────────────────────────────
+   The reference sets everything — nav, buttons, body — in Inter *Display*,
+   not Inter Text. Google's variable Inter carries that as the top of its
+   optical-size axis, so the shell pins `opsz` to 32 at every size instead
+   of letting the browser pick the Text cut below ~28px. Headings are 700
+   with tight negative tracking; body copy is regular with a touch of
+   negative tracking; numbers are tabular. No uppercase eyebrows. ──────── */
+:root {
+  --sh-font: 'Inter', system-ui, -apple-system, 'SF Pro Display', 'Segoe UI', sans-serif;
+  --sh-display: 'opsz' 32;
 }
-.sh-rail-bar .sh-rail-item { gap: 3px; padding: 3px 0 5px; border-radius: 12px; }
+.sh-rail-bar, .sh-mod-side, .sh-tabbar, .sh-rail-preview, .hm-home, .sh-section-title {
+  font-family: var(--sh-font);
+  font-variation-settings: var(--sh-display);
+  font-optical-sizing: auto;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+.sh-section-title { font-size: 40px; font-weight: 700; letter-spacing: -0.045em; line-height: 1; }
+
+/* ── Icon rail — a floating black dock (CoolDock language). One gradient
+   slab with a hairline inner ring and a soft drop shadow; each nav item is
+   a 40px squircle tile. Active = white tile with black glyph, hover = a
+   faint frosted tile. Labels stay tiny under the tile. ──────────────── */
+.sh-rail-bar {
+  --rail-badge: #FF453A;
+  --rail-badge-text: #ffffff;
+  --rail-badge-ring: #0e1012;
+  background: linear-gradient(180deg, #191c1f 0%, #0b0c0e 100%);
+  border-radius: 22px;
+  box-shadow:
+    inset 0 0 0 1px rgba(255,255,255,.08),
+    inset 0 1px 0 rgba(255,255,255,.14),
+    0 10px 28px rgba(0,0,0,.17),
+    0 2px 6px rgba(0,0,0,.12);
+}
+.sh-rail-bar .sh-rail-item { gap: 4px; padding: 3px 0 5px; border-radius: 14px; }
 .sh-rail-bar .sh-rail-ic {
-  width: 36px;
-  height: 36px;
-  border-radius: 10px;
-  color: #c9cecc;
-  --ic-cut: #080909;
+  width: 40px;
+  height: 40px;
+  border-radius: 13px;
+  color: #b7bcc0;
+  --ic-cut: #101214;
   background: transparent;
   border-color: transparent;
+  transition: background .16s ease, color .16s ease, box-shadow .16s ease, transform .12s cubic-bezier(0.22, 1, 0.36, 1);
 }
 .sh-rail-bar .sh-rail-lb {
-  color: #c5c9c7;
-  max-width: 54px;
-  font-size: 9px;
-  font-weight: 650;
-  letter-spacing: -.01em;
+  color: rgba(255,255,255,.52);
+  max-width: 56px;
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0;
 }
 .sh-rail-bar .sh-rail-item:hover { background: transparent; }
-.sh-rail-bar .sh-rail-item:hover .sh-rail-ic { background: rgba(255,255,255,.08); color: #ffffff; --ic-cut: #1d1f1f; }
-.sh-rail-bar .sh-rail-item:hover .sh-rail-lb { color: #f2f4f3; }
+.sh-rail-bar .sh-rail-item:hover .sh-rail-ic {
+  background: rgba(255,255,255,.08);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.10);
+  color: #ffffff;
+  --ic-cut: #26292c;
+  transform: translateY(-1px);
+}
+.sh-rail-bar .sh-rail-item:hover .sh-rail-lb { color: rgba(255,255,255,.85); }
 .sh-rail-bar .sh-rail-item[data-active="true"] { background: transparent; box-shadow: none; }
 .sh-rail-bar .sh-rail-item[data-active="true"] .sh-rail-ic {
   color: #0b0c0c;
   border-color: transparent;
   background: #ffffff;
   --ic-cut: #ffffff;
-  box-shadow: none;
+  box-shadow: 0 6px 16px rgba(0,0,0,.45), 0 1px 2px rgba(0,0,0,.3);
 }
 .sh-rail-bar .sh-rail-item[data-active="true"]:hover .sh-rail-ic {
   background: #ffffff;
   color: #0b0c0c;
   --ic-cut: #ffffff;
+  transform: none;
 }
 .sh-rail-bar .sh-rail-item[data-active="true"] .sh-rail-lb {
   color: #ffffff;
   font-weight: 700;
 }
+/* Brand tile at the top of the dock — the CoolDock mark: a dark squircle
+   with a white bar seated at its base. */
+.sh-rail-brand {
+  position: relative;
+  display: grid; place-items: end center;
+  width: 40px; height: 40px; margin: 2px 0 6px;
+  border-radius: 13px;
+  background: linear-gradient(180deg, #2b2f33 0%, #17191c 100%);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.12), inset 0 1px 0 rgba(255,255,255,.18), 0 4px 10px rgba(0,0,0,.35);
+}
+.sh-rail-brand::after {
+  content: '';
+  width: 20px; height: 7px; margin-bottom: 8px;
+  border-radius: 4px;
+  background: #ffffff;
+  box-shadow: 0 1px 2px rgba(0,0,0,.4);
+}
+.sh-rail-bar .sh-rail-sep { height: 1px; width: 28px; margin: 8px 0; background: rgba(255,255,255,.1); }
 
-/* ── Module sidebar — same black as the icon rail ───────────────────────── */
+/* ── Module sidebar — a flat white card floating on the warm canvas. Every
+   module sidebar (Home / Apps / Resources / Docs / Calendar) rides these
+   tokens, so the whole set reads as one surface. ────────────────────── */
 .sh-mod-side {
-  --sidebar: #080909;
-  --surface: #141616;
-  --sh-ink: #f1f3f1;
-  --sh-ink-2: #d2d6d3;
-  --sh-ink-3: #9aa19c;
-  --sh-ink-4: #6f7672;
-  --sh-hair: #1e2120;
-  --sh-hair-2: #2a2e2c;
-  --sh-hair-3: #141616;
-  --foreground: #f1f3f1;
+  --sidebar: #ffffff;
+  --surface: #f5f4f2;
+  --sh-ink: #0a0a0a;
+  --sh-ink-2: #2c2c2c;
+  --sh-ink-3: #6f6f6f;
+  --sh-ink-4: #a6a6a6;
+  --sh-hair: #efeeec;
+  --sh-hair-2: #e2e0dd;
+  --sh-hair-3: #f5f4f2;
+  --foreground: #0a0a0a;
   color: var(--sh-ink-2);
   background: var(--sidebar);
-  border-right: 1px solid #080909;
+  border-right: 0;
 }
+.dark .sh-mod-side {
+  --sidebar: #161819;
+  --surface: #1f2224;
+  --sh-ink: #f3f4f4;
+  --sh-ink-2: #d5d8d9;
+  --sh-ink-3: #9aa0a3;
+  --sh-ink-4: #6d7377;
+  --sh-hair: #24272a;
+  --sh-hair-2: #303438;
+  --sh-hair-3: #1f2224;
+  --foreground: #f3f4f4;
+}
+
+/* Sidebar brand mark — same CoolDock squircle as the rail's, in ink */
+.sb-brand {
+  display: grid; place-items: end center;
+  width: 30px; height: 30px; border-radius: 10px;
+  background: linear-gradient(180deg, #2a2d31 0%, #0e1012 100%);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.12), inset 0 1px 0 rgba(255,255,255,.16), 0 3px 8px rgba(0,0,0,.25);
+}
+.sb-brand::after { content: ''; width: 15px; height: 5px; margin-bottom: 6px; border-radius: 3px; background: #fff; }
+/* Sidebar type: primary nav a notch larger than the tree rows for hierarchy */
+.sh-mod-side .sb-nav { font-size: 13.5px; letter-spacing: -0.012em; }
+.sh-mod-side .sb-nav[data-active] { font-weight: 600; }
+.sh-mod-side .sb-wordmark { font-size: 16px; font-weight: 700; letter-spacing: -0.035em; line-height: 1.05; }
+.sh-mod-side .sb-tagline { font-size: 10.5px; font-weight: 500; letter-spacing: -0.005em; }
+.sh-mod-side .sb-section { font-size: 12px; font-weight: 600; letter-spacing: -0.01em; }
+
+/* ── Content pane — every open tab renders inside one white card with the
+   same radius as the sidebar. Views that paint their own canvas (My Home)
+   simply fill it. ────────────────────────────────────────────────────── */
+@media (min-width: 768px) {
+  .sh-pane { border-radius: 22px; background: var(--surface); box-shadow: var(--sh-sidebar-drop); }
+  /* My Home is the one view that lives directly on the canvas (hero + dock
+     float on the page, as on the reference site), so its pane is see-through. */
+  .sh-pane:has(> .hm-home) { background: transparent; box-shadow: none; }
+}
+
+/* ── Tab strip — floats on the canvas above the pane; the active tab is a
+   frosted white pill, the rest are quiet text. ─────────────────────────── */
+.sh-tabbar { background: transparent; border-bottom: 0; font-size: 13px; letter-spacing: -0.012em; }
+.sh-tabbar .sh-tab { border-radius: 10px; }
+.sh-tabbar .sh-tab[data-active="true"] { background: rgba(255,255,255,.8); box-shadow: inset 1px 1px 1px 0 #fff, 0 1px 2px rgba(0,0,0,.04); backdrop-filter: blur(12px); }
+.dark .sh-tabbar .sh-tab[data-active="true"] { background: rgba(255,255,255,.08); box-shadow: inset 0 0 0 1px rgba(255,255,255,.08); }
 
 /* ── Rail hover preview ────────────────────────────────────────────────────
    This panel temporarily covers the pinned module sidebar. Its small pointer
@@ -323,9 +421,9 @@ body {
 .sh-rail-preview-surface {
   position: relative;
   z-index: 1;
-  border: 1px solid #1e2120;
-  background: #080909;
-  box-shadow: 0 18px 42px rgba(0, 0, 0, .32), 0 3px 12px rgba(0, 0, 0, .2);
+  border: 0;
+  background: var(--sidebar);
+  box-shadow: 0 18px 42px rgba(0, 0, 0, .18), 0 3px 12px rgba(0, 0, 0, .08);
 }
 .sh-rail-preview-pointer {
   position: absolute;
@@ -335,9 +433,9 @@ body {
   width: 10px;
   height: 10px;
   transform: rotate(45deg);
-  border-left: 1px solid #1e2120;
-  border-bottom: 1px solid #1e2120;
-  background: #080909;
+  border-left: 0;
+  border-bottom: 0;
+  background: var(--sidebar);
 }
 .sh-rail-bar .sh-rail-item[data-previewing="true"] .sh-rail-ic {
   color: #ffffff;
@@ -426,8 +524,9 @@ body {
   70%, 100% { box-shadow: 0 0 0 7px transparent; }
 }
 .sh-rail-timer .rt-time {
-  font-family: 'Plus Jakarta Sans', 'Inter', sans-serif;
-  font-size: 9.5px; font-weight: 650; line-height: 1; letter-spacing: -0.02em;
+  font-family: var(--sh-font);
+  font-variation-settings: var(--sh-display);
+  font-size: 9.5px; font-weight: 700; line-height: 1; letter-spacing: -0.02em;
   font-variant-numeric: tabular-nums;
   color: color-mix(in srgb, var(--rt-cur) 88%, var(--sh-ink));
 }
@@ -7800,155 +7899,193 @@ ol.sqc-list {
 }
 
 /* ════════════════════════════════════════════════════════════════════════
-   MY HOME — editorial redesign, scoped under .hm-home. Rides the system
-   ink/hair tokens so dark mode mostly comes free; only canvas, accent and
-   alert colors are local. One accent, deployed sparingly: the greeting
-   full-stop, stat hover underline, links. Red is semantic — it appears
-   only when something is actually overdue.
+   MY HOME — CoolDock language. A warm off-white page, a compact tight-
+   tracked greeting with the work clock beside it, the five-card task strip,
+   and flat white cards with generous radii underneath. Colour is reserved
+   for state: green for a running timer, red only when something is
+   actually overdue.
    ════════════════════════════════════════════════════════════════════ */
 .hm-home {
-  --hm-accent: #2F6B4F;
-  --hm-red:    #B0432F;
-  --hm-canvas: #FBFBF9;
+  --hm-accent: #39C66B;
+  --hm-red:    #FF453A;
+  --hm-canvas: var(--canvas);
+  --hm-dock:   linear-gradient(180deg, #17191c 0%, #0a0b0d 100%);
+  --hm-tile:   #1b1e21;
+  --hm-tile-2: #24282c;
+  --hm-card-r: 24px;
   background: var(--hm-canvas);
   color: var(--sh-ink);
   font-family: 'Inter', system-ui, sans-serif;
+  font-optical-sizing: auto;
 }
-.dark .hm-home { --hm-accent: #8CC4A6; --hm-red: #E08573; --hm-canvas: #131316; }
+.dark .hm-home { --hm-accent: #4CD97D; --hm-red: #FF6B5B; --hm-tile: #202428; --hm-tile-2: #2a2f34; }
+/* The white inset highlight is a light-mode detail; in dark it reads as a rim. */
+.dark .hm-home .hm-eyebrow,
+.dark .hm-home .hm-stats-secondary .hm-stat { box-shadow: inset 0 0 0 1px rgba(255,255,255,.06); }
+.dark .hm-home .hm-stats-secondary .hm-stat:hover { box-shadow: inset 0 0 0 1px rgba(255,255,255,.1), 0 6px 16px rgba(0,0,0,.35); }
 
-.hm-home .hm-wrap { width: 100%; max-width: none; margin: 0; padding: 28px 20px 90px; }
+.hm-home .hm-wrap { width: 100%; max-width: 1180px; margin: 0 auto; padding: 18px 28px 90px; }
 
 @keyframes hm-rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 
-/* ── Hero ── */
-.hm-home .hm-hero { padding: 22px 0 26px; animation: hm-rise 0.45s cubic-bezier(0.22, 1, 0.36, 1) both; }
-.hm-home .hm-hero-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 32px; }
-.hm-home .hm-hero-lede { min-width: 0; flex: 1 1 auto; }
+/* ── Hero — compact greeting left, the work clock card right ── */
+.hm-home .hm-hero { padding: 14px 4px 22px; animation: hm-rise 0.45s cubic-bezier(0.22, 1, 0.36, 1) both; }
+.hm-home .hm-hero-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 28px; }
+.hm-home .hm-hero-lede { min-width: 0; flex: 1 1 auto; padding-top: 4px; }
 .hm-home .hm-hero-aside { flex: none; }
-.hm-home .hm-eyebrow-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 14px; }
-.hm-home .hm-eyebrow { font-family: 'Inter', sans-serif; font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: color-mix(in srgb, var(--sh-ink) 50%, transparent); }
-.hm-home .hm-greet { font-family: 'Plus Jakarta Sans', 'Inter', sans-serif; font-weight: 600; font-size: 30px; line-height: 1.15; letter-spacing: -0.03em; color: color-mix(in srgb, var(--sh-ink) 90%, transparent); margin: 0; }
-.hm-home .hm-greet .dot { color: color-mix(in srgb, var(--sh-ink) 35%, transparent); }
-.hm-home .hm-sub { margin-top: 9px; font-size: 13px; line-height: 1.6; color: color-mix(in srgb, var(--sh-ink) 60%, transparent); max-width: 62ch; }
+.hm-home .hm-eyebrow-row { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+.hm-home .hm-eyebrow { display: inline-flex; align-items: center; gap: 7px; height: 26px; padding: 0 11px; border-radius: 999px; background: var(--surface); box-shadow: inset 1px 1px 1px 0 rgba(255,255,255,.9); font-size: 11.5px; font-weight: 600; letter-spacing: -0.01em; color: var(--sh-ink-2); }
+.hm-home .hm-eyebrow::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--sh-ink); }
+.hm-home .hm-greet { font-weight: 700; font-size: 32px; line-height: 1.05; letter-spacing: -0.045em; color: var(--sh-ink); margin: 0; }
+.hm-home .hm-greet .dot { color: color-mix(in srgb, var(--sh-ink) 32%, transparent); }
+.hm-home .hm-sub { margin-top: 8px; font-size: 14px; line-height: 1.5; font-weight: 400; letter-spacing: -0.012em; color: color-mix(in srgb, var(--sh-ink) 56%, transparent); max-width: 58ch; }
 
-/* ── Hero work timer — Work / Break / No-work clock, shared with Daily Check-In.
-   One day-meter that fills toward the user's office-hours commitment and ticks
-   live while running; three controls toggle the active timer. ── */
+/* ── Work clock — Work / Break / No-work, shared with Daily Check-In. Sits
+   top-right of the hero as a CoolDock-style black widget: a conic ring
+   fills toward the office-hours commitment, the small bar under the
+   readout splits the day into work / break / no-work, and three round
+   transport buttons control the timers. ── */
 .hm-home .hm-timer {
-  --tmr-work: #3F8F66;
-  --tmr-break: #C68A2E;
-  --tmr-nowork: #64748B;
-  --tmr-cur: var(--sh-ink-4);
-  width: 480px; flex: none; display: flex; flex-direction: column; gap: 11px;
-  padding: 13px 16px; background: var(--surface);
-  border: 1px solid var(--sh-hair); border-radius: 14px;
-  box-shadow: 0 1px 2px rgba(10, 10, 10, 0.02), 0 10px 28px rgba(10, 10, 10, 0.03);
+  --tmr-work: #39C66B;
+  --tmr-break: #FFB340;
+  --tmr-nowork: #8E98A4;
+  --tmr-cur: rgba(255,255,255,.35);
+  width: 440px; flex: none; min-width: 0;
+  display: flex; align-items: center; gap: 14px;
+  padding: 14px 16px 24px 14px;
+  border-radius: 22px;
+  background: var(--hm-dock);
+  box-shadow:
+    inset 0 0 0 1px rgba(255,255,255,.08),
+    inset 0 1px 0 rgba(255,255,255,.14),
+    0 10px 28px rgba(0,0,0,.17),
+    0 2px 6px rgba(0,0,0,.12);
+  color: #fff;
   animation: hm-rise 0.45s cubic-bezier(0.22, 1, 0.36, 1) 0.04s both;
 }
-.dark .hm-home .hm-timer { --tmr-work: #4FA579; --tmr-break: #D69B45; --tmr-nowork: #7C8A9C; }
 .hm-home .hm-timer[data-state="work"] { --tmr-cur: var(--tmr-work); }
 .hm-home .hm-timer[data-state="break"] { --tmr-cur: var(--tmr-break); }
 .hm-home .hm-timer[data-state="no_work"] { --tmr-cur: var(--tmr-nowork); }
 
-.hm-home .hm-timer-meter { display: flex; align-items: center; gap: 14px; }
-.hm-home .hm-timer-meter .worked { flex: none; font-family: 'Plus Jakarta Sans', 'Inter', sans-serif; font-weight: 600; font-size: 17px; line-height: 1; letter-spacing: -0.02em; color: color-mix(in srgb, var(--sh-ink) 88%, transparent); font-variant-numeric: tabular-nums; }
-.hm-home .hm-timer-meter .worked em { font-style: normal; font-family: 'Inter', sans-serif; font-size: 11px; font-weight: 500; color: color-mix(in srgb, var(--sh-ink) 48%, transparent); margin-left: 5px; }
-.hm-home .hm-timer-readout { flex: none; display: inline-flex; align-items: center; gap: 12px; margin-left: auto; }
-.hm-home .hm-timer-readout .commit { font-size: 11px; font-weight: 500; color: color-mix(in srgb, var(--sh-ink) 50%, transparent); font-variant-numeric: tabular-nums; white-space: nowrap; }
-.hm-home .hm-timer-status { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 500; color: color-mix(in srgb, var(--sh-ink) 52%, transparent); white-space: nowrap; }
-.hm-home .hm-timer-status[data-running="true"] { color: color-mix(in srgb, var(--tmr-cur) 90%, var(--sh-ink)); }
-.hm-home .hm-timer-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--sh-ink-4); flex: none; }
+.hm-home .hm-timer-ring {
+  position: relative; flex: none; width: 60px; height: 60px; border-radius: 50%;
+  display: grid; place-items: center; margin-bottom: -10px;
+  background: conic-gradient(from -90deg, var(--tmr-cur) calc(var(--tmr-pct, 0) * 1%), rgba(255,255,255,.10) 0);
+  transition: background 0.8s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.hm-home .hm-timer-ring::before { content: ''; position: absolute; inset: 5px; border-radius: 50%; background: #121416; }
+.hm-home .hm-timer-ring .pct { position: relative; z-index: 1; font-size: 14px; font-weight: 700; letter-spacing: -0.04em; color: #fff; font-variant-numeric: tabular-nums; }
+.hm-home .hm-timer-ring .pct small { font-size: 9px; font-weight: 600; opacity: .6; margin-left: 1px; }
+
+.hm-home .hm-timer-body { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 6px; margin-bottom: -10px; }
+.hm-home .hm-timer-meter { display: flex; align-items: baseline; gap: 8px; }
+.hm-home .hm-timer-meter .worked { font-weight: 700; font-size: 24px; line-height: 1; letter-spacing: -0.045em; color: #fff; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.hm-home .hm-timer-meter .worked em { font-style: normal; font-size: 11.5px; font-weight: 500; letter-spacing: -0.01em; color: rgba(255,255,255,.55); margin-left: 6px; }
+.hm-home .hm-timer-readout { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.hm-home .hm-timer-readout .commit { font-size: 11px; font-weight: 500; letter-spacing: -0.01em; color: rgba(255,255,255,.5); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.hm-home .hm-timer-status { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 600; letter-spacing: -0.01em; color: rgba(255,255,255,.5); white-space: nowrap; }
+.hm-home .hm-timer-status[data-running="true"] { color: var(--tmr-cur); }
+.hm-home .hm-timer-dot { width: 6px; height: 6px; border-radius: 50%; background: rgba(255,255,255,.3); flex: none; }
 .hm-home .hm-timer-status[data-running="true"] .hm-timer-dot { background: var(--tmr-cur); animation: hm-timer-pulse 1.7s ease-out infinite; }
 @keyframes hm-timer-pulse {
-  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--tmr-cur) 50%, transparent); }
+  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--tmr-cur) 55%, transparent); }
   70%, 100% { box-shadow: 0 0 0 6px transparent; }
 }
-
-.hm-home .hm-timer-bar { position: relative; display: flex; flex: 1 1 auto; min-width: 80px; height: 8px; border-radius: 999px; overflow: hidden; background: color-mix(in srgb, var(--sh-ink) 9%, transparent); }
+.hm-home .hm-timer-bar { position: relative; display: flex; width: 100%; height: 4px; border-radius: 999px; overflow: hidden; background: rgba(255,255,255,.12); }
 .hm-home .hm-timer-bar .seg { height: 100%; transition: width 0.6s cubic-bezier(0.22, 1, 0.36, 1); }
 .hm-home .hm-timer-bar .seg.work { background: var(--tmr-work); }
 .hm-home .hm-timer-bar .seg.break { background: var(--tmr-break); }
 .hm-home .hm-timer-bar .seg.nowork { background: var(--tmr-nowork); }
-.hm-home .hm-timer-bar .seg[data-live="true"] { background-image: linear-gradient(100deg, transparent 20%, color-mix(in srgb, #fff 26%, transparent) 50%, transparent 80%); background-size: 220% 100%; animation: hm-timer-shimmer 1.6s linear infinite; }
-@keyframes hm-timer-shimmer { from { background-position: 200% 0; } to { background-position: -120% 0; } }
+.hm-home .hm-timer-bar .seg[data-live="true"] { background-image: linear-gradient(100deg, transparent 20%, rgba(255,255,255,.35) 50%, transparent 80%); background-size: 220% 100%; animation: hm-timer-shimmer 1.6s linear infinite; }
+@keyframes hm-timer-shimmer { from { background-position: 120% 0; } to { background-position: -120% 0; } }
 
-.hm-home .hm-timer-ctrls { display: flex; gap: 6px; }
-.hm-home .hm-timer-ctrls .hm-timer-btn { flex: 1 1 0; min-width: 0; display: inline-flex; align-items: center; justify-content: center; gap: 5px; height: 32px; padding: 0 8px; border-radius: 9px; border: 1px solid var(--sh-hair); background: transparent; cursor: pointer; font-family: 'Inter', sans-serif; font-size: 12px; font-weight: 550; color: color-mix(in srgb, var(--sh-ink) 68%, transparent); font-variant-numeric: tabular-nums; transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease; }
-.hm-home .hm-timer-ctrls .hm-timer-btn .ic { display: grid; place-items: center; flex: none; }
-.hm-home .hm-timer-ctrls .hm-timer-btn .ic svg { width: 13px; height: 13px; }
-.hm-home .hm-timer-ctrls .hm-timer-btn .lb { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.hm-home .hm-timer-ctrls .hm-timer-btn:hover:not([data-on="true"]):not(:disabled) { background: var(--sh-hair-3); color: var(--sh-ink); border-color: var(--sh-hair-2); }
+/* Controls — three round dark buttons, like a media widget's transport;
+   the label (or live clock) sits under each */
+.hm-home .hm-timer-ctrls { flex: none; display: flex; gap: 8px; }
+.hm-home .hm-timer-ctrls .hm-timer-btn { position: relative; display: grid; place-items: center; width: 38px; height: 38px; padding: 0; border-radius: 50%; border: 0; background: rgba(255,255,255,.08); box-shadow: inset 0 0 0 1px rgba(255,255,255,.08); color: rgba(255,255,255,.85); cursor: pointer; transition: background 0.15s ease, color 0.15s ease, transform 0.12s ease; }
+.hm-home .hm-timer-ctrls .hm-timer-btn .ic { display: grid; place-items: center; }
+.hm-home .hm-timer-ctrls .hm-timer-btn .ic svg { width: 14px; height: 14px; }
+.hm-home .hm-timer-ctrls .hm-timer-btn .lb { position: absolute; left: 50%; top: calc(100% + 4px); transform: translateX(-50%); font-size: 9px; font-weight: 600; letter-spacing: 0; color: rgba(255,255,255,.5); white-space: nowrap; pointer-events: none; font-variant-numeric: tabular-nums; }
+.hm-home .hm-timer-ctrls .hm-timer-btn:hover:not([data-on="true"]):not(:disabled) { background: rgba(255,255,255,.16); color: #fff; transform: translateY(-1px); }
 .hm-home .hm-timer-ctrls .hm-timer-btn:focus-visible { outline: 2px solid var(--tmr-cur); outline-offset: 1px; }
 .hm-home .hm-timer-ctrls .hm-timer-btn:disabled { cursor: default; opacity: 0.55; }
-.hm-home .hm-timer-ctrls .hm-timer-btn[data-on="true"] { color: #fff; border-color: transparent; }
+.hm-home .hm-timer-ctrls .hm-timer-btn[data-on="true"] { color: #0b0c0c; box-shadow: 0 4px 12px rgba(0,0,0,.4); }
+.hm-home .hm-timer-ctrls .hm-timer-btn[data-on="true"] .lb { color: #fff; }
 .hm-home .hm-timer-ctrls .hm-timer-btn[data-type="work"][data-on="true"] { background: var(--tmr-work); }
 .hm-home .hm-timer-ctrls .hm-timer-btn[data-type="break"][data-on="true"] { background: var(--tmr-break); }
-.hm-home .hm-timer-ctrls .hm-timer-btn[data-type="no_work"][data-on="true"] { background: var(--tmr-nowork); }
+.hm-home .hm-timer-ctrls .hm-timer-btn[data-type="no_work"][data-on="true"] { background: var(--tmr-nowork); color: #fff; }
 
-@media (max-width: 880px) {
-  .hm-home .hm-hero-row { flex-direction: column; gap: 18px; }
+/* ── Task strip — one floating black dock slab holding the five counter
+   tiles. Each is a door into a bucket: big number, quiet label, first item
+   as the sub line. ── */
+.hm-home .hm-stats {
+  display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px;
+  padding: 10px;
+  border-radius: 26px;
+  background: var(--hm-dock);
+  box-shadow:
+    inset 0 0 0 1px rgba(255,255,255,.08),
+    inset 0 1px 0 rgba(255,255,255,.14),
+    0 10px 28px rgba(0,0,0,.17),
+    0 2px 6px rgba(0,0,0,.12);
+  margin-bottom: 14px;
+  animation: hm-rise 0.45s cubic-bezier(0.22, 1, 0.36, 1) 0.06s both;
+}
+.hm-home .hm-stat { position: relative; min-width: 0; padding: 13px 15px 12px; border-radius: 18px; background: var(--hm-tile); box-shadow: inset 0 0 0 1px rgba(255,255,255,.07), inset 0 1px 0 rgba(255,255,255,.06); color: #fff; cursor: pointer; transition: background 0.15s ease, transform 0.15s cubic-bezier(0.22, 1, 0.36, 1); }
+.hm-home .hm-stat:hover { background: var(--hm-tile-2); transform: translateY(-1px); }
+.hm-home .hm-stat:focus-visible { outline: 2px solid var(--hm-accent); outline-offset: 2px; }
+.hm-home .hm-stat .lbl { display: flex; align-items: center; gap: 6px; font-size: 11.5px; font-weight: 600; letter-spacing: -0.01em; color: rgba(255,255,255,.55); }
+.hm-home .hm-stat .lbl svg { color: rgba(255,255,255,.45); transition: color 0.15s; }
+.hm-home .hm-stat:hover .lbl svg { color: #fff; }
+.hm-home .hm-stat .lbl .ping { width: 5px; height: 5px; border-radius: 50%; background: var(--hm-accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--hm-accent) 25%, transparent); }
+.hm-home .hm-stat .val { font-weight: 700; font-size: 28px; line-height: 1; letter-spacing: -0.05em; color: #fff; margin-top: 9px; font-variant-numeric: tabular-nums; }
+.hm-home .hm-stat[data-alert="true"] .val { color: var(--hm-red); }
+.hm-home .hm-stat .val .unit { font-size: 11.5px; font-weight: 500; color: rgba(255,255,255,.45); margin-left: 6px; letter-spacing: -0.01em; }
+.hm-home .hm-stat .sub { margin-top: 6px; font-size: 11.5px; font-weight: 500; letter-spacing: -0.01em; color: rgba(255,255,255,.45); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-height: 15px; }
+.hm-home .hm-stat .go { position: absolute; top: 13px; right: 13px; color: rgba(255,255,255,.7); opacity: 0; transition: opacity 0.15s ease; }
+.hm-home .hm-stat:hover .go { opacity: 1; }
+@media (max-width: 1240px) {
+  .hm-home .hm-hero-row { flex-wrap: wrap; }
   .hm-home .hm-timer { width: 100%; }
 }
 
-/* ── Stat strip — one joined surface, hairline-divided ── */
-.hm-home .hm-stats { display: grid; grid-template-columns: repeat(5, 1fr); background: var(--surface); border: 1px solid var(--sh-hair); border-radius: 14px; overflow: hidden; box-shadow: 0 1px 2px rgba(10, 10, 10, 0.02); margin-bottom: 22px; animation: hm-rise 0.45s cubic-bezier(0.22, 1, 0.36, 1) 0.06s both; }
-.hm-home .hm-stat { position: relative; padding: 15px 18px 14px; cursor: pointer; min-width: 0; transition: background 0.15s ease; }
-.hm-home .hm-stat + .hm-stat { border-left: 1px solid var(--sh-hair-3); }
-.hm-home .hm-stat:hover { background: color-mix(in srgb, var(--sh-ink) 2.5%, var(--surface)); }
-.hm-home .hm-stat:focus-visible { outline: 2px solid var(--hm-accent); outline-offset: -2px; }
-.hm-home .hm-stat::after { content: ''; position: absolute; left: 18px; right: 18px; bottom: 0; height: 2px; border-radius: 1px; background: color-mix(in srgb, var(--sh-ink) 30%, transparent); transform: scaleX(0); transform-origin: left; transition: transform 0.24s cubic-bezier(0.22, 1, 0.36, 1); }
-.hm-home .hm-stat:hover::after { transform: scaleX(1); }
-.hm-home .hm-stat[data-alert="true"]::after { background: var(--hm-red); }
-.hm-home .hm-stat .lbl { display: flex; align-items: center; gap: 7px; font-family: 'Inter', sans-serif; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: color-mix(in srgb, var(--sh-ink) 50%, transparent); }
-.hm-home .hm-stat .lbl svg { color: var(--sh-ink-4); transition: color 0.15s; }
-.hm-home .hm-stat:hover .lbl svg { color: var(--sh-ink-2); }
-.hm-home .hm-stat .lbl .ping { width: 5px; height: 5px; border-radius: 50%; background: color-mix(in srgb, var(--sh-ink) 45%, transparent); }
-.hm-home .hm-stat .val { font-family: 'Plus Jakarta Sans', 'Inter', sans-serif; font-weight: 600; font-size: 27px; line-height: 1.1; letter-spacing: -0.02em; color: color-mix(in srgb, var(--sh-ink) 88%, transparent); margin-top: 9px; font-variant-numeric: tabular-nums; }
-.hm-home .hm-stat[data-alert="true"] .val { color: var(--hm-red); }
-.hm-home .hm-stat .val .unit { font-family: 'Inter', sans-serif; font-size: 11.5px; color: color-mix(in srgb, var(--sh-ink) 50%, transparent); margin-left: 6px; letter-spacing: 0; }
-.hm-home .hm-stat .sub { margin-top: 4px; font-size: 11.5px; color: color-mix(in srgb, var(--sh-ink) 55%, transparent); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-height: 15px; }
-.hm-home .hm-stat .go { position: absolute; top: 11px; right: 12px; color: color-mix(in srgb, var(--sh-ink) 45%, transparent); opacity: 0; transition: opacity 0.15s ease; }
-.hm-home .hm-stat:hover .go { opacity: 1; }
-
-/* ── Secondary "type" cards (Routines / Courses / Meetings) ──
-   Unlike the primary strip (a fixed, joined surface), these are a variable
-   1–N set, so each is its own bordered tile in a wrapping flex row. The count
-   of cards depends on what has items, so a single tile mustn't stretch full
-   width — flex-basis + max-width keeps tiles a sensible size. */
-.hm-home .hm-stats-secondary { display: flex; flex-wrap: wrap; gap: 8px; background: transparent; border: none; border-radius: 0; box-shadow: none; overflow: visible; margin-top: -6px; margin-bottom: 22px; animation: hm-rise 0.45s cubic-bezier(0.22, 1, 0.36, 1) 0.09s both; }
-/* Compact inline chips: icon + label + count on one row, sized to content so
-   there's no empty card space. */
-.hm-home .hm-stats-secondary .hm-stat { flex: 0 0 auto; max-width: none; display: flex; align-items: center; gap: 9px; padding: 7px 12px; background: var(--surface); border: 1px solid var(--sh-hair); border-radius: 10px; box-shadow: 0 1px 2px rgba(10, 10, 10, 0.02); }
-.hm-home .hm-stats-secondary .hm-stat + .hm-stat { border-left: none; }
-.hm-home .hm-stats-secondary .hm-stat .lbl { font-size: 9.5px; gap: 6px; }
-.hm-home .hm-stats-secondary .hm-stat .lbl svg { width: 12px; height: 12px; }
-.hm-home .hm-stats-secondary .hm-stat .val { font-size: 15px; margin-top: 0; line-height: 1; }
+/* ── Secondary "type" chips (Urgent / Meetings / SOPs …) — white pills under
+   the dock; a chip only appears once it has something in it. ── */
+.hm-home .hm-stats-secondary { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 18px; animation: hm-rise 0.45s cubic-bezier(0.22, 1, 0.36, 1) 0.09s both; }
+.hm-home .hm-stats-secondary .hm-stat { flex: 0 0 auto; min-width: 0; display: flex; align-items: center; gap: 9px; height: 34px; padding: 0 6px 0 13px; border-radius: 999px; background: var(--surface); box-shadow: inset 1px 1px 1px 0 rgba(255,255,255,.9); color: var(--sh-ink); }
+.hm-home .hm-stats-secondary .hm-stat:hover { background: var(--surface); transform: translateY(-1px); box-shadow: inset 1px 1px 1px 0 rgba(255,255,255,.9), 0 6px 16px rgba(0,0,0,.08); }
+.hm-home .hm-stats-secondary .hm-stat .lbl { font-size: 12px; gap: 6px; color: var(--sh-ink-2); }
+.hm-home .hm-stats-secondary .hm-stat .lbl svg { width: 12px; height: 12px; color: var(--sh-ink-3); }
+.hm-home .hm-stats-secondary .hm-stat:hover .lbl svg { color: var(--sh-ink); }
+.hm-home .hm-stats-secondary .hm-stat .lbl .ping { background: var(--hm-red); box-shadow: 0 0 0 3px color-mix(in srgb, var(--hm-red) 22%, transparent); }
+.hm-home .hm-stats-secondary .hm-stat .val { display: grid; place-items: center; min-width: 22px; height: 22px; padding: 0 6px; border-radius: 999px; background: var(--sh-ink); color: var(--surface); font-size: 11px; font-weight: 700; letter-spacing: -0.02em; margin-top: 0; line-height: 1; }
+.hm-home .hm-stats-secondary .hm-stat[data-alert="true"] .val { background: var(--hm-red); color: #fff; }
 .hm-home .hm-stats-secondary .hm-stat .go { display: none; }
-.hm-home .hm-stats-secondary .hm-stat::after { display: none; }
 
-/* ── Today card ── */
-.hm-home .hm-card { background: var(--surface); border: 1px solid var(--sh-hair); border-radius: 14px; overflow: hidden; box-shadow: 0 1px 2px rgba(10, 10, 10, 0.02), 0 10px 28px rgba(10, 10, 10, 0.03); margin-bottom: 28px; animation: hm-rise 0.45s cubic-bezier(0.22, 1, 0.36, 1) 0.12s both; }
-.hm-home .hm-card-head { display: flex; align-items: center; gap: 9px; padding: 12px 18px; border-bottom: 1px solid var(--sh-hair-3); }
-.hm-home .hm-card-head h3 { margin: 0; font-size: 13.5px; font-weight: 600; color: color-mix(in srgb, var(--sh-ink) 90%, transparent); letter-spacing: -0.01em; }
-.hm-home .hm-count { font-family: 'Inter', sans-serif; font-size: 11px; color: color-mix(in srgb, var(--sh-ink) 50%, transparent); }
+/* ── Cards — flat white, big radius, no hairline ── */
+.hm-home .hm-card { background: var(--surface); border: 0; border-radius: var(--hm-card-r); overflow: hidden; box-shadow: inset 1px 1px 1px 0 rgba(255,255,255,.9); margin-bottom: 14px; animation: hm-rise 0.45s cubic-bezier(0.22, 1, 0.36, 1) 0.12s both; }
+.dark .hm-home .hm-card { box-shadow: inset 0 0 0 1px rgba(255,255,255,.05); }
+.hm-home .hm-card-head { display: flex; align-items: center; gap: 9px; padding: 18px 22px 12px; border-bottom: 0; }
+.hm-home .hm-card-head h3 { margin: 0; font-size: 20px; font-weight: 700; letter-spacing: -0.04em; line-height: 1.1; color: var(--sh-ink); }
+.hm-home .hm-count { font-size: 13px; font-weight: 500; letter-spacing: -0.01em; color: color-mix(in srgb, var(--sh-ink) 45%, transparent); font-variant-numeric: tabular-nums; }
 .hm-home .hm-head-actions { margin-left: auto; display: flex; align-items: center; gap: 6px; }
 
-/* Ghost pills */
-.hm-home .hm-pill { display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 9px; border-radius: 7px; border: 1px solid var(--sh-hair); background: transparent; font-family: inherit; font-size: 11.5px; font-weight: 500; color: color-mix(in srgb, var(--sh-ink) 65%, transparent); cursor: pointer; transition: background 0.13s ease, color 0.13s ease, border-color 0.13s ease; }
-.hm-home .hm-pill:hover { background: var(--sh-hair-3); color: var(--sh-ink); border-color: var(--sh-hair-2); }
-.hm-home .hm-pill .dim { color: var(--sh-ink-4); }
+/* Grey pills */
+.hm-home .hm-pill { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 12px; border-radius: 999px; border: 0; background: var(--sh-hair-3); font-family: inherit; font-size: 12.5px; font-weight: 600; letter-spacing: -0.015em; color: var(--sh-ink-2); cursor: pointer; transition: background 0.13s ease, color 0.13s ease; }
+.hm-home .hm-pill:hover { background: var(--sh-hair); color: var(--sh-ink); }
+.hm-home .hm-pill .dim { color: var(--sh-ink-4); font-weight: 500; }
 .hm-home .hm-pill svg { opacity: 0.7; }
 
 /* Menu */
-.hm-home .hm-menu { position: absolute; top: calc(100% + 6px); right: 0; min-width: 168px; z-index: 40; background: var(--surface); border: 1px solid var(--sh-hair); border-radius: 10px; box-shadow: 0 10px 28px rgba(10, 10, 10, 0.10); padding: 4px; }
+.hm-home .hm-menu { position: absolute; top: calc(100% + 6px); right: 0; min-width: 168px; z-index: 40; background: var(--surface); border: 1px solid var(--sh-hair); border-radius: 14px; box-shadow: 0 10px 28px rgba(10, 10, 10, 0.10); padding: 4px; }
 .hm-home .hm-menu-item { display: flex; align-items: center; justify-content: space-between; width: 100%; padding: 6px 10px; border-radius: 7px; border: none; background: transparent; font-family: inherit; font-size: 12.5px; font-weight: 450; color: color-mix(in srgb, var(--sh-ink) 65%, transparent); text-align: left; cursor: pointer; }
 .hm-home .hm-menu-item:hover { background: var(--sh-hair-3); color: var(--sh-ink); }
 .hm-home .hm-menu-item[data-active="true"] { color: var(--sh-ink); font-weight: 600; }
 
 /* ── Task rows ── */
-.hm-home .hm-list { padding: 5px 8px 7px; }
+.hm-home .hm-list { padding: 4px 12px 12px; }
 .hm-home .hm-task {
-  display: flex; align-items: center; gap: 12px; padding: 8px 10px; border-radius: 8px; cursor: pointer;
+  display: flex; align-items: center; gap: 12px; padding: 9px 12px; border-radius: 12px; cursor: pointer;
   /* Explicit upper bound so the completion fade's `max-height: 0` interpolates.
      A none→0 transition isn't animatable — without this the row clips to zero
      height instantly and the slide-out is never seen. Mirrors .lv-row. */
@@ -7964,7 +8101,7 @@ ol.sqc-list {
 .hm-home .hm-task:hover { background: var(--sh-hair-3); }
 .hm-home .hm-task:focus-visible { outline: 2px solid var(--hm-accent); outline-offset: -2px; }
 .hm-home .hm-task .t { flex: 1; min-width: 0; display: flex; align-items: center; gap: 9px; overflow: hidden; }
-.hm-home .hm-task .title { font-size: 13px; font-weight: 500; color: color-mix(in srgb, var(--sh-ink) 90%, transparent); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hm-home .hm-task .title { font-size: 13.5px; font-weight: 500; letter-spacing: -0.012em; color: color-mix(in srgb, var(--sh-ink) 90%, transparent); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .hm-home .hm-task[data-done="true"] .title { color: var(--sh-ink-4); text-decoration: line-through; }
 .hm-home .hm-parent { font-size: 11px; color: color-mix(in srgb, var(--sh-ink) 50%, transparent); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: none; max-width: 180px; }
 .hm-home .hm-tag { font-family: 'Inter', sans-serif; font-size: 10.5px; font-weight: 500; color: color-mix(in srgb, var(--sh-ink) 72%, transparent); background: color-mix(in srgb, var(--sh-ink) 7%, transparent); border-radius: 999px; padding: 2px 9px; white-space: nowrap; flex: none; }
@@ -7990,9 +8127,8 @@ ol.sqc-list {
 .hm-home .hm-task .hm-timer-btn[data-active] { color: var(--hm-accent); }
 
 /* "In progress today" section — a subtly accented variant of the focus card. */
-.hm-home .hm-inprogress-card { border-color: color-mix(in srgb, var(--hm-accent) 30%, var(--sh-hair)); }
-.hm-home .hm-inprogress-card .hm-card-head { border-bottom-color: color-mix(in srgb, var(--hm-accent) 16%, var(--sh-hair-3)); }
-.hm-home .hm-inprogress-card .hm-card-head h3 { color: var(--hm-accent); }
+.hm-home .hm-inprogress-card { box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--hm-accent) 55%, transparent); }
+.hm-home .hm-inprogress-card .hm-card-head h3 { color: var(--sh-ink); }
 .hm-home .hm-live-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--hm-accent); flex: none; box-shadow: 0 0 0 0 color-mix(in srgb, var(--hm-accent) 55%, transparent); animation: hm-live-pulse 1.8s ease-out infinite; }
 @keyframes hm-live-pulse {
   0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--hm-accent) 50%, transparent); }
@@ -8067,8 +8203,8 @@ ol.sqc-list {
 .hm-home .hm-state .retry:hover { text-decoration: underline; }
 .hm-home .hm-empty { padding: 40px 20px 44px; text-align: center; }
 .hm-home .hm-empty .rule { width: 28px; height: 1px; background: var(--sh-hair-2); margin: 0 auto 16px; }
-.hm-home .hm-empty .h { font-family: 'Plus Jakarta Sans', 'Inter', sans-serif; font-weight: 600; font-size: 14.5px; color: color-mix(in srgb, var(--sh-ink) 85%, transparent); }
-.hm-home .hm-empty .p { font-size: 12px; color: color-mix(in srgb, var(--sh-ink) 50%, transparent); margin-top: 6px; }
+.hm-home .hm-empty .h { font-weight: 700; font-size: 16px; letter-spacing: -0.03em; color: var(--sh-ink); }
+.hm-home .hm-empty .p { font-size: 13px; letter-spacing: -0.01em; color: color-mix(in srgb, var(--sh-ink) 50%, transparent); margin-top: 6px; }
 
 /* Complete → slide off (mirrors .home-task-item behaviour) */
 .hm-home .hm-task[data-fading="true"] { opacity: 0; transform: translateX(200px); pointer-events: none; max-height: 0; min-height: 0; padding-block: 0; overflow: hidden; }
@@ -8138,7 +8274,7 @@ ol.sqc-list {
    (eyebrow / title / computed summary), sticky group heads, staggered
    row entrances, hover open-chevron. Behaviour identical. */
 .hm-home .hmp-backdrop { position: absolute; inset: 0; background: rgba(10, 10, 10, 0.24); transition: opacity 0.3s ease; }
-.hm-home .hmp { position: absolute; top: 12px; right: 12px; bottom: 12px; width: min(520px, calc(100vw - 24px)); display: flex; flex-direction: column; background: var(--surface); border: 1px solid var(--sh-hair); border-radius: 18px; box-shadow: 0 1px 2px rgba(10, 10, 10, 0.05), 0 12px 28px rgba(10, 10, 10, 0.08), 0 32px 80px rgba(10, 10, 10, 0.16); overflow: hidden; }
+.hm-home .hmp { position: absolute; top: 12px; right: 12px; bottom: 12px; width: min(520px, calc(100vw - 24px)); display: flex; flex-direction: column; background: var(--surface); border: 0; border-radius: 26px; box-shadow: 0 1px 2px rgba(10, 10, 10, 0.05), 0 12px 28px rgba(10, 10, 10, 0.08), 0 32px 80px rgba(10, 10, 10, 0.16); overflow: hidden; }
 .dark .hm-home .hmp { box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04), 0 12px 28px rgba(0, 0, 0, 0.4), 0 32px 90px rgba(0, 0, 0, 0.55); }
 
 /* Head — eyebrow / title / summary left, actions right; shadow once scrolled */
@@ -8146,9 +8282,9 @@ ol.sqc-list {
 .hm-home .hmp-close { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 8px; border: 1px solid transparent; background: transparent; color: var(--sh-ink-3); cursor: pointer; flex: none; margin-top: 3px; transition: background 0.13s ease, color 0.13s ease, border-color 0.13s ease; }
 .hm-home .hmp-close:hover { background: var(--sh-hair-3); color: var(--sh-ink); border-color: var(--sh-hair); }
 .hm-home .hmp-head-text { flex: 1; min-width: 0; }
-.hm-home .hmp-eyebrow { font-family: 'Inter', sans-serif; font-size: 9.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: color-mix(in srgb, var(--sh-ink) 50%, transparent); margin-bottom: 3px; }
-.hm-home .hmp-title { font-family: 'Plus Jakarta Sans', 'Inter', sans-serif; font-weight: 600; font-size: 19px; letter-spacing: -0.025em; line-height: 1.15; color: color-mix(in srgb, var(--sh-ink) 90%, transparent); margin: 0; }
-.hm-home .hmp-summary { font-size: 12px; color: color-mix(in srgb, var(--sh-ink) 55%, transparent); margin-top: 3px; }
+.hm-home .hmp-eyebrow { font-size: 12px; font-weight: 600; letter-spacing: -0.01em; color: color-mix(in srgb, var(--sh-ink) 50%, transparent); margin-bottom: 4px; }
+.hm-home .hmp-title { font-weight: 700; font-size: 24px; letter-spacing: -0.045em; line-height: 1.15; color: color-mix(in srgb, var(--sh-ink) 90%, transparent); margin: 0; }
+.hm-home .hmp-summary { font-size: 13px; letter-spacing: -0.01em; color: color-mix(in srgb, var(--sh-ink) 55%, transparent); margin-top: 4px; }
 .hm-home .hmp-summary .urgent { color: var(--hm-red); font-weight: 500; }
 .hm-home .hmp-head-actions { display: flex; align-items: center; gap: 6px; flex: none; margin-top: 3px; position: relative; }
 .hm-home .hmp-kbd { font-family: 'Inter', sans-serif; font-size: 9px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: color-mix(in srgb, var(--sh-ink) 50%, transparent); border: 1px solid var(--sh-hair); border-bottom-width: 2px; border-radius: 5px; padding: 2px 5px; background: var(--surface); }
@@ -8160,8 +8296,8 @@ ol.sqc-list {
 .hm-home .hmp-groupby .glbl { flex: none; }
 .hm-home .hmp-groupby .hm-pill { flex: none; white-space: nowrap; }
 .hm-home .hmp-groupby[data-scrolled="true"] { box-shadow: 0 10px 18px -14px rgba(10, 10, 10, 0.30); }
-.hm-home .hmp-groupby .glbl { font-family: 'Inter', sans-serif; font-size: 9.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: color-mix(in srgb, var(--sh-ink) 50%, transparent); margin-right: 5px; }
-.hm-home .hm-pill[data-active="true"] { background: var(--sh-hair-3); color: var(--sh-ink); border-color: var(--sh-hair-2); font-weight: 600; }
+.hm-home .hmp-groupby .glbl { font-size: 12px; font-weight: 600; letter-spacing: -0.01em; color: color-mix(in srgb, var(--sh-ink) 45%, transparent); margin-right: 6px; }
+.hm-home .hm-pill[data-active="true"] { background: var(--sh-ink); color: var(--surface); font-weight: 600; }
 
 /* Body */
 .hm-home .hmp-scroll { flex: 1; overflow-y: auto; }
@@ -9643,3 +9779,412 @@ html[data-theme="frost"] .inbox-slider-panel {
 html[data-theme="noir"] .inbox-slider-panel {
   background: rgba(15,19,27,.97) !important;
 }
+
+/* ════════════════════════════════════════════════════════════════════════
+   TASK DETAIL — CoolDock skin. Layered last so it wins over the earlier
+   glass + Hashnode passes (which lean on !important). One floating white
+   card on the warm canvas; inside it, grey rounded wells instead of
+   bordered boxes, a black primary pill, and sentence-case section heads.
+
+   Type: one face — Plus Jakarta Sans for the title, headings, labels,
+   values and body alike. Behaviour untouched.
+   ════════════════════════════════════════════════════════════════════ */
+.td-panel,
+.td-panel-luma,
+.td-panel-luma.apple.td-shell {
+  --td-font-sans: 'Plus Jakarta Sans', 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --td-font-body: 'Plus Jakarta Sans', 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --td-font-mono: 'Plus Jakarta Sans', 'Inter', ui-sans-serif, system-ui, sans-serif;
+  --td-well:       #f5f4f2;
+  --td-well-2:     #edecea;
+  --td-line:       rgba(0,0,0,.055);
+  --td-rule:       #efeeec;
+  --td-rule-soft:  #f3f2f0;
+  --sh-ink:        #0a0a0a;
+  --sh-ink-2:      #2c2c2c;
+  --sh-ink-3:      #6f6f6f;
+  --sh-ink-4:      #a6a6a6;
+  --sh-ink-5:      #d6d4d1;
+  --sh-hair:       #efeeec;
+  --sh-hair-2:     #e2e0dd;
+  --sh-hair-3:     #f5f4f2;
+  --td-accent:     #0a0a0a;
+  --td-accent-soft: #f5f4f2;
+  --td-accent-ring: rgba(10,10,10,.12);
+  font-family: var(--td-font-body);
+  font-variation-settings: normal;
+  font-optical-sizing: auto;
+  font-size: 13.5px;
+  letter-spacing: -0.008em;
+  -webkit-font-smoothing: antialiased;
+}
+.dark .td-panel,
+.dark .td-panel-luma,
+.dark .td-panel-luma.apple.td-shell {
+  --td-well:       #1f2224;
+  --td-well-2:     #272b2e;
+  --td-line:       rgba(255,255,255,.07);
+  --td-rule:       #24272a;
+  --td-rule-soft:  #1f2224;
+  --sh-ink:        #f3f4f4;
+  --sh-ink-2:      #d5d8d9;
+  --sh-ink-3:      #9aa0a3;
+  --sh-ink-4:      #6d7377;
+  --sh-ink-5:      #3a3f43;
+  --sh-hair:       #24272a;
+  --sh-hair-2:     #303438;
+  --sh-hair-3:     #1f2224;
+  --td-accent:     #f3f4f4;
+  --td-accent-soft: #272b2e;
+  --td-accent-ring: rgba(255,255,255,.12);
+}
+/* Section heads share one voice */
+.td-panel-luma.apple.td-shell .td-h {
+  font-family: var(--td-font-sans);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--sh-ink);
+}
+
+/* ── Shell — floating card, not a flush drawer ── */
+.td-panel-luma,
+.td-panel-luma.apple,
+.td-panel-luma.apple.td-shell {
+  top: 12px !important;
+  right: 12px !important;
+  bottom: 12px !important;
+  width: min(680px, 72vw) !important;
+  border-radius: 26px !important;
+  background: var(--surface) !important;
+  border: 0 !important;
+  box-shadow:
+    inset 1px 1px 1px 0 rgba(255,255,255,.9),
+    0 24px 60px -24px rgba(0,0,0,.28),
+    0 8px 24px -12px rgba(0,0,0,.14) !important;
+}
+.dark .td-panel-luma.apple.td-shell {
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.06), 0 24px 60px -20px rgba(0,0,0,.7) !important;
+}
+.td-panel-luma.apple.td-shell[data-peek="true"] { left: 360px !important; right: auto !important; }
+.td-panel-luma.apple.td-shell .td-scroll { padding: 8px 24px 32px !important; }
+
+/* ── Header — round grey nav, breadcrumb pill, black primary ── */
+.td-panel-luma.apple.td-shell .td-head-luma { padding: 14px 16px 6px !important; border-bottom: 0 !important; }
+.td-panel-luma.apple.td-shell .td-nav-btn { width: 32px; height: 32px; border-radius: 50%; background: var(--td-well); color: var(--sh-ink-2); border: 0; }
+.td-panel-luma.apple.td-shell .td-nav-btn:hover { background: var(--td-well-2); color: var(--sh-ink); }
+.td-panel-luma.apple.td-shell .td-bcrumb { height: 30px; padding: 0 12px; border-radius: 999px; background: var(--td-well); color: var(--sh-ink-3); font-size: 12.5px; font-weight: 500; }
+.td-panel-luma.apple.td-shell .td-bcrumb-part .name { font-weight: 600; }
+.td-panel-luma.apple.td-shell .td-task-code { height: 30px; padding: 0 12px; border-radius: 999px; border: 0; background: var(--td-well); font-size: 12px; font-weight: 600; }
+.td-panel-luma.apple.td-shell .td-pill-btn { height: 32px; padding: 0 14px; border-radius: 999px; border: 0; font-size: 12.5px; font-weight: 600; background: var(--td-well); color: var(--sh-ink-2); box-shadow: none; }
+.td-panel-luma.apple.td-shell .td-pill-btn:hover { background: var(--td-well-2); color: var(--sh-ink); }
+.td-panel-luma.apple.td-shell .td-pill-btn[data-accent="true"],
+.td-panel-luma.apple.td-shell .td-pill-btn[title="Start timer"] { background: var(--sh-ink) !important; color: var(--surface) !important; box-shadow: 0 6px 16px -6px rgba(0,0,0,.45) !important; }
+.td-panel-luma.apple.td-shell .td-pill-btn[title="Stop timer"] { background: #FF453A !important; color: #fff !important; }
+.td-panel-luma.apple.td-shell .td-icon-btn { border-radius: 50%; }
+.td-panel-luma.apple.td-shell .td-icon-btn:hover { background: var(--td-well); }
+
+/* ── Title — Plus Jakarta Sans, as before ── */
+.td-panel .td-title-hero,
+.td-panel-luma .td-title-hero,
+.td-panel-luma.apple.td-shell .td-title-hero {
+  font-family: var(--td-font-sans) !important;
+  font-size: 24px !important;
+  line-height: 1.22 !important;
+  font-weight: 700 !important;
+  letter-spacing: -0.025em !important;
+}
+.td-panel .td-checkbox-lg,
+.td-panel-luma .td-checkbox-lg { width: 24px !important; height: 24px !important; border-radius: 8px !important; border: 1.8px solid var(--sh-hair-2) !important; }
+.td-panel-luma.apple.td-shell .td-parent-ref { border-radius: 999px; background: var(--td-well); border: 0; }
+
+/* ── Description — grey well; label turns into an edit hint on hover ── */
+.td-panel-luma.apple.td-shell .td-desc-box { border: 0 !important; border-radius: 18px !important; background: var(--td-well) !important; padding: 14px 16px 15px !important; gap: 6px; margin-bottom: 10px !important; }
+.td-panel-luma.apple.td-shell .td-desc-box:hover { background: var(--td-well-2) !important; }
+.td-panel-luma.apple.td-shell .td-desc-box:focus-within:hover { background: var(--surface) !important; }
+.td-panel-luma.apple.td-shell .td-desc-box-label { font-family: var(--td-font-sans); font-size: 12.5px; font-weight: 700; letter-spacing: -0.015em; text-transform: none; color: var(--sh-ink-3); }
+.td-panel-luma.apple.td-shell .td-desc-box:hover .td-desc-box-label::after { content: ' · click to edit'; font-family: var(--td-font-body); font-weight: 500; color: var(--sh-ink-4); }
+.td-panel-luma.apple.td-shell .td-about,
+.td-panel-luma.apple.td-shell .td-desc-box textarea { font-family: var(--td-font-body); font-size: 14px; line-height: 1.6; color: var(--sh-ink-2); }
+/* Compact by default — two lines — and it grows to full height while editing
+   (task view: the click swaps text for a textarea; create panel: focus). */
+.td-panel-luma.apple.td-shell .td-desc-box .td-about:not(textarea) { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.td-panel-luma.apple.td-shell .td-desc-box textarea { min-height: 44px; height: auto; transition: min-height .22s cubic-bezier(0.22, 1, 0.36, 1); }
+.td-panel-luma.apple.td-shell .td-desc-box:focus-within textarea,
+.td-panel-luma.apple.td-shell .td-desc-box textarea:focus { min-height: 132px; }
+.td-panel-luma.apple.td-shell .td-desc-box:focus-within { background: var(--surface) !important; box-shadow: 0 0 0 1.5px var(--sh-ink); }
+.td-panel-luma.apple.td-shell .td-desc-box:focus-within .td-desc-box-label::after { content: none; }
+.td-panel-luma.apple.td-shell .td-desc-box .td-about.empty { color: var(--sh-ink-4); font-style: normal !important; }
+
+/* ── Assignee — its own well ── */
+.td-panel-luma.apple.td-shell .td-assignee-bar {
+  grid-template-columns: 96px 1fr auto; gap: 12px;
+  border: 0; border-radius: 18px; background: var(--td-well);
+  padding: 13px 16px; margin-bottom: 10px;
+}
+.td-panel-luma.apple.td-shell .td-assignee-bar:hover { background: var(--td-well-2); }
+.td-panel-luma.apple.td-shell .td-assignee-bar .label { font-family: var(--td-font-body); font-size: 12.5px; font-weight: 500; letter-spacing: -0.005em; text-transform: none; color: var(--sh-ink-3); }
+.td-panel-luma.apple.td-shell .td-assignee-bar .value { gap: 10px; }
+.td-panel-luma.apple.td-shell .td-assignee-bar .value .name { font-family: var(--td-font-sans); font-size: 15px; font-weight: 700; letter-spacing: -0.02em; color: var(--sh-ink); }
+.td-panel-luma.apple.td-shell .td-assignee-bar .value .name.muted { font-weight: 600; color: var(--sh-ink-4); }
+.td-panel-luma.apple.td-shell .td-assignee-bar .td-ava-sm,
+.td-panel-luma.apple.td-shell .td-assignee-bar .av-placeholder { width: 32px; height: 32px; font-size: 11.5px; }
+.td-panel-luma.apple.td-shell .td-assignee-bar .reassign { height: 30px; padding: 0 12px; border-radius: 999px; border: 0; background: var(--surface); color: var(--sh-ink-2); font-size: 12px; font-weight: 600; box-shadow: inset 1px 1px 1px 0 rgba(255,255,255,.9), 0 1px 2px rgba(0,0,0,.04); }
+.td-panel-luma.apple.td-shell .td-assignee-bar .reassign:hover { color: var(--sh-ink); box-shadow: inset 1px 1px 1px 0 rgba(255,255,255,.9), 0 4px 10px rgba(0,0,0,.08); }
+
+/* ── Details — one well, laid out in rows by importance:
+     1. Status · Type · Priority · Labels            (labelled pills)
+     2. Work date · Due date · Start date · Repeat   (four cells)
+     3. Estimate · Time logged [· Elapsed]           (equal cells)
+     4. Created by                                   (footer line)
+   Rows are ordered with flex `order`; the DOM is untouched. ── */
+.td-panel .td-settings-card,
+.td-panel-luma .td-settings-card,
+.td-panel-luma.apple.td-shell .td-settings-card { border: 0 !important; border-radius: 18px !important; background: var(--td-well) !important; }
+.td-panel-luma.apple.td-shell .td-details-head { display: none; }
+.td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] {
+  display: flex !important; flex-wrap: wrap; align-items: stretch;
+  padding: 14px 16px 4px; border-radius: 0 !important; background: transparent !important;
+}
+.td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row::before { display: none !important; }
+
+/* Row 1 — labelled pills: grey key, dark value */
+.td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row[data-td="status"],
+.td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row[data-td="type"],
+.td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row[data-td="priority"],
+.td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row[data-td="labels"],
+.td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row[data-td="space"] {
+  flex: 0 0 auto !important; display: inline-flex !important; flex-direction: row !important; align-items: center !important; gap: 7px !important;
+  grid-template-columns: none !important; height: 32px; min-height: 0; padding: 0 11px 0 10px !important;
+  margin: 0 6px 12px 0 !important; border: 0 !important; border-radius: 999px !important;
+  background: var(--surface); box-shadow: inset 1px 1px 1px 0 rgba(255,255,255,.9), 0 1px 2px rgba(0,0,0,.04);
+  transition: box-shadow .15s ease, transform .15s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row[data-td="status"] { order: 1; }
+.td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row[data-td="type"] { order: 2; }
+.td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row[data-td="priority"] { order: 3; }
+.td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row[data-td="labels"] { order: 4; height: auto; min-height: 34px; padding-top: 4px !important; padding-bottom: 4px !important; }
+/* The breadcrumb already names the space — no need to repeat it as a pill */
+.td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row[data-td="space"] { display: none !important; }
+.td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"]::before { content: ''; order: 5; flex-basis: 100%; height: 0; }
+.td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row[data-td="status"]:hover,
+.td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row[data-td="type"]:hover,
+.td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row[data-td="priority"]:hover,
+.td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row[data-td="labels"]:hover,
+.td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row[data-td="space"]:hover { background: var(--surface); transform: translateY(-1px); box-shadow: inset 1px 1px 1px 0 rgba(255,255,255,.9), 0 6px 14px -6px rgba(0,0,0,.16); }
+.dark .td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row[data-td="status"],
+.dark .td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row[data-td="type"],
+.dark .td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row[data-td="priority"],
+.dark .td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row[data-td="labels"],
+.dark .td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row[data-td="space"] { box-shadow: inset 0 0 0 1px rgba(255,255,255,.07); }
+.td-panel-luma.apple.td-shell .td-settings-row[data-td="status"] .k,
+.td-panel-luma.apple.td-shell .td-settings-row[data-td="type"] .k,
+.td-panel-luma.apple.td-shell .td-settings-row[data-td="priority"] .k,
+.td-panel-luma.apple.td-shell .td-settings-row[data-td="labels"] .k,
+.td-panel-luma.apple.td-shell .td-settings-row[data-td="space"] .k { font-size: 11.5px !important; font-weight: 500; color: var(--sh-ink-3); gap: 5px !important; white-space: nowrap; }
+.td-panel-luma.apple.td-shell .td-settings-row[data-td="status"] .k svg,
+.td-panel-luma.apple.td-shell .td-settings-row[data-td="type"] .k svg,
+.td-panel-luma.apple.td-shell .td-settings-row[data-td="priority"] .k svg,
+.td-panel-luma.apple.td-shell .td-settings-row[data-td="labels"] .k svg,
+.td-panel-luma.apple.td-shell .td-settings-row[data-td="space"] .k svg { width: 13px; height: 13px; color: var(--sh-ink-4); }
+.td-panel-luma.apple.td-shell .td-settings-row[data-td="status"] .v,
+.td-panel-luma.apple.td-shell .td-settings-row[data-td="type"] .v,
+.td-panel-luma.apple.td-shell .td-settings-row[data-td="priority"] .v,
+.td-panel-luma.apple.td-shell .td-settings-row[data-td="labels"] .v,
+.td-panel-luma.apple.td-shell .td-settings-row[data-td="space"] .v { font-family: var(--td-font-body); font-size: 12.5px; font-weight: 600; letter-spacing: -0.01em; white-space: nowrap; }
+.td-panel-luma.apple.td-shell .td-settings-row[data-td="labels"] .v,
+.td-panel-luma.apple.td-shell .td-settings-row[data-td="space"] .v { white-space: normal; flex-wrap: wrap; gap: 4px; }
+.td-panel-luma.apple.td-shell .td-settings-row[data-td="type"] .td-prop-chip,
+.td-panel-luma.apple.td-shell .td-settings-row[data-td="priority"] .td-pri-chip,
+.td-panel-luma.apple.td-shell .td-settings-row[data-td="priority"] .td-prop-chip { background: transparent !important; border: 0 !important; box-shadow: none !important; padding: 0 !important; font-size: 13px; }
+
+/* Pill states.
+   Empty pill  — just its icon + label; the hint ("Pick a list", "+ Add",
+                 "None") fades in only while hovered / focused / open.
+   Filled pill — the inline label collapses so the value sits at the left
+                 edge, and a small plain caption (no chip) names the field
+                 just above the pill. */
+.td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row[data-td="status"],
+.td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row[data-td="type"],
+.td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row[data-td="priority"],
+.td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row[data-td="labels"],
+.td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row[data-td="space"] { position: relative; overflow: visible; }
+.td-panel-luma.apple.td-shell .td-settings-row[data-td="status"] .k,
+.td-panel-luma.apple.td-shell .td-settings-row[data-td="type"] .k,
+.td-panel-luma.apple.td-shell .td-settings-row[data-td="priority"] .k,
+.td-panel-luma.apple.td-shell .td-settings-row[data-td="labels"] .k,
+.td-panel-luma.apple.td-shell .td-settings-row[data-td="space"] .k { max-width: 120px; overflow: hidden; transition: opacity .16s ease, transform .16s ease, max-width .22s cubic-bezier(0.22, 1, 0.36, 1), margin .22s cubic-bezier(0.22, 1, 0.36, 1); }
+/* caption */
+.td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row[data-td="status"]::after,
+.td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row[data-td="type"]::after,
+.td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row[data-td="priority"]::after,
+.td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row[data-td="labels"]::after,
+.td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row[data-td="space"]::after {
+  /* Notched into the pill's top edge, the way an outlined field's label is:
+     the well colour behind the text cuts the pill edge, no chip, no shadow. */
+  position: absolute; left: 10px; top: -5px; z-index: 1; pointer-events: none;
+  font-family: var(--td-font-body); font-size: 8.5px; font-weight: 600; line-height: 10px; letter-spacing: 0.02em;
+  padding: 0 4px; background: var(--td-well); border-radius: 3px;
+  color: var(--sh-ink-3); white-space: nowrap;
+  opacity: 0; transform: translateY(4px);
+  transition: opacity .18s ease, transform .22s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row[data-td="status"]::after { content: 'Status'; }
+.td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row[data-td="type"]::after { content: 'Type'; }
+.td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row[data-td="priority"]::after { content: 'Priority'; }
+.td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row[data-td="labels"]::after { content: 'Labels'; }
+.td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row[data-td="space"]::after { content: 'Space'; }
+/* filled: collapse the inline label, show the caption */
+.td-panel-luma.apple.td-shell .td-settings-row[data-td="status"]:not(:has(.td-prop-empty)) .k,
+.td-panel-luma.apple.td-shell .td-settings-row[data-td="type"]:not(:has(.td-prop-empty)) .k,
+.td-panel-luma.apple.td-shell .td-settings-row[data-td="priority"]:not(:has(.td-prop-empty)) .k,
+.td-panel-luma.apple.td-shell .td-settings-row[data-td="labels"]:not(:has(.td-prop-empty)) .k,
+.td-panel-luma.apple.td-shell .td-settings-row[data-td="space"]:not(:has(.td-prop-empty)) .k { opacity: 0; transform: translateY(-6px); max-width: 0; margin-right: -7px; }
+.td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row[data-td="status"]:not(:has(.td-prop-empty))::after,
+.td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row[data-td="type"]:not(:has(.td-prop-empty))::after,
+.td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row[data-td="priority"]:not(:has(.td-prop-empty))::after,
+.td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row[data-td="labels"]:not(:has(.td-prop-empty))::after,
+.td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row[data-td="space"]:not(:has(.td-prop-empty))::after { opacity: 1; transform: none; }
+/* empty: hide the hint until the pill is hovered / focused / open */
+.td-panel-luma.apple.td-shell .td-settings-row[data-td="status"] .td-prop-empty,
+.td-panel-luma.apple.td-shell .td-settings-row[data-td="type"] .td-prop-empty,
+.td-panel-luma.apple.td-shell .td-settings-row[data-td="priority"] .td-prop-empty,
+.td-panel-luma.apple.td-shell .td-settings-row[data-td="labels"] .td-prop-empty,
+.td-panel-luma.apple.td-shell .td-settings-row[data-td="space"] .td-prop-empty { display: inline-block; max-width: 0; opacity: 0; overflow: hidden; white-space: nowrap; margin-left: -7px; transition: max-width .22s cubic-bezier(0.22, 1, 0.36, 1), opacity .16s ease, margin .22s cubic-bezier(0.22, 1, 0.36, 1); }
+.td-panel-luma.apple.td-shell .td-settings-row[data-td="status"]:is(:hover, :focus-within, [data-open]) .td-prop-empty,
+.td-panel-luma.apple.td-shell .td-settings-row[data-td="type"]:is(:hover, :focus-within, [data-open]) .td-prop-empty,
+.td-panel-luma.apple.td-shell .td-settings-row[data-td="priority"]:is(:hover, :focus-within, [data-open]) .td-prop-empty,
+.td-panel-luma.apple.td-shell .td-settings-row[data-td="labels"]:is(:hover, :focus-within, [data-open]) .td-prop-empty,
+.td-panel-luma.apple.td-shell .td-settings-row[data-td="space"]:is(:hover, :focus-within, [data-open]) .td-prop-empty { max-width: 160px; opacity: 1; margin-left: 0; }
+/* room above row 1 for the captions */
+.td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] { padding-top: 18px !important; }
+@media (prefers-reduced-motion: reduce) {
+  .td-panel-luma.apple.td-shell .td-settings-row .k,
+  .td-panel-luma.apple.td-shell .td-settings-row .td-prop-empty,
+  .td-panel-luma.apple.td-shell .td-settings-row::after { transition: none; }
+}
+
+/* Rows 2–3 — cells: caption above, value below; hairline above each row.
+   Everything sits on one 4-column grid so columns line up. */
+.td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row:not([data-td="status"]):not([data-td="type"]):not([data-td="priority"]):not([data-td="labels"]):not([data-td="space"]) {
+  display: flex !important; flex-direction: column; align-items: flex-start !important; justify-content: flex-start; gap: 5px;
+  flex: 0 0 25%; min-width: 0; grid-template-columns: none !important;
+  padding: 12px 12px 12px 0 !important; min-height: 0; margin: 0; border: 0 !important; border-top: 1px solid var(--td-line) !important;
+  background: transparent; border-radius: 0;
+}
+.td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row:hover { background: transparent; }
+.td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row[data-td="work"] { order: 6; }
+.td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row[data-td="due"] { order: 7; }
+.td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row[data-td="start"] { order: 8; }
+.td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row[data-td="repeat"] { order: 9; }
+.td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row[data-td="estimate"] { order: 10; flex-basis: 50% !important; }
+.td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row[data-td="time"] { order: 11; flex-basis: 50% !important; }
+.td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row[data-td="elapsed"] { order: 12; flex-basis: 25% !important; }
+.td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"]:has([data-td="elapsed"]) .td-settings-row[data-td="estimate"] { flex-basis: 25% !important; }
+/* Cell labels float like the pill labels. The cell is always two lines
+   tall (caption slot + value slot). Empty: the name sits on the value line
+   at full size, the placeholder hidden. Hover / focus / open: the name rises
+   to the caption slot and shrinks, the placeholder fades in below. Filled:
+   the small caption stays up over the value. Height never changes. */
+.td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row:is([data-td="work"], [data-td="due"], [data-td="start"], [data-td="repeat"], [data-td="estimate"], [data-td="time"], [data-td="elapsed"]) { position: relative; min-height: 60px; justify-content: flex-start !important; gap: 5px; }
+.td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row:is([data-td="work"], [data-td="due"], [data-td="start"], [data-td="repeat"], [data-td="estimate"], [data-td="time"], [data-td="elapsed"]) .k { transform-origin: left center; transition: transform .22s cubic-bezier(0.22, 1, 0.36, 1), font-size .18s ease, color .18s ease, letter-spacing .18s ease; }
+.td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row:is([data-td="work"], [data-td="due"], [data-td="start"], [data-td="repeat"], [data-td="estimate"], [data-td="time"], [data-td="elapsed"]) .k svg { transition: width .18s ease, height .18s ease; }
+/* empty at rest: name on the value line, placeholder hidden (keeps its slot) */
+.td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row:is([data-td="work"], [data-td="due"], [data-td="start"], [data-td="repeat"], [data-td="estimate"], [data-td="time"], [data-td="elapsed"]):has(.td-prop-empty) .k { transform: translateY(21px); }
+.td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row:is([data-td="work"], [data-td="due"], [data-td="start"], [data-td="repeat"], [data-td="estimate"], [data-td="time"], [data-td="elapsed"]) .v .td-prop-empty { opacity: 0; transition: opacity .16s ease .06s; }
+/* hover / focus / open, or filled: name up small, value line live */
+.td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row:is([data-td="work"], [data-td="due"], [data-td="start"], [data-td="repeat"], [data-td="estimate"], [data-td="time"], [data-td="elapsed"]):is(:hover, :focus-within, [data-open]) .k,
+.td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row:is([data-td="work"], [data-td="due"], [data-td="start"], [data-td="repeat"], [data-td="estimate"], [data-td="time"], [data-td="elapsed"]):not(:has(.td-prop-empty)) .k { transform: none; font-size: 8.5px !important; font-weight: 600 !important; letter-spacing: 0.02em !important; color: var(--sh-ink-3) !important; }
+.td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row:is([data-td="work"], [data-td="due"], [data-td="start"], [data-td="repeat"], [data-td="estimate"], [data-td="time"], [data-td="elapsed"]):is(:hover, :focus-within, [data-open]) .k svg,
+.td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row:is([data-td="work"], [data-td="due"], [data-td="start"], [data-td="repeat"], [data-td="estimate"], [data-td="time"], [data-td="elapsed"]):not(:has(.td-prop-empty)) .k svg { width: 11px; height: 11px; }
+.td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row:is([data-td="work"], [data-td="due"], [data-td="start"], [data-td="repeat"], [data-td="estimate"], [data-td="time"], [data-td="elapsed"]):is(:hover, :focus-within, [data-open]) .v .td-prop-empty { opacity: 1; }
+
+/* Create panel: Estimate pairs with Block (design tasks) or stands alone */
+.td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row[data-td="block"] { order: 11; flex-basis: 50% !important; }
+.td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"]:not(:has([data-td="time"])):not(:has([data-td="block"])) .td-settings-row[data-td="estimate"] { flex-basis: 100% !important; }
+.td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row[data-half="false"] { order: 13; flex-basis: 100% !important; flex-direction: row !important; align-items: center !important; justify-content: flex-start !important; gap: 10px !important; }
+.td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row[data-td="created"] { order: 14; flex-basis: 100% !important; flex-direction: row !important; align-items: center !important; justify-content: flex-start !important; gap: 10px !important; padding-bottom: 10px !important; }
+
+.td-panel-luma.apple.td-shell .td-settings-row .k { font-family: var(--td-font-body); font-size: 12px; font-weight: 500; letter-spacing: -0.005em; color: var(--sh-ink-3); gap: 6px; }
+.td-panel-luma.apple.td-shell .td-settings-row .k svg { width: 14px; height: 14px; flex: none; margin: 0 !important; color: var(--sh-ink-4); }
+.td-panel-luma.apple.td-shell .td-settings-row .v { font-family: var(--td-font-body); font-size: 13.5px; font-weight: 600; letter-spacing: -0.01em; color: var(--sh-ink); flex-wrap: wrap; }
+.td-panel-luma.apple.td-shell .td-settings-row .v .muted,
+.td-panel-luma.apple.td-shell .td-settings-row .v .td-prop-empty { font-weight: 500; color: var(--sh-ink-4); }
+.td-panel-luma.apple.td-shell .td-settings-row[data-td="created"] .v { font-weight: 500; color: var(--sh-ink-2); }
+.td-panel-luma.apple.td-shell .td-settings-row[data-td="created"] .v .muted { color: var(--sh-ink-4); }
+/* Due stamp — date on the first line, time · Overdue on a smaller second line */
+.td-panel-luma.apple.td-shell .td-settings-row[data-td="due"] .td-date-text > span { display: flex; flex-direction: column; gap: 2px; }
+.td-panel-luma.apple.td-shell .td-settings-row[data-td="due"] .td-date-sub { font-size: 11.5px; font-weight: 500; letter-spacing: 0; opacity: .85; }
+.td-panel-luma.apple.td-shell .td-prop-chip,
+.td-panel-luma.apple.td-shell .td-pri-chip { border-radius: 999px; padding: 3px 10px; font-family: var(--td-font-body); font-size: 12px; font-weight: 600; letter-spacing: 0; }
+.td-panel-luma.apple.td-shell .td-prop-chip { background: var(--surface); box-shadow: inset 1px 1px 1px 0 rgba(255,255,255,.9), 0 1px 2px rgba(0,0,0,.04); }
+@media (max-width: 980px) {
+  .td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row:not([data-td="status"]):not([data-td="type"]):not([data-td="priority"]):not([data-td="labels"]):not([data-td="space"]) { flex-basis: 50% !important; }
+}
+
+/* ── Section heads (Checklist / Files / Comments / Activity) ── */
+.td-panel-luma.apple.td-shell .td-eyebrow {
+  font-family: var(--td-font-sans) !important; font-size: 15px !important; font-weight: 700 !important;
+  letter-spacing: -0.02em !important; text-transform: none !important; color: var(--sh-ink) !important; margin: 0 0 12px !important;
+  display: flex; align-items: center; gap: 8px;
+}
+.td-panel-luma.apple.td-shell .td-eyebrow .muted { font-family: var(--td-font-body); font-size: 12.5px; font-weight: 500; letter-spacing: 0; color: var(--sh-ink-4); }
+.td-panel-luma.apple.td-shell .td-eyebrow .action { margin-left: auto; height: 28px; padding: 0 12px; border-radius: 999px; background: var(--td-well); font-family: var(--td-font-body); font-size: 12px; font-weight: 600; letter-spacing: 0; color: var(--sh-ink-2); display: inline-flex; align-items: center; text-transform: none; }
+.td-panel-luma.apple.td-shell .td-eyebrow .action:hover { background: var(--td-well-2); color: var(--sh-ink); }
+.td-panel-luma.apple.td-shell .td-section-rule { background: var(--td-rule); margin: 20px 0; }
+
+/* ── Subtasks — bold head, count pill, black add, one well for the list ── */
+.td-panel-luma.apple.td-shell .td-section-strong { margin-bottom: 12px; }
+.td-panel-luma.apple.td-shell .td-section-strong .title { font-family: var(--td-font-sans); font-size: 17px; font-weight: 700; letter-spacing: -0.025em; color: var(--sh-ink); }
+.td-panel-luma.apple.td-shell .td-section-strong .icon { color: var(--sh-ink-3); }
+.td-panel-luma.apple.td-shell .td-section-count-strong { border-radius: 999px; padding: 2px 9px; background: var(--td-well); color: var(--sh-ink-2); font-size: 11.5px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.td-panel-luma.apple.td-shell .td-section-add-strong { height: 30px; padding: 0 12px; border-radius: 999px; background: var(--sh-ink); color: var(--surface); font-size: 12px; font-weight: 600; box-shadow: 0 6px 16px -6px rgba(0,0,0,.45); }
+.td-panel-luma.apple.td-shell .td-section-add-strong:hover { background: var(--sh-ink-2); }
+.td-panel-luma.apple.td-shell .td-subtask-list { border: 0; border-radius: 18px; background: var(--td-well); }
+.td-panel-luma.apple.td-shell .td-subtask-row { border-bottom: 1px solid var(--td-line); padding: 11px 16px; }
+.td-panel-luma.apple.td-shell .td-subtask-row:hover { background: rgba(0,0,0,.025); }
+.dark .td-panel-luma.apple.td-shell .td-subtask-row:hover { background: rgba(255,255,255,.03); }
+.td-panel-luma.apple.td-shell .td-subtask-row .title { font-size: 13.5px; font-weight: 500; }
+.td-panel-luma.apple.td-shell .td-subtask-code { border-radius: 999px; border: 0; background: var(--surface); padding: 2px 8px; font-size: 10.5px; font-weight: 600; color: var(--sh-ink-3); font-variant-numeric: tabular-nums; }
+.td-panel-luma.apple.td-shell .td-subtask-add-row { background: transparent; border-top: 1px solid var(--td-line); padding: 11px 16px; font-size: 13.5px; font-weight: 500; }
+.td-panel-luma.apple.td-shell .td-subtask-add-row .kbd { border-radius: 999px; background: var(--surface); border: 0; box-shadow: inset 1px 1px 1px 0 rgba(255,255,255,.9), 0 1px 2px rgba(0,0,0,.04); }
+.td-panel-luma.apple.td-shell .td-subtask-list input { font-size: 13.5px; }
+
+/* ── Checklist — each list is a well card: title, 60px progress, count ── */
+.td-panel-luma.apple.td-shell .td-cl-card { border-radius: 18px; background: var(--td-well); padding: 12px 16px 10px; }
+.td-panel-luma.apple.td-shell .td-cl-head { margin-bottom: 6px; }
+.td-panel-luma.apple.td-shell .td-cl-title { font-family: var(--td-font-sans); font-size: 13.5px; font-weight: 700; letter-spacing: -0.015em; color: var(--sh-ink); }
+.td-panel-luma.apple.td-shell .td-cl-bar { width: 64px !important; height: 5px; border-radius: 999px; background: var(--surface) !important; box-shadow: inset 0 0 0 1px var(--td-line); }
+.td-panel-luma.apple.td-shell .td-cl-bar > span { background: var(--sh-done, #7c3aed) !important; border-radius: 999px; }
+.td-panel-luma.apple.td-shell .td-cl-count { font-family: var(--td-font-body); font-size: 11.5px; font-weight: 600; color: var(--sh-ink-3); font-variant-numeric: tabular-nums; }
+.td-panel-luma.apple.td-shell .td-cl-item { padding: 6px 0; border-top: 1px solid var(--td-line); }
+.td-panel-luma.apple.td-shell .td-cl-item:first-child { border-top: 0; }
+.td-panel-luma.apple.td-shell .td-cl-item > span { font-size: 13.5px !important; }
+.td-panel-luma.apple.td-shell .td-cl-card input { font-size: 13px !important; padding: 7px 0 2px !important; }
+.td-panel-luma.apple.td-shell .td-checkbox { width: 18px; height: 18px; border-radius: 6px; border-color: var(--sh-hair-2); }
+.td-panel-luma.apple.td-shell .td-lcard,
+.td-panel-luma.apple.td-shell .td-lcard.apple { border: 0 !important; border-radius: 18px !important; background: var(--td-well) !important; box-shadow: none !important; }
+
+/* ── Files — dashed well ── */
+.td-panel-luma.apple.td-shell .td-files-wrap .border-dashed { border-radius: 18px; border: 1.5px dashed var(--sh-hair-2); background: var(--td-well); padding: 22px 16px; font-weight: 500; color: var(--sh-ink-3); }
+.td-panel-luma.apple.td-shell .td-files-wrap .border-dashed:hover { background: var(--td-well-2); color: var(--sh-ink); }
+
+/* ── Comments — composer well; each comment as its own card ── */
+.td-panel-luma.apple.td-shell .td-comment-box { border: 0; border-radius: 18px; background: var(--td-well); padding: 12px 14px; }
+.td-panel-luma.apple.td-shell .td-comment-box[data-focus="true"] { background: var(--surface); box-shadow: 0 0 0 1.5px var(--sh-ink); }
+.td-panel-luma.apple.td-shell .td-comment-box textarea,
+.td-panel-luma.apple.td-shell .td-comment-box input { font-size: 13.5px !important; line-height: 1.5; }
+.td-panel-luma.apple.td-shell .td-comment-send { height: 30px; padding: 0 14px; border-radius: 999px; border: 0; background: var(--sh-ink); color: var(--surface); font-size: 12px; font-weight: 600; }
+.td-panel-luma.apple.td-shell .td-comment { padding: 12px 14px; border-radius: 16px; background: var(--td-well); }
+.td-panel-luma.apple.td-shell .td-comment b { font-family: var(--td-font-sans); font-size: 13px !important; font-weight: 700 !important; letter-spacing: -0.015em; }
+.td-panel-luma.apple.td-shell .td-comment .td-ava-sm { width: 28px; height: 28px; font-size: 10.5px; }
+
+/* ── Activity — bold toggle, quiet log ── */
+.td-panel-luma.apple.td-shell .td-activity-toggle { font-family: var(--td-font-sans); text-transform: none; letter-spacing: -0.02em; font-size: 15px; font-weight: 700; color: var(--sh-ink); padding: 6px 0; margin: 0; border-radius: 0; }
+.td-panel-luma.apple.td-shell .td-activity-toggle:hover { background: transparent; color: var(--sh-ink-2); }
+.td-panel-luma.apple.td-shell .td-act-item { padding: 6px 0; }
+
+/* ── Inputs ── */
+.td-panel-luma.apple.td-shell input,
+.td-panel-luma.apple.td-shell textarea { font-family: var(--td-font-body); font-variation-settings: normal; }
+.td-panel-luma.apple.td-shell input:focus-visible,
+.td-panel-luma.apple.td-shell textarea:focus-visible { outline: none; box-shadow: 0 0 0 1.5px var(--sh-ink); border-radius: 10px; }

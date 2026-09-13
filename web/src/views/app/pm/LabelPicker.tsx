@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useLabelPicker, useCreateLabel, useAttachLabel, useDetachLabel, useRequestLabel, useUpdateLabel } from '../../../hooks/useLabels';
+import type { TaskTag } from '@squadhub/shared';
+import { useLabelPicker, useListLabelPicker, useCreateLabel, useAttachLabel, useDetachLabel, useRequestLabel, useUpdateLabel } from '../../../hooks/useLabels';
 
 const DEFAULT_COLOR = '#6b7280';
 
@@ -9,23 +10,37 @@ export const LABEL_COLORS = [
   '#8b5cf6', '#d946ef', '#ec4899', '#6b7280',
 ];
 
+/**
+ * Two modes. Task mode (`taskId`): toggles attach/detach on the server. Draft
+ * mode (`listId` + `onDraftToggle`): the task doesn't exist yet — labels are
+ * listed by the list's workspace and selection is kept by the caller, which
+ * attaches them once the task is created. Draft mode can't create, rename,
+ * recolor or request labels (all need a task).
+ */
 export default function LabelPicker({
   taskId,
+  listId,
   attachedTagIds,
   anchorRect,
   onClose,
+  onDraftToggle,
 }: {
-  taskId: string;
+  taskId?: string;
+  listId?: string;
   attachedTagIds: string[];
   anchorRect: DOMRect | null;
   onClose: () => void;
+  onDraftToggle?: (tag: TaskTag) => void;
 }) {
-  const { data, isLoading } = useLabelPicker(taskId, true);
-  const createLabel = useCreateLabel(taskId);
-  const attachLabel = useAttachLabel(taskId);
-  const detachLabel = useDetachLabel(taskId);
-  const requestLabel = useRequestLabel(taskId);
-  const updateLabel = useUpdateLabel(taskId);
+  const draftMode = !taskId;
+  const taskQuery = useLabelPicker(taskId ?? null, !draftMode);
+  const listQuery = useListLabelPicker(listId ?? null, draftMode);
+  const { data, isLoading } = draftMode ? listQuery : taskQuery;
+  const createLabel = useCreateLabel(taskId ?? '');
+  const attachLabel = useAttachLabel(taskId ?? '');
+  const detachLabel = useDetachLabel(taskId ?? '');
+  const requestLabel = useRequestLabel(taskId ?? '');
+  const updateLabel = useUpdateLabel(taskId ?? '');
 
   const [query, setQuery] = useState('');
   const [requested, setRequested] = useState<string | null>(null);
@@ -91,11 +106,16 @@ export default function LabelPicker({
     return (data?.groups || []).some((g) => g.labels.some((l) => l.name.toLowerCase() === q));
   }, [data, q]);
 
-  const canCreate = !!data?.can_create;
+  const canCreate = !!data?.can_create && !draftMode;
   const showCreateRow = q.length > 0 && !exactMatch && canCreate;
-  const showRequestRow = q.length > 0 && !exactMatch && !canCreate;
+  const showRequestRow = q.length > 0 && !exactMatch && !canCreate && !draftMode;
 
   const toggle = (tagId: string) => {
+    if (draftMode) {
+      const tag = (data?.groups || []).flatMap((g) => g.labels).find((l) => l.id === tagId);
+      if (tag) onDraftToggle?.(tag);
+      return;
+    }
     if (attached.has(tagId)) detachLabel.mutate(tagId);
     else attachLabel.mutate(tagId);
   };

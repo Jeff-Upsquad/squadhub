@@ -11,6 +11,16 @@ export function useLabelPicker(taskId: string | null, enabled: boolean) {
   });
 }
 
+// Same picker data scoped by list — for a task that doesn't exist yet (the
+// create panel picks labels before the row exists, then attaches them).
+export function useListLabelPicker(listId: string | null, enabled: boolean) {
+  return useQuery<LabelPickerData>({
+    queryKey: ['label-picker', 'list', listId],
+    queryFn: async () => (await api.get('/pm/labels', { params: { list_id: listId } })).data.data,
+    enabled: !!listId && enabled,
+  });
+}
+
 // Every query key that can render a task's tag pills. Mirrors
 // invalidateTaskLists in useTasks — attach/detach must refresh all of them or
 // the tag only appears after a manual refresh when returning to that view.

@@ -11,6 +11,22 @@ export async function isPlatformAdmin(userId: string): Promise<boolean> {
   return !!(data as any)?.is_admin;
 }
 
+/** Resolve the workspace a list belongs to via space. */
+export async function getWorkspaceIdForList(listId: string): Promise<string | null> {
+  const { data: list } = await supabaseAdmin
+    .from('lists')
+    .select('space_id')
+    .eq('id', listId)
+    .maybeSingle();
+  if (!list?.space_id) return null;
+  const { data: space } = await supabaseAdmin
+    .from('spaces')
+    .select('workspace_id')
+    .eq('id', list.space_id as string)
+    .maybeSingle();
+  return (space as any)?.workspace_id ?? null;
+}
+
 /** Resolve the workspace a task belongs to via list → space. */
 export async function getWorkspaceIdForTask(taskId: string): Promise<string | null> {
   const { data: task } = await supabaseAdmin

@@ -1311,7 +1311,7 @@ export default function MainLayout() {
       return (
         <div className="sh-view flex flex-1 flex-col items-center justify-center">
           <div className="mb-4 opacity-20 text-[var(--sh-ink-3)]">{ICON.apps}</div>
-          <h3 className="serif text-[40px] text-[var(--sh-ink)]" style={{ fontFamily: 'var(--font-serif, Plus Jakarta Sans, sans-serif)', letterSpacing: '-0.01em' }}>Apps</h3>
+          <h3 className="sh-section-title text-[var(--sh-ink)]">Apps</h3>
           <p className="mt-1 text-[12.5px] text-[var(--sh-ink-3)]">Select an app from the list to open it here</p>
         </div>
       );
@@ -1321,7 +1321,7 @@ export default function MainLayout() {
       return (
         <div className="sh-view flex flex-1 flex-col items-center justify-center">
           <div className="mb-4 opacity-20 text-[var(--sh-ink-3)]">{ICON[section as keyof typeof ICON]}</div>
-          <h3 className="serif text-[40px] text-[var(--sh-ink)]" style={{ fontFamily: 'var(--font-serif, Plus Jakarta Sans, sans-serif)', letterSpacing: '-0.01em' }}>{SECTION_TITLES[section]}</h3>
+          <h3 className="sh-section-title text-[var(--sh-ink)]">{SECTION_TITLES[section]}</h3>
           <p className="mt-1 text-[12.5px] text-[var(--sh-ink-3)]">Coming soon</p>
         </div>
       );
@@ -1484,7 +1484,7 @@ export default function MainLayout() {
   };
 
   return (
-    <div className="flex h-[100dvh] bg-surface text-foreground">
+    <div className="flex h-[100dvh] bg-canvas text-foreground">
       {/* Mobile top bar — only renders below md breakpoint. */}
       <div className="fixed inset-x-0 top-0 z-[60] flex h-12 items-center justify-between border-b border-[var(--sh-hair)] bg-[var(--icon-bar)] px-3 md:hidden">
         <button
@@ -1536,11 +1536,11 @@ export default function MainLayout() {
           mobileDrawerOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
         }`}
       >
-      {/* Far-left rail — black, matches reference green bar but in black. Home sits at true top, no brand tile. */}
-      <div
-        className="sh-rail-bar flex w-[60px] shrink-0 flex-col items-center gap-0.5 bg-[#080909] px-[4px] pt-[10px] pb-3 relative z-[3] my-2 ml-2 mr-[2px]"
-        style={{ boxShadow: 'var(--sh-rail-inset)' }}
-      >
+      {/* Far-left rail — a floating black dock (CoolDock language): brand tile
+          on top, then the nav tiles. Sits on the warm canvas with a gap on
+          every side rather than butting against the window edge. */}
+      <div className="sh-rail-bar flex w-[64px] shrink-0 flex-col items-center gap-0.5 px-[6px] pt-[10px] pb-[10px] relative z-[3] my-3 ml-3 mr-[6px]">
+        <div className="sh-rail-brand" aria-hidden="true" />
         {/* Main nav: Home / Inbox / Tasks / Docs / Cal / Apps */}
         <div className="flex w-full flex-col items-center gap-[2px]">
           <RailBtn
@@ -1635,7 +1635,7 @@ export default function MainLayout() {
         </div>
 
         {/* Divider */}
-        <div className="h-px w-7 bg-white/10 my-2" />
+        <div className="sh-rail-sep" />
 
         {/* Second nav: More */}
         <div className="flex w-full flex-col items-center gap-[2px]">
@@ -1696,12 +1696,12 @@ export default function MainLayout() {
           <div ref={profileRef} className="relative">
             <button
               onClick={() => setProfileOpen((v) => !v)}
-              className="grid h-8 w-8 place-items-center rounded-full bg-[var(--sh-ink)] text-[var(--sidebar)] text-[11px] font-semibold relative cursor-pointer"
-              style={{ border: '2px solid var(--icon-bar)' }}
+              className="grid h-9 w-9 place-items-center rounded-full bg-white text-[#0b0c0c] text-[11px] font-bold relative cursor-pointer"
+              style={{ boxShadow: '0 0 0 2px rgba(255,255,255,.14), 0 4px 10px rgba(0,0,0,.35)' }}
               title={user?.display_name || user?.email || 'Me'}
             >
               {(user?.display_name || user?.email || 'ME').split(/[ @]/).slice(0, 2).map((s) => s.charAt(0).toUpperCase()).join('').slice(0, 2) || 'ME'}
-              <span className="absolute -right-[2px] -bottom-[2px] h-[10px] w-[10px] rounded-full bg-[var(--icon-bar)]" style={{ border: '2px solid var(--sh-ink)' }} />
+              <span className="absolute -right-[1px] -bottom-[1px] h-[11px] w-[11px] rounded-full bg-[#39C66B]" style={{ border: '2px solid #0e1012' }} />
             </button>
 
             {profileOpen && (
@@ -1749,7 +1749,7 @@ export default function MainLayout() {
         <div
           className="sh-rail-preview hidden md:block"
           style={{
-            left: 70,
+            left: 82,
             width: sidebarWidth,
             '--sh-preview-y': `${railPreviewAnchorY}px`,
           } as CSSProperties}
@@ -1772,7 +1772,7 @@ export default function MainLayout() {
           to let its own chapter/page nav take over. */}
       {currentWorkspace && !(activeSection === 'learning' && learningActiveItemId) && (
         <div
-          className={`sh-mod-side flex shrink-0 flex-col overflow-hidden relative z-[2] my-2 rounded-[12px] ${
+          className={`sh-mod-side flex shrink-0 flex-col overflow-hidden relative z-[2] my-3 rounded-[22px] ${
             resizingSidebar ? '' : 'transition-[width] duration-200 ease-in-out'
           } ${sidebarOpen ? '' : 'w-0'}`}
           style={{ boxShadow: 'var(--sh-sidebar-drop)', width: sidebarOpen ? sidebarWidth : 0 }}
@@ -1798,7 +1798,7 @@ export default function MainLayout() {
         <button
           type="button"
           onClick={() => setSidebarOpen(true)}
-          className="hidden md:grid self-start mt-4 ml-1 h-8 w-7 place-items-center rounded-[8px] bg-[var(--sidebar)] text-[var(--sh-ink-3)] hover:text-[var(--sh-ink)] hover:bg-[var(--sh-hair)]"
+          className="hidden md:grid self-start mt-5 ml-1 h-8 w-7 place-items-center rounded-[10px] bg-[var(--surface)] text-[var(--sh-ink-3)] hover:text-[var(--sh-ink)] shadow-[inset_1px_1px_1px_0_rgba(255,255,255,.9)]"
           title="Open sidebar"
           aria-label="Open sidebar"
         >
@@ -1810,7 +1810,7 @@ export default function MainLayout() {
       </aside>
 
       {/* Main content area */}
-      <div className="relative flex flex-1 flex-col overflow-hidden bg-surface pt-12 md:pt-0">
+      <div className="relative flex flex-1 flex-col overflow-hidden bg-transparent pt-12 md:pt-0 md:my-3 md:mr-3 md:ml-[6px]">
         {/* Chrome-style tab strip (desktop only) — each tab is a saved view. */}
         <TabBar />
         {/* The universal top-right "New task" floating "+" was removed per request
@@ -1839,7 +1839,7 @@ export default function MainLayout() {
             new user with empty persisted tabs): render the live view from global
             state so the content area is never blank. */}
         {tabs.length === 0 && (
-          <div className="flex flex-1 flex-col min-h-0 overflow-hidden">
+          <div className="sh-pane flex flex-1 flex-col min-h-0 overflow-hidden">
             {renderPane(navSnapshot)}
           </div>
         )}
@@ -1853,7 +1853,7 @@ export default function MainLayout() {
             return (
               <div
                 key={t.id}
-                className="flex flex-1 flex-col min-h-0 overflow-hidden"
+                className="sh-pane flex flex-1 flex-col min-h-0 overflow-hidden"
                 style={isActive ? undefined : { display: 'none' }}
                 aria-hidden={!isActive}
               >

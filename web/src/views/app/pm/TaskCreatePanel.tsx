@@ -9,6 +9,8 @@ import { useAuthStore } from '../../../stores/authStore';
 import type { SpaceStatus, Task, TaskPriority, TaskStatusKey, TaskTypeField, TaskRecurrence } from '@squadhub/shared';
 import { getTaskStatusDef, describeTaskRecurrence } from '@squadhub/shared';
 import api from '../../../services/api';
+import LabelPicker from './LabelPicker';
+import type { TaskTag } from '@squadhub/shared';
 import AssigneePicker from './AssigneePicker';
 import DatePicker from './DatePicker';
 import RepeatPicker from './RepeatPicker';
@@ -173,6 +175,12 @@ const META_ICONS: Record<string, React.ReactNode> = {
     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
       <path d="M4 4h12l4 4v12H4z" />
       <path d="M8 8h8M8 12h6" />
+    </svg>
+  ),
+  Labels: (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M20 12L12 20a2 2 0 01-2.83 0L3 13.83V4h9.83L20 11.17a2 2 0 010 2.83z" />
+      <circle cx="7.5" cy="7.5" r="1" fill="currentColor" stroke="none" />
     </svg>
   ),
   Estimate: (
@@ -381,6 +389,11 @@ export default function TaskCreatePanel({
   // Popover / menu anchors
   const [statusMenuOpen, setStatusMenuOpen] = useState(false);
   const [priorityMenuOpen, setPriorityMenuOpen] = useState(false);
+  // Labels chosen before the task exists; attached right after creation.
+  const [draftLabels, setDraftLabels] = useState<TaskTag[]>([]);
+  useEffect(() => { setDraftLabels([]); }, [effectiveListId]);
+  const [labelPickerOpen, setLabelPickerOpen] = useState(false);
+  const [labelAnchor, setLabelAnchor] = useState<DOMRect | null>(null);
   const [priorityAnchor, setPriorityAnchor] = useState<DOMRect | null>(null);
   const [pendingEmergency, setPendingEmergency] = useState(false);
   const [typeMenuOpen, setTypeMenuOpen] = useState(false);
@@ -604,6 +617,15 @@ export default function TaskCreatePanel({
           });
         } catch (err) {
           console.error('Failed to upload file:', err);
+        }
+      }
+
+      // Labels picked in the panel exist only client-side until now.
+      for (const tag of draftLabels) {
+        try {
+          await api.post(`/pm/tasks/${newTask.id}/labels`, { tag_id: tag.id });
+        } catch (err) {
+          console.error('Failed to attach label:', err);
         }
       }
 
@@ -852,7 +874,8 @@ export default function TaskCreatePanel({
             onClick={handleSubmit}
             disabled={!canSubmit}
             className="td-pill-btn"
-            style={canSubmit ? { background: 'var(--sh-ink)', color: 'var(--surface)', borderColor: 'var(--sh-ink)' } : { opacity: 0.5 }}
+            data-accent="true"
+            style={canSubmit ? undefined : { opacity: 0.5 }}
             title={isDesignTask ? (isVideoTask ? 'Create video task' : 'Create design task') : 'Create task'}
           >
             <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
@@ -894,7 +917,7 @@ export default function TaskCreatePanel({
                 value={draft.description}
                 onChange={(e) => setDraft((d) => ({ ...d, description: e.target.value }))}
                 placeholder="Click to add a description…"
-                rows={4}
+                rows={2}
                 className="td-about w-full resize-none bg-transparent outline-none"
               />
             </div>
@@ -1068,7 +1091,7 @@ export default function TaskCreatePanel({
             <div className="td-settings-card" data-twocol="true" style={{ border: 'none', borderRadius: 0, marginBottom: 0 }}>
               {/* Status */}
               <div
-                className="td-settings-row"
+                data-td="status" className="td-settings-row"
                 data-half="true"
                 style={{ cursor: 'pointer' }}
                 onClick={currentType?.key !== 'task' ? () => setStatusMenuOpen((v) => !v) : undefined}
@@ -1124,7 +1147,7 @@ export default function TaskCreatePanel({
 
               {/* Priority */}
               <div
-                className="td-settings-row"
+                data-td="priority" className="td-settings-row"
                 data-half="true"
                 style={{ cursor: 'pointer' }}
                 onClick={(e) => {
@@ -1153,9 +1176,36 @@ export default function TaskCreatePanel({
                 </span>
               </div>
 
+              {/* Labels — picked now, attached once the task exists. Labels live in
+                  the list's workspace, so until a list is chosen the pill only hints. */}
+              <div
+                data-td="labels" className="td-settings-row"
+                data-half="true"
+                style={{ cursor: effectiveListId ? 'pointer' : 'default' }}
+                title={effectiveListId ? undefined : 'Pick a list to see its labels'}
+                onClick={effectiveListId ? (e) => {
+                  setLabelAnchor((e.currentTarget as HTMLElement).getBoundingClientRect());
+                  setLabelPickerOpen((v) => !v);
+                } : undefined}
+              >
+                <span className="k">{META_ICONS.Labels}Labels</span>
+                <span className="v">
+                  {draftLabels.length > 0 ? (
+                    draftLabels.map((t) => (
+                      <span key={t.id} className="td-prop-chip" style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                        <span style={{ width: 7, height: 7, borderRadius: 9999, background: t.color || '#6b7280' }} aria-hidden />
+                        {t.name}
+                      </span>
+                    ))
+                  ) : (
+                    <span className="td-prop-empty">{effectiveListId ? '+ Add' : 'Pick a list'}</span>
+                  )}
+                </span>
+              </div>
+
               {/* Work date */}
               <div
-                className="td-settings-row td-date-row"
+                data-td="work" className="td-settings-row td-date-row"
                 data-half="true"
                 style={{ cursor: 'pointer' }}
                 onClick={(e) => {
@@ -1169,7 +1219,7 @@ export default function TaskCreatePanel({
                     {draft.work_date ? (
                       formatDueRelative(draft.work_date).text
                     ) : (
-                      <span className="td-prop-empty">Set work date</span>
+                      <span className="td-prop-empty">Set date</span>
                     )}
                   </span>
                   <button
@@ -1195,7 +1245,7 @@ export default function TaskCreatePanel({
 
               {/* Start date */}
               <div
-                className="td-settings-row td-date-row"
+                data-td="start" className="td-settings-row td-date-row"
                 data-half="true"
                 style={{ cursor: 'pointer' }}
                 onClick={(e) => {
@@ -1209,7 +1259,7 @@ export default function TaskCreatePanel({
                     {draft.start_date ? (
                       formatDueRelative(draft.start_date).text
                     ) : (
-                      <span className="td-prop-empty">Set start date</span>
+                      <span className="td-prop-empty">Set date</span>
                     )}
                   </span>
                   <button
@@ -1235,7 +1285,7 @@ export default function TaskCreatePanel({
 
               {/* Due date */}
               <div
-                className="td-settings-row td-date-row"
+                data-td="due" className="td-settings-row td-date-row"
                 data-half="true"
                 style={{ cursor: 'pointer' }}
                 onClick={(e) => {
@@ -1251,7 +1301,7 @@ export default function TaskCreatePanel({
                         {dueInfo.text}
                       </span>
                     ) : (
-                      <span className="td-prop-empty">Set due date</span>
+                      <span className="td-prop-empty">Set date</span>
                     )}
                   </span>
                   <button
@@ -1277,7 +1327,7 @@ export default function TaskCreatePanel({
 
               {/* Repeat — non-null rule creates this task as a routine */}
               <div
-                className="td-settings-row"
+                data-td="repeat" className="td-settings-row"
                 data-half="true"
                 style={{ cursor: 'pointer' }}
                 onClick={(e) => {
@@ -1305,7 +1355,7 @@ export default function TaskCreatePanel({
 
               {/* Estimate */}
               <div
-                className="td-settings-row"
+                data-td="estimate" className="td-settings-row"
                 data-half="true"
                 style={{ cursor: 'pointer' }}
                 onClick={!editingEstimate ? () => { setEditingEstimate(true); setEstimateInput(formatMinutes(draft.time_estimate)); } : undefined}
@@ -1330,7 +1380,7 @@ export default function TaskCreatePanel({
                   ) : draft.time_estimate ? (
                     <span>{formatMinutes(draft.time_estimate)}</span>
                   ) : (
-                    <span className="td-prop-empty">Add estimate</span>
+                    <span className="td-prop-empty">Not set</span>
                   )}
                 </span>
               </div>
@@ -1338,7 +1388,7 @@ export default function TaskCreatePanel({
               {/* Type (hidden for design tasks — auto-set to design_task) */}
               {!isDesignTask && taskTypes && taskTypes.length > 0 && (
                 <div
-                  className="td-settings-row"
+                  data-td="type" className="td-settings-row"
                   data-half="true"
                   style={!(effectiveSpaceName) ? { gridColumn: '1 / -1', borderRight: 'none' } : undefined}
                 >
@@ -1366,7 +1416,7 @@ export default function TaskCreatePanel({
               {/* Work block schedule — only when type is work_block */}
               {currentType?.key === 'work_block' && (
                 <div
-                  className="td-settings-row"
+                  data-td="block" className="td-settings-row"
                   style={{ gridColumn: '1 / -1', borderRight: 'none' }}
                 >
                   <span className="k">{META_ICONS.Space}Block</span>
@@ -1461,6 +1511,7 @@ export default function TaskCreatePanel({
                 <div
                   className="td-settings-row"
                   data-half="true"
+                  data-td="space"
                   style={!(taskTypes && taskTypes.length > 0) ? { gridColumn: '1 / -1', borderRight: 'none' } : undefined}
                 >
                   <span className="k">{META_ICONS.Space}Space</span>
@@ -1477,7 +1528,7 @@ export default function TaskCreatePanel({
               )}
 
               {/* Reporter (full width) */}
-              <div className="td-settings-row" data-half="true" style={{ gridColumn: '1 / -1', borderRight: 'none', borderBottom: 'none' }}>
+              <div className="td-settings-row" data-half="true" data-td="created" style={{ gridColumn: '1 / -1', borderRight: 'none', borderBottom: 'none' }}>
                 <span className="k">{META_ICONS.Reporter}Reporter</span>
                 <span className="v">
                   {currentUser ? (
@@ -1826,6 +1877,24 @@ export default function TaskCreatePanel({
             ))}
           </div>
         </>
+      )}
+
+      {labelPickerOpen && effectiveListId && (
+
+        <LabelPicker
+
+          listId={effectiveListId}
+
+          attachedTagIds={draftLabels.map((t) => t.id)}
+
+          anchorRect={labelAnchor}
+
+          onClose={() => setLabelPickerOpen(false)}
+
+          onDraftToggle={(tag) => setDraftLabels((prev) => (prev.some((t) => t.id === tag.id) ? prev.filter((t) => t.id !== tag.id) : [...prev, tag]))}
+
+        />
+
       )}
 
       {priorityMenuOpen && priorityAnchor && (
