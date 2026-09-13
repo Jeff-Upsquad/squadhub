@@ -65,7 +65,7 @@ export default function SecondaryCardPanel({ card }: { card: SecondaryCardConfig
     if (groupBy === 'none') return null;
     const byId = new Map(items.map((it) => [it.id, it] as const));
     return groupTasks(items.map((it) => it.task), groupBy, tz, fadingTaskIds)
-      .map((g) => ({ key: g.key, label: g.label, items: g.tasks.map((t) => byId.get(t.id)).filter(Boolean) as SecondaryCardItem[] }));
+      .map((g) => ({ key: g.key, label: g.label, color: g.color, items: g.tasks.map((t) => byId.get(t.id)).filter(Boolean) as SecondaryCardItem[] }));
   }, [items, groupBy, tz, fadingTaskIds]);
 
   if (!card) return null;
@@ -171,6 +171,9 @@ export default function SecondaryCardPanel({ card }: { card: SecondaryCardConfig
             groups.map((g) => (
               <div key={g.key} className="hm-group">
                 <div className="hm-group-head">
+                  {g.color && (
+                    <span aria-hidden="true" style={{ width: 8, height: 8, borderRadius: 999, background: g.color, flex: 'none' }} />
+                  )}
                   <span>{g.label}</span>
                   <span className="count">· {g.items.length}</span>
                 </div>

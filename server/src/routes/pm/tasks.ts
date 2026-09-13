@@ -770,7 +770,7 @@ router.get('/tasks/new', async (req: Request, res: Response) => {
       a.created_at < b.created_at ? 1 : a.created_at > b.created_at ? -1 : 0,
     );
 
-    let hydrated = await hydrateParents(await hydrateLists(await hydrateAssignees(rows)));
+    let hydrated = await hydrateLabels(await hydrateParents(await hydrateLists(await hydrateAssignees(rows))));
 
     // Drop tasks completed under a custom (space) status whose category is done/closed.
     // Catalog (task_type='task') completes resolve to 'closed'/'cancelled' and were already removed by

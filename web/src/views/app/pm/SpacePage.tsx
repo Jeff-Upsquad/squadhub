@@ -359,6 +359,7 @@ export default function SpacePage({ spacePageId: propSpacePageId }: { spacePageI
                   key={g.key}
                   groupKey={`sp:${g.key}`}
                   label={g.label}
+                  dotColor={g.color}
                   tasks={g.tasks}
                   allStatuses={spaceStatuses}
                   listId={null}

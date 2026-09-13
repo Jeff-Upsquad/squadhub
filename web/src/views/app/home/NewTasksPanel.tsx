@@ -191,7 +191,12 @@ export default function NewTasksPanel() {
               grouped.map((g) => (
                 <div key={g.key}>
                   <div className="nt-head-row" style={{ background: 'var(--sh-hair-3)', fontWeight: 650 }}>
-                    <div className="nt-col nt-c-task">{g.label} · {g.tasks.length}</div>
+                    <div className="nt-col nt-c-task">
+                      {g.color && (
+                        <span aria-hidden="true" style={{ display: 'inline-block', width: 8, height: 8, borderRadius: 999, background: g.color, marginRight: 6, verticalAlign: '1px' }} />
+                      )}
+                      {g.label} · {g.tasks.length}
+                    </div>
                   </div>
                   {g.tasks.map((task) => (
                     <NewTaskRow key={task.id} task={task} showReviewed={showReviewed} />
