@@ -70,9 +70,25 @@ function renderInline(text: string, keyPrefix: string, inlineRe: RegExp) {
     }
     const linkM = part.match(/^\[([^\]]+)\]\(([^)\s]+)\)$/);
     if (linkM) {
+      const label = linkM[1];
+      const href = linkM[2];
+      // Legacy bleed: composer once stored "[url trailing](url)" because the
+      // autolink mark was inclusive. Render only the URL as a link and keep
+      // the trailing prose plain so old messages self-heal.
+      if (label.length > href.length && label.startsWith(href) && /^[\s>]/.test(label.slice(href.length))) {
+        const trailing = label.slice(href.length);
+        return (
+          <Fragment key={key}>
+            <a href={href} target="_blank" rel="noopener noreferrer" className="sqc-link" onClick={(e) => { e.preventDefault(); e.stopPropagation(); openExternalUrl(href); }}>
+              {href}
+            </a>
+            <span>{trailing}</span>
+          </Fragment>
+        );
+      }
       return (
-        <a key={key} href={linkM[2]} target="_blank" rel="noopener noreferrer" className="sqc-link" onClick={(e) => { e.preventDefault(); e.stopPropagation(); openExternalUrl(linkM[2]); }}>
-          {linkM[1]}
+        <a key={key} href={href} target="_blank" rel="noopener noreferrer" className="sqc-link" onClick={(e) => { e.preventDefault(); e.stopPropagation(); openExternalUrl(href); }}>
+          {label}
         </a>
       );
     }
