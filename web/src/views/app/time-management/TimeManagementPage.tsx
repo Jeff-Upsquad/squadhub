@@ -47,18 +47,18 @@ export default function TimeManagementPage() {
   return (
     <div className="flex flex-1 flex-col">
       {/* Header */}
-      <div className="border-b border-[#E2E8F0] px-5 py-3">
+      <div className="border-b border-divider px-5 py-3">
         <div className="flex items-center justify-between">
-          <h2 className="font-[family-name:var(--font-display)] text-sm font-semibold text-[#0F172B]">
+          <h2 className="font-[family-name:var(--font-display)] text-sm font-semibold text-foreground">
             Time Management
           </h2>
           <div className="flex items-center gap-2">
             {lastUpdated && (
-              <span className="text-[10px] text-[#90A1B9]">Updated {lastUpdated}</span>
+              <span className="text-[10px] text-foreground-dim">Updated {lastUpdated}</span>
             )}
             <button
               onClick={() => refetchStatus()}
-              className="rounded p-1 text-[#90A1B9] transition hover:bg-[#F1F5F9] hover:text-[#0F172B]"
+              className="rounded p-1 text-foreground-dim transition hover:bg-surface-alt hover:text-foreground"
               title="Refresh"
             >
               <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -70,14 +70,14 @@ export default function TimeManagementPage() {
       </div>
 
       {/* Tab bar */}
-      <div className="flex items-center justify-between border-b border-[#E2E8F0] px-5 py-2">
+      <div className="flex items-center justify-between border-b border-divider px-5 py-2">
         <div className="flex gap-1">
           <button
             onClick={() => setTab('live')}
             className={`rounded-full px-3 py-1 text-xs font-medium transition ${
               tab === 'live'
-                ? 'bg-[#0F172B] text-white'
-                : 'bg-[#F1F5F9] text-[#62748E] hover:bg-[#E2E8F0]'
+                ? 'bg-foreground text-canvas'
+                : 'bg-surface-alt text-foreground-muted hover:bg-divider-subtle'
             }`}
           >
             Live Status
@@ -86,8 +86,8 @@ export default function TimeManagementPage() {
             onClick={() => setTab('stats')}
             className={`rounded-full px-3 py-1 text-xs font-medium transition ${
               tab === 'stats'
-                ? 'bg-[#0F172B] text-white'
-                : 'bg-[#F1F5F9] text-[#62748E] hover:bg-[#E2E8F0]'
+                ? 'bg-foreground text-canvas'
+                : 'bg-surface-alt text-foreground-muted hover:bg-divider-subtle'
             }`}
           >
             Team Stats
@@ -95,12 +95,12 @@ export default function TimeManagementPage() {
         </div>
         <div className="flex items-center gap-2">
           {tab === 'live' && (
-            <label className="flex items-center gap-1.5 text-[10px] text-[#90A1B9]">
+            <label className="flex items-center gap-1.5 text-[10px] text-foreground-dim">
               <input
                 type="checkbox"
                 checked={autoRefresh}
                 onChange={(e) => setAutoRefresh(e.target.checked)}
-                className="h-3 w-3 rounded border-[#CBD5E1] text-[#0F172B] focus:ring-[#0F172B]"
+                className="h-3 w-3 rounded border-divider text-foreground focus:ring-foreground"
               />
               Auto-refresh
             </label>
@@ -112,7 +112,7 @@ export default function TimeManagementPage() {
       <div className="flex-1 overflow-y-auto p-5">
         {tab === 'live' ? (
           statusLoading ? (
-            <p className="py-8 text-center text-sm text-[#90A1B9]">Loading team status...</p>
+            <p className="py-8 text-center text-sm text-foreground-dim">Loading team status...</p>
           ) : (
             <TeamStatusPanel teamStatus={teamStatus} onSelectUser={handleSelectUser} />
           )
@@ -126,15 +126,15 @@ export default function TimeManagementPage() {
                   value={startDate}
                   max={endDate}
                   onChange={(e) => setStartDate(e.target.value)}
-                  className="rounded-lg border border-[#E2E8F0] px-2 py-1.5 text-xs text-[#0F172B] focus:border-[#0F172B] focus:outline-none"
+                  className="rounded-lg border border-divider bg-surface px-2 py-1.5 text-xs text-foreground focus:border-accent focus:outline-none"
                 />
-                <span className="text-xs text-[#90A1B9]">to</span>
+                <span className="text-xs text-foreground-dim">to</span>
                 <input
                   type="date"
                   value={endDate}
                   max={today}
                   onChange={(e) => setEndDate(e.target.value)}
-                  className="rounded-lg border border-[#E2E8F0] px-2 py-1.5 text-xs text-[#0F172B] focus:border-[#0F172B] focus:outline-none"
+                  className="rounded-lg border border-divider bg-surface px-2 py-1.5 text-xs text-foreground focus:border-accent focus:outline-none"
                 />
               </div>
               {/* Preset buttons */}
@@ -147,7 +147,7 @@ export default function TimeManagementPage() {
                   <button
                     key={preset.label}
                     onClick={() => { setStartDate(preset.start); setEndDate(preset.end); }}
-                    className="rounded px-2 py-1 text-[10px] font-medium text-[#62748E] transition hover:bg-[#F1F5F9]"
+                    className="rounded px-2 py-1 text-[10px] font-medium text-foreground-muted transition hover:bg-surface-alt"
                   >
                     {preset.label}
                   </button>
@@ -159,7 +159,7 @@ export default function TimeManagementPage() {
             </div>
 
             {statsLoading ? (
-              <p className="py-8 text-center text-sm text-[#90A1B9]">Loading stats...</p>
+              <p className="py-8 text-center text-sm text-foreground-dim">Loading stats...</p>
             ) : (
               <TeamStatsTable data={teamStats} onSelectUser={handleSelectUser} />
             )}

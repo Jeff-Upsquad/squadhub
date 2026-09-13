@@ -75,7 +75,7 @@ export default function TeamStatsTable({ data, onSelectUser }: Props) {
   const SortHeader = ({ label, sortId }: { label: string; sortId: SortKey }) => (
     <button
       onClick={() => handleSort(sortId)}
-      className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-[#90A1B9] hover:text-[#0F172B]"
+      className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-foreground-dim hover:text-foreground"
     >
       {label}
       {sortKey === sortId && <span>{sortAsc ? '\u2191' : '\u2193'}</span>}
@@ -91,15 +91,15 @@ export default function TeamStatsTable({ data, onSelectUser }: Props) {
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Search users..."
-          className="w-full rounded-lg border border-[#E2E8F0] px-3 py-2 text-sm text-[#0F172B] placeholder-[#90A1B9] focus:border-[#0F172B] focus:outline-none"
+          className="w-full rounded-lg border border-divider bg-surface px-3 py-2 text-sm text-foreground placeholder-foreground-dim focus:border-accent focus:outline-none"
         />
       </div>
 
       {/* Table */}
-      <div className="overflow-x-auto rounded-lg border border-[#E2E8F0]">
+      <div className="overflow-x-auto rounded-lg border border-divider bg-surface">
         <table className="w-full">
           <thead>
-            <tr className="border-b border-[#E2E8F0] bg-[#F8FAFC]">
+            <tr className="border-b border-divider bg-surface-alt">
               <th className="px-3 py-2 text-left"><SortHeader label="User" sortId="user" /></th>
               <th className="px-3 py-2 text-right"><SortHeader label="Work" sortId="work" /></th>
               <th className="px-3 py-2 text-right"><SortHeader label="Break" sortId="break" /></th>
@@ -115,20 +115,20 @@ export default function TeamStatsTable({ data, onSelectUser }: Props) {
                 <tr
                   key={row.userId}
                   onClick={() => onSelectUser(row.userId)}
-                  className="cursor-pointer border-b border-[#E2E8F0] transition hover:bg-[#F8FAFC] last:border-b-0"
+                  className="cursor-pointer border-b border-divider transition hover:bg-surface-alt last:border-b-0"
                 >
-                  <td className="px-3 py-2 text-sm font-medium text-[#0F172B]">{row.name}</td>
-                  <td className="px-3 py-2 text-right text-sm text-blue-600">{formatDuration(row.work)}</td>
-                  <td className="px-3 py-2 text-right text-sm text-amber-600">{formatDuration(row.break_)}</td>
-                  <td className="px-3 py-2 text-right text-sm text-gray-500">{formatDuration(row.noWork)}</td>
-                  <td className="px-3 py-2 text-right text-sm font-medium text-[#0F172B]">{formatDuration(total)}</td>
-                  <td className="px-3 py-2 text-right text-sm text-[#62748E]">{row.sessions}</td>
+                  <td className="px-3 py-2 text-sm font-medium text-foreground">{row.name}</td>
+                  <td className="px-3 py-2 text-right text-sm text-blue-600 dark:text-blue-400">{formatDuration(row.work)}</td>
+                  <td className="px-3 py-2 text-right text-sm text-amber-600 dark:text-amber-400">{formatDuration(row.break_)}</td>
+                  <td className="px-3 py-2 text-right text-sm text-gray-500 dark:text-gray-400">{formatDuration(row.noWork)}</td>
+                  <td className="px-3 py-2 text-right text-sm font-medium text-foreground">{formatDuration(total)}</td>
+                  <td className="px-3 py-2 text-right text-sm text-foreground-muted">{row.sessions}</td>
                 </tr>
               );
             })}
             {rows.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-3 py-6 text-center text-sm text-[#90A1B9]">No data found</td>
+                <td colSpan={6} className="px-3 py-6 text-center text-sm text-foreground-dim">No data found</td>
               </tr>
             )}
           </tbody>
