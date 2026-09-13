@@ -513,7 +513,11 @@ router.get('/tasks', async (req: Request, res: Response) => {
     const withParents = await hydrateParents(withAssignees);
     // Hydrate labels so list rows can render minimal tag pills without an
     // extra fetch per row (same shape as GET /pm/tasks/my + detail).
-    const hydrated = await hydrateLabels(withParents);
+    const labeled = await hydrateLabels(withParents);
+    // Hydrate list/folder/space so the list view's Group By menu can bucket by
+    // Space, Folder and List — same annotations GET /pm/tasks/my provides.
+    // Linked (multi-homed) tasks resolve to their PRIMARY list chain here.
+    const hydrated = await hydrateLists(labeled);
     // Flag rows that are only in this view because they were ADDED to this list
     // (their primary list_id points elsewhere) so the UI can badge them.
     const linkedSet = new Set(linkedIds);
