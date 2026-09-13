@@ -9957,7 +9957,7 @@ html[data-theme="noir"] .inbox-slider-panel {
   grid-template-columns: none !important; height: 32px; min-height: 0; padding: 0 11px 0 10px !important;
   margin: 0 6px 12px 0 !important; border: 0 !important; border-radius: 999px !important;
   background: var(--surface); box-shadow: inset 1px 1px 1px 0 rgba(255,255,255,.9), 0 1px 2px rgba(0,0,0,.04);
-  transition: box-shadow .15s ease, transform .15s cubic-bezier(0.22, 1, 0.36, 1);
+  transition: background-color .15s ease, box-shadow .15s ease;
 }
 .td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row[data-td="status"] { order: 1; }
 .td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row[data-td="type"] { order: 2; }
@@ -9970,7 +9970,7 @@ html[data-theme="noir"] .inbox-slider-panel {
 .td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row[data-td="type"]:hover,
 .td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row[data-td="priority"]:hover,
 .td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row[data-td="labels"]:hover,
-.td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row[data-td="space"]:hover { background: var(--surface); transform: translateY(-1px); box-shadow: inset 1px 1px 1px 0 rgba(255,255,255,.9), 0 6px 14px -6px rgba(0,0,0,.16); }
+.td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row[data-td="space"]:hover { background: var(--surface); box-shadow: inset 1px 1px 1px 0 rgba(255,255,255,.9), 0 6px 14px -6px rgba(0,0,0,.16); }
 .dark .td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row[data-td="status"],
 .dark .td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row[data-td="type"],
 .dark .td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row[data-td="priority"],
@@ -9998,8 +9998,7 @@ html[data-theme="noir"] .inbox-slider-panel {
 .td-panel-luma.apple.td-shell .td-settings-row[data-td="priority"] .td-prop-chip { background: transparent !important; border: 0 !important; box-shadow: none !important; padding: 0 !important; font-size: 13px; }
 
 /* Pill states.
-   Empty pill  — just its icon + label; the hint ("Pick a list", "+ Add",
-                 "None") fades in only while hovered / focused / open.
+   Empty pill  — icon, label, and hint stay visible at a stable width.
    Filled pill — the inline label collapses so the value sits at the left
                  edge, and a small plain caption (no chip) names the field
                  just above the pill. */
@@ -10012,7 +10011,7 @@ html[data-theme="noir"] .inbox-slider-panel {
 .td-panel-luma.apple.td-shell .td-settings-row[data-td="type"] .k,
 .td-panel-luma.apple.td-shell .td-settings-row[data-td="priority"] .k,
 .td-panel-luma.apple.td-shell .td-settings-row[data-td="labels"] .k,
-.td-panel-luma.apple.td-shell .td-settings-row[data-td="space"] .k { max-width: 120px; overflow: hidden; transition: opacity .16s ease, transform .16s ease, max-width .22s cubic-bezier(0.22, 1, 0.36, 1), margin .22s cubic-bezier(0.22, 1, 0.36, 1); }
+.td-panel-luma.apple.td-shell .td-settings-row[data-td="space"] .k { max-width: 120px; overflow: hidden; }
 /* caption */
 .td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row[data-td="status"]::after,
 .td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row[data-td="type"]::after,
@@ -10026,7 +10025,6 @@ html[data-theme="noir"] .inbox-slider-panel {
   padding: 0 4px; background: var(--td-well); border-radius: 3px;
   color: var(--sh-ink-3); white-space: nowrap;
   opacity: 0; transform: translateY(4px);
-  transition: opacity .18s ease, transform .22s cubic-bezier(0.22, 1, 0.36, 1);
 }
 .td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row[data-td="status"]::after { content: 'Status'; }
 .td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row[data-td="type"]::after { content: 'Type'; }
@@ -10044,17 +10042,12 @@ html[data-theme="noir"] .inbox-slider-panel {
 .td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row[data-td="priority"]:not(:has(.td-prop-empty))::after,
 .td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row[data-td="labels"]:not(:has(.td-prop-empty))::after,
 .td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row[data-td="space"]:not(:has(.td-prop-empty))::after { opacity: 1; transform: none; }
-/* empty: hide the hint until the pill is hovered / focused / open */
+/* Empty hints reserve their width so hovering cannot reflow the flex row. */
 .td-panel-luma.apple.td-shell .td-settings-row[data-td="status"] .td-prop-empty,
 .td-panel-luma.apple.td-shell .td-settings-row[data-td="type"] .td-prop-empty,
 .td-panel-luma.apple.td-shell .td-settings-row[data-td="priority"] .td-prop-empty,
 .td-panel-luma.apple.td-shell .td-settings-row[data-td="labels"] .td-prop-empty,
-.td-panel-luma.apple.td-shell .td-settings-row[data-td="space"] .td-prop-empty { display: inline-block; max-width: 0; opacity: 0; overflow: hidden; white-space: nowrap; margin-left: -7px; transition: max-width .22s cubic-bezier(0.22, 1, 0.36, 1), opacity .16s ease, margin .22s cubic-bezier(0.22, 1, 0.36, 1); }
-.td-panel-luma.apple.td-shell .td-settings-row[data-td="status"]:is(:hover, :focus-within, [data-open]) .td-prop-empty,
-.td-panel-luma.apple.td-shell .td-settings-row[data-td="type"]:is(:hover, :focus-within, [data-open]) .td-prop-empty,
-.td-panel-luma.apple.td-shell .td-settings-row[data-td="priority"]:is(:hover, :focus-within, [data-open]) .td-prop-empty,
-.td-panel-luma.apple.td-shell .td-settings-row[data-td="labels"]:is(:hover, :focus-within, [data-open]) .td-prop-empty,
-.td-panel-luma.apple.td-shell .td-settings-row[data-td="space"]:is(:hover, :focus-within, [data-open]) .td-prop-empty { max-width: 160px; opacity: 1; margin-left: 0; }
+.td-panel-luma.apple.td-shell .td-settings-row[data-td="space"] .td-prop-empty { display: inline-block; max-width: 160px; opacity: 1; overflow: hidden; white-space: nowrap; margin-left: 0; }
 /* room above row 1 for the captions */
 .td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] { padding-top: 18px !important; }
 @media (prefers-reduced-motion: reduce) {
@@ -10080,23 +10073,12 @@ html[data-theme="noir"] .inbox-slider-panel {
 .td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row[data-td="time"] { order: 11; flex-basis: 50% !important; }
 .td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row[data-td="elapsed"] { order: 12; flex-basis: 25% !important; }
 .td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"]:has([data-td="elapsed"]) .td-settings-row[data-td="estimate"] { flex-basis: 25% !important; }
-/* Cell labels float like the pill labels. The cell is always two lines
-   tall (caption slot + value slot). Empty: the name sits on the value line
-   at full size, the placeholder hidden. Hover / focus / open: the name rises
-   to the caption slot and shrinks, the placeholder fades in below. Filled:
-   the small caption stays up over the value. Height never changes. */
+/* Cell labels use a fixed two-line layout (caption + value). Keeping the
+   geometry unchanged on hover prevents pointer-triggered animation loops. */
 .td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row:is([data-td="work"], [data-td="due"], [data-td="start"], [data-td="repeat"], [data-td="estimate"], [data-td="time"], [data-td="elapsed"]) { position: relative; min-height: 60px; justify-content: flex-start !important; gap: 5px; }
-.td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row:is([data-td="work"], [data-td="due"], [data-td="start"], [data-td="repeat"], [data-td="estimate"], [data-td="time"], [data-td="elapsed"]) .k { transform-origin: left center; transition: transform .22s cubic-bezier(0.22, 1, 0.36, 1), font-size .18s ease, color .18s ease, letter-spacing .18s ease; }
-.td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row:is([data-td="work"], [data-td="due"], [data-td="start"], [data-td="repeat"], [data-td="estimate"], [data-td="time"], [data-td="elapsed"]) .k svg { transition: width .18s ease, height .18s ease; }
-/* empty at rest: name on the value line, placeholder hidden (keeps its slot) */
-.td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row:is([data-td="work"], [data-td="due"], [data-td="start"], [data-td="repeat"], [data-td="estimate"], [data-td="time"], [data-td="elapsed"]):has(.td-prop-empty) .k { transform: translateY(21px); }
-.td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row:is([data-td="work"], [data-td="due"], [data-td="start"], [data-td="repeat"], [data-td="estimate"], [data-td="time"], [data-td="elapsed"]) .v .td-prop-empty { opacity: 0; transition: opacity .16s ease .06s; }
-/* hover / focus / open, or filled: name up small, value line live */
-.td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row:is([data-td="work"], [data-td="due"], [data-td="start"], [data-td="repeat"], [data-td="estimate"], [data-td="time"], [data-td="elapsed"]):is(:hover, :focus-within, [data-open]) .k,
-.td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row:is([data-td="work"], [data-td="due"], [data-td="start"], [data-td="repeat"], [data-td="estimate"], [data-td="time"], [data-td="elapsed"]):not(:has(.td-prop-empty)) .k { transform: none; font-size: 8.5px !important; font-weight: 600 !important; letter-spacing: 0.02em !important; color: var(--sh-ink-3) !important; }
-.td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row:is([data-td="work"], [data-td="due"], [data-td="start"], [data-td="repeat"], [data-td="estimate"], [data-td="time"], [data-td="elapsed"]):is(:hover, :focus-within, [data-open]) .k svg,
-.td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row:is([data-td="work"], [data-td="due"], [data-td="start"], [data-td="repeat"], [data-td="estimate"], [data-td="time"], [data-td="elapsed"]):not(:has(.td-prop-empty)) .k svg { width: 11px; height: 11px; }
-.td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row:is([data-td="work"], [data-td="due"], [data-td="start"], [data-td="repeat"], [data-td="estimate"], [data-td="time"], [data-td="elapsed"]):is(:hover, :focus-within, [data-open]) .v .td-prop-empty { opacity: 1; }
+.td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row:is([data-td="work"], [data-td="due"], [data-td="start"], [data-td="repeat"], [data-td="estimate"], [data-td="time"], [data-td="elapsed"]) .k { transform: none; transform-origin: left center; font-size: 8.5px !important; font-weight: 600 !important; letter-spacing: 0.02em !important; color: var(--sh-ink-3) !important; }
+.td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row:is([data-td="work"], [data-td="due"], [data-td="start"], [data-td="repeat"], [data-td="estimate"], [data-td="time"], [data-td="elapsed"]) .v .td-prop-empty { opacity: 1; }
+.td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row:is([data-td="work"], [data-td="due"], [data-td="start"], [data-td="repeat"], [data-td="estimate"], [data-td="time"], [data-td="elapsed"]) .k svg { width: 11px; height: 11px; }
 
 /* Create panel: Estimate pairs with Block (design tasks) or stands alone */
 .td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row[data-td="block"] { order: 11; flex-basis: 50% !important; }
