@@ -8256,10 +8256,10 @@ ol.sqc-list {
 .nt-table { min-width: 1000px; }
 
 /* Column order (left → right) follows the triage flow: decide → what → where →
-   who → how urgent → what state → when (due first) → how long. The eight content
-   columns are content-sized (auto) so each hugs its widest value; Task is the
-   flexible column that takes the remaining space and wraps long titles. */
-.nt-row-grid, .nt-head-row { display: grid; grid-template-columns: 48px minmax(200px, 1fr) repeat(8, auto); align-items: center; gap: 2px; padding: 0 16px; }
+   who → how urgent → what state → when (due first) → how long. Task has a fixed
+   width and wraps long titles; the eight content columns are content-sized
+   (auto) so each hugs its widest value. */
+.nt-row-grid, .nt-head-row { display: grid; grid-template-columns: 48px 340px repeat(8, auto); align-items: center; gap: 2px; padding: 0 16px; }
 .nt-head-row { position: sticky; top: 0; z-index: 2; background: var(--surface); border-bottom: 1px solid var(--sh-hair-3); padding-top: 10px; padding-bottom: 10px; }
 .nt-col { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.07em; font-weight: 600; color: var(--sh-ink-4); padding: 0 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 /* Headers line up with their column's content: body cells add 4px cell padding
