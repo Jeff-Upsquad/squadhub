@@ -103,7 +103,7 @@ function isAllDaySentinel(p: { start_minute: number; duration_minutes: number })
 
 function isTaskDone(status?: string | null): boolean {
   if (!status) return false;
-  if (status === 'done' || status === 'closed') return true;
+  if (status === 'done' || status === 'closed' || status === 'cancelled') return true;
   return getTaskStatusCategory(status) === 'closed';
 }
 

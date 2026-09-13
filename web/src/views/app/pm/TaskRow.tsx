@@ -112,7 +112,7 @@ export default function TaskRow({
   const isSelected = selectedTasks.includes(task.id);
 
   const statusCategory = (task as any).status as string | undefined;
-  const isDone = statusCategory === 'done' || statusCategory === 'closed';
+  const isDone = statusCategory === 'done' || statusCategory === 'closed' || statusCategory === 'cancelled';
   const isFading = fadingTaskIds.has(task.id);
   const displayDone = isDone || isFading;
   const priority = (task.priority || 'none') as TaskPriority;

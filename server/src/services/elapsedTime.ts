@@ -55,7 +55,7 @@ function isTaskDone(status: string | null | undefined, statuses: SpaceStatus[]):
   const stage = resolveStage(status, statuses);
   if (stage) return stage.category === 'closed' || DONE_STAGE_NAMES.has(stage.name);
   // No stages resolved (space not set up): fall back to the catalog completes.
-  return status === 'done' || status === 'closed';
+  return status === 'done' || status === 'closed' || status === 'cancelled';
 }
 
 export interface ElapsibleSpace {

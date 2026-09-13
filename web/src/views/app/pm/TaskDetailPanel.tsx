@@ -640,7 +640,7 @@ export default function TaskDetailPanel({
       : statuses.find((s) => s.name === taskStatusCategory) || statuses.find((s) => s.category === taskStatusCategory)
     : undefined;
   const matchedStatus = !isTaskType ? (statuses.find((s) => s.name === taskStatusCategory) || statuses.find((s) => s.category === taskStatusCategory)) : null;
-  const isDone = catalogDef?.category === 'closed' || taskStatusCategory === 'done' || taskStatusCategory === 'closed' || matchedStatus?.category === 'done' || matchedStatus?.category === 'closed';
+  const isDone = catalogDef?.category === 'closed' || taskStatusCategory === 'done' || taskStatusCategory === 'closed' || taskStatusCategory === 'cancelled' || matchedStatus?.category === 'done' || matchedStatus?.category === 'closed';
 
   // Normalize legacy status for design/video tasks when the drawer opens
   useEffect(() => {
@@ -759,7 +759,7 @@ export default function TaskDetailPanel({
   // errors — the server enforces the same rule as a backstop.
   const handleSubtaskToggle = async (st: any, e: React.MouseEvent) => {
     if (!canEdit) return;
-    const stDone = st.status === 'done' || st.status === 'closed';
+    const stDone = st.status === 'done' || st.status === 'closed' || st.status === 'cancelled';
     // Re-opening a completed subtask: flip straight back, no prompt.
     if (stDone) {
       updateTask.mutate({ id: st.id, status: 'todo' } as any);
@@ -883,7 +883,7 @@ export default function TaskDetailPanel({
   const nonAudioAttachments = attachmentsData.filter((a) => !a.mime_type?.startsWith('audio/'));
   const attachmentCount = nonAudioAttachments.length;
   const subtasks = task?.subtasks || [];
-  const subtaskDone = subtasks.filter((s: any) => s.status === 'done' || s.status === 'closed').length;
+  const subtaskDone = subtasks.filter((s: any) => s.status === 'done' || s.status === 'closed' || s.status === 'cancelled').length;
   const checklistItems = (checklists || []).flatMap((c) => c.items || []);
   const progressTotal = subtasks.length + checklistItems.length;
   const progressDone = subtaskDone + checklistItems.filter((i) => i.is_done).length;
@@ -2133,7 +2133,7 @@ export default function TaskDetailPanel({
               {(subtasks.length > 0 || canEdit) && (
                 <div className="td-subtask-list">
                   {subtasks.map((st: any) => {
-                    const stDone = st.status === 'done' || st.status === 'closed';
+                    const stDone = st.status === 'done' || st.status === 'closed' || st.status === 'cancelled';
                     const stPerson = st.assignees?.[0];
                     return (
                       <button

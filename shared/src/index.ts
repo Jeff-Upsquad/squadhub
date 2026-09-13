@@ -312,7 +312,7 @@ export type TaskStatusKey =
   | 'active' | 'in_progress' | 'time_tracked' | 'active_daily'
   | 'routines' | 'imp_routines'
   | 'on_hold' | 'waiting_on_dependency' | 'follow_ups' | 'help' | 'unblocked'
-  | 'closed';
+  | 'closed' | 'cancelled';
 
 export type TaskStatusGroup =
   | 'not_started'
@@ -376,6 +376,7 @@ export const TASK_STATUS_CATALOG: TaskStatusDef[] = [
 
   // Closed → closed
   { key: 'closed', label: 'CLOSED', description: 'Completed and archived.', group: 'done', groupLabel: 'Closed', groupEmoji: '✅', category: 'closed', color: '#10b981' },
+  { key: 'cancelled', label: 'CANCELLED', description: 'No longer needed; closed without completing.', group: 'done', groupLabel: 'Closed', groupEmoji: '✅', category: 'closed', color: '#6b7280' },
 ];
 
 const TASK_STATUS_BY_KEY: Record<string, TaskStatusDef> = TASK_STATUS_CATALOG.reduce(

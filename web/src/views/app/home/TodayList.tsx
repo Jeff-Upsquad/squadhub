@@ -645,7 +645,7 @@ function TodayRow({ task: t, onOpen, secondsToday = 0 }: { task: Task; onOpen: (
   const isSubtask = !!t.parent_task_id;
   const parentTitle = t.parent_task?.title || null;
   const status = (t as any).status as string | undefined;
-  const isDone = status === 'done' || status === 'closed';
+  const isDone = status === 'done' || status === 'closed' || status === 'cancelled';
   const displayDone = isDone || isFading;
   // Inline subtask dropdown — hydrated by GET /pm/tasks/my (direct children,
   // done ones included so they render struck-through). Chevron + N/M done
@@ -654,7 +654,7 @@ function TodayRow({ task: t, onOpen, secondsToday = 0 }: { task: Task; onOpen: (
   const [subsExpanded, setSubsExpanded] = useState(false);
   const subsDone = subtasks.filter((s) => {
     const st = (s as any).status as string | undefined;
-    return st === 'done' || st === 'closed';
+    return st === 'done' || st === 'closed' || st === 'cancelled';
   }).length;
 
   const onToggleDone = (e: React.MouseEvent) => {
@@ -841,7 +841,7 @@ function TodayRow({ task: t, onOpen, secondsToday = 0 }: { task: Task; onOpen: (
 function HomeSubtaskRow({ sub: s, onOpen }: { sub: Task; onOpen: (id: string) => void }) {
   const updateTask = useUpdateTask(null);
   const status = (s as any).status as string | undefined;
-  const isDone = status === 'done' || status === 'closed';
+  const isDone = status === 'done' || status === 'closed' || status === 'cancelled';
   const when = formatWhen(s.due_date);
   const assignee = s.assignees?.[0];
   return (

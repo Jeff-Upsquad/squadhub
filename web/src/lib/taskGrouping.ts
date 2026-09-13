@@ -191,7 +191,7 @@ export function isTaskCompleted(t: Task): boolean {
   if (s && typeof s === 'object') {
     return s.category === 'done' || s.category === 'closed';
   }
-  if (typeof s === 'string') return s === 'closed' || s === 'done';
+  if (typeof s === 'string') return s === 'closed' || s === 'done' || s === 'cancelled';
   return false;
 }
 

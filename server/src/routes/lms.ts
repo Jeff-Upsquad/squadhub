@@ -171,7 +171,7 @@ router.get('/my-open-sop-tasks', async (req: Request, res: Response) => {
       .select('id, title, due_date, source_id, status')
       .eq('source_kind', 'sop')
       .eq('source_user_id', req.userId!)
-      .not('status', 'in', '(done,closed)')
+      .not('status', 'in', '(done,closed,cancelled)')
       .order('due_date', { ascending: true, nullsFirst: false });
 
     if (taskError) {

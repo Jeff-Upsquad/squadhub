@@ -43,7 +43,7 @@ function shortDate(iso: string | null | undefined): string | null {
 
 function isDone(task: Task) {
   const s = (task as { status?: string }).status;
-  return s === 'done' || s === 'closed';
+  return s === 'done' || s === 'closed' || s === 'cancelled';
 }
 
 export default function MobileMyTasks() {
