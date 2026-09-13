@@ -226,136 +226,162 @@ export default function ClientDesignDashboard({ folderId }: { folderId: string }
     // height — the tall Reports tab then overflows instead of letting the inner
     // `.cd-root` scroll, which clips the top and breaks scrolling. (Matches the
     // chat/clips sibling views in MainLayout.)
-    <div className="flex flex-1 flex-col min-h-0 min-w-0">
-      {/* Row 1: Breadcrumb + global actions */}
-      <div className="lv-breadcrumb-row">
-        <div className="lv-breadcrumb">
-          <span className="lv-bc-link">{breadcrumbLabel}</span>
-          <span className="lv-bc-sep">/</span>
-          <span className="lv-bc-current">{folder?.name || 'Loading…'}</span>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <div className="lv-search">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-              <circle cx="11" cy="11" r="8" />
-              <path d="M21 21l-4.35-4.35" />
-            </svg>
-            <input
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search tasks..."
-            />
-            <kbd>N</kbd>
-          </div>
-
-          {isManager && (
-            <button
-              onClick={() => setShowShare(true)}
-              className="lv-icon-btn"
-              title="Share this space"
-              aria-label="Share"
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="18" cy="5" r="3" />
-                <circle cx="6" cy="12" r="3" />
-                <circle cx="18" cy="19" r="3" />
-                <path d="M8.59 13.51l6.83 3.98M15.41 6.51l-6.82 3.98" />
-              </svg>
-            </button>
-          )}
-
-          {/* Split button: main click = New Design/Video request (default,
-              unchanged); caret opens a dropdown with general-task + meeting. */}
-          <div style={{ position: 'relative', display: 'inline-flex' }}>
-            <div style={{ display: 'inline-flex' }}>
-              <button
-                onClick={handleNewTask}
-                className="lv-newtask-btn"
-                style={{ borderTopRightRadius: 0, borderBottomRightRadius: 0 }}
-              >
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-                  <path d="M12 5v14M5 12h14" />
+    <div className="cd-workspace-shell flex flex-1 flex-col min-h-0 min-w-0">
+      {/* Workspace identity + primary controls. */}
+      <header className="cd-workspace-header">
+        <div className="cd-workspace-header-main">
+          <div className="cd-workspace-identity">
+            <div className="cd-workspace-mark" data-kind={isVideo ? 'video' : 'design'} aria-hidden="true">
+              {isVideo ? (
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="3" y="5" width="14" height="14" rx="3" />
+                  <path d="m17 10 4-2v8l-4-2" />
                 </svg>
-                {newTaskLabel}
-              </button>
-              <button
-                onClick={() => setShowNewMenu((v) => !v)}
-                className="lv-newtask-btn"
-                style={{
-                  borderTopLeftRadius: 0,
-                  borderBottomLeftRadius: 0,
-                  borderLeft: '1px solid rgba(255,255,255,0.22)',
-                  padding: '0 7px',
-                }}
-                aria-label="More create options"
-                aria-haspopup="menu"
-                aria-expanded={showNewMenu}
-                title="More options"
-              >
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M6 9l6 6 6-6" />
+              ) : (
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="m4 20 4.25-1 10.9-10.9a2.12 2.12 0 0 0-3-3L5.25 16 4 20Z" />
+                  <path d="m13.8 7.4 3 3M4 20h5" />
                 </svg>
-              </button>
+              )}
             </div>
-            {showNewMenu && (
-              <>
-                <div className="fixed inset-0 z-[1]" onClick={() => setShowNewMenu(false)} />
-                <div
-                  className="absolute right-0 top-[calc(100%+6px)] z-[2] w-52 overflow-hidden rounded-xl border shadow-lg"
-                  style={{ borderColor: 'var(--sh-hair)', background: 'var(--surface)' }}
-                  role="menu"
+            <div className="cd-workspace-title-block">
+              <div className="cd-workspace-eyebrow">
+                <span>{breadcrumbLabel}</span>
+                <span className="cd-workspace-eyebrow-dot" />
+                <span>{isVideo ? 'Production' : 'Creative operations'}</span>
+              </div>
+              <div className="cd-workspace-title-row">
+                <h1>{folder?.name || 'Loading…'}</h1>
+              </div>
+              <div className="cd-workspace-summary">
+                <span><strong>{activeCount}</strong> active request{activeCount === 1 ? '' : 's'}</span>
+                <span className="cd-workspace-summary-sep" />
+                <span><strong>{doneCount}</strong> completed</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="cd-workspace-actions">
+            <div className="lv-search">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                <circle cx="11" cy="11" r="8" />
+                <path d="M21 21l-4.35-4.35" />
+              </svg>
+              <input
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search this workspace"
+                aria-label="Search this workspace"
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  className="cd-search-clear"
+                  onClick={() => setSearchQuery('')}
+                  aria-label="Clear search"
                 >
-                  <button
-                    onClick={handleNewGeneralTask}
-                    className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-[13px] text-[color:var(--sh-ink)] hover:bg-[color:var(--sh-hair-3)]"
-                    role="menuitem"
-                  >
-                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round"><path d="M9 11l3 3 8-8M20 12v6a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2h9" /></svg>
-                    New General Task
-                  </button>
-                  <button
-                    onClick={handleScheduleMeeting}
-                    className="flex w-full items-center gap-2 border-t px-3 py-2.5 text-left text-[13px] text-[color:var(--sh-ink)] hover:bg-[color:var(--sh-hair-3)]"
-                    style={{ borderColor: 'var(--sh-hair)' }}
-                    role="menuitem"
-                  >
-                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#0a7d55" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round"><path d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
-                    Schedule Meeting
-                  </button>
-                </div>
-              </>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+                    <path d="M18 6 6 18M6 6l12 12" />
+                  </svg>
+                </button>
+              )}
+            </div>
+
+            {isManager && (
+              <button
+                onClick={() => setShowShare(true)}
+                className="cd-workspace-share"
+                title="Share this workspace"
+                aria-label="Share this workspace"
+              >
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="18" cy="5" r="3" />
+                  <circle cx="6" cy="12" r="3" />
+                  <circle cx="18" cy="19" r="3" />
+                  <path d="M8.59 13.51l6.83 3.98M15.41 6.51l-6.82 3.98" />
+                </svg>
+                <span>Share</span>
+              </button>
             )}
+
+            {/* Split button: main click = New Design/Video request (default,
+                unchanged); caret opens a dropdown with general-task + meeting. */}
+            <div className="cd-create-wrap">
+              <div className="cd-create-split">
+                <button onClick={handleNewTask} className="lv-newtask-btn cd-create-main">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                    <path d="M12 5v14M5 12h14" />
+                  </svg>
+                  {newTaskLabel}
+                  <kbd>N</kbd>
+                </button>
+                <button
+                  onClick={() => setShowNewMenu((v) => !v)}
+                  className="lv-newtask-btn cd-create-more"
+                  aria-label="More create options"
+                  aria-haspopup="menu"
+                  aria-expanded={showNewMenu}
+                  title="More options"
+                >
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M6 9l6 6 6-6" />
+                  </svg>
+                </button>
+              </div>
+              {showNewMenu && (
+                <>
+                  <div className="fixed inset-0 z-[1]" onClick={() => setShowNewMenu(false)} />
+                  <div className="cd-create-menu" role="menu">
+                    <button onClick={handleNewGeneralTask} className="cd-create-menu-item" role="menuitem">
+                      <span className="cd-create-menu-icon">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round"><path d="M9 11l3 3 8-8M20 12v6a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2h9" /></svg>
+                      </span>
+                      <span><strong>General task</strong><small>Add a standard to-do</small></span>
+                    </button>
+                    <button onClick={handleScheduleMeeting} className="cd-create-menu-item" role="menuitem">
+                      <span className="cd-create-menu-icon is-meeting">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round"><path d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                      </span>
+                      <span><strong>Schedule meeting</strong><small>Plan time with the team</small></span>
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
           </div>
         </div>
-      </div>
 
-      {/* Row 2: View Tabs */}
-      <div className="lv-tabs-row">
-        {tabs.map((t) => (
-          <button
-            key={t.key}
-            className="lv-tab"
-            data-active={tab === t.key}
-            onClick={() => setTab(t.key)}
-          >
-            {TAB_ICONS[t.key]}
-            {t.label}
-            {t.count != null && (
-              <span className="ml-1 text-[11px] tabular-nums text-[color:var(--sh-ink-4)]">
-                {t.count}
-              </span>
-            )}
-          </button>
-        ))}
-        <ContainerChatButton
-          resourceType="folder"
-          resourceId={folderId}
-          name={folder?.name || 'Workspace'}
-          accessLevel={folder?.my_access_level}
-          style={{ marginLeft: 'auto' }}
-        />
-      </div>
+        {/* View switcher: a larger active target is easier to scan than the
+            former thin underline, especially beside card-heavy content. */}
+        <nav className="cd-workspace-tabbar" aria-label="Workspace views">
+          <div className="cd-workspace-tab-list" role="tablist">
+            {tabs.map((t) => (
+              <button
+                key={t.key}
+                className="cd-workspace-tab"
+                data-active={tab === t.key}
+                onClick={() => setTab(t.key)}
+                role="tab"
+                aria-selected={tab === t.key}
+              >
+                <span className="cd-workspace-tab-icon">{TAB_ICONS[t.key]}</span>
+                <span>{t.label}</span>
+                {t.count != null && (
+                  <span className="cd-workspace-tab-count">{t.count}</span>
+                )}
+              </button>
+            ))}
+          </div>
+          <div className="cd-workspace-chat">
+            <ContainerChatButton
+              resourceType="folder"
+              resourceId={folderId}
+              name={folder?.name || 'Workspace'}
+              accessLevel={folder?.my_access_level}
+            />
+          </div>
+        </nav>
+      </header>
 
       {/* Content area */}
       <div className="flex flex-1 overflow-hidden">

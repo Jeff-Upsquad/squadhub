@@ -2,7 +2,6 @@ import { useMemo, useState, useEffect } from 'react';
 import type { SpaceStatus } from '@squadhub/shared';
 import type { RequestRowData } from '../atoms/RequestRow';
 import { sortStages } from '../../../../../lib/designSpaceLists';
-import { IconFilter, IconSort, IconGrid } from '../atoms/Icons';
 import TaskGroupCard from '../../TaskGroupCard';
 
 // ---- Sort ----
@@ -160,65 +159,98 @@ function buildGroups(
     }));
 }
 
-function ToolbarMenu<T extends string>({
-  icon,
-  prefix,
-  value,
-  options,
-  align = 'right',
-  onChange,
+const IconSettings = (p: { size?: number }) => (
+  <svg width={p.size ?? 14} height={p.size ?? 14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M4 6h10M18 6h2M4 12h2M10 12h10M4 18h12M20 18h0" />
+    <circle cx="16" cy="6" r="2" />
+    <circle cx="8" cy="12" r="2" />
+    <circle cx="18" cy="18" r="2" />
+  </svg>
+);
+
+/* View settings: one small button that opens Sort + Group as pill groups.
+   Keeps the strip down to chips + a single control. */
+function ViewSettings({
+  sortBy,
+  groupBy,
+  onSort,
+  onGroup,
 }: {
-  icon: React.ReactNode;
-  prefix: string;
-  value: T;
-  options: { key: T; label: string }[];
-  align?: 'left' | 'right';
-  onChange: (v: T) => void;
+  sortBy: SortKey;
+  groupBy: GroupKey;
+  onSort: (v: SortKey) => void;
+  onGroup: (v: GroupKey) => void;
 }) {
   const [open, setOpen] = useState(false);
-  const current = options.find((o) => o.key === value);
+  const customised = sortBy !== 'newest' || groupBy !== 'status';
   return (
     <div className="cd-menu-wrap">
       <button
-        className="cd-topbar-btn"
-        style={{ border: '1px solid var(--cd-br-0)' }}
+        type="button"
+        className="cd-tool-btn cd-tool-btn-icon"
+        data-on={customised}
         onClick={() => setOpen((o) => !o)}
-        aria-haspopup="menu"
+        aria-haspopup="dialog"
         aria-expanded={open}
+        aria-label="View settings"
+        title="Sort & group"
       >
-        {icon} {prefix}: {current?.label ?? ''}
+        <IconSettings size={15} />
       </button>
       {open && (
         <>
           <div className="cd-menu-backdrop" onClick={() => setOpen(false)} />
-          <div className={`cd-menu cd-menu-${align}`} role="menu">
-            {options.map((o) => (
-              <button
-                key={o.key}
-                role="menuitemradio"
-                aria-checked={o.key === value}
-                className={`cd-menu-item${o.key === value ? ' active' : ''}`}
-                onClick={() => {
-                  onChange(o.key);
-                  setOpen(false);
-                }}
-              >
-                {o.label}
-                <svg
-                  className="check"
-                  width="13"
-                  height="13"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2.4"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
+          <div className="cd-menu cd-menu-right cd-settings" role="dialog" aria-label="View settings">
+            <div className="cd-settings-section">
+              <div className="cd-menu-head">Sort by</div>
+              <div className="cd-seg" role="radiogroup" aria-label="Sort by">
+                {SORT_OPTIONS.map((o) => (
+                  <button
+                    key={o.key}
+                    type="button"
+                    role="radio"
+                    aria-checked={o.key === sortBy}
+                    className="cd-seg-btn"
+                    data-active={o.key === sortBy}
+                    onClick={() => onSort(o.key)}
+                  >
+                    {o.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="cd-settings-section">
+              <div className="cd-menu-head">Group by</div>
+              <div className="cd-seg" role="radiogroup" aria-label="Group by">
+                {GROUP_OPTIONS.map((o) => (
+                  <button
+                    key={o.key}
+                    type="button"
+                    role="radio"
+                    aria-checked={o.key === groupBy}
+                    className="cd-seg-btn"
+                    data-active={o.key === groupBy}
+                    onClick={() => onGroup(o.key)}
+                  >
+                    {o.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {customised && (
+              <div className="cd-settings-foot">
+                <button
+                  type="button"
+                  className="cd-menu-head-action"
+                  onClick={() => {
+                    onSort('newest');
+                    onGroup('status');
+                  }}
                 >
-                  <path d="M20 6L9 17l-5-5" />
-                </svg>
-              </button>
-            ))}
+                  Reset to default
+                </button>
+              </div>
+            )}
           </div>
         </>
       )}
@@ -309,37 +341,40 @@ export default function RequestsTab({
   return (
     <div>
       <div className="cd-list-toolbar">
-        <button className="cd-topbar-btn" style={{ border: '1px solid var(--cd-br-0)' }}>
-          <IconFilter size={12} /> Filter
-        </button>
-        {sortedStages.map((s) => (
+        {/* Every stage shows as a small chip — empty ones too, dimmed — so the
+            pipeline is always fully visible. Chips are the filter (multi). */}
+        <div className="cd-stage-chips" role="group" aria-label="Filter by stage">
           <button
-            key={s.id}
-            className={`cd-filter-chip${activeFilters.has(s.id) ? ' active' : ''}`}
-            onClick={() => toggleFilter(s.id)}
+            type="button"
+            className="cd-chip cd-chip-all"
+            data-active={activeFilters.size === 0}
+            aria-pressed={activeFilters.size === 0}
+            onClick={() => setActiveFilters(new Set())}
           >
-            <span
-              style={{ width: 6, height: 6, borderRadius: '50%', background: s.color }}
-            />
-            {s.name}
-            <span className="count">{statusCounts[s.id] || 0}</span>
+            All
+            <span className="n">{requests.length}</span>
           </button>
-        ))}
-        <div style={{ flex: 1 }} />
-        <ToolbarMenu
-          icon={<IconSort size={12} />}
-          prefix="Sort"
-          value={sortBy}
-          options={SORT_OPTIONS}
-          onChange={setSortBy}
-        />
-        <ToolbarMenu
-          icon={<IconGrid size={12} />}
-          prefix="Group"
-          value={groupBy}
-          options={GROUP_OPTIONS}
-          onChange={setGroupBy}
-        />
+          {sortedStages.map((s) => {
+            const n = statusCounts[s.id] || 0;
+            return (
+              <button
+                key={s.id}
+                type="button"
+                className="cd-chip"
+                data-active={activeFilters.has(s.id)}
+                data-empty={n === 0}
+                aria-pressed={activeFilters.has(s.id)}
+                style={{ '--chip': s.color } as React.CSSProperties}
+                onClick={() => toggleFilter(s.id)}
+              >
+                <span className="dot" />
+                {s.name}
+                <span className="n">{n}</span>
+              </button>
+            );
+          })}
+        </div>
+        <ViewSettings sortBy={sortBy} groupBy={groupBy} onSort={setSortBy} onGroup={setGroupBy} />
       </div>
 
       {groups.length === 0 && (
