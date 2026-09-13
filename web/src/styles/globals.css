@@ -8253,13 +8253,16 @@ ol.sqc-list {
 .nt-modal .hm-menu-item[data-active="true"] { color: var(--sh-ink); font-weight: 600; }
 
 .nt-scroll { flex: 1; overflow: auto; }
-.nt-table { min-width: 1000px; }
 
-/* Column order (left → right) follows the triage flow: decide → what → where →
-   who → how urgent → what state → when (due first) → how long. Task has a fixed
-   width and wraps long titles; the eight content columns are content-sized
-   (auto) so each hugs its widest value. */
-.nt-row-grid, .nt-head-row { display: grid; grid-template-columns: 48px 340px repeat(8, auto); align-items: center; gap: 2px; padding: 0 16px; }
+/* One shared track set for the whole table: Task is fixed-width, the eight
+   content columns are content-sized (auto). Every row below renders as a
+   subgrid of these tracks, so each column sizes ONCE from the entire column's
+   content — rows can never drift out of alignment. */
+.nt-table { display: grid; grid-template-columns: 48px 340px repeat(8, auto); column-gap: 2px; padding: 0 16px; min-width: 1000px; }
+.nt-head-row, .nt-row, .nt-row-grid { display: grid; grid-template-columns: subgrid; grid-column: 1 / -1; align-items: center; }
+/* Group-by wrapper must not create a box — its header + rows join the table grid. */
+.nt-group { display: contents; }
+.nt-skel-wrap, .nt-empty { grid-column: 1 / -1; }
 .nt-head-row { position: sticky; top: 0; z-index: 2; background: var(--surface); border-bottom: 1px solid var(--sh-hair-3); padding-top: 10px; padding-bottom: 10px; }
 .nt-col { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.07em; font-weight: 600; color: var(--sh-ink-4); padding: 0 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 /* Headers line up with their column's content: body cells add 4px cell padding

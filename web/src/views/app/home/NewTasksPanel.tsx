@@ -190,7 +190,7 @@ export default function NewTasksPanel() {
               ))
             ) : (
               grouped.map((g) => (
-                <div key={g.key}>
+                <div key={g.key} className="nt-group">
                   <div className="nt-head-row" style={{ background: 'var(--sh-hair-3)', fontWeight: 650 }}>
                     <div className="nt-col nt-c-task" style={{ gridColumn: '1 / -1' }}>{g.label} · {g.tasks.length}</div>
                   </div>
