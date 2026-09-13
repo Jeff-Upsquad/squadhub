@@ -31,13 +31,35 @@ export default function LabelPicker({
   const [requested, setRequested] = useState<string | null>(null);
   const [newColor, setNewColor] = useState(LABEL_COLORS[7]);
   const [recolorId, setRecolorId] = useState<string | null>(null);
+  const [renameId, setRenameId] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState('');
+  const [renameError, setRenameError] = useState<string | null>(null);
+  const renameInputRef = useRef<HTMLInputElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => { inputRef.current?.focus(); }, []);
 
   useEffect(() => {
-    function onKeyDown(e: KeyboardEvent) { if (e.key === 'Escape') onClose(); }
+    if (renameId) {
+      setRenameError(null);
+      // Focus + select text for quick overwrite.
+      const t = setTimeout(() => {
+        renameInputRef.current?.focus();
+        renameInputRef.current?.select();
+      }, 0);
+      return () => clearTimeout(t);
+    }
+  }, [renameId]);
+
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key !== 'Escape') return;
+      // Let inline rename/recolor consume Escape first — don't close the picker.
+      if (renameId) { setRenameId(null); return; }
+      if (recolorId) { setRecolorId(null); return; }
+      onClose();
+    }
     function onClickOutside(e: MouseEvent) {
       if (!panelRef.current) return;
       if (panelRef.current.contains(e.target as Node)) return;
@@ -49,7 +71,7 @@ export default function LabelPicker({
       document.removeEventListener('keydown', onKeyDown);
       document.removeEventListener('mousedown', onClickOutside);
     };
-  }, [onClose]);
+  }, [onClose, renameId, recolorId]);
 
   const attached = useMemo(() => new Set(attachedTagIds), [attachedTagIds]);
   const q = query.trim().toLowerCase();
@@ -92,6 +114,40 @@ export default function LabelPicker({
     await requestLabel.mutateAsync({ name });
     setRequested(name);
     setQuery('');
+  };
+
+  const startRename = (id: string, currentName: string) => {
+    setRecolorId(null);
+    setRenameError(null);
+    setRenameId(id);
+    setRenameValue(currentName);
+  };
+
+  const saveRename = (id: string, originalName: string) => {
+    if (updateLabel.isPending) return;
+    const name = renameValue.trim();
+    if (!name) {
+      setRenameError('Name cannot be empty');
+      return;
+    }
+    if (name.length > 60) {
+      setRenameError('Keep it under 60 characters');
+      return;
+    }
+    if (name === originalName) {
+      setRenameId(null);
+      return;
+    }
+    setRenameError(null);
+    updateLabel.mutate({ id, name }, {
+      onSuccess: () => setRenameId(null),
+      onError: (err: unknown) => {
+        const msg =
+          (err as { response?: { data?: { error?: string } } })?.response?.data?.error ||
+          (err instanceof Error ? err.message : 'Could not rename label');
+        setRenameError(/already exists/i.test(msg) ? 'A label with that name already exists' : msg);
+      },
+    });
   };
 
   const style = useMemo<React.CSSProperties>(() => {
@@ -147,6 +203,7 @@ export default function LabelPicker({
             {g.labels.map((l) => {
               const sel = attached.has(l.id);
               const recoloring = recolorId === l.id;
+              const renaming = renameId === l.id;
               return (
                 <div key={l.id}>
                   <div className="ap-row" data-selected={sel} style={{ cursor: 'default' }}>
@@ -158,27 +215,63 @@ export default function LabelPicker({
                       aria-hidden
                       tabIndex={-1}
                     />
-                    <button
-                      type="button"
-                      className="ap-label"
-                      style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', textAlign: 'left', flex: 1 }}
-                      onClick={() => toggle(l.id)}
-                    >
-                      <span className="ap-name">{l.name}</span>
-                    </button>
-                    {canCreate && (
+                    {renaming ? (
+                      <input
+                        ref={renameInputRef}
+                        type="text"
+                        value={renameValue}
+                        maxLength={60}
+                        onChange={(e) => setRenameValue(e.target.value)}
+                        onClick={(e) => e.stopPropagation()}
+                        onKeyDown={(e) => {
+                          e.stopPropagation();
+                          if (e.key === 'Enter') saveRename(l.id, l.name);
+                          if (e.key === 'Escape') setRenameId(null);
+                        }}
+                        onBlur={() => saveRename(l.id, l.name)}
+                        className="ap-input"
+                        style={{ flex: 1, padding: '2px 6px', fontSize: 13 }}
+                        aria-label={`Rename ${l.name}`}
+                      />
+                    ) : (
                       <button
                         type="button"
-                        onClick={(e) => { e.stopPropagation(); setRecolorId(recoloring ? null : l.id); }}
-                        title="Change color"
-                        aria-label={`Change color of ${l.name}`}
-                        style={{
-                          background: 'none', border: 'none', cursor: 'pointer', padding: '2px 4px',
-                          fontSize: 11, color: 'var(--sh-ink-4)', lineHeight: 1,
-                        }}
+                        className="ap-label"
+                        style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', textAlign: 'left', flex: 1 }}
+                        onClick={() => toggle(l.id)}
+                        onDoubleClick={(e) => { if (canCreate) { e.stopPropagation(); startRename(l.id, l.name); } }}
+                        title={canCreate ? 'Click to attach • double-click to rename' : undefined}
                       >
-                        🎨
+                        <span className="ap-name">{l.name}</span>
                       </button>
+                    )}
+                    {canCreate && !renaming && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); startRename(l.id, l.name); }}
+                          title="Rename"
+                          aria-label={`Rename ${l.name}`}
+                          style={{
+                            background: 'none', border: 'none', cursor: 'pointer', padding: '2px 4px',
+                            fontSize: 11, color: 'var(--sh-ink-4)', lineHeight: 1,
+                          }}
+                        >
+                          ✏️
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); setRecolorId(recoloring ? null : l.id); }}
+                          title="Change color"
+                          aria-label={`Change color of ${l.name}`}
+                          style={{
+                            background: 'none', border: 'none', cursor: 'pointer', padding: '2px 4px',
+                            fontSize: 11, color: 'var(--sh-ink-4)', lineHeight: 1,
+                          }}
+                        >
+                          🎨
+                        </button>
+                      </>
                     )}
                     {sel && (
                       <svg className="ap-check" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
@@ -186,6 +279,11 @@ export default function LabelPicker({
                       </svg>
                     )}
                   </div>
+                  {renaming && renameError && (
+                    <div style={{ padding: '0 10px 6px 30px', fontSize: 11, color: '#ef4444' }}>
+                      {renameError}
+                    </div>
+                  )}
                   {recoloring && (
                     <div style={{ display: 'flex', gap: 6, padding: '4px 10px 8px 30px', flexWrap: 'wrap' }}>
                       {LABEL_COLORS.map((c) => (
