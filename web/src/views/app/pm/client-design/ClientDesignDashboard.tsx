@@ -65,6 +65,7 @@ export default function ClientDesignDashboard({ folderId }: { folderId: string }
   const [showNewMenu, setShowNewMenu] = useState(false);
   const [showShare, setShowShare] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [shortcutModifier, setShortcutModifier] = useState<'Cmd' | 'Ctrl'>('Ctrl');
   const [pendingListId, setPendingListId] = useState<string | null>(null);
   const [pendingTasksListId, setPendingTasksListId] = useState<string | null>(null);
   const creatingRef = useRef(false);
@@ -91,6 +92,12 @@ export default function ClientDesignDashboard({ folderId }: { folderId: string }
   const taskTypeKey = isVideo ? 'video_edit_task' : 'design_task';
   const breadcrumbLabel = isVideo ? 'Video editing workspace' : 'Design workspace';
   const newTaskLabel = isVideo ? 'New Video Task' : 'New Design Task';
+  const newTaskShortcut = `${shortcutModifier}+N`;
+
+  useEffect(() => {
+    const isApplePlatform = /Mac|iPhone|iPad|iPod/i.test(navigator.userAgent);
+    setShortcutModifier(isApplePlatform ? 'Cmd' : 'Ctrl');
+  }, []);
 
   const designType = useMemo(
     () => taskTypes?.find((t) => t.key === taskTypeKey) || null,
@@ -180,9 +187,15 @@ export default function ClientDesignDashboard({ folderId }: { folderId: string }
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if (e.defaultPrevented) return;
       const t = e.target as HTMLElement | null;
       if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
-      if ((e.key === 'n' || e.key === 'N') && !e.metaKey && !e.ctrlKey) {
+      if (
+        (e.metaKey || e.ctrlKey) &&
+        !e.shiftKey &&
+        !e.altKey &&
+        (e.key === 'n' || e.key === 'N')
+      ) {
         e.preventDefault();
         handleNewTask();
       }
@@ -308,12 +321,18 @@ export default function ClientDesignDashboard({ folderId }: { folderId: string }
                 unchanged); caret opens a dropdown with general-task + meeting. */}
             <div className="cd-create-wrap">
               <div className="cd-create-split">
-                <button onClick={handleNewTask} className="lv-newtask-btn cd-create-main">
+                <button
+                  onClick={handleNewTask}
+                  className="lv-newtask-btn cd-create-main"
+                  data-shortcut-new-design-task="true"
+                  aria-keyshortcuts="Meta+N Control+N"
+                  title={`${newTaskLabel} (${newTaskShortcut})`}
+                >
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
                     <path d="M12 5v14M5 12h14" />
                   </svg>
                   {newTaskLabel}
-                  <kbd>N</kbd>
+                  <kbd>{newTaskShortcut}</kbd>
                 </button>
                 <button
                   onClick={() => setShowNewMenu((v) => !v)}
@@ -406,6 +425,7 @@ export default function ClientDesignDashboard({ folderId }: { folderId: string }
                   plan={plan}
                   statuses={sortedStatuses}
                   listByStatus={listByStatus}
+                  newTaskShortcut={newTaskShortcut}
                 />
               )}
               {tab === 'board' && (

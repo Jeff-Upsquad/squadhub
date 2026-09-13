@@ -638,6 +638,7 @@ export default function MainLayout() {
       return false;
     };
     const onKeyDown = (e: KeyboardEvent) => {
+      if (e.defaultPrevented) return;
       if ((e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K')) {
         e.preventDefault();
         setSearchOpen(true);
@@ -655,6 +656,13 @@ export default function MainLayout() {
         (e.key === 'n' || e.key === 'N')
       ) {
         e.preventDefault();
+        const contextualCreateButton = document.querySelector<HTMLButtonElement>(
+          '[data-shortcut-new-design-task="true"]',
+        );
+        if (contextualCreateButton) {
+          contextualCreateButton.click();
+          return;
+        }
         setShowCreateTaskModal(true);
         return;
       }

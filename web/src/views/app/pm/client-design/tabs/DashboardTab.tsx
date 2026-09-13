@@ -81,12 +81,14 @@ export default function DashboardTab({
   statuses,
   listByStatus,
   folderId,
+  newTaskShortcut,
 }: {
   requests: RequestRowData[];
   plan: DesignPlan;
   statuses: SpaceStatus[];
   listByStatus: Record<string, { id: string; name: string } | null>;
   folderId: string;
+  newTaskShortcut: string;
 }) {
   const qc = useQueryClient();
   const setActiveTask = usePMStore((s) => s.setActiveTask);
@@ -286,7 +288,7 @@ export default function DashboardTab({
             </div>
             <div className="cd-dock-legend">
               {requests.length === 0 ? (
-                <span className="cd-dock-legend-empty">No requests yet — press N to add one</span>
+                <span className="cd-dock-legend-empty">No requests yet — press {newTaskShortcut} to add one</span>
               ) : (
                 stageBreakdown
                   .filter((st) => st.count > 0)
@@ -410,7 +412,7 @@ export default function DashboardTab({
         collapseCompletedByDefault
         emptyHint={
           <>
-            No design requests yet. Press <b style={{ color: 'var(--cd-fg-1)' }}>N</b> to submit one.
+            No design requests yet. Press <b style={{ color: 'var(--cd-fg-1)' }}>{newTaskShortcut}</b> to submit one.
           </>
         }
       />
