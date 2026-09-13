@@ -8240,6 +8240,18 @@ ol.sqc-list {
 .nt-close { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 8px; border: 1px solid transparent; background: transparent; color: var(--sh-ink-3); cursor: pointer; transition: background 0.13s, color 0.13s, border-color 0.13s; }
 .nt-close:hover { background: var(--sh-hair-3); color: var(--sh-ink); border-color: var(--sh-hair); }
 
+/* Group-by pill + menu reuse the Home "hm" classnames, but those rules are
+   scoped to .hm-home / .day-planner-view while this modal portals to <body> —
+   without this the menu renders unstyled with its options run together. */
+.nt-modal .hm-pill { display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 9px; border-radius: 7px; border: 1px solid var(--sh-hair); background: transparent; font-family: inherit; font-size: 11.5px; font-weight: 500; color: color-mix(in srgb, var(--sh-ink) 65%, transparent); cursor: pointer; transition: background 0.13s ease, color 0.13s ease, border-color 0.13s ease; white-space: nowrap; }
+.nt-modal .hm-pill:hover { background: var(--sh-hair-3); color: var(--sh-ink); border-color: var(--sh-hair-2); }
+.nt-modal .hm-pill .dim { color: var(--sh-ink-4); }
+.nt-modal .hm-pill svg { opacity: 0.7; }
+.nt-modal .hm-menu { position: absolute; top: calc(100% + 6px); right: 0; min-width: 168px; z-index: 40; background: var(--surface); border: 1px solid var(--sh-hair); border-radius: 10px; box-shadow: 0 10px 28px rgba(10, 10, 10, 0.10); padding: 4px; }
+.nt-modal .hm-menu-item { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; padding: 6px 10px; border-radius: 7px; border: none; background: transparent; font-family: inherit; font-size: 12.5px; font-weight: 450; color: color-mix(in srgb, var(--sh-ink) 65%, transparent); text-align: left; cursor: pointer; white-space: nowrap; }
+.nt-modal .hm-menu-item:hover { background: var(--sh-hair-3); color: var(--sh-ink); }
+.nt-modal .hm-menu-item[data-active="true"] { color: var(--sh-ink); font-weight: 600; }
+
 .nt-scroll { flex: 1; overflow: auto; }
 .nt-table { min-width: 1120px; }
 
