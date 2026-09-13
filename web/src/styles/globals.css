@@ -1333,6 +1333,26 @@ body.sb-resizing { user-select: none; -webkit-user-select: none; cursor: col-res
 .td-pill-btn:hover { background: var(--sh-hair-3); color: var(--sh-ink); border-color: var(--sh-hair-2); }
 .td-pill-btn svg { opacity: 0.7; }
 
+/* Running task-timer pill — pulse ring while the timer runs so the live
+   state reads at a glance (desktop header pill). */
+.td-pill-btn[data-running="true"] {
+  position: relative;
+  border-color: color-mix(in srgb, #ef4444 45%, var(--sh-hair-3));
+}
+.td-pill-btn[data-running="true"]::after {
+  content: ""; position: absolute; inset: -1px; border-radius: 10px;
+  border: 2px solid color-mix(in srgb, #ef4444 55%, transparent);
+  animation: td-pill-ping 1.8s cubic-bezier(0, 0, 0.2, 1) infinite;
+  pointer-events: none;
+}
+@keyframes td-pill-ping {
+  0%        { transform: scale(0.96); opacity: 0.9; }
+  70%, 100% { transform: scale(1.12); opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .td-pill-btn[data-running="true"]::after { animation: none; opacity: 0; }
+}
+
 .td-nav-btn {
   display: grid;
   place-items: center;

@@ -1013,7 +1013,7 @@ export default function TaskDetailPanel({
             <div className="td-m-hero-cmds">
               {canEdit && (
                 isAnyRunningForThisTask ? (
-                  <button type="button" className="td-m-cmd is-running" onClick={handleStopTimer}>
+                  <button type="button" className="td-m-cmd is-running" data-running="true" onClick={handleStopTimer}>
                     <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="1" /></svg>
                     {formatSeconds(isWorkBlockRunForThisTask ? timerElapsed : (task.time_tracked || 0) + timerElapsed)}
                   </button>
@@ -1190,7 +1190,7 @@ export default function TaskDetailPanel({
           </div>
           {task && canEdit && (
             isAnyRunningForThisTask ? (
-              <button type="button" onClick={handleStopTimer} className="td-pill-btn" title="Stop timer">
+              <button type="button" onClick={handleStopTimer} className="td-pill-btn" data-running="true" title="Stop timer">
                 <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor">
                   <rect x="6" y="6" width="12" height="12" rx="1" />
                 </svg>
