@@ -8244,10 +8244,10 @@ ol.sqc-list {
 .nt-table { min-width: 1120px; }
 
 /* Column order (left → right) follows the triage flow: decide → what → where →
-   who → how urgent → what state → when (due first) → how long. The Task column
-   takes all free space; the rest are sized to their content so all ten columns
-   fit the modal with no horizontal scroll. */
-.nt-row-grid, .nt-head-row { display: grid; grid-template-columns: 48px minmax(260px, 1fr) 132px 88px 100px 132px 108px 108px 108px 88px; align-items: center; gap: 4px; padding: 0 16px; }
+   who → how urgent → what state → when (due first) → how long. Fixed columns hug
+   their content (2px gaps) and the Task column takes the remaining space, so all
+   ten columns fit the modal with no horizontal scroll and no dead gaps. */
+.nt-row-grid, .nt-head-row { display: grid; grid-template-columns: 48px minmax(240px, 1fr) 124px 92px 100px 116px 108px 108px 108px 92px; align-items: center; gap: 2px; padding: 0 16px; }
 .nt-head-row { position: sticky; top: 0; z-index: 2; background: var(--surface); border-bottom: 1px solid var(--sh-hair-3); padding-top: 10px; padding-bottom: 10px; }
 .nt-col { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.07em; font-weight: 600; color: var(--sh-ink-4); padding: 0 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* Headers line up with their column's content: body cells add 4px cell padding
