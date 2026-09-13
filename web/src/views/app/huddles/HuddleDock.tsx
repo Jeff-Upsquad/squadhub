@@ -8,13 +8,16 @@ import { useWorkspaceStore } from '../../../stores/workspaceStore';
 import { useHuddle, useHuddleActions, useHuddleSocketSync } from '../../../hooks/useHuddles';
 import HuddleCall from './HuddleCall';
 import ChatPanel from '../chat/ChatPanel';
+import ThreadPanel from '../chat/ThreadPanel';
 import './huddle.css';
 
-// Mounted once in MainLayout. Renders the active huddle (from huddleStore) as
-// either the full-screen call with the conversation's chat docked on the
-// right, or — when minimised — a floating pill so the call keeps running
-// while the user works elsewhere. The LiveKit Room lives in the store, so
-// flipping between the two never reconnects.
+// Mounted once in MainLayout. Renders the active SquadUp (from huddleStore)
+// as either the full-screen call with the call's own thread docked on the
+// right — a thread on the "started a SquadUp" card, so what's said during
+// the call stays with the call instead of flooding the channel — or, when
+// minimised, a floating pill so the call keeps running while the user works
+// elsewhere. The LiveKit Room lives in the store, so flipping between the
+// two never reconnects.
 
 export function huddleShareUrl(code: string): string {
   if (typeof window === 'undefined') return `/huddle/${code}`;
@@ -42,15 +45,15 @@ export default function HuddleDock() {
       const dm = dms.find((d) => d.id === session.channelId);
       const others = (dm?.participants || []).filter((p) => p.id !== me?.id);
       const names = others.map((p) => p.display_name).filter(Boolean);
-      return names.length ? `Huddle with ${names.join(', ')}` : 'Huddle';
+      return names.length ? `SquadUp with ${names.join(', ')}` : 'SquadUp';
     }
     const ch = channels.find((c) => c.id === session.channelId);
-    return ch ? `Huddle in #${ch.name}` : 'Huddle';
+    return ch ? `SquadUp in #${ch.name}` : 'SquadUp';
   }, [session, channels, dms, me?.id]);
 
   const onEnd = useCallback(async () => {
     if (!session) return;
-    if (!window.confirm('End the huddle for everyone?')) return;
+    if (!window.confirm('End the SquadUp for everyone?')) return;
     await actions.end.mutateAsync().catch(() => undefined);
     await leave();
   }, [session, actions.end, leave]);
@@ -69,6 +72,9 @@ export default function HuddleDock() {
 
   const huddle = detail?.huddle ?? session.creds.huddle.huddle;
   const canEnd = huddle.started_by === me?.id || !!me?.is_admin;
+  // The call's thread anchor. Falls back to the whole conversation only if
+  // the card somehow never got posted (e.g. a row from before threads).
+  const cardMessageId = detail?.card_message_id ?? session.creds.huddle.card_message_id ?? null;
 
   if (!expanded) {
     return (
@@ -93,7 +99,17 @@ export default function HuddleDock() {
         onToggleRail={() => setRailOpen((v) => !v)}
         rail={
           <div className="squadhub-chat flex flex-1 flex-col min-h-0 overflow-hidden">
-            <ChatPanel channelId={session.channelId} kind={session.kind} active />
+            {cardMessageId ? (
+              <ThreadPanel
+                parentId={cardMessageId}
+                channelId={session.channelId}
+                kind={session.kind}
+                embedded
+                title="SquadUp thread"
+              />
+            ) : (
+              <ChatPanel channelId={session.channelId} kind={session.kind} active />
+            )}
           </div>
         }
       />
@@ -107,7 +123,7 @@ function Pill({ title, onExpand, onLeave }: { title: string; onExpand: () => voi
   const shown = participants.slice(0, 4);
   return (
     <div className="hd-pill">
-      <button type="button" className="flex items-center gap-2 text-left" onClick={onExpand} title="Open huddle">
+      <button type="button" className="flex items-center gap-2 text-left" onClick={onExpand} title="Open SquadUp">
         <span className="hd-pill__avatars">
           {shown.map((p) => {
             let meta: { avatar_url?: string | null } = {};
@@ -127,7 +143,7 @@ function Pill({ title, onExpand, onLeave }: { title: string; onExpand: () => voi
         <span className="min-w-0">
           <span className="block max-w-[180px] truncate text-[12.5px] font-semibold">{title}</span>
           <span className="block text-[11px] text-white/60">
-            {participants.length} in huddle
+            {participants.length} in SquadUp
           </span>
         </span>
       </button>
@@ -141,7 +157,7 @@ function Pill({ title, onExpand, onLeave }: { title: string; onExpand: () => voi
           <path d={isMicrophoneEnabled ? 'M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3zM19 11a7 7 0 0 1-14 0M12 18v3' : 'M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3zM19 11a7 7 0 0 1-14 0M12 18v3M3 3l18 18'} />
         </svg>
       </button>
-      <button type="button" className="hd-ctl is-danger" title="Leave huddle" onClick={onLeave}>
+      <button type="button" className="hd-ctl is-danger" title="Leave SquadUp" onClick={onLeave}>
         <svg fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
           <path d="M16 17l5-5-5-5M21 12H9M13 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h8" />
         </svg>

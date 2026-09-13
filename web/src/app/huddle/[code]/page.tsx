@@ -51,7 +51,7 @@ export default function HuddleGuestPage() {
         setPhase('landing');
       })
       .catch((e) => {
-        setError(e?.response?.status === 404 ? 'This huddle link is not valid.' : 'Could not load the huddle.');
+        setError(e?.response?.status === 404 ? 'This SquadUp link is not valid.' : 'Could not load the SquadUp.');
         setPhase('error');
       });
   }, [code]);
@@ -94,7 +94,7 @@ export default function HuddleGuestPage() {
         }
       }
       if (!c) {
-        if (!info.allow_guests) throw new Error('Guests are not allowed in this huddle. Ask for an invite.');
+        if (!info.allow_guests) throw new Error('Guests are not allowed in this SquadUp. Ask for an invite.');
         const trimmed = name.trim();
         if (!trimmed) throw new Error('Please enter your name.');
         c = (await axios.post(`/huddles/public/${code}/join`, { name: trimmed })).data.data;
@@ -113,7 +113,7 @@ export default function HuddleGuestPage() {
       setCreds(c);
       setPhase('in-call');
     } catch (e: any) {
-      setError(e?.response?.data?.error || e?.message || 'Could not join the huddle.');
+      setError(e?.response?.data?.error || e?.message || 'Could not join the SquadUp.');
       setPhase('landing');
     }
   }, [info, accessToken, name, code]);
@@ -138,7 +138,7 @@ export default function HuddleGuestPage() {
       <div className="fixed inset-0">
         <HuddleCall
           room={roomRef.current}
-          title={info?.topic || 'SquadHub huddle'}
+          title={info?.topic || 'SquadUp'}
           subtitle={info?.starter_name ? `Started by ${info.starter_name}` : null}
           shareUrl={typeof window !== 'undefined' ? window.location.href : null}
           onLeave={leave}
@@ -154,7 +154,7 @@ export default function HuddleGuestPage() {
         <div className="mb-5 flex items-center gap-3">
           <span className="grid h-10 w-10 place-items-center rounded-xl bg-[#0a7d55] text-lg" aria-hidden>🎧</span>
           <div className="min-w-0">
-            <div className="truncate text-[15px] font-semibold">{info?.topic || 'SquadHub huddle'}</div>
+            <div className="truncate text-[15px] font-semibold">{info?.topic || 'SquadUp'}</div>
             <div className="truncate text-[12px] text-white/60">
               {phase === 'loading' && 'Loading…'}
               {phase !== 'loading' && info?.starter_name && `Started by ${info.starter_name}`}
@@ -166,7 +166,7 @@ export default function HuddleGuestPage() {
 
         {phase === 'left' && (
           <>
-            <p className="text-[13px] text-white/80">You left the huddle.</p>
+            <p className="text-[13px] text-white/80">You left the SquadUp.</p>
             <button type="button" className="mt-4 w-full rounded-lg bg-white/10 py-2 text-[13px] font-medium hover:bg-white/15" onClick={() => setPhase('landing')}>
               Rejoin
             </button>
@@ -176,7 +176,7 @@ export default function HuddleGuestPage() {
         {(phase === 'landing' || phase === 'joining') && info && (
           <>
             {ended ? (
-              <p className="text-[13px] text-white/80">This huddle has ended.</p>
+              <p className="text-[13px] text-white/80">This SquadUp has ended.</p>
             ) : (
               <>
                 <div className="mb-4 flex items-center gap-2 text-[12.5px] text-white/70">
@@ -191,7 +191,7 @@ export default function HuddleGuestPage() {
                       </span>
                     ))}
                   </span>
-                  <span>{info.participant_count ? `${info.participant_count} in the huddle` : 'Nobody in yet'}</span>
+                  <span>{info.participant_count ? `${info.participant_count} in the SquadUp` : 'Nobody in yet'}</span>
                 </div>
                 {!accessToken && (
                   <label className="block">
@@ -215,7 +215,7 @@ export default function HuddleGuestPage() {
                   disabled={phase === 'joining'}
                   className="mt-4 w-full rounded-lg bg-[#0a7d55] py-2.5 text-[14px] font-semibold text-white transition hover:opacity-90 disabled:opacity-60"
                 >
-                  {phase === 'joining' ? 'Joining…' : 'Join huddle'}
+                  {phase === 'joining' ? 'Joining…' : 'Join SquadUp'}
                 </button>
                 <p className="mt-3 text-center text-[11px] text-white/40">Your browser will ask for microphone access.</p>
               </>

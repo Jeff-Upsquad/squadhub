@@ -3,7 +3,7 @@ import { useHuddleStore } from '../../../stores/huddleStore';
 import { useAuthStore } from '../../../stores/authStore';
 import { MEETING_ACCENT } from '../meetings/meetingUtils';
 
-// The "X started a huddle" card inside a chat message. Live while the huddle
+// The "X started a SquadUp" card inside a chat message. Live while the SquadUp
 // runs (who's in it, Join), then collapses to a one-line "ended" summary.
 
 function durationLabel(startIso: string, endIso: string | null): string {
@@ -38,7 +38,7 @@ export default function HuddleCard({ huddleId }: { huddleId: string }) {
   const connecting = useHuddleStore((s) => s.connecting);
 
   if (isLoading || !detail) {
-    return <div className="mt-1 max-w-md rounded-lg border border-[#E2E8F0] bg-white px-3 py-2 text-xs text-[#94A3B8]">Loading huddle…</div>;
+    return <div className="mt-1 max-w-md rounded-lg border border-[#E2E8F0] bg-white px-3 py-2 text-xs text-[#94A3B8]">Loading SquadUp…</div>;
   }
 
   const { huddle, starter, participants } = detail;
@@ -51,7 +51,7 @@ export default function HuddleCard({ huddleId }: { huddleId: string }) {
       <div className="mt-1 inline-flex max-w-md items-center gap-2 rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] px-3 py-1.5 text-xs text-[#64748B]">
         <span aria-hidden>🎧</span>
         <span>
-          Huddle ended · lasted {durationLabel(huddle.started_at, huddle.ended_at)}
+          SquadUp ended · lasted {durationLabel(huddle.started_at, huddle.ended_at)}
           {huddle.topic ? ` · ${huddle.topic}` : ''}
         </span>
       </div>
@@ -80,10 +80,10 @@ export default function HuddleCard({ huddleId }: { huddleId: string }) {
         </span>
         <div className="min-w-0 flex-1">
           <div className="truncate text-sm font-semibold text-[#0F172B]">
-            {starterName} started a huddle{huddle.topic ? ` · ${huddle.topic}` : ''}
+            {starterName} started a SquadUp{huddle.topic ? ` · ${huddle.topic}` : ''}
           </div>
           <div className="text-xs text-[#64748B]">
-            {participants.length ? `${participants.length} in the huddle · ` : 'Nobody in yet · '}
+            {participants.length ? `${participants.length} in the SquadUp · ` : 'Nobody in yet · '}
             {durationLabel(huddle.started_at, null)}
           </div>
         </div>

@@ -4,7 +4,7 @@ import { useActiveHuddle, useHuddlesEnabled, useJoinHuddle, useStartHuddle } fro
 import { useHuddleStore } from '../../../stores/huddleStore';
 import type { ChatKind } from '../../../stores/workspaceStore';
 
-// Headset button in the chat header. Idle: starts a huddle in this
+// Headset button in the chat header. Idle: starts a SquadUp in this
 // conversation. While one is live here: a green "Join · N" pill (or "Open"
 // if you're already in it). Hidden entirely when LiveKit isn't configured.
 export default function HuddleHeaderButton({ channelId, kind }: { channelId: string; kind: ChatKind }) {
@@ -51,14 +51,14 @@ export default function HuddleHeaderButton({ channelId, kind }: { channelId: str
         onClick={onClick}
         disabled={busy}
         className="sqc-pill !border-[#22c55e]/40 !bg-[#22c55e]/10 !text-[#15803d]"
-        title={inThisOne ? 'Open the huddle' : 'Join the huddle'}
+        title={inThisOne ? 'Open the SquadUp' : 'Join the SquadUp'}
       >
         <span className="relative flex h-2 w-2">
           <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#22c55e] opacity-60" />
           <span className="relative inline-flex h-2 w-2 rounded-full bg-[#22c55e]" />
         </span>
         <span className="text-[12px] font-semibold">
-          {inThisOne ? 'In huddle' : busy ? 'Joining…' : 'Join huddle'}
+          {inThisOne ? 'In SquadUp' : busy ? 'Joining…' : 'Join SquadUp'}
           {live.participant_count ? ` · ${live.participant_count}` : ''}
         </span>
       </button>
@@ -66,9 +66,9 @@ export default function HuddleHeaderButton({ channelId, kind }: { channelId: str
   }
 
   return (
-    <button type="button" onClick={onClick} disabled={busy} className="sqc-pill" title="Start a huddle">
+    <button type="button" onClick={onClick} disabled={busy} className="sqc-pill" title="Start a SquadUp">
       {icon}
-      <span className="text-[12px]">{busy ? 'Starting…' : 'Huddle'}</span>
+      <span className="text-[12px]">{busy ? 'Starting…' : 'SquadUp'}</span>
     </button>
   );
 }

@@ -129,7 +129,7 @@ function Header({ title, subtitle }: { title: string; subtitle?: string | null }
   const state = useConnectionState();
   const label =
     state === ConnectionState.Connected
-      ? `${participants.length} in huddle`
+      ? `${participants.length} in SquadUp`
       : state === ConnectionState.Reconnecting
         ? 'Reconnecting…'
         : 'Connecting…';
@@ -191,7 +191,7 @@ function Controls({
     if (!shareUrl) return;
     try {
       await navigator.clipboard.writeText(shareUrl);
-      setNotice('Huddle link copied');
+      setNotice('SquadUp link copied');
     } catch {
       setNotice(shareUrl);
     }
@@ -213,7 +213,7 @@ function Controls({
           </CtlButton>
         )}
         {shareUrl && (
-          <CtlButton title="Copy huddle link" onClick={copyLink}>
+          <CtlButton title="Copy SquadUp link" onClick={copyLink}>
             <Icon d={ICONS.link} />
           </CtlButton>
         )}
@@ -230,7 +230,7 @@ function Controls({
       </div>
       <div className="hd-ctl-group">
         {canEnd && onEnd && (
-          <button type="button" className="hd-end" onClick={onEnd} title="End the huddle for everyone">
+          <button type="button" className="hd-end" onClick={onEnd} title="End the SquadUp for everyone">
             End for all
           </button>
         )}

@@ -57,7 +57,7 @@ async function canUseConversation(userId: string, channelId: string | null, dmId
 }
 
 export async function buildHuddleDetail(huddleId: string): Promise<HuddleDetail | null> {
-  const [{ data: huddle }, { data: parts }] = await Promise.all([
+  const [{ data: huddle }, { data: parts }, { data: card }] = await Promise.all([
     supabaseAdmin.from('huddles').select('*').eq('id', huddleId).maybeSingle(),
     supabaseAdmin
       .from('huddle_participants')
@@ -65,6 +65,14 @@ export async function buildHuddleDetail(huddleId: string): Promise<HuddleDetail 
       .eq('huddle_id', huddleId)
       .is('left_at', null)
       .order('joined_at', { ascending: true }),
+    supabaseAdmin
+      .from('messages')
+      .select('id')
+      .eq('huddle_id', huddleId)
+      .is('parent_message_id', null)
+      .order('created_at', { ascending: true })
+      .limit(1)
+      .maybeSingle(),
   ]);
   if (!huddle) return null;
   const { data: starter } = await supabaseAdmin
@@ -78,6 +86,7 @@ export async function buildHuddleDetail(huddleId: string): Promise<HuddleDetail 
     starter: (starter as any) || null,
     participants,
     participant_count: participants.length,
+    card_message_id: (card as any)?.id ?? null,
   };
 }
 
@@ -147,7 +156,7 @@ async function loadUser(userId: string): Promise<{ display_name: string; avatar_
   return { display_name: (data as any)?.display_name || 'Member', avatar_url: (data as any)?.avatar_url ?? null };
 }
 
-// Post the "X started a huddle" card into the conversation (same pattern as
+// Post the "X started a SquadUp" card into the conversation (same pattern as
 // meeting poll cards — a plain message carrying a reverse reference).
 async function postCard(req: Request, huddleId: string, senderId: string, channelId: string | null, dmId: string | null): Promise<void> {
   const { data: message } = await supabaseAdmin
@@ -156,7 +165,7 @@ async function postCard(req: Request, huddleId: string, senderId: string, channe
       channel_id: channelId,
       dm_conversation_id: dmId,
       sender_id: senderId,
-      content: '🎧 Started a huddle',
+      content: '🎧 Started a SquadUp',
       type: 'text',
       huddle_id: huddleId,
       mentions: [],
@@ -170,7 +179,7 @@ async function postCard(req: Request, huddleId: string, senderId: string, channe
 
 function requireConfigured(res: Response): boolean {
   if (isLivekitConfigured()) return true;
-  res.status(503).json({ success: false, error: 'Huddles are not configured on this server' });
+  res.status(503).json({ success: false, error: 'SquadUp is not configured on this server' });
   return false;
 }
 
@@ -185,7 +194,7 @@ router.get('/public/:code', async (req: Request, res: Response) => {
     .eq('code', req.params.code as string)
     .maybeSingle();
   if (!huddle) {
-    res.status(404).json({ success: false, error: 'Huddle not found' });
+    res.status(404).json({ success: false, error: 'SquadUp not found' });
     return;
   }
   const detail = await buildHuddleDetail((huddle as any).id);
@@ -218,15 +227,15 @@ router.post('/public/:code/join', async (req: Request, res: Response) => {
       .eq('code', req.params.code as string)
       .maybeSingle();
     if (!huddle) {
-      res.status(404).json({ success: false, error: 'Huddle not found' });
+      res.status(404).json({ success: false, error: 'SquadUp not found' });
       return;
     }
     if ((huddle as any).ended_at) {
-      res.status(410).json({ success: false, error: 'This huddle has ended' });
+      res.status(410).json({ success: false, error: 'This SquadUp has ended' });
       return;
     }
     if (!(huddle as any).allow_guests) {
-      res.status(403).json({ success: false, error: 'Guests are not allowed in this huddle' });
+      res.status(403).json({ success: false, error: 'Guests are not allowed in this SquadUp' });
       return;
     }
     const huddleId = (huddle as any).id as string;
@@ -256,7 +265,7 @@ router.post('/public/:code/leave', async (req: Request, res: Response) => {
   }
   const { data: huddle } = await supabaseAdmin.from('huddles').select('id').eq('code', req.params.code as string).maybeSingle();
   if (!huddle) {
-    res.status(404).json({ success: false, error: 'Huddle not found' });
+    res.status(404).json({ success: false, error: 'SquadUp not found' });
     return;
   }
   const huddleId = (huddle as any).id as string;
@@ -350,7 +359,7 @@ router.post('/', async (req: Request, res: Response) => {
           : supabaseAdmin.from('huddles').select('id').is('ended_at', null).eq('dm_conversation_id', dmId as string)
         ).maybeSingle();
         if (!again) {
-          res.status(500).json({ success: false, error: error?.message || 'Could not start huddle' });
+          res.status(500).json({ success: false, error: error?.message || 'Could not start SquadUp' });
           return;
         }
         huddleId = (again as any).id;
@@ -384,12 +393,12 @@ async function loadAccessible(req: Request, res: Response): Promise<{ id: string
     .eq('id', req.params.id as string)
     .maybeSingle();
   if (!huddle) {
-    res.status(404).json({ success: false, error: 'Huddle not found' });
+    res.status(404).json({ success: false, error: 'SquadUp not found' });
     return null;
   }
   const h = huddle as any;
   if (!(await canUseConversation(req.userId!, h.channel_id, h.dm_conversation_id))) {
-    res.status(403).json({ success: false, error: 'No access to this huddle' });
+    res.status(403).json({ success: false, error: 'No access to this SquadUp' });
     return null;
   }
   return h;
@@ -406,7 +415,7 @@ router.post('/:id/join', async (req: Request, res: Response) => {
   const h = await loadAccessible(req, res);
   if (!h) return;
   if (h.ended_at) {
-    res.status(410).json({ success: false, error: 'This huddle has ended' });
+    res.status(410).json({ success: false, error: 'This SquadUp has ended' });
     return;
   }
   const userId = req.userId!;
@@ -442,7 +451,7 @@ router.post('/:id/end', async (req: Request, res: Response) => {
   const h = await loadAccessible(req, res);
   if (!h) return;
   if (h.started_by !== req.userId && !(await isWorkspaceAdmin(req.userId!))) {
-    res.status(403).json({ success: false, error: 'Only the person who started the huddle can end it for everyone' });
+    res.status(403).json({ success: false, error: 'Only the person who started the SquadUp can end it for everyone' });
     return;
   }
   res.json({ success: true, data: await endHuddle(req.app.get('io'), h.id) });

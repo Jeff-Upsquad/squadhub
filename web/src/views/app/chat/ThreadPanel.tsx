@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import api from '../../../services/api';
-import { getSocket } from '../../../services/socket';
+import { getSocket, subscribeToChannelRoom } from '../../../services/socket';
 import type { Message } from '@squadhub/shared';
 import MessageBubble from './MessageBubble';
 import MessageComposer, { type MessageComposerHandle } from './MessageComposer';
@@ -14,7 +14,13 @@ interface Props {
   parentId: string;
   channelId: string;
   kind: ChatKind;
-  onClose: () => void;
+  onClose?: () => void;
+  // Fill a host container instead of docking as a resizable side panel
+  // (the SquadUp call rail). Drops the resize handle, fixed width and the
+  // close button; the host owns the panel's frame.
+  embedded?: boolean;
+  // Header title — defaults to "Thread".
+  title?: string;
 }
 
 // Slack-style thread side panel. Shows the parent message + replies fetched
@@ -27,7 +33,7 @@ function threadWidthKey(userId?: string | null) {
   return userId ? `sh-thread-width:${userId}` : 'sh-thread-width';
 }
 
-export default function ThreadPanel({ parentId, channelId, kind, onClose }: Props) {
+export default function ThreadPanel({ parentId, channelId, kind, onClose, embedded = false, title = 'Thread' }: Props) {
   const queryClient = useQueryClient();
   const queryKey = ['thread', parentId];
 
@@ -117,6 +123,10 @@ export default function ThreadPanel({ parentId, channelId, kind, onClose }: Prop
     queryFn: () => api.get(`/messages/${parentId}/thread`).then((r) => r.data),
     enabled: !!parentId,
   });
+
+  // Hold the conversation room ourselves: alongside ChatPanel this is a no-op
+  // (ref-counted), but embedded in the SquadUp rail there is no host panel.
+  useEffect(() => subscribeToChannelRoom(channelId), [channelId]);
 
   // Refresh on any new_message in this room (covers thread_reply events too).
   useEffect(() => {
@@ -222,23 +232,29 @@ export default function ThreadPanel({ parentId, channelId, kind, onClose }: Prop
 
   return (
     <div
-      className="sqc-thread-panel relative flex shrink-0 flex-col border-l border-divider bg-white dark:bg-surface"
-      style={{ width: threadWidth }}
+      className={
+        embedded
+          ? 'sqc-thread-panel sqc-thread-panel--embedded relative flex min-h-0 flex-1 flex-col bg-white dark:bg-surface'
+          : 'sqc-thread-panel relative flex shrink-0 flex-col border-l border-divider bg-white dark:bg-surface'
+      }
+      style={embedded ? undefined : { width: threadWidth }}
       {...panelHandlers}
     >
-      <div
-        className="sqc-thread-resize"
-        data-resizing={resizingThread}
-        role="separator"
-        aria-orientation="vertical"
-        aria-label="Resize thread panel"
-        title="Drag to resize — double-click to reset"
-        onPointerDown={beginThreadResize}
-        onPointerMove={moveThreadResize}
-        onPointerUp={endThreadResize}
-        onPointerCancel={endThreadResize}
-        onDoubleClick={resetThreadWidth}
-      />
+      {!embedded && (
+        <div
+          className="sqc-thread-resize"
+          data-resizing={resizingThread}
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Resize thread panel"
+          title="Drag to resize — double-click to reset"
+          onPointerDown={beginThreadResize}
+          onPointerMove={moveThreadResize}
+          onPointerUp={endThreadResize}
+          onPointerCancel={endThreadResize}
+          onDoubleClick={resetThreadWidth}
+        />
+      )}
       {dragActive && (
         <div aria-hidden className="sqc-drop-overlay">
           <div className="sqc-drop-overlay__label">Drop a file to attach</div>
@@ -247,20 +263,22 @@ export default function ThreadPanel({ parentId, channelId, kind, onClose }: Prop
       {/* Header */}
       <div className="flex items-center justify-between border-b border-divider px-4 py-[9px]">
         <div className="flex items-baseline gap-2 min-w-0">
-          <h3 className="text-[18px] font-extrabold leading-tight text-foreground">Thread</h3>
+          <h3 className="text-[18px] font-extrabold leading-tight text-foreground">{title}</h3>
           {contextLabel && (
             <span className="truncate text-[13px] text-foreground-muted">{contextLabel}</span>
           )}
         </div>
-        <button
-          onClick={onClose}
-          className="rounded-[6px] p-1.5 text-foreground-muted hover:bg-surface-alt hover:text-foreground"
-          aria-label="Close thread"
-        >
-          <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-          </svg>
-        </button>
+        {onClose && (
+          <button
+            onClick={onClose}
+            className="rounded-[6px] p-1.5 text-foreground-muted hover:bg-surface-alt hover:text-foreground"
+            aria-label="Close thread"
+          >
+            <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        )}
       </div>
 
       {/* Scroll area: parent message + divider + replies */}

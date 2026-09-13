@@ -1287,6 +1287,9 @@ export interface HuddleDetail {
   // Currently in the call (left_at IS NULL).
   participants: HuddleParticipant[];
   participant_count: number;
+  // The "started a SquadUp" card message in the conversation — the in-call
+  // chat rail is a thread on it, so call-time chatter stays with the call.
+  card_message_id: string | null;
 }
 
 // Returned by the join-token endpoints; `url` is the LiveKit server the

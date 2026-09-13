@@ -67,7 +67,7 @@ export const useHuddleStore = create<HuddleState>((set, get) => ({
     } catch (err: any) {
       console.error('[huddle] connect failed:', err);
       room.disconnect().catch(() => undefined);
-      set({ session: null, connecting: false, error: err?.message || 'Could not connect to the huddle' });
+      set({ session: null, connecting: false, error: err?.message || 'Could not connect to the SquadUp' });
       await leaveHuddleRequest(h.id);
     }
   },
