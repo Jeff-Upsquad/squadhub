@@ -471,25 +471,36 @@ export default function NewTaskRow({
         />
       </div>
 
-      {/* Due date — first of the dates: the deadline drives triage urgency */}
-      <div className="nt-cell nt-c-date">
-        <button type="button" className="nt-cellbtn" onClick={(e) => openEditor('due', e)}>
-          {t.due_date ? <span>{fmtDateCell(t.due_date)}</span> : <span className="nt-placeholder">—</span>}
-        </button>
-      </div>
-
-      {/* Start date */}
-      <div className="nt-cell nt-c-date">
-        <button type="button" className="nt-cellbtn" onClick={(e) => openEditor('start', e)}>
-          {t.start_date ? <span>{fmtDateCell(t.start_date)}</span> : <span className="nt-placeholder">—</span>}
-        </button>
-      </div>
-
-      {/* Work date */}
-      <div className="nt-cell nt-c-date">
-        <button type="button" className="nt-cellbtn" onClick={(e) => openEditor('work', e)}>
-          {t.work_date ? <span>{fmtDateCell(t.work_date)}</span> : <span className="nt-placeholder">—</span>}
-        </button>
+      {/* Dates — one stacked column instead of three: each set date gets its own
+          editable line (Due first), so rows stay narrow without losing function.
+          Empty tasks show a single "—" that sets the due date. */}
+      <div className="nt-cell nt-c-dates">
+        {!(t.due_date || t.start_date || t.work_date) ? (
+          <button type="button" className="nt-cellbtn" title="Set due date" onClick={(e) => openEditor('due', e)}>
+            <span className="nt-placeholder">—</span>
+          </button>
+        ) : (
+          <div className="nt-dates-stack">
+            {([
+              ['due', 'Due', t.due_date],
+              ['start', 'Start', t.start_date],
+              ['work', 'Work', t.work_date],
+            ] as const)
+              .filter(([, , v]) => !!v)
+              .map(([kind, label, value]) => (
+                <button
+                  key={kind}
+                  type="button"
+                  className="nt-date-line"
+                  title={`${label}: ${value ? fmtDateCell(value) : ''} — click to edit`}
+                  onClick={(e) => openEditor(kind, e)}
+                >
+                  <span className="nt-date-k">{label}</span>
+                  <span className="nt-date-v">{fmtDateCell(value)}</span>
+                </button>
+              ))}
+          </div>
+        )}
       </div>
 
       {/* Estimate — last: useful metadata once what/where/who/when is settled */}

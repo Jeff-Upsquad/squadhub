@@ -8241,11 +8241,12 @@ ol.sqc-list {
 .nt-close:hover { background: var(--sh-hair-3); color: var(--sh-ink); border-color: var(--sh-hair); }
 
 .nt-scroll { flex: 1; overflow: auto; }
-.nt-table { min-width: 1350px; }
+.nt-table { min-width: 1000px; }
 
 /* Column order (left → right) follows the triage flow: decide → what → where →
-   who → how urgent → what state → when (due first) → how long. */
-.nt-row-grid, .nt-head-row { display: grid; grid-template-columns: 52px minmax(280px, 2.6fr) 150px 122px 112px 150px 122px 122px 122px 92px; align-items: center; gap: 4px; padding: 0 16px; }
+   who → how urgent → what state → when → how long. The three dates share one
+   stacked column so the table fits the modal with no horizontal scroll. */
+.nt-row-grid, .nt-head-row { display: grid; grid-template-columns: 44px minmax(220px, 1fr) 132px 76px 100px 132px 150px 84px; align-items: center; gap: 4px; padding: 0 16px; }
 .nt-head-row { position: sticky; top: 0; z-index: 2; background: var(--surface); border-bottom: 1px solid var(--sh-hair-3); padding-top: 10px; padding-bottom: 10px; }
 .nt-col { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.07em; font-weight: 600; color: var(--sh-ink-4); }
 
@@ -8288,6 +8289,13 @@ ol.sqc-list {
 .nt-ava-more { background: var(--sh-hair-2); color: var(--sh-ink-3); }
 
 .nt-pri-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; border: 1px solid transparent; }
+
+/* Stacked Dates column: one editable line per set date (Due / Start / Work). */
+.nt-dates-stack { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.nt-date-line { display: flex; align-items: baseline; gap: 6px; width: 100%; padding: 2px 6px; border-radius: 6px; border: 1px solid transparent; background: transparent; font-family: inherit; font-size: 12px; line-height: 1.35; color: var(--sh-ink-2); cursor: pointer; white-space: nowrap; text-align: left; transition: background 0.12s, border-color 0.12s; }
+.nt-date-line:hover { background: var(--surface); border-color: var(--sh-hair); }
+.nt-date-k { flex: none; width: 28px; font-size: 9px; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; color: var(--sh-ink-4); }
+.nt-date-v { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 
 .nt-skel-wrap { padding: 12px 16px; }
 .nt-skel { height: 40px; border-radius: 9px; margin: 6px 0; background: var(--sh-hair-3); animation: hm-pulse 1.5s ease-in-out infinite; }
