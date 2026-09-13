@@ -10,7 +10,6 @@ import { logTaskActivity } from '../../utils/taskActivity';
 import {
   getWorkspaceIdForTask,
   visibleGroupIds,
-  canCreateLabels,
   isPlatformAdmin,
   getDefaultGroupId,
 } from '../../utils/labels';
@@ -93,7 +92,12 @@ router.get('/labels', async (req: Request, res: Response) => {
       labels: labelsByGroup.get(g.id) || [],
     }));
 
-    const can_create = await canCreateLabels(req.userId!, workspaceId, { isAdmin });
+    // Picker buttons (create / rename / recolor) are manager-only: the list
+    // share level must be manager. Platform admins bypass via the manager
+    // level that checkResourceAccess grants workspace admins/creators, plus
+    // the explicit isAdmin fallback below.
+    const can_create =
+      (level ? meetsAccessLevel(level, 'manager') : false) || isAdmin;
     const data: LabelPickerData = { groups: pickerGroups, can_create };
     res.json({ success: true, data });
   } catch (err) {
@@ -102,7 +106,7 @@ router.get('/labels', async (req: Request, res: Response) => {
   }
 });
 
-// POST /pm/labels — inline-create a label (gated by can_create).
+// POST /pm/labels — inline-create a label (managers only).
 // Non-admins always create into the default "General" group; admins may target
 // any group in the task's workspace.
 const createSchema = z.object({
@@ -133,8 +137,8 @@ router.post('/labels', async (req: Request, res: Response) => {
     }
 
     const isAdmin = await isPlatformAdmin(req.userId!);
-    if (!(await canCreateLabels(req.userId!, workspaceId, { isAdmin }))) {
-      res.status(403).json({ success: false, error: 'You do not have permission to create labels' });
+    if (!meetsAccessLevel(level, 'manager') && !isAdmin) {
+      res.status(403).json({ success: false, error: 'Only managers can create labels' });
       return;
     }
 
@@ -354,9 +358,8 @@ router.post('/label-requests', async (req: Request, res: Response) => {
   }
 });
 
-// PUT /pm/labels/:id — update a label's name/color (gated by can_create).
-// Lets members with label-create permission recolor labels inline from the
-// task picker without needing the admin panel. task_id anchors the workspace.
+// PUT /pm/labels/:id — update a label's name/color (managers only).
+// task_id anchors the workspace.
 const updateSchema = z.object({
   task_id: z.string().uuid(),
   name: z.string().trim().min(1).max(60).optional(),
@@ -386,8 +389,8 @@ router.put('/labels/:id', async (req: Request, res: Response) => {
       return;
     }
     const isAdmin = await isPlatformAdmin(req.userId!);
-    if (!(await canCreateLabels(req.userId!, workspaceId, { isAdmin }))) {
-      res.status(403).json({ success: false, error: 'You do not have permission to edit labels' });
+    if (!meetsAccessLevel(level, 'manager') && !isAdmin) {
+      res.status(403).json({ success: false, error: 'Only managers can edit labels' });
       return;
     }
     const patch: Record<string, unknown> = {};
