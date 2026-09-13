@@ -158,13 +158,14 @@ export default function NewTasksPanel() {
             <div className="nt-head-row">
               <div className="nt-col nt-c-review">Review</div>
               <div className="nt-col nt-c-task">Task</div>
+              <div className="nt-col nt-c-list">List</div>
               <div className="nt-col nt-c-assignee">Assignee</div>
               <div className="nt-col nt-c-priority">Priority</div>
               <div className="nt-col nt-c-status">Status</div>
-              <div className="nt-col nt-c-estimate">Estimate</div>
-              <div className="nt-col nt-c-date">Work date</div>
-              <div className="nt-col nt-c-date">Start date</div>
               <div className="nt-col nt-c-date">Due date</div>
+              <div className="nt-col nt-c-date">Start date</div>
+              <div className="nt-col nt-c-date">Work date</div>
+              <div className="nt-col nt-c-estimate">Estimate</div>
             </div>
 
             {isLoading ? (
@@ -189,9 +190,9 @@ export default function NewTasksPanel() {
               ))
             ) : (
               grouped.map((g) => (
-                <div key={g.key}>
+                <div key={g.key} className="nt-group">
                   <div className="nt-head-row" style={{ background: 'var(--sh-hair-3)', fontWeight: 650 }}>
-                    <div className="nt-col nt-c-task">
+                    <div className="nt-col nt-c-task" style={{ gridColumn: '1 / -1' }}>
                       {g.color && (
                         <span aria-hidden="true" style={{ display: 'inline-block', width: 8, height: 8, borderRadius: 999, background: g.color, marginRight: 6, verticalAlign: '1px' }} />
                       )}

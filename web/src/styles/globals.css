@@ -8238,7 +8238,7 @@ ol.sqc-list {
 .nt-overlay { position: fixed; inset: 0; z-index: 85; display: flex; align-items: center; justify-content: center; padding: 28px; opacity: 0; transition: opacity 0.22s ease; }
 .nt-overlay[data-mounted] { opacity: 1; }
 .nt-backdrop { position: absolute; inset: 0; background: rgba(10, 10, 10, 0.34); backdrop-filter: blur(2px); }
-.nt-modal { position: relative; z-index: 1; display: flex; flex-direction: column; width: min(1180px, 100%); max-height: min(88vh, 920px); background: var(--surface); border: 1px solid var(--sh-hair); border-radius: 18px; box-shadow: 0 1px 2px rgba(10, 10, 10, 0.05), 0 18px 40px rgba(10, 10, 10, 0.12), 0 40px 90px rgba(10, 10, 10, 0.18); overflow: hidden; font-family: 'Inter', system-ui, sans-serif; color: var(--sh-ink); }
+.nt-modal { position: relative; z-index: 1; display: flex; flex-direction: column; width: min(1340px, 100%); max-height: min(88vh, 920px); background: var(--surface); border: 1px solid var(--sh-hair); border-radius: 18px; box-shadow: 0 1px 2px rgba(10, 10, 10, 0.05), 0 18px 40px rgba(10, 10, 10, 0.12), 0 40px 90px rgba(10, 10, 10, 0.18); overflow: hidden; font-family: 'Inter', system-ui, sans-serif; color: var(--sh-ink); }
 .dark .nt-modal { box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04), 0 18px 40px rgba(0, 0, 0, 0.45), 0 40px 100px rgba(0, 0, 0, 0.6); }
 
 .nt-head { display: flex; align-items: flex-start; gap: 12px; padding: 18px 20px 14px; border-bottom: 1px solid var(--sh-hair-3); flex: none; }
@@ -8254,12 +8254,37 @@ ol.sqc-list {
 .nt-close { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 8px; border: 1px solid transparent; background: transparent; color: var(--sh-ink-3); cursor: pointer; transition: background 0.13s, color 0.13s, border-color 0.13s; }
 .nt-close:hover { background: var(--sh-hair-3); color: var(--sh-ink); border-color: var(--sh-hair); }
 
-.nt-scroll { flex: 1; overflow: auto; }
-.nt-table { min-width: 1140px; }
+/* Group-by pill + menu reuse the Home "hm" classnames, but those rules are
+   scoped to .hm-home / .day-planner-view while this modal portals to <body> —
+   without this the menu renders unstyled with its options run together. */
+.nt-modal .hm-pill { display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 9px; border-radius: 7px; border: 1px solid var(--sh-hair); background: transparent; font-family: inherit; font-size: 11.5px; font-weight: 500; color: color-mix(in srgb, var(--sh-ink) 65%, transparent); cursor: pointer; transition: background 0.13s ease, color 0.13s ease, border-color 0.13s ease; white-space: nowrap; }
+.nt-modal .hm-pill:hover { background: var(--sh-hair-3); color: var(--sh-ink); border-color: var(--sh-hair-2); }
+.nt-modal .hm-pill .dim { color: var(--sh-ink-4); }
+.nt-modal .hm-pill svg { opacity: 0.7; }
+.nt-modal .hm-menu { position: absolute; top: calc(100% + 6px); right: 0; min-width: 168px; z-index: 40; background: var(--surface); border: 1px solid var(--sh-hair); border-radius: 10px; box-shadow: 0 10px 28px rgba(10, 10, 10, 0.10); padding: 4px; }
+.nt-modal .hm-menu-item { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; padding: 6px 10px; border-radius: 7px; border: none; background: transparent; font-family: inherit; font-size: 12.5px; font-weight: 450; color: color-mix(in srgb, var(--sh-ink) 65%, transparent); text-align: left; cursor: pointer; white-space: nowrap; }
+.nt-modal .hm-menu-item:hover { background: var(--sh-hair-3); color: var(--sh-ink); }
+.nt-modal .hm-menu-item[data-active="true"] { color: var(--sh-ink); font-weight: 600; }
 
-.nt-row-grid, .nt-head-row { display: grid; grid-template-columns: 64px minmax(300px, 3fr) 132px 120px 168px 100px 124px 124px 124px; align-items: center; gap: 4px; padding: 0 16px; }
+.nt-scroll { flex: 1; overflow: auto; }
+
+/* One shared track set for the whole table: Task is fixed-width, the eight
+   content columns are content-sized (auto). Every row below renders as a
+   subgrid of these tracks, so each column sizes ONCE from the entire column's
+   content — rows can never drift out of alignment. */
+.nt-table { display: grid; grid-template-columns: 48px 340px repeat(8, auto); column-gap: 2px; padding: 0 16px; min-width: 1000px; }
+.nt-head-row, .nt-row, .nt-row-grid { display: grid; grid-template-columns: subgrid; grid-column: 1 / -1; align-items: center; }
+/* Group-by wrapper must not create a box — its header + rows join the table grid. */
+.nt-group { display: contents; }
+.nt-skel-wrap, .nt-empty { grid-column: 1 / -1; }
 .nt-head-row { position: sticky; top: 0; z-index: 2; background: var(--surface); border-bottom: 1px solid var(--sh-hair-3); padding-top: 10px; padding-bottom: 10px; }
-.nt-col { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.07em; font-weight: 600; color: var(--sh-ink-4); }
+.nt-col { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.07em; font-weight: 600; color: var(--sh-ink-4); padding: 0 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+/* Headers line up with their column's content: body cells add 4px cell padding
+   + 8px button padding before the text, so headers carry the same 12px inset.
+   Review is centered like its checkbox; Task aligns to its content block start
+   (the focus star + title stack). */
+.nt-head-row .nt-c-review { padding: 0; }
+.nt-head-row .nt-c-task { padding-left: 4px; }
 
 .nt-row { border-bottom: 1px solid var(--sh-hair-3); transition: opacity 0.42s ease, transform 0.42s cubic-bezier(0.4, 0, 0.7, 0.1); }
 .nt-row:hover .nt-row-grid { background: var(--sh-hair-3); }
@@ -8290,7 +8315,7 @@ ol.sqc-list {
 .nt-estimate-input:focus { border-color: var(--sh-ink-3); }
 .nt-estimate-hint { font-size: 10px; color: var(--sh-ink-4); margin-top: 6px; }
 
-.nt-cellbtn { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; padding: 4px 8px; border-radius: 7px; border: 1px solid transparent; background: transparent; color: var(--sh-ink-2); font-size: 12.5px; cursor: pointer; transition: background 0.12s, border-color 0.12s, box-shadow 0.12s; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.nt-cellbtn { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; padding: 4px 8px; border-radius: 7px; border: 1px solid transparent; background: transparent; color: var(--sh-ink-2); font-size: 12px; cursor: pointer; transition: background 0.12s, border-color 0.12s, box-shadow 0.12s; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .nt-cellbtn:hover { background: var(--surface); border-color: var(--sh-hair); box-shadow: var(--sh-shadow-sm); }
 .nt-placeholder { color: var(--sh-ink-4); }
 
