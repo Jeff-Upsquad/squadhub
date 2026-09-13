@@ -7,20 +7,16 @@ import { useParallelTimers } from '../../../hooks/useParallelTimers';
 import { usePMStore, todayKey, effectiveFocusBucket, type FocusBucket } from '../../../stores/pmStore';
 import { avatarColor, initialOf, formatWhen } from '../pm/taskHelpers';
 import { formatTracked, toLocalDateKey } from '../../../lib/formatDuration';
-import { groupTasks, isFutureDay, isTaskFocused, collapseGroupedTasks, isGroupedRow, type GroupBy } from '../../../lib/taskGrouping';
+import { groupTasks, isFutureDay, isTaskFocused, collapseGroupedTasks, isGroupedRow, GROUP_BY_OPTIONS } from '../../../lib/taskGrouping';
 import GroupedTaskRow from './GroupedTaskRow';
 import DayCalendar from '../day-planner/DayCalendar';
 import { planDateKey } from '../../../hooks/useDayPlanner';
 import { useIsMobile } from '../../../hooks/useIsMobile';
 
-const GROUP_OPTIONS: { value: GroupBy; label: string }[] = [
-  { value: 'none', label: 'None' },
-  { value: 'priority', label: 'Priority' },
-  { value: 'due_date', label: 'Due date' },
-  { value: 'status', label: 'Status' },
-  { value: 'space', label: 'Space' },
-  { value: 'list', label: 'List' },
-];
+// Full group-by set shared with Home tabs + Space/Folder views (None, Work
+// date, Due date, Priority, Status, Space, Folder, List) so the Focus list
+// groups exactly like every other surface.
+const GROUP_OPTIONS = GROUP_BY_OPTIONS;
 
 // Hold rows that are mid-completion-animation in the list until their slide-out
 // finishes. The My Home task lists come from a query that DROPS done tasks, and

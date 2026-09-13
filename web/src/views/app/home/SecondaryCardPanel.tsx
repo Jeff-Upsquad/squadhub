@@ -1,19 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { usePMStore } from '../../../stores/pmStore';
-import { groupTasks, type GroupBy } from '../../../lib/taskGrouping';
+import { groupTasks, GROUP_BY_OPTIONS } from '../../../lib/taskGrouping';
 import type { SecondaryCardItem } from '../../../hooks/useSecondaryCards';
 import type { SecondaryCardConfig } from './SecondaryCardRow';
 
-const GROUP_OPTIONS: { value: GroupBy; label: string }[] = [
-  { value: 'none', label: 'None' },
-  { value: 'priority', label: 'Priority' },
-  { value: 'due_date', label: 'Due date' },
-  { value: 'work_date', label: 'Work date' },
-  { value: 'status', label: 'Status' },
-  { value: 'space', label: 'Space' },
-  { value: 'folder', label: 'Folder' },
-  { value: 'list', label: 'List' },
-];
+// Shared full group-by set (None, Work date, Due date, Priority, Status,
+// Space, Folder, List) — same options as the Focus list, Home tabs and
+// Space/Folder views.
+const GROUP_OPTIONS = GROUP_BY_OPTIONS;
 
 // Slide-in list opened when a Home "disappearing card" is clicked. Mirrors
 // DashboardListPanel's mount / Escape / backdrop behaviour and reuses its
