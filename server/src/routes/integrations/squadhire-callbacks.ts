@@ -78,7 +78,7 @@ const talentProvisionSchema = z
 
 const groupMeetNoticeSchema = z
   .object({
-    kind: z.enum(['invite', 'rescheduled', 'cancelled']),
+    kind: z.enum(['invite', 'rescheduled', 'cancelled', 'join']),
     title: z.string().min(1),
     body: z.string().optional().default(''),
     card_id: z.string().uuid(),
@@ -623,7 +623,13 @@ router.post(
         ? 'group_meet_invite'
         : body.kind === 'rescheduled'
           ? 'group_meet_rescheduled'
-          : 'group_meet_cancelled';
+          : body.kind === 'join'
+            ? 'group_meet_join'
+            : 'group_meet_cancelled';
+      const needsRsvp = body.kind === 'invite' || body.kind === 'rescheduled';
+      const route = body.kind === 'join'
+        ? `/group-meet/${body.meeting_id}?action=join`
+        : `/group-meet/${body.meeting_id}`;
       const emails = [...new Set(body.talents.map((t) => t.email.trim().toLowerCase()).filter(Boolean))];
       const { data: users, error: userError } = await supabaseAdmin
         .from('users')
@@ -645,11 +651,11 @@ router.post(
           title: body.title,
           body: body.body || null,
           metadata: {
-            route: `/group-meet/${body.meeting_id}`,
+            route,
             meeting_id: body.meeting_id,
             card_id: body.card_id,
-            action_required: body.kind === 'cancelled' ? 'false' : 'true',
-            notification_kind: body.kind === 'cancelled' ? 'group_meet' : 'group_meet',
+            action_required: needsRsvp ? 'true' : 'false',
+            notification_kind: 'group_meet',
           },
         }];
       });
