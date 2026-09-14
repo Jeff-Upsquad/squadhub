@@ -76,6 +76,20 @@ const talentProvisionSchema = z
   })
   .strict();
 
+const groupMeetNoticeSchema = z
+  .object({
+    kind: z.enum(['invite', 'rescheduled', 'cancelled']),
+    title: z.string().min(1),
+    body: z.string().optional().default(''),
+    card_id: z.string().uuid(),
+    meeting_id: z.string().uuid(),
+    talents: z.array(z.object({
+      talent_user_id: z.string().uuid(),
+      email: z.string().email(),
+    })).min(1),
+  })
+  .strict();
+
 // Assignment-time partner provisioning. The signed caller supplies identity,
 // but the local assigned card is the entitlement: a valid signature alone can
 // never create a partner who is not actually assigned on this SquadHub card.
@@ -591,6 +605,70 @@ router.post(
         return;
       }
       console.error('[squadhire-callback grant-deletes] error:', err);
+      res.status(500).json({ success: false, error: err?.message || 'Internal server error' });
+    }
+  },
+);
+
+// SquadHire Group Meet invite / reschedule / cancel — write an inbox row so
+// the partner-app poller can FCM it. Talent using Discover never sees the
+// retired SquadHire talent-app push channel.
+router.post(
+  '/talent/group-meet-notice',
+  verifySquadhireCallbackSecret,
+  async (req: Request, res: Response) => {
+    try {
+      const body = groupMeetNoticeSchema.parse(req.body);
+      const type = body.kind === 'invite'
+        ? 'group_meet_invite'
+        : body.kind === 'rescheduled'
+          ? 'group_meet_rescheduled'
+          : 'group_meet_cancelled';
+      const emails = [...new Set(body.talents.map((t) => t.email.trim().toLowerCase()).filter(Boolean))];
+      const { data: users, error: userError } = await supabaseAdmin
+        .from('users')
+        .select('id, email')
+        .in('email', emails);
+      if (userError) {
+        res.status(500).json({ success: false, error: userError.message });
+        return;
+      }
+      const byEmail = new Map((users ?? []).map((u) => [String(u.email || '').toLowerCase(), u.id as string]));
+      const rows = emails.flatMap((email) => {
+        const userId = byEmail.get(email);
+        if (!userId) return [];
+        return [{
+          user_id: userId,
+          type,
+          reference_id: body.meeting_id,
+          reference_type: 'group_meet',
+          title: body.title,
+          body: body.body || null,
+          metadata: {
+            route: `/group-meet/${body.meeting_id}`,
+            meeting_id: body.meeting_id,
+            card_id: body.card_id,
+            action_required: body.kind === 'cancelled' ? 'false' : 'true',
+            notification_kind: body.kind === 'cancelled' ? 'group_meet' : 'group_meet',
+          },
+        }];
+      });
+      if (rows.length === 0) {
+        res.json({ success: true, data: { inserted: 0 } });
+        return;
+      }
+      const { error: insertError } = await supabaseAdmin.from('notifications').insert(rows);
+      if (insertError) {
+        res.status(500).json({ success: false, error: insertError.message });
+        return;
+      }
+      res.json({ success: true, data: { inserted: rows.length } });
+    } catch (err: any) {
+      if (err instanceof z.ZodError) {
+        res.status(400).json({ success: false, error: err.errors[0].message });
+        return;
+      }
+      console.error('[squadhire-callback talent/group-meet-notice] error:', err);
       res.status(500).json({ success: false, error: err?.message || 'Internal server error' });
     }
   },
