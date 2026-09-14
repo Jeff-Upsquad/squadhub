@@ -14,6 +14,7 @@ import { useIsClient, useIsPartner } from '../hooks/useUserType';
 import { useAuthStore } from '../stores/authStore';
 import { useThemeStore } from '../stores/themeStore';
 import { MAvatar, MGroupHead, MIcon, MRow } from './MobileKit';
+import AppVersionsFooter from './AppVersions';
 
 export type MoreTarget =
   | { kind: 'view'; view: HomeView; title: string }
@@ -119,6 +120,10 @@ export default function MobileMore({
           ))}
         </>
       )}
+
+      <div style={{ marginTop: 18, borderTop: '1px solid var(--m-hair-3)' }}>
+        <AppVersionsFooter tone="light" />
+      </div>
     </div>
   );
 }
@@ -155,6 +160,9 @@ export function MobileSettings() {
           {theme === o.value && <span className="msh-row-chev" style={{ color: 'var(--m-accent)' }}>{MIcon.tick}</span>}
         </button>
       ))}
+      <div style={{ marginTop: 18, borderTop: '1px solid var(--m-hair-3)' }}>
+        <AppVersionsFooter tone="light" />
+      </div>
     </div>
   );
 }

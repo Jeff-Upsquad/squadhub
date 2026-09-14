@@ -36,6 +36,7 @@ import MobileMore, { MobileSettings, type MoreTarget } from './MobileMore';
 import MobileCreateSheet from './MobileCreateSheet';
 import MobileTour, { hasSeenMobileTour } from './MobileTour';
 import { MAvatar, MIcon, MRow } from './MobileKit';
+import AppVersionsFooter from './AppVersions';
 import type { OpenTarget } from './useMobileSpaces';
 import api from '../services/api';
 import TalentShell from './TalentShell';
@@ -601,6 +602,7 @@ function AccountDrawer({
 
         <div className="msh-drawer-foot">
           <MRow icon={MIcon.logout} title="Log out" danger onClick={onLogout} trailing={<span />} />
+          <AppVersionsFooter tone="dark" />
         </div>
       </aside>
     </>
