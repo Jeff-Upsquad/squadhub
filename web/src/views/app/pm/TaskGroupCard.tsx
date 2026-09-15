@@ -85,13 +85,15 @@ export default function TaskGroupCard({
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
     >
-      {/* Group header — focus renders the editorial "agenda" banner;
-          every other group keeps the compact table-style header. */}
+      {/* Group header — focus renders the editorial "agenda" banner plus the
+          same column headings as every other group, so Priority / Assignee /
+          Work date / Due line up with the rows below. */}
       {isFocus ? (
-        <div
-          className="lv-card-head lv-focus-head"
-          onClick={toggleCollapse}
-        >
+        <>
+          <div
+            className="lv-card-head lv-focus-head"
+            onClick={toggleCollapse}
+          >
           <div className="lv-focus-lead">
             <span className="gh-chevron">
               <svg
@@ -144,7 +146,21 @@ export default function TaskGroupCard({
               <span className="lv-focus-ring-label">{pct}%</span>
             </span>
           </div>
-        </div>
+          </div>
+          {!isCollapsed && (
+            <div
+              className="lv-card-head lv-focus-cols"
+              aria-hidden="true"
+            >
+              <div className="gh-left" />
+              <span className="gh-col">Priority</span>
+              <span className="gh-col">Assignee</span>
+              <span className="gh-col">Work date</span>
+              <span className="gh-col">Due</span>
+              <span />
+            </div>
+          )}
+        </>
       ) : (
         <div
           className="lv-card-head"

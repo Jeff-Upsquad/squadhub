@@ -3390,6 +3390,14 @@ body.sb-resizing { user-select: none; -webkit-user-select: none; cursor: col-res
 /* Planner rows — drop the vertical cell dividers for an airier list */
 .lv-card.lv-card--focus .lv-cell { border-left-color: transparent !important; }
 
+/* Column headings under the Focus Today banner — same grid as every other
+   group header so Priority / Assignee / Work date / Due align with rows. */
+.lv-card-head.lv-focus-cols {
+  cursor: default;
+  min-height: 38px;
+  background: var(--surface);
+}
+
 /* Narrow viewports — hide the "x of y done" label, keep the ring */
 @media (max-width: 640px) {
   .lv-focus-done { display: none; }
