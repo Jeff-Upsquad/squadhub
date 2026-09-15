@@ -51,6 +51,7 @@ export default function AdminCrmAccess() {
   const [resetTarget, setResetTarget] = useState<GrantedRow | null>(null);
   const [resetResult, setResetResult] = useState<{ email: string; temp_password: string } | null>(null);
   const [copied, setCopied] = useState(false);
+  const [permanentTarget, setPermanentTarget] = useState<GrantedRow | null>(null);
 
   const { data: wsRes } = useQuery({
     queryKey: ['crm-access-workspaces', app],
@@ -82,6 +83,10 @@ export default function AdminCrmAccess() {
     enabled: !!workspaceId,
   });
   const members: GrantedRow[] = usersRes?.data?.members || [];
+  // Soft-removed grants (enabled=false) are kept for reinstate and shown in
+  // the "Removed users" section below instead of the active access list.
+  const activeMembers = members.filter((m) => m.access.enabled !== false);
+  const removedMembers = members.filter((m) => m.access.enabled === false);
 
   const { data: candRes } = useQuery({
     queryKey: ['crm-access-candidates', app, workspaceId, search],
@@ -107,8 +112,9 @@ export default function AdminCrmAccess() {
   });
   const directory: UserLite[] = dirRes?.data || [];
   // Emails already granted, so the directory can show "Added" instead of "Add".
+  // Only active grants count — removed users can be reinstated below.
   const grantedEmails = new Set(
-    members.map((m) => (m.user?.email || '').toLowerCase()).filter(Boolean),
+    activeMembers.map((m) => (m.user?.email || '').toLowerCase()).filter(Boolean),
   );
 
   const invalidate = () => {
@@ -156,6 +162,23 @@ export default function AdminCrmAccess() {
     mutationFn: (user_id: string) =>
       api.delete('/admin/crm-access/grant', { data: { user_id, workspace_id: workspaceId, app } }),
     onSuccess: invalidate,
+  });
+
+  const reinstateUser = useMutation({
+    mutationFn: (user_id: string) =>
+      api.patch('/admin/crm-access/grant', { user_id, workspace_id: workspaceId, app, enabled: true }),
+    onSuccess: invalidate,
+  });
+
+  const permanentDeleteUser = useMutation({
+    mutationFn: (user_id: string) =>
+      api.delete('/admin/crm-access/grant?permanent=true', {
+        data: { user_id, workspace_id: workspaceId, app },
+      }),
+    onSuccess: () => {
+      setPermanentTarget(null);
+      invalidate();
+    },
   });
 
   const setModuleLevel = useMutation({
@@ -272,7 +295,7 @@ export default function AdminCrmAccess() {
       <div className="overflow-hidden rounded-lg border border-divider bg-surface">
         <div className="flex items-center justify-between border-b border-divider px-4 py-3">
           <h3 className="text-sm font-semibold text-foreground">
-            People with CRM access {members.length > 0 && <span className="text-foreground-dim">({members.length})</span>}
+            People with CRM access {activeMembers.length > 0 && <span className="text-foreground-dim">({activeMembers.length})</span>}
           </h3>
           <button
             onClick={() => {
@@ -419,7 +442,7 @@ export default function AdminCrmAccess() {
         {/* Granted list */}
         {isLoading ? (
           <p className="px-4 py-8 text-center text-sm text-foreground-muted">Loading…</p>
-        ) : members.length === 0 ? (
+        ) : activeMembers.length === 0 ? (
           <p className="px-4 py-10 text-center text-sm text-foreground-muted">
             No one has CRM access yet. Click <span className="font-medium text-foreground">+ Add user</span> to grant
             access.
@@ -434,7 +457,7 @@ export default function AdminCrmAccess() {
               </tr>
             </thead>
             <tbody>
-              {members.map((m) => {
+              {activeMembers.map((m) => {
                 const isOpen = expanded === m.user_id;
                 return (
                   <Fragment key={m.user_id}>
@@ -519,6 +542,74 @@ export default function AdminCrmAccess() {
           </table>
         )}
       </div>
+
+      {/* Removed users — soft-removed grants kept for one-click reinstate */}
+      {removedMembers.length > 0 && (
+        <div className="mt-4 overflow-hidden rounded-lg border border-divider bg-surface">
+          <div className="border-b border-divider px-4 py-3">
+            <h3 className="text-sm font-semibold text-foreground">
+              Removed users <span className="text-foreground-dim">({removedMembers.length})</span>
+            </h3>
+            <p className="mt-0.5 text-xs text-foreground-muted">
+              Removed people lose CRM access immediately. Reinstate restores their previous role + module permissions.
+            </p>
+          </div>
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-divider text-left text-xs text-foreground-muted">
+                <th className="px-4 py-2.5 font-medium">User</th>
+                <th className="px-4 py-2.5 font-medium">Last role</th>
+                <th className="px-4 py-2.5 font-medium" />
+              </tr>
+            </thead>
+            <tbody>
+              {removedMembers.map((m) => (
+                <tr key={m.user_id} className="border-b border-divider last:border-0">
+                  <td className="px-4 py-2.5">
+                    <div className="font-medium text-foreground">{m.user?.display_name || '—'}</div>
+                    <div className="text-xs text-foreground-muted">{m.user?.email || m.user_id}</div>
+                  </td>
+                  <td className="px-4 py-2.5 text-xs capitalize text-foreground-muted">{m.access.role}</td>
+                  <td className="px-4 py-2.5 text-right">
+                    <button
+                      onClick={() => reinstateUser.mutate(m.user_id)}
+                      disabled={reinstateUser.isPending}
+                      className="mr-3 text-xs font-medium text-accent hover:underline disabled:opacity-50"
+                    >
+                      Reinstate
+                    </button>
+                    <button
+                      onClick={() => setPermanentTarget(m)}
+                      className="text-xs font-medium text-red-500 hover:underline"
+                    >
+                      Delete forever
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Confirm permanent delete */}
+      <ConfirmDialog
+        open={!!permanentTarget}
+        title="Delete forever?"
+        description={
+          permanentTarget
+            ? `This permanently deletes ${permanentTarget.user?.email || 'this user'} from the CRM access list, including their per-module permissions. They can still be re-added later, but will start from scratch.`
+            : ''
+        }
+        confirmLabel="Delete forever"
+        variant="danger"
+        isPending={permanentDeleteUser.isPending}
+        pendingLabel="Deleting…"
+        onCancel={() => setPermanentTarget(null)}
+        onConfirm={() => {
+          if (permanentTarget) permanentDeleteUser.mutate(permanentTarget.user_id);
+        }}
+      />
 
       {/* Confirm password reset */}
       <ConfirmDialog

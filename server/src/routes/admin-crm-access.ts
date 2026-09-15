@@ -460,8 +460,11 @@ router.put('/module-level', async (req: Request, res: Response) => {
   }
 });
 
-// DELETE /admin/crm-access/grant — remove a user from the CRM access list
-// (deletes the grant + any per-module overrides).
+// DELETE /admin/crm-access/grant — remove a user from the CRM access list.
+// Default is a SOFT remove (enabled=false) so the grant + per-module
+// overrides are preserved and the user shows up under "Removed users" for
+// one-click reinstate. Pass ?permanent=true to hard-delete the grant +
+// overrides forever.
 const deleteGrantSchema = z.object({
   user_id: z.string().uuid(),
   workspace_id: z.string().uuid(),
@@ -470,15 +473,30 @@ const deleteGrantSchema = z.object({
 router.delete('/grant', async (req: Request, res: Response) => {
   try {
     const body = deleteGrantSchema.parse(req.body);
-    await supabaseAdmin
-      .from('crm_module_access')
-      .delete()
-      .eq('user_id', body.user_id)
-      .eq('workspace_id', body.workspace_id)
-      .eq('app', body.app);
+    const permanent = req.query.permanent === 'true';
+    if (permanent) {
+      await supabaseAdmin
+        .from('crm_module_access')
+        .delete()
+        .eq('user_id', body.user_id)
+        .eq('workspace_id', body.workspace_id)
+        .eq('app', body.app);
+      const { error } = await supabaseAdmin
+        .from('crm_app_access')
+        .delete()
+        .eq('user_id', body.user_id)
+        .eq('workspace_id', body.workspace_id)
+        .eq('app', body.app);
+      if (error) {
+        res.status(500).json({ success: false, error: error.message });
+        return;
+      }
+      res.json({ success: true, permanent: true });
+      return;
+    }
     const { error } = await supabaseAdmin
       .from('crm_app_access')
-      .delete()
+      .update({ enabled: false })
       .eq('user_id', body.user_id)
       .eq('workspace_id', body.workspace_id)
       .eq('app', body.app);
@@ -486,7 +504,7 @@ router.delete('/grant', async (req: Request, res: Response) => {
       res.status(500).json({ success: false, error: error.message });
       return;
     }
-    res.json({ success: true });
+    res.json({ success: true, permanent: false });
   } catch (err) {
     if (err instanceof z.ZodError) {
       res.status(400).json({ success: false, error: err.errors[0].message });
