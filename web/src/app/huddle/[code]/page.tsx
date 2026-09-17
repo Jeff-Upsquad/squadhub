@@ -3,11 +3,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams } from 'next/navigation';
 import axios from 'axios';
-import { Room } from 'livekit-client';
+import type { Room } from 'livekit-client';
 import type { HuddleJoinCredentials } from '@squadhub/shared';
 import { useAuthStore } from '../../../stores/authStore';
 import api from '../../../services/api';
 import HuddleCall from '../../../views/app/huddles/HuddleCall';
+import { createHuddleRoom } from '../../../views/app/huddles/devices';
 import '../../../views/app/huddles/huddle.css';
 
 // Public share-link landing: /huddle/<code>. Anyone with the link can join
@@ -100,7 +101,7 @@ export default function HuddleGuestPage() {
         c = (await axios.post(`/huddles/public/${code}/join`, { name: trimmed })).data.data;
       }
       if (!c) throw new Error('Could not join.');
-      const room = new Room({ adaptiveStream: true, dynacast: true });
+      const room = createHuddleRoom();
       room.on('disconnected', () => {
         if (roomRef.current === room) {
           roomRef.current = null;

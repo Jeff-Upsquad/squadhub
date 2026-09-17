@@ -1,8 +1,9 @@
 import { create } from 'zustand';
-import { Room, RoomEvent } from 'livekit-client';
+import { RoomEvent, type Room } from 'livekit-client';
 import type { HuddleJoinCredentials } from '@squadhub/shared';
 import type { ChatKind } from './workspaceStore';
 import { leaveHuddleRequest } from '../hooks/useHuddles';
+import { createHuddleRoom } from '../views/app/huddles/devices';
 
 // The one call the user can be in at a time. Owns the LiveKit `Room` so the
 // media connection survives navigation — HuddleDock (mounted once in
@@ -42,7 +43,8 @@ export const useHuddleStore = create<HuddleState>((set, get) => ({
     }
     if (prev) await get().leave();
 
-    const room = new Room({ adaptiveStream: true, dynacast: true });
+    // Built with the user's remembered mic/camera/speaker as defaults.
+    const room = createHuddleRoom();
     const h = creds.huddle.huddle;
     const session: HuddleSession = {
       huddleId: h.id,

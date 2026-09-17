@@ -11,6 +11,7 @@
 | Routes `/huddles/*` (start/join/leave/end, public share link) | `server/src/routes/huddles.ts` |
 | Presence backstop sweeper (30s) | `server/src/cron/huddle-cron.ts` — reconciles DB rows against LiveKit's participant list, ends empty huddles |
 | Call UI (tiles + controls) | `web/src/views/app/huddles/HuddleCall.tsx` + `huddle.css` |
+| Mic / camera / speaker picker (Meet-style chevrons) | `web/src/views/app/huddles/DeviceMenu.tsx`; prefs + shared `createHuddleRoom()` in `devices.ts` |
 | In-app dock (full screen ⇄ floating pill) | `web/src/views/app/huddles/HuddleDock.tsx`, state in `web/src/stores/huddleStore.ts` |
 | Header button / chat card | `HuddleHeaderButton.tsx`, `web/src/views/app/chat/HuddleCard.tsx` |
 | Guest page | `web/src/app/huddle/[code]/page.tsx` → `/huddle/<code>` |
@@ -46,7 +47,8 @@ To test the guest path against a signed-in tab, open the share link on `http://1
 - **Presence is client-reported** (join/leave endpoints). A crashed tab is caught by the sweeper (asks LiveKit who's really connected, 45s grace for fresh tokens). With `DISABLE_CRONS=true` locally, stale rows linger until someone leaves.
 - **Last person out ends the huddle** and deletes the LiveKit room; "End for all" is starter/admin only.
 - **Same identity twice**: opening the share link in a browser while already in the huddle in-app (same account) replaces the earlier connection — LiveKit kicks the first one. Expected.
-- **Mic on / camera off by default.** The Browser pane used for agent verification blocks device capture — don't treat mic/camera as broken from there.
+- **Mic on / camera off by default.** The Browser pane used for agent verification blocks device capture — don't treat mic/camera as broken from there (device menus list "No microphone found" there; that's the pane, not a bug).
+- **Device selection**: the chevron next to mic opens Microphone + Speakers, next to camera opens Camera. Picks go through LiveKit `switchActiveDevice` and are remembered in localStorage `squadhub-huddle-devices`, applied as `audioCaptureDefaults`/`videoCaptureDefaults`/`audioOutput` on the next call (both in-app and guest page build their Room via `createHuddleRoom()`). Speakers only show where `setSinkId` exists (Chrome/Edge — not Safari/WKWebView). Gotcha: `useMediaDeviceSelect` rebuilds its observable whenever `onError`'s identity changes → pass a `useCallback`'d handler or you get a render loop.
 - **Mac desktop app (Tauri/WKWebView): no screen sharing** (no `getDisplayMedia`) — the button hides itself. Mic/camera need the usage strings in `desktop-app/src-tauri/Info.plist` (added; ships with the next desktop release).
 - **Socket subscription** must use `connectSocket()` not `getSocket()` in hooks mounted below MainLayout — child effects run before the parent's connect effect, so `getSocket()` is null on first mount.
 - The chat card's message text (`🎧 Started a huddle`) is hidden in the bubble when the card renders; it still feeds sidebar previews/notifications.

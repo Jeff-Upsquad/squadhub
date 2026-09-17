@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   GridLayout,
   ParticipantTile,
@@ -13,6 +13,7 @@ import {
 } from '@livekit/components-react';
 import { ConnectionState, Room, Track } from 'livekit-client';
 import '@livekit/components-styles';
+import DeviceMenu, { type DeviceMenuKind } from './DeviceMenu';
 import './huddle.css';
 
 // The call surface itself — participant tiles + the control bar — shared by
@@ -53,6 +54,7 @@ const ICONS = {
   minimize: 'M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7',
   chat: 'M21 12a8 8 0 0 1-8 8H8l-5 3 1.5-4.5A8 8 0 1 1 21 12z',
   leave: 'M16 17l5-5-5-5M21 12H9M13 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h8',
+  caret: 'M6 9l6 6 6-6',
 };
 
 function CtlButton({
@@ -81,6 +83,60 @@ function CtlButton({
     >
       {children}
     </button>
+  );
+}
+
+function SplitCtl({
+  menu,
+  openMenu,
+  onOpenMenu,
+  onNotice,
+  children,
+}: {
+  menu: DeviceMenuKind;
+  openMenu: DeviceMenuKind | null;
+  onOpenMenu: (m: DeviceMenuKind | null) => void;
+  onNotice: (msg: string) => void;
+  children: ReactNode;
+}) {
+  const open = openMenu === menu;
+  const label = menu === 'audio' ? 'Audio settings' : 'Video settings';
+  const ref = useRef<HTMLDivElement>(null);
+
+  // Close on outside click / Escape. The caret is inside the wrapper, so a
+  // click on it doesn't count as "outside" and then re-open on its own.
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) onOpenMenu(null);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onOpenMenu(null);
+    };
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open, onOpenMenu]);
+
+  return (
+    <div className="hd-split" ref={ref}>
+      {children}
+      <button
+        type="button"
+        className={`hd-caret${open ? ' is-open' : ''}`}
+        title={label}
+        aria-label={label}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={() => onOpenMenu(open ? null : menu)}
+      >
+        <Icon d={ICONS.caret} className="h-3.5 w-3.5" />
+      </button>
+      {open && <DeviceMenu kind={menu} onClose={() => onOpenMenu(null)} onNotice={onNotice} />}
+    </div>
   );
 }
 
@@ -156,6 +212,7 @@ function Controls({
   const { localParticipant, isMicrophoneEnabled, isCameraEnabled, isScreenShareEnabled } = useLocalParticipant();
   const [busy, setBusy] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [openMenu, setOpenMenu] = useState<DeviceMenuKind | null>(null);
 
   useEffect(() => {
     if (!notice) return;
@@ -201,12 +258,16 @@ function Controls({
     <div className="hd-controls">
       {notice && <div className="hd-notice">{notice}</div>}
       <div className="hd-ctl-group">
-        <CtlButton on={isMicrophoneEnabled} title={isMicrophoneEnabled ? 'Mute' : 'Unmute'} onClick={() => toggle('mic')} disabled={busy === 'mic'}>
-          <Icon d={isMicrophoneEnabled ? ICONS.mic : ICONS.micOff} />
-        </CtlButton>
-        <CtlButton on={isCameraEnabled} title={isCameraEnabled ? 'Turn camera off' : 'Turn camera on'} onClick={() => toggle('cam')} disabled={busy === 'cam'}>
-          <Icon d={isCameraEnabled ? ICONS.cam : ICONS.camOff} />
-        </CtlButton>
+        <SplitCtl menu="audio" openMenu={openMenu} onOpenMenu={setOpenMenu} onNotice={setNotice}>
+          <CtlButton on={isMicrophoneEnabled} title={isMicrophoneEnabled ? 'Mute' : 'Unmute'} onClick={() => toggle('mic')} disabled={busy === 'mic'}>
+            <Icon d={isMicrophoneEnabled ? ICONS.mic : ICONS.micOff} />
+          </CtlButton>
+        </SplitCtl>
+        <SplitCtl menu="video" openMenu={openMenu} onOpenMenu={setOpenMenu} onNotice={setNotice}>
+          <CtlButton on={isCameraEnabled} title={isCameraEnabled ? 'Turn camera off' : 'Turn camera on'} onClick={() => toggle('cam')} disabled={busy === 'cam'}>
+            <Icon d={isCameraEnabled ? ICONS.cam : ICONS.camOff} />
+          </CtlButton>
+        </SplitCtl>
         {canShareScreen && (
           <CtlButton on={isScreenShareEnabled} title={isScreenShareEnabled ? 'Stop sharing' : 'Share screen'} onClick={() => toggle('screen')} disabled={busy === 'screen'}>
             <Icon d={ICONS.screen} />
