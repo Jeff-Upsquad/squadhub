@@ -1,56 +1,40 @@
 # CU — Cleanup after CMPD
 
 ## Objective
-After a successful CMPD, remove the local worktree for the just-merged branch and delete the branch locally and on origin. Then reclaim secondary local + VPS resources (old `/tmp` junk, dangling Docker images, Caddyfile backups).
 
-## When to Use
-When the user says "CU" (case-insensitive). Assumes CMPD just completed successfully and the feature branch is fully merged into `origin/main`.
+Safely remove a fully merged feature worktree and branch after CMPD, then reclaim secondary local + VPS resources. Must not prune Docker images belonging to other projects sharing the VPS.
 
 ## Preconditions
-- Last CMPD verified green (squadhub.in / admin.squadhub.in / api.squadhub.in all healthy).
-- The feature branch has been merged to `main` and pushed to `origin`. Verify with `git branch --merged main` before deleting.
-- You're in the main checkout (`/Users/jeffzeena/squadhub web`), not inside the worktree you're about to remove.
+
+- The preceding CMPD completed and `origin/main` contains the feature work.
+- Cleanup runs from the primary checkout at `/Users/jeffzeena/squadhub web`.
 
 ## Steps
 
-### A. Worktree + branch removal
+1. Fetch origin and inspect `git worktree list`, local branches merged into `main`, and matching remote branches.
+2. Use a branch named by the user. Otherwise identify the most recently merged non-`main` branch that still has a worktree. If none exists, report that there is no branch/worktree cleanup target.
+3. Verify the branch is present in both local `main` and `origin/main`. Inspect the target worktree's status; stop if it contains changes.
+4. List the exact worktree path, local branch, remote branch, and temporary files proposed for deletion. Ask for explicit confirmation before deleting any worktree or branch.
+5. After confirmation, remove the clean worktree, delete the local branch with safe `git branch -d`, and delete the remote branch only if it exists.
+6. Clean secondary resources — list exact targets first and require confirmation:
+   - Local `/tmp` junk (`/tmp/squadhub*.tar.gz` etc.)
+   - Orphaned local dev servers for the removed worktree
+   - VPS Caddyfile backups — keep the 5 most recent:
+     ```bash
+     ssh root@72.61.245.97 'cd /opt/squadhub && ls -t Caddyfile.bak.* 2>/dev/null | tail -n +6 | xargs -r rm -v'
+     ```
+    - Dangling SquadHub images on VPS (each rebuild leaves the prior `:latest` as `<none>`):
+      Dangling images report `REPOSITORY` as `<none>`, so filtering by `^squadhub-` never matches. Use a label that survives untagging (compose adds `com.docker.compose.project=squadhub` at build time):
+      ```bash
+      ssh root@72.61.245.97 'df -h / | tail -1; docker image prune -f --filter label=com.docker.compose.project=squadhub; df -h / | tail -1'
+      ```
+      If the label filter is unavailable on an older Docker, fall back to pruning only SquadHub-tagged old deploy images (already kept to 5 by `tools/deploy.sh`) and skip generic dangling prune. Do not use unfiltered `docker image prune -f`, `docker system prune -a`, or `docker system prune --volumes` — the VPS is shared with other products (CRM, SquadHire, kia, etc.).
+7. Report each removed item and whether it was regenerable or recoverable.
 
-1. **Discover target.** If the user named a branch, use it. Otherwise find the most-recently-merged branch and its worktree path from `git worktree list`.
-2. **Verify merged.** `git branch --merged main` must list `$BRANCH`. If not, **stop and report** — never delete unmerged work. Confirm the merge is on `origin/main` too (`git fetch && git log origin/main --grep "$BRANCH"`).
-3. **Announce & confirm.** List the worktree path, local branch, and remote branch to be deleted. **Wait for explicit user OK** — never delete branches/worktrees without confirmation.
-4. **Remove the worktree.**
-   ```bash
-   cd "/Users/jeffzeena/squadhub web"
-   git worktree remove "$WT"
-   ```
-   If it refuses due to uncommitted changes, stop — don't `--force` without asking; show that worktree's `git status`.
-5. **Delete the local branch** (safe `-d`, refuses if unmerged):
-   ```bash
-   git branch -d "$BRANCH"
-   ```
-6. **Delete the remote branch (if any):**
-   ```bash
-   git ls-remote --exit-code --heads origin "$BRANCH" && git push origin --delete "$BRANCH" || echo "no remote branch"
-   ```
+## Edge cases
 
-### B. Local + VPS resource cleanup
-
-7. **Stop orphaned local dev servers** for that worktree (ask first if other worktrees have long-running edits).
-8. **Clean local /tmp junk** (`rm -f /tmp/squadhub*.tar.gz` etc.).
-9. **Prune old Caddyfile backups on VPS** — keep the 5 most recent:
-   ```bash
-   ssh root@72.61.245.97 'cd /opt/squadhub && ls -t Caddyfile.bak.* 2>/dev/null | tail -n +6 | xargs -r rm -v'
-   ```
-10. **Prune dangling Docker images on VPS** (each rebuild leaves the prior `:latest` as `<none>`):
-    ```bash
-    ssh root@72.61.245.97 'df -h / | tail -1; docker image prune -f; df -h / | tail -1'
-    ```
-    **Do not** use `docker system prune -a` — it would delete other projects' images sharing this VPS (CRM, SquadHire, etc.).
-11. **Report.** One-line summary: worktree removed, branches deleted, /tmp cleaned, VPS Caddyfile backups kept, Docker images pruned + GB reclaimed.
-
-## Edge Cases
-- **Branch not merged.** Stop. Never `git branch -D` without explicit instruction.
-- **Worktree has uncommitted changes.** Stop; surface `git status`. Don't `--force`.
-- **Worktree path stale.** `git worktree prune`, then retry.
-- **Docker prune reclaims 0 B.** Already pruned recently — not an error.
-- **"Clean everything" request.** Clarify scope — `docker system prune -a --volumes` on this shared VPS would wipe other projects' certs/volumes. Require explicit per-service confirmation.
+- Never force-remove a dirty worktree or use `git branch -D` without explicit instruction.
+- Never delete an unmerged branch.
+- If there is no branch/worktree target, do not invent one; temporary-file cleanup may still be offered separately.
+- Do not run `docker system prune`, `docker image prune -a`, or broad VPS cleanup; the VPS is shared.
+- If Docker prune reclaims 0 B, it was already pruned recently — not an error.
