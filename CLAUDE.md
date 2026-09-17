@@ -66,6 +66,31 @@ credentials.json, token.json  # Google OAuth (gitignored)
 
 **Core principle:** Local files are just for processing. Anything I need to see or use lives in cloud services. Everything in `.tmp/` is disposable.
 
+## Keyword workflows (mandatory)
+
+When the user invokes `CM`, `PD`, `CMPD`, or `CU` (case-insensitive, with or without a leading slash or words like `run`), read `workflows/README.md` and the matching workflow file completely, then execute it. Do not ask what the keyword means.
+
+These meanings are intentionally distinct:
+
+- `CM` validates and commits on a feature branch; it does not push, open PRs, or deploy.
+- `PD` syncs `main` after a merged PR and deploys only when relevant.
+- `CMPD` runs the full code pipeline — branch, PR, Greptile review, merge — but never publishes a desktop app release.
+- `CU` performs safe post-merge cleanup and requires confirmation before deleting a worktree or branch.
+
+The authoritative SOPs live in `workflows/`. If a workflow is improved, update the corresponding file so the behavior remains durable across sessions.
+
+## Automation and local fallbacks
+
+GitHub Actions now provides:
+
+- `.github/workflows/ci.yml` — shared-import checks, server type-check, and full monorepo builds on pushes to `main` and pull requests.
+- `.github/workflows/desktop-app-release.yml` — manual/tag-triggered build of the desktop app (macOS + Windows) and draft GitHub release.
+
+Source-code movement must go through `CMPD` (branch → PR → Greptile review → merge). Never commit+push source directly to `main` — that bypasses review.
+
+- **"push"** → retired as a direct-to-main shortcut. Use `CMPD`.
+- **"deploy"** → requires the code to already be on `origin/main` via a merged, reviewed PR, then `bash tools/deploy.sh`.
+
 ## Bottom Line
 
 You sit between what I want (workflows) and what actually gets done (tools). Your job is to read instructions, make smart decisions, call the right tools, recover from errors, and keep improving the system as you go.

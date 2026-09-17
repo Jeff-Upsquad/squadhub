@@ -4,70 +4,39 @@ This directory contains Markdown SOPs (Standard Operating Procedures) that defin
 
 ## Purpose
 
-Workflows are the instruction layer of the WAT framework. Each workflow:
-- Defines a clear objective
-- Specifies required inputs
-- Lists which tools to use and in what sequence
-- Describes expected outputs
-- Includes edge case handling and troubleshooting
+Workflows are the instruction layer of the WAT framework. Each workflow defines a clear objective, required inputs, which tools to use and in what sequence, and how to handle edge cases.
 
-## Command shorthands
+## Keyword workflows (mandatory)
 
-When the user invokes one of these (e.g. "cmpd", "/pd", "run cu"), read the matching file and execute its steps in order.
+When the user invokes `CM`, `PD`, `CMPD`, or `CU` (case-insensitive, with or without a leading slash or words like `run`), read `workflows/README.md` and the matching workflow file completely, then execute it. Do not ask what the keyword means.
 
-| Shorthand | File | Meaning |
+| Keyword | File | Meaning |
 |---|---|---|
-| **CM** | [cm.md](cm.md) | **Commit, Merge** — commit + merge to `main`, locally. No push/deploy. |
-| **PD** | [pd.md](pd.md) | **Push, Deploy** — push `main` to origin + deploy to prod. Assumes already committed/merged. |
-| **CMPD** | [cmpd.md](cmpd.md) | **Commit, Merge, Push, Deploy** — the full pipeline (CM + PD). |
-| **CU** | [cu.md](cu.md) | **Cleanup after CMPD** — remove the merged branch/worktree + reclaim VPS resources. |
+| **CM** | [cm.md](cm.md) | Validate and commit on a feature branch. No push, PR, or deployment. |
+| **PD** | [pd.md](pd.md) | Sync `main` after a merged PR; deploy only when the PR touched deployable code. |
+| **CMPD** | [cmpd.md](cmpd.md) | Complete code pipeline: branch → PR → Greptile review → merge → PD. Never publishes a desktop release. |
+| **CU** | [cu.md](cu.md) | Safely clean a merged worktree/branch and temporary files. |
 
-## Structure
+The critical boundary is deliberate: `CM`, `PD`, and `CMPD` can move source code, but only a tagged `desktop-app-v*` push or manual dispatch of `desktop-app-release.yml` may publish a desktop release. `main` only moves via reviewed PR merges (Greptile reviews every change) — direct commits/pushes to `main` are not allowed in this pipeline.
 
-```
-workflows/
-├── README.md                    # This file
-├── [workflow_name].md           # Example: scrape_website.md, export_to_sheets.md
-└── ...
-```
+If a workflow exposes a recurring failure or a safer method, update its SOP. Never silently weaken its validation, branch-safety, or deployment checks.
+
+## Other SOPs
+
+| File | Purpose |
+|---|---|
+| [deploy.md](deploy.md) | VPS Docker deployment details (`tools/deploy.sh`) |
+| [rollback.md](rollback.md) | Rolling back a bad deploy via timestamp tags |
+| [test-handoff.md](test-handoff.md) | Post-deploy plain-language handoff to the user |
+| [push.md](push.md) | Legacy direct-push SOP (retired — use CMPD) |
 
 ## Workflow Template
 
 Each workflow should include:
-
-### Header
 - **Objective**: What this workflow accomplishes
 - **Inputs**: What data or configuration is needed before starting
 - **Tools Used**: Which scripts from `../tools/` are called
 - **Estimated Time**: How long this typically takes
-
-### Steps
-- Numbered, clear instructions for the agent
-- Tool calls with specific parameters
-- Error handling and recovery steps
-
-### Outputs
-- What gets produced
-- Where outputs are stored (cloud services, `.tmp/`, etc.)
-- Format and structure of the output data
-
-### Examples
-- Real usage examples
-- Common scenarios and variations
-
-## Updating Workflows
-
-When you:
-- Find a better method → update the workflow
-- Discover rate limits or constraints → document them
-- Hit a recurring error → add troubleshooting steps
-- Improve a tool → update the workflow to reflect the change
-
-Always preserve workflow improvements so the system gets stronger over time.
-
-## Important Notes
-
-- **Never overwrite workflows without asking** unless explicitly instructed
-- Workflows should evolve as you learn what works
-- Document failures so they don't happen again
-- Share learnings through workflow updates
+- **Steps**: Numbered, clear instructions for the agent
+- **Outputs**: What gets produced and where
+- **Edge Cases**: Troubleshooting and recovery

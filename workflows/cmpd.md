@@ -1,86 +1,40 @@
-# CMPD — Commit, Merge, Push, Deploy
+# CMPD — Commit, Review, Merge, Push, Deploy
 
 ## Objective
-Stage, commit, push, and deploy changes to production in one coordinated flow. Also updates the plan file's completion status.
 
-## Inputs
-- `git status` — to confirm what's changed
-- A descriptive commit message summarizing the changes
+Run the complete source-code pipeline: branch, commit, open a PR, get a Greptile review, merge, then `PD`. CMPD gets reviewed code onto `origin/main` and deploys when relevant. Greptile only reviews pull requests, so direct pushes to `main` are not allowed in this pipeline.
 
-## Tools Used
-- `git add -A` / `git commit` / `git push origin main`
-- `tools/deploy.sh` — Docker-based VPS deployment
-- `bash tools/rollback.sh <TAG>` — if rollback is needed
-
-## Estimated Time
-- 2–4 minutes (commit + push: ~1 min, deploy: ~2–3 min depending on Docker rebuild)
+Desktop app releases (`desktop-app/` + `desktop-app-release.yml`) are never triggered by CMPD — they require an explicit tag or manual workflow dispatch.
 
 ## Steps
 
-### 0. Pre-check
-- Ensure the working tree has changes worth shipping.
-- Run typecheck/build to confirm code compiles:
-  ```bash
-  npx tsc --noEmit -p server/tsconfig.json
-  ```
-  For web changes, `npm run build -w web` is also validated by the deploy script's Docker build step.
+1. Read and execute [cm.md](cm.md), including `npx tsc --noEmit -p server/tsconfig.json` and `npm run check:shared-imports`. Work lands on a `feat/*`, `fix/*`, or `docs/*` branch — never on `main`.
+2. Push the branch and open a PR against `main` (run in the same checkout CM used — never split branch work across checkouts):
 
-### 1. Commit
-```bash
-git add -A
-git commit -m "<descriptive message>"
-```
-- Imperative mood, under 72 chars.
-- Reference what and why, not how.
-- If on a feature branch, the merge step will handle origin.
+   ```bash
+   git push -u origin <branch>
+   gh pr create --repo Jeff-Upsquad/squadhub --base main --head <branch> \
+     --title "<imperative summary>" --body "<what changed and how to test>"
+   ```
 
-### 2. Merge
-If on a feature branch:
-```bash
-git checkout main
-git merge <branch>
-```
-If already on `main` (hotfix/small change), skip this step — the commit was made directly to main.
+3. Wait for Greptile's review of the PR. Address every finding: fix on the branch, re-run checks, and push. Repeat until Greptile has no open blocking comments.
+4. Merge only when checks are green and Greptile's review is resolved:
 
-### 3. Push
-```bash
-git push origin main
-```
+   ```bash
+   gh pr merge --repo Jeff-Upsquad/squadhub <PR-number> --merge
+   ```
 
-### 4. Deploy
-```bash
-bash tools/deploy.sh
-```
-The script:
-- Pulls latest on the VPS
-- Detects which packages changed (server, web, admin, shared)
-- Rebuilds only affected Docker images
-- Timestamp-tags all three images for rollback
-- Restarts updated containers
-- Prints rollback command
+   Do not delete the branch here — `CU` owns branch cleanup and requires confirmation first.
+5. Sync the primary checkout and execute [pd.md](pd.md). Pass the merged PR number so deployment is scoped from that PR's changed files.
+6. Confirm the primary checkout is clean and synchronized with `origin/main`.
+7. Report the branch, PR link, Greptile outcome, merge commit, push, CI state, any deployment, and testing instructions (see [test-handoff.md](test-handoff.md)).
 
-### 5. Verify
-- Check `docker compose ps` on the VPS — all containers should be healthy.
-- Visit the app and confirm the change works.
+## Important boundary
 
-### 6. Hand off for testing
-After a successful deploy, give the user a plain-language summary of what shipped and how to test it. Follow [test-handoff.md](test-handoff.md). Do this automatically — don't wait to be asked.
+Do not build or publish a desktop app release, tag `desktop-app-v*`, or dispatch `desktop-app-release.yml` from CMPD. Those actions require an explicit release tag or manual dispatch.
 
-## Edge Cases
-- **Push rejected (remote ahead):** `git pull --rebase origin main`, then retry push.
-- **Deploy fails mid-build:** Run `bash tools/deploy.sh` again — it picks up from the current git state.
-- **Bad deploy reaches production:** Roll back immediately with the printed rollback command, then investigate locally.
-- **Nothing to commit:** Inform the user and stop.
+## Edge cases
 
-## Example
-```
-$ git status
-  modified: web/src/views/app/pm/SpaceTree.tsx
-  modified: web/src/components/SettingsSlider.tsx
-
-$ git add -A && git commit -m "Fix settings panel positioning via createPortal"
-$ git push origin main
-$ bash tools/deploy.sh
-  → Deploy tag: 20260601-183722
-  → All 4 containers healthy
-```
+- If there is nothing to commit and no open PR, report that the pipeline is already complete.
+- If a PR is already open for the branch, reuse it instead of opening another.
+- Stop on failed checks, an unresolved Greptile review, merge conflicts, rejected pushes, failed deployments, or unhealthy verification. Do not claim completion while a required step is failing. Do not merge over an unresolved review by using admin flags.
