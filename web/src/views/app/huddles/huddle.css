@@ -204,3 +204,119 @@
 .hd-pill__avatars img { width: 100%; height: 100%; object-fit: cover; }
 .hd-pill .hd-ctl { width: 34px; height: 34px; }
 .hd-pill .hd-ctl svg { width: 16px; height: 16px; }
+
+/* ---- Device picker (Meet-style split mic/camera controls) ---- */
+.hd-split {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+.hd-split .hd-ctl {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+  border-right: 0;
+}
+.hd-caret {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 42px;
+  border-radius: 0 999px 999px 0;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-left: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.8);
+  cursor: pointer;
+  padding: 0 4px 0 2px;
+  transition: background 0.12s;
+}
+.hd-caret:hover,
+.hd-caret.is-open { background: rgba(255, 255, 255, 0.18); color: #fff; }
+.hd-caret svg { transition: transform 0.15s; }
+.hd-caret.is-open svg { transform: rotate(180deg); }
+
+.hd-devmenu {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 10px);
+  z-index: 5;
+  min-width: 280px;
+  max-width: min(360px, 90vw);
+  max-height: 60vh;
+  overflow-y: auto;
+  padding: 6px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: #26272e;
+  color: #f5f5f7;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45);
+}
+.hd-devmenu__section + .hd-devmenu__section {
+  margin-top: 4px;
+  padding-top: 6px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+.hd-devmenu__title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px 4px;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.55);
+}
+.hd-devmenu__title svg { width: 14px; height: 14px; }
+.hd-devmenu__item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+.hd-devmenu__item:hover { background: rgba(255, 255, 255, 0.08); }
+.hd-devmenu__item:disabled { cursor: default; opacity: 0.7; }
+.hd-devmenu__item.is-active { color: #fff; font-weight: 500; }
+.hd-devmenu__check {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  color: #22c55e;
+}
+.hd-devmenu__check svg { width: 16px; height: 16px; }
+.hd-devmenu__spin {
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  border: 2px solid rgba(255, 255, 255, 0.25);
+  border-top-color: #fff;
+  animation: hd-spin 0.7s linear infinite;
+}
+@keyframes hd-spin { to { transform: rotate(360deg); } }
+.hd-devmenu__empty {
+  padding: 8px 10px 10px;
+  font-size: 12.5px;
+  color: rgba(255, 255, 255, 0.5);
+}
+/* Narrow (phone-width) call: pin the sheet to the viewport instead of the
+   button so it never overflows the edge. */
+@media (max-width: 480px) {
+  .hd-devmenu {
+    position: fixed;
+    left: 12px;
+    right: 12px;
+    bottom: 88px;
+    max-width: none;
+  }
+}
