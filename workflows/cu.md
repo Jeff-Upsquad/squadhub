@@ -24,10 +24,11 @@ Safely remove a fully merged feature worktree and branch after CMPD, then reclai
      ssh root@72.61.245.97 'cd /opt/squadhub && ls -t Caddyfile.bak.* 2>/dev/null | tail -n +6 | xargs -r rm -v'
      ```
     - Dangling SquadHub images on VPS (each rebuild leaves the prior `:latest` as `<none>`):
+      Dangling images report `REPOSITORY` as `<none>`, so filtering by `^squadhub-` never matches. Use a label that survives untagging (compose adds `com.docker.compose.project=squadhub` at build time):
       ```bash
-      ssh root@72.61.245.97 'df -h / | tail -1; docker images -f dangling=true --format "{{.ID}} {{.Repository}}" | awk '\''$2 ~ /^squadhub-/ {print $1}'\'' | xargs -r docker rmi; df -h / | tail -1'
+      ssh root@72.61.245.97 'df -h / | tail -1; docker image prune -f --filter label=com.docker.compose.project=squadhub; df -h / | tail -1'
       ```
-      Do not use `docker image prune -f`, `docker system prune -a`, or `docker system prune --volumes` — the VPS is shared with other products (CRM, SquadHire, kia, etc.), and unfiltered prune removes other projects' dangling cache.
+      If the label filter is unavailable on an older Docker, fall back to pruning only SquadHub-tagged old deploy images (already kept to 5 by `tools/deploy.sh`) and skip generic dangling prune. Do not use unfiltered `docker image prune -f`, `docker system prune -a`, or `docker system prune --volumes` — the VPS is shared with other products (CRM, SquadHire, kia, etc.).
 7. Report each removed item and whether it was regenerable or recoverable.
 
 ## Edge cases
