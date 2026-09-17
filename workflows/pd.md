@@ -28,9 +28,15 @@ Sync an already merged `main` and deploy to production only when the merged chan
    ```
 
    When run from CMPD, use the PR number recorded there.
+
+   `tools/deploy.sh` always pulls and deploys **every** commit between the VPS's current HEAD and the latest `origin/main`, not just the recorded PR. If another PR (e.g. with a migration) merged before this invocation, that commit will also ship — so migration checks must cover the full `VPS_HEAD..origin/main` range, not just the single PR.
 4. Verify local `main` matches `origin/main`. There is normally nothing to push — code reaches `origin/main` through the merged PR, not through PD.
 
-5. If the recorded paths include deployable code, run the deploy:
+5. If there are new DB migrations in `supabase/migrations/`, apply them **before** deploying. Two ways (same durable procedure as [deploy.md](deploy.md)):
+   - **Supabase CLI** (machine is logged in): stage the migration as a timestamped file (`YYYYMMDDHHMMSS_name.sql`) in `supabase/migrations/`, then `supabase db push --dry-run` → confirm it lists ONLY your file → `supabase db push`. Gotcha: prod history uses timestamped versions while most repo files use the `NNN_` convention, so a plain push fails or replays old files. If the dry-run lists more than your file, stash the `NNN_` files, add empty placeholder files named after each remote version (`supabase migration list` → JSON), re-dry-run until exactly yours remains, push, then restore everything.
+   - **SQL Editor paste** (dashboard) — fallback when the CLI isn't available.
+
+   Then, if the recorded paths include deployable code **or** `supabase/migrations/`, run the deploy:
 
    ```bash
    cd "/Users/jeffzeena/squadhub web"
@@ -47,12 +53,11 @@ Sync an already merged `main` and deploy to production only when the merged chan
    | `shared/` | rebuilds `server`, `web`, `admin` |
    | `package.json` / `package-lock.json` | rebuilds all three |
    | `docker-compose.yml` | rebuilds all three |
+   | `supabase/migrations/` | apply migrations (triggers deploy; may not need rebuild if migration-only but `deploy.sh` still syncs the repo) |
    | `Caddyfile` | Caddy reload (no rebuild) |
    | `tools/set-r2-cors.ts` | R2 CORS apply |
 
    Docs, workflows, CI-only, and other non-service changes require no deployment. Desktop app releases belong exclusively to a tagged `desktop-app-v*` push or manual dispatch of `desktop-app-release.yml`.
-
-   If there are new DB migrations in `supabase/migrations/`, apply them **before** deploying — see [pd.md pre-check in deploy.md](deploy.md) and the prior PD's migration notes (Supabase CLI `supabase db push` with timestamped file, or SQL Editor paste).
 
 6. Verify applicable endpoints:
    - Source: `main` matches `origin/main`.

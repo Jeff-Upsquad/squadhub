@@ -23,11 +23,11 @@ Safely remove a fully merged feature worktree and branch after CMPD, then reclai
      ```bash
      ssh root@72.61.245.97 'cd /opt/squadhub && ls -t Caddyfile.bak.* 2>/dev/null | tail -n +6 | xargs -r rm -v'
      ```
-   - Dangling Docker images on VPS (each rebuild leaves the prior `:latest` as `<none>`):
-     ```bash
-     ssh root@72.61.245.97 'df -h / | tail -1; docker image prune -f; df -h / | tail -1'
-     ```
-     Do not use `docker system prune -a` or `docker system prune --volumes` — the VPS is shared with other products (CRM, SquadHire, kia, etc.).
+    - Dangling SquadHub images on VPS (each rebuild leaves the prior `:latest` as `<none>`):
+      ```bash
+      ssh root@72.61.245.97 'df -h / | tail -1; docker images -f dangling=true --format "{{.ID}} {{.Repository}}" | awk '\''$2 ~ /^squadhub-/ {print $1}'\'' | xargs -r docker rmi; df -h / | tail -1'
+      ```
+      Do not use `docker image prune -f`, `docker system prune -a`, or `docker system prune --volumes` — the VPS is shared with other products (CRM, SquadHire, kia, etc.), and unfiltered prune removes other projects' dangling cache.
 7. Report each removed item and whether it was regenerable or recoverable.
 
 ## Edge cases
