@@ -65,7 +65,7 @@ export default function DashboardTaskRow({ task }: { task: Task }) {
   const priorityLabel = PRIORITY_LABEL[task.priority as string] || null;
   const isSubtask = !!task.parent_task_id;
   const parentTitle = task.parent_task?.title || null;
-  const whenText = formatWhen(task.due_date);
+  const whenText = formatWhen(task.due_date || task.work_date || task.start_date);
   const isOverdue = whenText.startsWith('Overdue');
   const taskPath = [task.space?.name, task.folder?.name, task.list?.name].filter(Boolean).join(' › ');
 

@@ -134,8 +134,9 @@ export default function DashboardListPanel() {
       const todayMid = new Date();
       todayMid.setHours(0, 0, 0, 0);
       for (const t of tasks) {
-        if (!t.due_date) continue;
-        const d = new Date(t.due_date);
+        const raw = t.due_date || t.work_date || t.start_date;
+        if (!raw) continue;
+        const d = new Date(raw);
         d.setHours(0, 0, 0, 0);
         const days = Math.round((todayMid.getTime() - d.getTime()) / 86_400_000);
         if (days > oldest) oldest = days;

@@ -32,6 +32,9 @@ const MeetingIcon = () => (
 const CallIcon = () => (
   <svg {...icoProps}><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.9.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92Z" /></svg>
 );
+const WorkOverdueIcon = () => (
+  <svg {...icoProps}><rect x="3" y="5" width="18" height="14" rx="2" /><path d="M3 9h18M8 3v4M16 3v4" /><path d="M12 13v2" /><path d="M12 17h.01" /></svg>
+);
 // Resource "send as task" cards.
 const CourseIcon = () => (
   <svg {...icoProps}><path d="M22 10 12 5 2 10l10 5 10-5Z" /><path d="M6 12v5c0 1 2.7 2.5 6 2.5s6-1.5 6-2.5v-5" /></svg>
@@ -60,10 +63,11 @@ export interface SecondaryCardConfig {
 export default function SecondaryCardRow() {
   const setActiveSecondaryCard = usePMStore((s) => s.setActiveSecondaryCard);
   const activeSecondaryCard = usePMStore((s) => s.activeSecondaryCard);
-  const { urgent, recordings, meetings, calls, courses, sops, posts } = useSecondaryCards();
+  const { urgent, recordings, meetings, calls, courses, sops, posts, workOverdue } = useSecondaryCards();
 
   const cards: SecondaryCardConfig[] = [
     { key: 'urgent', name: 'Urgent', eyebrow: 'Priority: urgent', icon: <UrgentIcon />, data: urgent },
+    { key: 'work_overdue', name: 'Work Overdue', eyebrow: 'Work date overdue', icon: <WorkOverdueIcon />, data: workOverdue },
     { key: 'recordings', name: 'Recordings', eyebrow: 'Label: recording', icon: <RecordingIcon />, data: recordings },
     { key: 'meetings', name: 'Meetings', eyebrow: 'Label: meeting', icon: <MeetingIcon />, data: meetings },
     { key: 'calls', name: 'Calls', eyebrow: 'Label: calls', icon: <CallIcon />, data: calls },
