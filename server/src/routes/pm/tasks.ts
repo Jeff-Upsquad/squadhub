@@ -533,7 +533,8 @@ router.get('/tasks', async (req: Request, res: Response) => {
 
 // GET /pm/tasks/my — returns the logged-in user's assigned tasks
 // bucketed by due-date in the requested timezone. Today and Tomorrow
-// buckets also match on work_date and start_date.
+// buckets also match on work_date and start_date. Overdue is due-date only
+// (work-date overdue lives in the separate Work Overdue card).
 // Used by the partner mobile app's Tasks tab.
 router.get('/tasks/my', async (req: Request, res: Response) => {
   try {
@@ -626,10 +627,11 @@ router.get('/tasks/my', async (req: Request, res: Response) => {
       if (hasToday) { buckets.today.push(t); continue; }
       if (hasTomorrow) { buckets.tomorrow.push(t); continue; }
 
-      // Overdue: any of due / work / start in the past (work_date overdue tasks
-      // were previously falling through to `later`, making the Home Overdue card
-      // miss them and appear to "disappear" when a work date slipped past today).
-      const isOverdue = (dueStr && dueStr < todayStr) || (workStr && workStr < todayStr) || (startStr && startStr < todayStr);
+      // Overdue: due_date only. Work-date overdue tasks belong to the
+      // separate Work Overdue card — they must not land in this bucket.
+      // Tasks that are only work/start overdue fall through to the
+      // due_date-based upcoming/later buckets below.
+      const isOverdue = !!(dueStr && dueStr < todayStr);
       if (isOverdue) { buckets.overdue.push(t); continue; }
 
       // Everything else buckets by due_date only.
