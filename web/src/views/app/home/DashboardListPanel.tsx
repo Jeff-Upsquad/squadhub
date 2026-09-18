@@ -134,17 +134,12 @@ export default function DashboardListPanel() {
       const todayMid = new Date();
       todayMid.setHours(0, 0, 0, 0);
       for (const t of tasks) {
-        // Pick the earliest overdue date among due/work/start so a past work_date
-        // isn't masked by a later due_date — mirrors DashboardTaskRow display.
-        const candidates = [t.due_date, t.work_date, t.start_date].filter(Boolean) as string[];
-        if (candidates.length === 0) continue;
-        const overdueIso = candidates
-          .map((iso) => ({ iso, d: new Date(iso) }))
-          .filter(({ d }) => { const dd = new Date(d); dd.setHours(0, 0, 0, 0); return dd.getTime() < todayMid.getTime(); })
-          .sort((a, b) => a.d.getTime() - b.d.getTime())[0]?.iso
-          ?? (t.due_date || t.work_date || t.start_date) as string;
-        const d = new Date(overdueIso);
+        // Overdue bucket is due-date only (work-date overdue lives in the
+        // separate Work Overdue card), so age comes from due_date.
+        if (!t.due_date) continue;
+        const d = new Date(t.due_date);
         d.setHours(0, 0, 0, 0);
+        if (d.getTime() >= todayMid.getTime()) continue;
         const days = Math.round((todayMid.getTime() - d.getTime()) / 86_400_000);
         if (days > oldest) oldest = days;
       }
