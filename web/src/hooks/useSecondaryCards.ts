@@ -60,6 +60,7 @@ function hasDateTodayOrOverdue(t: Task, tz: string): boolean {
 export function useSecondaryCards(): SecondaryCardsResult {
   const { data, isLoading } = useMyTasksSummary();
   const setActiveTask = usePMStore((s) => s.setActiveTask);
+  const setPeekTask = usePMStore((s) => s.setPeekTask);
   const setActiveSecondaryCard = usePMStore((s) => s.setActiveSecondaryCard);
   const updateTask = useUpdateTask(null);
   const setLearningTarget = useLearningStore((s) => s.setLearningTarget);
@@ -103,8 +104,21 @@ export function useSecondaryCards(): SecondaryCardsResult {
               }
             } catch { /* fall through to normal task open */ }
           }
-          setActiveSecondaryCard(null);
-          setActiveTask(t.id);
+          // Open in the lister: keep the secondary card panel open behind and
+          // show the full task detail as a peek (desktop) so it reads exactly
+          // like DashboardListPanel rows. Mobile has no peek layer, so use the
+          // main task slot there.
+          const isMobileViewport =
+            typeof window !== 'undefined' &&
+            (window.innerWidth < 768 ||
+              (typeof window.matchMedia === 'function' &&
+                window.matchMedia('(max-width: 767px)').matches));
+          if (isMobileViewport) {
+            setActiveSecondaryCard(null);
+            setActiveTask(t.id);
+          } else {
+            setPeekTask(t.id);
+          }
         },
         // SOP acknowledgements must be completed while reading the SOP. The
         // Home panel remains a navigation surface and deliberately has no
@@ -163,5 +177,5 @@ export function useSecondaryCards(): SecondaryCardsResult {
       posts: { items: sourceCard('post'), isLoading },
       workOverdue: { items: workOverdue, isLoading },
     };
-  }, [data, isLoading, tz, setActiveTask, setActiveSecondaryCard, updateTask, setLearningTarget]);
+  }, [data, isLoading, tz, setActiveTask, setPeekTask, setActiveSecondaryCard, updateTask, setLearningTarget]);
 }
