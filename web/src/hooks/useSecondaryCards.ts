@@ -5,7 +5,7 @@ import { useUpdateTask } from './useTasks';
 import { usePMStore } from '../stores/pmStore';
 import { useLearningStore } from '../stores/learningStore';
 import { formatWhen } from '../views/app/pm/taskHelpers';
-import { isFutureDay, isTaskFocused } from '../lib/taskGrouping';
+import { isFutureDay, isToday, isTaskFocused } from '../lib/taskGrouping';
 import api from '../services/api';
 
 // One normalized row for a Home "disappearing card". Every card maps its tasks
@@ -37,6 +37,7 @@ export interface SecondaryCardsResult {
   courses: SecondaryCardData;
   sops: SecondaryCardData;
   posts: SecondaryCardData;
+  workOverdue: SecondaryCardData;
 }
 
 // Label names (case-insensitive, singular or plural) per label-driven card.
@@ -68,7 +69,7 @@ export function useSecondaryCards(): SecondaryCardsResult {
     const empty: SecondaryCardData = { items: [], isLoading };
     if (!data) return {
       urgent: empty, recordings: empty, meetings: empty, calls: empty,
-      courses: empty, sops: empty, posts: empty,
+      courses: empty, sops: empty, posts: empty, workOverdue: empty,
     };
 
     // Union every bucket (these cards are lenses over ALL my tasks, not the
@@ -140,6 +141,18 @@ export function useSecondaryCards(): SecondaryCardsResult {
         .filter((t) => t.source_kind === kind && !isFutureDay(t.work_date, tz))
         .map((t) => toItem(t, kind));
 
+    // Work date overdue: any open task whose work_date is strictly before today
+    // (in the user's tz). Today and future work_dates are not overdue. The row
+    // always shows the work_date ("Overdue · ...") and is flagged overdue even
+    // if a later due_date exists.
+    const workOverdue = all
+      .filter((t) => !!t.work_date && !isFutureDay(t.work_date, tz) && !isToday(t.work_date, tz))
+      .map((t) => {
+        const base = toItem(t, 'work_overdue');
+        const when = formatWhen(t.work_date);
+        return { ...base, whenText: when.text, overdue: true };
+      });
+
     return {
       urgent: { items: urgent, isLoading },
       recordings: { items: labelCard(RECORDING_LABELS, 'recordings'), isLoading },
@@ -148,6 +161,7 @@ export function useSecondaryCards(): SecondaryCardsResult {
       courses: { items: sourceCard('course'), isLoading },
       sops: { items: sourceCard('sop'), isLoading },
       posts: { items: sourceCard('post'), isLoading },
+      workOverdue: { items: workOverdue, isLoading },
     };
   }, [data, isLoading, tz, setActiveTask, setActiveSecondaryCard, updateTask, setLearningTarget]);
 }

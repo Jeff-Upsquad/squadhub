@@ -65,7 +65,21 @@ export default function DashboardTaskRow({ task }: { task: Task }) {
   const priorityLabel = PRIORITY_LABEL[task.priority as string] || null;
   const isSubtask = !!task.parent_task_id;
   const parentTitle = task.parent_task?.title || null;
-  const whenText = formatWhen(task.due_date);
+  // Show the date that actually made the task overdue. If any of due/work/start
+  // is before today, pick the earliest of those overdue dates so a past work_date
+  // isn't masked by a future due_date (server classifies by any overdue date).
+  const displayIso = (() => {
+    const candidates = [task.due_date, task.work_date, task.start_date].filter(Boolean) as string[];
+    if (candidates.length === 0) return null;
+    const todayMid = new Date(); todayMid.setHours(0, 0, 0, 0);
+    const overdue = candidates
+      .map((iso) => ({ iso, d: new Date(iso) }))
+      .filter(({ d }) => { const dd = new Date(d); dd.setHours(0, 0, 0, 0); return dd.getTime() < todayMid.getTime(); })
+      .sort((a, b) => a.d.getTime() - b.d.getTime());
+    if (overdue.length > 0) return overdue[0].iso;
+    return (task.due_date || task.work_date || task.start_date) as string | null;
+  })();
+  const whenText = formatWhen(displayIso);
   const isOverdue = whenText.startsWith('Overdue');
   const taskPath = [task.space?.name, task.folder?.name, task.list?.name].filter(Boolean).join(' › ');
 

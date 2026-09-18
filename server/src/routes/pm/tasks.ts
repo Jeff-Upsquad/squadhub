@@ -626,10 +626,15 @@ router.get('/tasks/my', async (req: Request, res: Response) => {
       if (hasToday) { buckets.today.push(t); continue; }
       if (hasTomorrow) { buckets.tomorrow.push(t); continue; }
 
-      // Everything else still buckets by due_date only.
+      // Overdue: any of due / work / start in the past (work_date overdue tasks
+      // were previously falling through to `later`, making the Home Overdue card
+      // miss them and appear to "disappear" when a work date slipped past today).
+      const isOverdue = (dueStr && dueStr < todayStr) || (workStr && workStr < todayStr) || (startStr && startStr < todayStr);
+      if (isOverdue) { buckets.overdue.push(t); continue; }
+
+      // Everything else buckets by due_date only.
       if (!dueStr) { buckets.later.push(t); continue; }
-      if (dueStr < todayStr) buckets.overdue.push(t);
-      else if (dueStr <= upcomingCutoffStr) buckets.upcoming.push(t);
+      if (dueStr <= upcomingCutoffStr) buckets.upcoming.push(t);
       else buckets.later.push(t);
     }
 
