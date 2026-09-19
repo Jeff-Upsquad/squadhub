@@ -38,6 +38,47 @@ export function syncItemToSquadhire(itemId: string): void {
   });
 }
 
+// Coalesce the bursts an editing session produces (each block save, reorder
+// step and video upload is its own request) into one push per item. The
+// payload is a full snapshot, so the newest push always wins and anything
+// saved during the window is included.
+const SYNC_DEBOUNCE_MS = 10_000;
+const queuedSyncs = new Set<string>();
+
+/**
+ * Push a content edit (lesson / block / video / quiz save) to SquadHire.
+ *
+ * Only items carrying the `squadhire_audience` flag are pushed — draft review
+ * clones never inherit the flag, so contributor drafts stay private until an
+ * admin approves them (approve() calls the immediate sync below). Best-effort
+ * like everything else here: the flag check failing just skips this round and
+ * the next save retries.
+ */
+export function syncContentToSquadhire(itemId: string | null): void {
+  if (!itemId || queuedSyncs.has(itemId)) return;
+  queuedSyncs.add(itemId);
+  void (async () => {
+    try {
+      const { data } = await supabaseAdmin
+        .from('lms_items')
+        .select('squadhire_audience')
+        .eq('id', itemId)
+        .maybeSingle();
+      if ((data as any)?.squadhire_audience !== true) {
+        queuedSyncs.delete(itemId);
+        return;
+      }
+      setTimeout(() => {
+        queuedSyncs.delete(itemId);
+        syncItemToSquadhire(itemId);
+      }, SYNC_DEBOUNCE_MS);
+    } catch (err: any) {
+      queuedSyncs.delete(itemId);
+      console.error('[squadhire-training] auto-sync check failed:', err?.message ?? err);
+    }
+  })();
+}
+
 export async function deliver(itemId: string): Promise<void> {
   const endpoint = squadhireUrl();
   if (!endpoint) return; // integration not configured in this environment

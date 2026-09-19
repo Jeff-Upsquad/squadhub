@@ -8,7 +8,7 @@ import { cloneItemForReview, notifyLms } from '../services/lmsAuthoring';
 import { createSend, listSendsForItem, recipientsForSend, type SendScope, type Principal } from '../services/lmsTaskSends';
 import { userTypeShareUuidToKey } from '../utils/lmsShares';
 import { loadBlockVideos, withBlockVideos } from '../services/lmsBlockVideos';
-import { syncItemToSquadhire } from '../services/squadhireTraining';
+import { syncContentToSquadhire, syncItemToSquadhire } from '../services/squadhireTraining';
 
 // ============================================================
 // Collaborative (non-admin) LMS authoring + comments, gated by per-item
@@ -254,6 +254,7 @@ router.post('/items/:id/lessons', async (req: Request, res: Response) => {
       })
       .select().single();
     if (error) { res.status(500).json({ success: false, error: error.message }); return; }
+    syncContentToSquadhire(itemId);
     res.status(201).json({ success: true, data: { ...data, blocks: [], access_overrides: [] } });
   } catch (err) {
     if (err instanceof z.ZodError) { res.status(400).json({ success: false, error: err.errors[0].message }); return; }
@@ -285,6 +286,7 @@ router.patch('/lessons/:lessonId', async (req: Request, res: Response) => {
     }
     const { data, error } = await supabaseAdmin.from('lms_lessons').update(patch).eq('id', lessonId).select().single();
     if (error) { res.status(500).json({ success: false, error: error.message }); return; }
+    syncContentToSquadhire(itemId);
     res.json({ success: true, data });
   } catch (err) {
     if (err instanceof z.ZodError) { res.status(400).json({ success: false, error: err.errors[0].message }); return; }
@@ -298,6 +300,7 @@ router.delete('/lessons/:lessonId', async (req: Request, res: Response) => {
   if (!(await gate(itemId, req.userId!, 'admin', res))) return;
   const { error } = await supabaseAdmin.from('lms_lessons').delete().eq('id', lessonId);
   if (error) { res.status(500).json({ success: false, error: error.message }); return; }
+  syncContentToSquadhire(itemId);
   res.json({ success: true });
 });
 
@@ -311,6 +314,7 @@ router.put('/items/:id/lessons/reorder', async (req: Request, res: Response) => 
     for (const it of items) {
       await supabaseAdmin.from('lms_lessons').update({ position: it.position }).eq('id', it.id).eq('item_id', itemId);
     }
+    syncContentToSquadhire(itemId);
     res.json({ success: true });
   } catch (err) {
     if (err instanceof z.ZodError) { res.status(400).json({ success: false, error: err.errors[0].message }); return; }
@@ -387,6 +391,7 @@ router.post('/lessons/:lessonId/blocks', async (req: Request, res: Response) => 
       .insert({ lesson_id: lessonId, type, position: nextPos, metadata: {} })
       .select().single();
     if (error) { res.status(500).json({ success: false, error: error.message }); return; }
+    syncContentToSquadhire(itemId);
     res.status(201).json({ success: true, data });
   } catch (err) {
     if (err instanceof z.ZodError) { res.status(400).json({ success: false, error: err.errors[0].message }); return; }
@@ -406,6 +411,7 @@ router.patch('/blocks/:blockId', async (req: Request, res: Response) => {
     }
     const { data, error } = await supabaseAdmin.from('lms_content_blocks').update(patch).eq('id', blockId).select().single();
     if (error) { res.status(500).json({ success: false, error: error.message }); return; }
+    syncContentToSquadhire(itemId);
     res.json({ success: true, data });
   } catch (err) {
     if (err instanceof z.ZodError) { res.status(400).json({ success: false, error: err.errors[0].message }); return; }
@@ -419,6 +425,7 @@ router.delete('/blocks/:blockId', async (req: Request, res: Response) => {
   if (!(await gate(itemId, req.userId!, 'admin', res))) return;
   const { error } = await supabaseAdmin.from('lms_content_blocks').delete().eq('id', blockId);
   if (error) { res.status(500).json({ success: false, error: error.message }); return; }
+  syncContentToSquadhire(itemId);
   res.json({ success: true });
 });
 
@@ -484,6 +491,7 @@ router.put('/blocks/:blockId/videos', async (req: Request, res: Response) => {
     const { data } = await supabaseAdmin
       .from('lms_content_block_videos').select('*').eq('block_id', blockId)
       .order('language', { ascending: true });
+    syncContentToSquadhire(itemId);
     res.json({ success: true, data: data ?? [] });
   } catch (err) {
     if (err instanceof z.ZodError) { res.status(400).json({ success: false, error: err.errors[0].message }); return; }
@@ -500,6 +508,7 @@ router.put('/lessons/:lessonId/blocks/reorder', async (req: Request, res: Respon
     for (const it of items) {
       await supabaseAdmin.from('lms_content_blocks').update({ position: it.position }).eq('id', it.id).eq('lesson_id', lessonId);
     }
+    syncContentToSquadhire(itemId);
     res.json({ success: true });
   } catch (err) {
     if (err instanceof z.ZodError) { res.status(400).json({ success: false, error: err.errors[0].message }); return; }
