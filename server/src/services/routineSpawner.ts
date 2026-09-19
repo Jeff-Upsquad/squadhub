@@ -128,6 +128,7 @@ export async function spawnRoutineInstance(template: any, dateStr: string): Prom
     time_estimate: template.time_estimate ?? null,
     metadata: template.metadata || {},
     created_by: template.created_by,
+    created_via: 'system',
     recurring_parent_id: template.id,
     recurrence_instance_date: dateStr,
   };

@@ -296,6 +296,26 @@ export interface ResourceMembership {
 
 // ---- Project Management ----
 export type TaskPriority = 'emergency' | 'urgent' | 'high' | 'normal' | 'low' | 'none';
+// Client platform that created a task. Mirrors the server allowlist in
+// server/src/utils/clientSource.ts and the tasks.created_via CHECK.
+export type TaskClientSource =
+  | 'web' | 'mobile_web' | 'desktop_app' | 'companion'
+  | 'partner_app' | 'internal_app' | 'business_app' | 'mobile_app'
+  | 'public_form' | 'system' | 'api' | 'unknown';
+export const CLIENT_SOURCE_LABELS: Record<TaskClientSource, string> = {
+  web: 'Web',
+  mobile_web: 'Mobile web',
+  desktop_app: 'Desktop app',
+  companion: 'Companion app',
+  partner_app: 'Partner app',
+  internal_app: 'Internal app',
+  business_app: 'Business app',
+  mobile_app: 'Mobile app',
+  public_form: 'Public form',
+  system: 'System',
+  api: 'API',
+  unknown: 'Unknown',
+};
 export type StatusCategory = 'todo' | 'active' | 'done' | 'closed';
 export type ListView = 'list' | 'board' | 'whiteboard';
 export type ResourceStatus = 'active' | 'inactive';
@@ -741,6 +761,10 @@ export interface Task {
   source_kind?: string | null;
   source_id?: string | null;
   source_user_id?: string | null;
+  // Client platform that created the task. Orthogonal to source_kind (domain
+  // origin). Resolved server-side from X-Client-Source / client_source /
+  // User-Agent; 'unknown' for rows predating tracking. See clientSource util.
+  created_via?: TaskClientSource | null;
   // Joined
   status?: SpaceStatus;
   task_type?: TaskType;

@@ -240,6 +240,7 @@ async function upsertMirrorTask(opts: {
     source_kind: kind,
     source_id: sourceId,
     source_user_id: userId,
+    created_via: 'system',
   });
   // 23505 = another worker created the same mirror first; harmless.
   if (error && (error as any).code !== '23505') {
@@ -406,6 +407,7 @@ export async function mirrorResourceRecipient(
     source_kind: sourceKind,
     source_id: recipientId,
     source_user_id: userId,
+    created_via: 'system',
   });
   if (error && (error as any).code !== '23505') {
     console.error('[taskMirror] insert resource task failed:', error.message);

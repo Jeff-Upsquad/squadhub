@@ -19,7 +19,7 @@ import {
 } from '../../../hooks/useChecklists';
 import api from '../../../services/api';
 import type { Task, TaskChecklist, SpaceStatus, TaskType, TaskTypeField, TaskMetadata, TaskPriority, TaskStatusKey, TaskRecurrence } from '@squadhub/shared';
-import { getTaskStatusDef, describeTaskRecurrence } from '@squadhub/shared';
+import { getTaskStatusDef, describeTaskRecurrence, CLIENT_SOURCE_LABELS, type TaskClientSource } from '@squadhub/shared';
 import AssigneePicker from './AssigneePicker';
 import NoAssigneeCompleteDialog from './NoAssigneeCompleteDialog';
 import IncompleteItemsDialog from './IncompleteItemsDialog';
@@ -2088,6 +2088,9 @@ export default function TaskDetailPanel({
                         <span>{task.creator.display_name || task.creator.email}</span>
                         {task.created_at && (
                           <span className="muted"> · {formatCreatedAt(task.created_at)}</span>
+                        )}
+                        {task.created_via && task.created_via !== 'unknown' && (
+                          <span className="muted"> · via {CLIENT_SOURCE_LABELS[task.created_via as TaskClientSource] ?? task.created_via}</span>
                         )}
                       </>
                     ) : (
