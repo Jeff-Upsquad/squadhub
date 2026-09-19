@@ -787,3 +787,156 @@ body.qa-window {
 .qa-bgjob .qa-att-remove {
   margin-left: auto;
 }
+
+/* Quick-add: inline sign-in (same window, no menu-bar round-trip) */
+.qa-signin-title {
+  font-size: 17px;
+  font-weight: 600;
+}
+.qa-signin-sub {
+  font-size: 12px;
+  color: var(--text-muted);
+  padding-left: 36px;
+  line-height: 1.5;
+}
+.qa-signin-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-left: 36px;
+}
+.qa-signin-input {
+  width: 100%;
+  padding: 9px 11px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  font-size: 13px;
+  outline: none;
+}
+.qa-signin-input:focus {
+  border-color: var(--primary);
+}
+.qa-signin-form .qa-add-btn {
+  align-self: flex-end;
+}
+
+/* Quick-add: selected labels */
+.qa-labelsel {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding-left: 36px;
+}
+.qa-labelchip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--bg-input);
+  border: 1px solid var(--primary);
+  color: var(--text);
+  border-radius: 999px;
+  padding: 3px 9px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.qa-labelchip-name {
+  max-width: 140px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.qa-grouphead {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  padding: 8px 9px 2px;
+}
+
+/* Quick-add: my open tasks (complete + create from here) */
+.qa-mytasks {
+  margin-left: 36px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.qa-mytasks-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+}
+.qa-mytasks-refresh {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  border-radius: 6px;
+  width: 22px;
+  height: 22px;
+  cursor: pointer;
+  line-height: 1;
+}
+.qa-mytasks-refresh:hover {
+  color: var(--text);
+  border-color: var(--text-muted);
+}
+.qa-taskrow {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+.qa-taskrow:last-child {
+  border-bottom: none;
+}
+.qa-taskcheck {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 1px solid var(--text-muted);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 12px;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+.qa-taskcheck:hover {
+  border-color: var(--success);
+  color: var(--success);
+}
+.qa-taskcheck:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+.qa-taskmain {
+  flex: 1;
+  min-width: 0;
+}
+.qa-tasktitle {
+  font-size: 13px;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.qa-tasksub {
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

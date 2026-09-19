@@ -10,10 +10,18 @@ import {
   createTask,
   setTaskFocus,
   uploadTaskAttachment,
+  fetchLabelsForList,
+  attachTaskLabel,
+  fetchMyOpenTasks,
+  updateTaskStatus,
   type AssignableUser,
   type ListLite,
   type TaskPriority,
+  type TaskTag,
+  type LabelPickerGroup,
+  type MyTaskLite,
 } from './services/api';
+import { login } from './services/auth';
 import { getRecentLists, pushRecentList, type RecentList } from './services/recents';
 
 // Cached across summons of the (persistent) quickadd window so we only resolve
@@ -21,7 +29,7 @@ import { getRecentLists, pushRecentList, type RecentList } from './services/rece
 let cachedPersonal: { id: string; name: string } | null = null;
 
 type Phase = 'idle' | 'saving' | 'done' | 'error';
-type MenuKey = 'list' | 'assignee' | 'priority' | 'date' | null;
+type MenuKey = 'list' | 'assignee' | 'priority' | 'date' | 'labels' | null;
 type SelectedList = { id: string; name: string };
 
 // A file the user has dropped onto the panel, queued to upload once the task
@@ -136,6 +144,24 @@ export default function QuickAdd() {
   const [error, setError] = useState('');
   const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
   const [dragOver, setDragOver] = useState(false);
+  // Auth is shared with the menu-bar window via auth.json — when empty we show
+  // an inline sign-in form instead of just an error string.
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const authHydrated = useAuthStore((s) => s.hydrated);
+  const [loginEmail, setLoginEmail] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
+  const [loginLoading, setLoginLoading] = useState(false);
+  const [loginError, setLoginError] = useState('');
+  // Labels for the selected list's workspace (draft mode: attached after create).
+  const [labelGroups, setLabelGroups] = useState<LabelPickerGroup[]>([]);
+  const [labelQuery, setLabelQuery] = useState('');
+  const [selectedLabels, setSelectedLabels] = useState<TaskTag[]>([]);
+  // My open tasks — tick to mark complete without leaving the panel.
+  const [myTasks, setMyTasks] = useState<MyTaskLite[]>([]);
+  const [myTasksLoading, setMyTasksLoading] = useState(false);
+  const [myTasksError, setMyTasksError] = useState('');
+  const [completingId, setCompletingId] = useState<string | null>(null);
+  const [completeOnCreate, setCompleteOnCreate] = useState(false);
 
   // Once the task is created we keep its id so a retry (e.g. after an attachment
   // upload fails) re-uses it instead of creating a duplicate task.
@@ -167,6 +193,16 @@ export default function QuickAdd() {
     });
   };
 
+  const refreshMyTasks = () => {
+    if (!useAuthStore.getState().accessToken) return;
+    setMyTasksLoading(true);
+    setMyTasksError('');
+    fetchMyOpenTasks(12)
+      .then(setMyTasks)
+      .catch((e) => setMyTasksError(e instanceof Error ? e.message : 'Could not load tasks'))
+      .finally(() => setMyTasksLoading(false));
+  };
+
   const reset = () => {
     setTitle('');
     setDescription('');
@@ -182,10 +218,15 @@ export default function QuickAdd() {
     dragDepthRef.current = 0;
     draggingRef.current = false;
     setDragOver(false);
+    setSelectedLabels([]);
+    setLabelQuery('');
+    setCompleteOnCreate(false);
+    setLoginError('');
     const self = useAuthStore.getState().userId;
     setAssigneeIds(self ? [self] : []);
     if (defaultListRef.current) setSelectedList(defaultListRef.current);
     void getRecentLists().then(setRecents);
+    refreshMyTasks();
     setTimeout(() => inputRef.current?.focus(), 0);
   };
 
@@ -248,11 +289,13 @@ export default function QuickAdd() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Load assignable users whenever the target list changes; default to self.
+  // Load assignable users + labels whenever the target list changes.
   useEffect(() => {
     const lid = selectedList?.id;
     if (!lid) {
       setAssignable([]);
+      setLabelGroups([]);
+      setSelectedLabels([]);
       return;
     }
     let alive = true;
@@ -269,10 +312,77 @@ export default function QuickAdd() {
           setAssigneeIds([]);
         }
       });
+    // Labels are workspace-scoped; reset selection when the list changes
+    // (mirrors the web TaskCreatePanel draftLabels reset).
+    setSelectedLabels([]);
+    setLabelQuery('');
+    fetchLabelsForList(lid)
+      .then((d) => {
+        if (alive) setLabelGroups(d.groups || []);
+      })
+      .catch(() => {
+        if (alive) setLabelGroups([]);
+      });
     return () => {
       alive = false;
     };
   }, [selectedList?.id]);
+
+  // Pull open tasks once authenticated so the panel can complete + create.
+  useEffect(() => {
+    if (isAuthenticated) refreshMyTasks();
+    else setMyTasks([]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAuthenticated]);
+
+  const handleQuickSignIn = async (e?: React.FormEvent) => {
+    e?.preventDefault();
+    if (!loginEmail.trim() || !loginPassword || loginLoading) return;
+    setLoginLoading(true);
+    setLoginError('');
+    try {
+      const res = await login(loginEmail.trim(), loginPassword);
+      if (res.success && res.data) {
+        await useAuthStore.getState().setAuth({
+          accessToken: res.data.access_token,
+          refreshToken: res.data.refresh_token,
+          userEmail: res.data.user.email,
+          displayName: res.data.user.display_name,
+          userId: res.data.user.id,
+        });
+        setLoginPassword('');
+        void resolvePersonal();
+        reset();
+      } else {
+        setLoginError(res.error || 'Login failed');
+      }
+    } catch {
+      setLoginError('Could not connect to server');
+    } finally {
+      setLoginLoading(false);
+    }
+  };
+
+  const completeTask = async (taskId: string) => {
+    if (completingId) return;
+    setCompletingId(taskId);
+    setMyTasksError('');
+    const prev = myTasks;
+    setMyTasks((cur) => cur.filter((t) => t.id !== taskId));
+    try {
+      await updateTaskStatus(taskId, 'done');
+    } catch (e) {
+      setMyTasks(prev);
+      setMyTasksError(e instanceof Error ? e.message : 'Could not complete task');
+    } finally {
+      setCompletingId(null);
+    }
+  };
+
+  const toggleLabel = (tag: TaskTag) =>
+    setSelectedLabels((cur) =>
+      cur.some((t) => t.id === tag.id) ? cur.filter((t) => t.id !== tag.id) : [...cur, tag],
+    );
 
   const submit = async () => {
     const trimmed = title.trim();
@@ -280,7 +390,7 @@ export default function QuickAdd() {
 
     if (!useAuthStore.getState().accessToken) {
       setPhase('error');
-      setError('Sign in from the SquadHub menu-bar app first.');
+      setError('Sign in below to add tasks.');
       return;
     }
 
@@ -322,9 +432,26 @@ export default function QuickAdd() {
             /* focus is a nice-to-have; don't fail the whole add */
           }
         }
+        // Labels picked before the task exists are attached now (web parity).
+        for (const tag of selectedLabels) {
+          try {
+            await attachTaskLabel(task.id, tag.id);
+          } catch {
+            /* label attach is best-effort; task already exists */
+          }
+        }
+        if (completeOnCreate) {
+          try {
+            await updateTaskStatus(task.id, 'done');
+          } catch {
+            /* leave the created task open if complete fails */
+          }
+        }
         if (!cachedPersonal || list.id !== cachedPersonal.id) {
           void pushRecentList({ id: list.id, name: list.name });
         }
+        // Refresh the completable list so the new task state shows up.
+        refreshMyTasks();
       }
 
       // Hand dropped files to the background uploader and close right away —
@@ -499,6 +626,66 @@ export default function QuickAdd() {
           '1 assignee'
         : `${assigneeIds.length} assignees`;
 
+  const labelCount = selectedLabels.length;
+  const labelButtonText =
+    labelCount === 0 ? 'Labels' : labelCount === 1 ? selectedLabels[0].name : `${labelCount} labels`;
+  const lq = labelQuery.trim().toLowerCase();
+  const filteredLabelGroups = (labelGroups || [])
+    .map((g) => ({
+      ...g,
+      labels: g.labels.filter((l) => !lq || l.name.toLowerCase().includes(lq)),
+    }))
+    .filter((g) => g.labels.length > 0);
+
+  if (authHydrated && !isAuthenticated) {
+    return (
+      <div className="qa-scroll" onKeyDown={onContainerKeyDown}>
+        <div className="qa">
+          <button
+            type="button"
+            className="qa-close"
+            onClick={() => void win.hide()}
+            title="Close (Esc)"
+            aria-label="Close"
+          >
+            ×
+          </button>
+          <div className="qa-row">
+            <span className="qa-icon">⚡</span>
+            <div className="qa-signin-title">Sign in to SquadHub</div>
+          </div>
+          <p className="qa-signin-sub">
+            Use your SquadHub account — the same one as the menu-bar app — to add tasks from here.
+          </p>
+          {loginError && <div className="qa-err">{loginError}</div>}
+          <form className="qa-signin-form" onSubmit={(e) => void handleQuickSignIn(e)}>
+            <input
+              className="qa-signin-input"
+              type="email"
+              placeholder="you@company.com"
+              value={loginEmail}
+              onChange={(e) => setLoginEmail(e.target.value)}
+              autoFocus
+              required
+            />
+            <input
+              className="qa-signin-input"
+              type="password"
+              placeholder="Enter your password"
+              value={loginPassword}
+              onChange={(e) => setLoginPassword(e.target.value)}
+              required
+            />
+            <button type="submit" className="qa-add-btn" disabled={loginLoading || !loginEmail.trim() || !loginPassword}>
+              {loginLoading ? 'Signing in…' : 'Sign In'}
+            </button>
+          </form>
+          <div className="qa-hint">Task title, labels and completion unlock after sign-in.</div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div
       className="qa-scroll"
@@ -610,7 +797,48 @@ export default function QuickAdd() {
           </svg>
           <span className="qa-pill-label">Description</span>
         </button>
+
+        <button
+          type="button"
+          className={`qa-pill${labelCount ? ' active' : ' muted'}`}
+          onClick={() => toggleMenu('labels')}
+          title={selectedList ? `Labels in ${selectedList.name}` : 'Labels'}
+        >
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M20.59 13.41 11 3.83A2 2 0 0 0 9.59 3.24H4a1 1 0 0 0-1 1v5.59a2 2 0 0 0 .59 1.41l9.58 9.59a2 2 0 0 0 2.83 0l4.59-4.59a2 2 0 0 0 0-2.83z" />
+            <circle cx="7.5" cy="7.5" r="1" fill="currentColor" />
+          </svg>
+          <span className="qa-pill-label">{labelButtonText}</span>
+        </button>
+
+        <button
+          type="button"
+          className={`qa-pill${completeOnCreate ? ' active' : ' muted'}`}
+          onClick={() => setCompleteOnCreate((v) => !v)}
+          title="Create this task already completed"
+        >
+          <span aria-hidden>✓</span>
+          <span className="qa-pill-label">{completeOnCreate ? 'Complete on add' : 'Mark complete'}</span>
+        </button>
       </div>
+
+      {labelCount > 0 && (
+        <div className="qa-labelsel">
+          {selectedLabels.map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              className="qa-labelchip"
+              onClick={() => toggleLabel(t)}
+              title="Remove label"
+            >
+              <span className="qa-dot" style={{ background: t.color || '#6b7280' }} />
+              <span className="qa-labelchip-name">{t.name}</span>
+              <span aria-hidden>×</span>
+            </button>
+          ))}
+        </div>
+      )}
 
       {descOpen && (
         <div className="qa-desc">
@@ -692,6 +920,39 @@ export default function QuickAdd() {
         </div>
       )}
 
+      {openMenu === 'labels' && (
+        <div className="qa-menu">
+          <input
+            className="qa-search"
+            autoFocus
+            placeholder={selectedList ? `Search labels in ${selectedList.name}…` : 'Search labels…'}
+            value={labelQuery}
+            onChange={(e) => setLabelQuery(e.target.value)}
+          />
+          <div className="qa-menu-scroll">
+            {!selectedList && <div className="qa-menu-empty">Pick a list to see its labels</div>}
+            {selectedList && filteredLabelGroups.length === 0 && (
+              <div className="qa-menu-empty">{lq ? 'No labels match' : 'No labels in this workspace yet'}</div>
+            )}
+            {filteredLabelGroups.map((g) => (
+              <div key={g.group.id}>
+                <div className="qa-grouphead">{g.group.name}</div>
+                {g.labels.map((tag) => {
+                  const on = selectedLabels.some((t) => t.id === tag.id);
+                  return (
+                    <button key={tag.id} type="button" className="qa-opt-row" onClick={() => toggleLabel(tag)}>
+                      <span className="qa-dot" style={{ background: tag.color || '#6b7280' }} />
+                      <span className="qa-opt-main">{tag.name}</span>
+                      {on && <span className="qa-check">✓</span>}
+                    </button>
+                  );
+                })}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {attachments.length > 0 && (
         <div className="qa-attachments">
           {attachments.map((a) => (
@@ -748,7 +1009,39 @@ export default function QuickAdd() {
         </div>
       )}
 
-      <div className="qa-footer">
+            <div className="qa-mytasks">
+        <div className="qa-mytasks-head">
+          <span>My open tasks</span>
+          <button type="button" className="qa-mytasks-refresh" onClick={() => refreshMyTasks()} title="Refresh">
+            ↻
+          </button>
+        </div>
+        {myTasksLoading && <div className="qa-menu-empty">Loading tasks…</div>}
+        {!myTasksLoading && myTasksError && <div className="qa-err">{myTasksError}</div>}
+        {!myTasksLoading && !myTasksError && myTasks.length === 0 && (
+          <div className="qa-menu-empty">Nothing open — create one above.</div>
+        )}
+        {!myTasksLoading && myTasks.map((t) => (
+          <div key={t.id} className="qa-taskrow">
+            <button
+              type="button"
+              className="qa-taskcheck"
+              disabled={completingId === t.id}
+              onClick={() => void completeTask(t.id)}
+              title="Mark as completed"
+              aria-label={`Mark ${t.title} as completed`}
+            >
+              {completingId === t.id ? '…' : '○'}
+            </button>
+            <div className="qa-taskmain">
+              <div className="qa-tasktitle">{t.title}</div>
+              <div className="qa-tasksub">{[t.space?.name, t.list?.name].filter(Boolean).join(' / ') || 'My Tasks'}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+<div className="qa-footer">
         <div className="qa-hint">
           {phase === 'saving' && <span>Adding…</span>}
           {phase === 'done' && <span className="qa-ok">Added ✓</span>}
