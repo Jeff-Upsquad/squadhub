@@ -4,11 +4,12 @@ import { useTasks, useUpdateTask, useCreateTask, groupTasksByStatus } from '../.
 import { usePMStore } from '../../../stores/pmStore';
 import { filterTasks, EMPTY_FILTER, type TaskFilterState } from '../../../lib/filters';
 import { sortByCreationOrder } from '../../../lib/taskGrouping';
+import { formatDated } from './taskHelpers';
 import TaskPriorityBadge from './TaskPriorityBadge';
 
-function formatDate(dateStr: string | null | undefined) {
+function formatDate(dateStr: string | null | undefined, kind: 'Work' | 'Due' = 'Due') {
   if (!dateStr) return null;
-  return new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  return formatDated(dateStr, kind)?.text ?? null;
 }
 
 // ---- Task card ----
@@ -17,7 +18,8 @@ function TaskCard({ task, statuses, listName }: { task: Task; statuses: SpaceSta
   const tags = (task as any).tags || [];
   const subtasks = task.subtasks || [];
   const completedSubtasks = subtasks.filter((s: any) => s.status === 'done' || (s as any).category === 'done').length;
-  const due = formatDate(task.due_date);
+  const work = formatDate(task.work_date, 'Work');
+  const due = formatDate(task.due_date, 'Due');
   const commentCount = task.comment_count || 0;
   const attachmentCount = (task as any).attachment_count || 0;
 
@@ -83,7 +85,15 @@ function TaskCard({ task, statuses, listName }: { task: Task; statuses: SpaceSta
           </div>
         )}
 
-        {/* Due date */}
+        {/* Work + due dates — both shown with labels when both exist */}
+        {work && (
+          <div className="flex items-center gap-1 text-[11px] text-[color:var(--sh-ink-3)]">
+            <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+            </svg>
+            {work}
+          </div>
+        )}
         {due && (
           <div className="flex items-center gap-1 text-[11px] text-[color:var(--sh-ink-3)]">
             <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">

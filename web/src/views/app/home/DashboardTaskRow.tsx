@@ -3,6 +3,7 @@ import type { Task } from '@squadhub/shared';
 import { usePMStore } from '../../../stores/pmStore';
 import { useUpdateTask } from '../../../hooks/useTasks';
 import { useIsMobile } from '../../../hooks/useIsMobile';
+import { formatTaskDates } from '../pm/taskHelpers';
 
 function hashHue(input: string): number {
   let h = 0;
@@ -19,25 +20,6 @@ function initialOf(name: string | undefined | null): string {
   if (!name) return '?';
   const parts = name.trim().split(/\s+/).slice(0, 2);
   return parts.map((p) => p[0]?.toUpperCase() || '').join('') || '?';
-}
-
-function formatWhen(iso: string | null | undefined): string {
-  if (!iso) return 'No due date';
-  const d = new Date(iso);
-  const now = new Date();
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-  const that = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
-  const delta = Math.round((that - today) / 86_400_000);
-  const hasTime = !(d.getHours() === 0 && d.getMinutes() === 0);
-  const time = hasTime ? d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: true }) : '';
-  if (delta < 0) {
-    const abs = Math.abs(delta);
-    return abs === 1 ? 'Overdue · 1 day' : `Overdue · ${abs} days`;
-  }
-  if (delta === 0) return time ? `Today · ${time}` : 'Due today';
-  if (delta === 1) return time ? `Tomorrow · ${time}` : 'Due tomorrow';
-  if (delta < 7) return d.toLocaleDateString([], { weekday: 'long' });
-  return d.toLocaleDateString([], { month: 'short', day: 'numeric' });
 }
 
 const PRIORITY_LABEL: Record<string, string | null> = {
@@ -65,15 +47,11 @@ export default function DashboardTaskRow({ task }: { task: Task }) {
   const priorityLabel = PRIORITY_LABEL[task.priority as string] || null;
   const isSubtask = !!task.parent_task_id;
   const parentTitle = task.parent_task?.title || null;
-  // The Home Overdue bucket is due-date only (work-date overdue lives in the
-  // separate Work Overdue card), so rows show the due date when present and
-  // only fall back to work/start when there is no due date.
-  const displayIso = (() => {
-    if (task.due_date) return task.due_date;
-    return (task.work_date || task.start_date) as string | null;
-  })();
-  const whenText = formatWhen(displayIso);
-  const isOverdue = whenText.startsWith('Overdue');
+  // Show work and due dates with explicit labels so a work date is never
+  // misread as a due date. Both are shown when both exist.
+  const dateDisplay = formatTaskDates(task);
+  const whenText = dateDisplay.text;
+  const isOverdue = dateDisplay.overdue;
   const taskPath = [task.space?.name, task.folder?.name, task.list?.name].filter(Boolean).join(' › ');
 
   const onOpen = () => {

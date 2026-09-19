@@ -4,7 +4,7 @@ import { useMyTasksSummary } from './useMyTasksSummary';
 import { useUpdateTask } from './useTasks';
 import { usePMStore } from '../stores/pmStore';
 import { useLearningStore } from '../stores/learningStore';
-import { formatWhen } from '../views/app/pm/taskHelpers';
+import { formatDated, formatTaskDates } from '../views/app/pm/taskHelpers';
 import { isFutureDay, isToday, isTaskFocused } from '../lib/taskGrouping';
 import api from '../services/api';
 
@@ -83,12 +83,12 @@ export function useSecondaryCards(): SecondaryCardsResult {
     const all = merged.filter((t) => (seen.has(t.id) ? false : (seen.add(t.id), true)));
 
     const toItem = (t: Task, kind: string): SecondaryCardItem => {
-      const when = formatWhen(t.due_date || t.work_date || t.start_date);
+      const when = formatTaskDates(t);
       return {
         id: t.id,
         title: t.title,
         whenText: when.text,
-        overdue: when.state === 'overdue',
+        overdue: when.overdue,
         kind,
         task: t,
         open: async () => {
@@ -163,8 +163,8 @@ export function useSecondaryCards(): SecondaryCardsResult {
       .filter((t) => !!t.work_date && !isFutureDay(t.work_date, tz) && !isToday(t.work_date, tz))
       .map((t) => {
         const base = toItem(t, 'work_overdue');
-        const when = formatWhen(t.work_date);
-        return { ...base, whenText: when.text, overdue: true };
+        const when = formatDated(t.work_date, 'Work');
+        return { ...base, whenText: when?.text ?? base.whenText, overdue: true };
       });
 
     return {
