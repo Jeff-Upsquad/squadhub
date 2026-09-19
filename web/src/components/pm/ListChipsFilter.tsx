@@ -13,6 +13,13 @@ interface ListChipsFilterProps {
    * chip stays in the main row without a badge until its count arrives.
    */
   counts: Record<string, number>;
+  /**
+   * Snoozed (future-dated) open tasks per list id. A list whose open tasks are
+   * ALL upcoming moves into the "No open tasks" dropdown, with its upcoming
+   * count shown on the dropdown row. Omit (or leave an entry out) when unknown
+   * — those lists keep the legacy count-only behavior.
+   */
+  upcomingCounts?: Record<string, number>;
   /** Currently filtered list id, or 'all'. */
   value: string;
   onChange: (next: string) => void;
@@ -31,6 +38,7 @@ export default function ListChipsFilter({
   label,
   lists,
   counts,
+  upcomingCounts,
   value,
   onChange,
   myAccess,
@@ -51,17 +59,32 @@ export default function ListChipsFilter({
   // Resolve each list's count: live query only. The server-joined
   // `task_count` deliberately ISN'T used as a fallback — it includes
   // completed/closed tasks, which would flash wrong numbers while loading.
+  // `current` is open tasks due now (open minus snoozed/upcoming): a list with
+  // no current tasks collapses into the "No open tasks" dropdown even when it
+  // holds upcoming ones — those keep an upcoming badge on the dropdown row.
   const enriched = useMemo(
     () =>
-      lists.map((list) => ({
-        list,
-        count: counts[list.id],
-      })),
-    [lists, counts],
+      lists.map((list) => {
+        const count = counts[list.id];
+        const upcoming = upcomingCounts?.[list.id] ?? 0;
+        return {
+          list,
+          count,
+          upcoming,
+          current: count === undefined ? undefined : Math.max(0, count - upcoming),
+        };
+      }),
+    [lists, counts, upcomingCounts],
   );
 
-  const withTasks = useMemo(() => enriched.filter((e) => e.count === undefined || e.count > 0), [enriched]);
-  const emptyLists = useMemo(() => enriched.filter((e) => e.count === 0), [enriched]);
+  const withTasks = useMemo(
+    () => enriched.filter((e) => e.current === undefined || e.current > 0),
+    [enriched],
+  );
+  const emptyLists = useMemo(
+    () => enriched.filter((e) => e.current !== undefined && e.current === 0),
+    [enriched],
+  );
 
   // If the filtered list disappears (deleted / moved out), fall back to All.
   useEffect(() => {
@@ -329,7 +352,7 @@ export default function ListChipsFilter({
                 padding: 4,
               }}
             >
-              {emptyLists.map(({ list }) => (
+              {emptyLists.map(({ list, upcoming }) => (
                 <div key={list.id} className="group/em relative flex items-center">
                   <div
                     role="menuitem"
@@ -346,6 +369,15 @@ export default function ListChipsFilter({
                     {list.is_private && !list.is_locked && <PrivateLock />}
                     {list.is_locked && <AdminLock />}
                     <span className="flex-1 truncate">{list.name}</span>
+                    {upcoming > 0 && (
+                      <span
+                        className="lc-count shrink-0"
+                        title={`${upcoming} upcoming task${upcoming === 1 ? '' : 's'}`}
+                        style={{ background: '#0ea5e922', color: '#0284c7' }}
+                      >
+                        {upcoming > 99 ? '99+' : upcoming} upcoming
+                      </span>
+                    )}
                     {value === list.id && (
                       <svg className="h-3.5 w-3.5 shrink-0 text-[var(--sh-ink)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
                         <path d="M20 6L9 17l-5-5" />

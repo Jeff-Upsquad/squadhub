@@ -6,7 +6,7 @@ import { usePMStore } from '../../../stores/pmStore';
 import { useSpace } from '../../../hooks/useSpaces';
 import { useIsMobile } from '../../../hooks/useIsMobile';
 import TaskGroupCard from './TaskGroupCard';
-import { GROUP_BY_OPTIONS, groupTasks, partitionByCompletion, buildFocusTodayGroup, isTaskCompleted, sortByCreationOrder, type GroupBy } from '../../../lib/taskGrouping';
+import { GROUP_BY_OPTIONS, groupTasks, partitionByCompletion, buildFocusTodayGroup, isTaskCompleted, isTaskUpcoming, sortByCreationOrder, type GroupBy } from '../../../lib/taskGrouping';
 import MinimalGroupFilterBar from '../../../components/pm/MinimalGroupFilterBar';
 import ViewSearchInput from '../../../components/pm/ViewSearchInput';
 import ContainerChatButton from '../../../components/pm/ContainerChatButton';
@@ -127,6 +127,19 @@ export default function SpacePage({ spacePageId: propSpacePageId }: { spacePageI
 
   const tz = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC', []);
 
+  // Per-list snoozed (future-dated) open counts for the list chips. A list
+  // whose open tasks are ALL upcoming collapses into the "No open tasks"
+  // dropdown with its upcoming count shown on the row.
+  const upcomingCounts = useMemo(() => {
+    const m: Record<string, number> = {};
+    for (const q of taskQueries) {
+      if (!q.data) continue;
+      m[q.data.listId] = q.data.tasks.filter((t) => !isTaskCompleted(t) && isTaskUpcoming(t, tz)).length;
+    }
+    return m;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [taskQueries.map((q) => q.dataUpdatedAt).join('|'), tz]);
+
   const tasksAfterPills = useMemo(() => {
     let arr = allTasks;
     if (folderFilter === NO_FOLDER_KEY) {
@@ -163,14 +176,36 @@ export default function SpacePage({ spacePageId: propSpacePageId }: { spacePageI
     [filteredTasks, fadingTaskIds],
   );
 
+  // "Upcoming" — snoozed future-dated tasks, collapsed just above Completed.
+  // Bypasses date filters (so a "Today" filter can't hide a future task) while
+  // still respecting the folder/list pills, every other filter, and search. A
+  // task automatically rejoins the main list once its day arrives.
+  const upcomingTasks = useMemo(() => {
+    const hasDateFilter = (filters.dueDate?.length ?? 0) > 0 || (filters.workDate?.length ?? 0) > 0;
+    if (!hasDateFilter) return sortByCreationOrder(openTasks.filter((t) => isTaskUpcoming(t, tz)));
+    let arr = filterTasks(sortByCreationOrder(tasksAfterPills), { ...filters, dueDate: undefined, workDate: undefined }, tz);
+    const q = searchQuery.trim().toLowerCase();
+    if (q) arr = arr.filter((t) => t.title.toLowerCase().includes(q));
+    const { open } = partitionByCompletion(arr, fadingTaskIds);
+    return sortByCreationOrder(open.filter((t) => isTaskUpcoming(t, tz)));
+  }, [tasksAfterPills, filters, tz, searchQuery, openTasks, fadingTaskIds]);
+
+  const upcomingIds = useMemo(() => new Set(upcomingTasks.map((t) => t.id)), [upcomingTasks]);
+
+  // Main groups exclude snoozed tasks so a future task never shows twice.
+  const currentOpenTasks = useMemo(
+    () => openTasks.filter((t) => !upcomingIds.has(t.id)),
+    [openTasks, upcomingIds],
+  );
+
   const groups = useMemo(() => {
     if (groupBy === 'none') return [];
-    return groupTasks(openTasks, groupBy, tz, fadingTaskIds);
-  }, [openTasks, groupBy, tz, fadingTaskIds]);
+    return groupTasks(currentOpenTasks, groupBy, tz, fadingTaskIds);
+  }, [currentOpenTasks, groupBy, tz, fadingTaskIds]);
 
   const focusGroup = useMemo(() => {
-    return buildFocusTodayGroup(openTasks);
-  }, [openTasks]);
+    return buildFocusTodayGroup(currentOpenTasks);
+  }, [currentOpenTasks]);
 
   if (!activeSpacePageId) {
     return (
@@ -186,7 +221,7 @@ export default function SpacePage({ spacePageId: propSpacePageId }: { spacePageI
   }
 
   const totalCount = allTasks.length;
-  const filteredCount = filteredTasks.length;
+  const visibleCount = filteredTasks.length - openTasks.filter((t) => upcomingIds.has(t.id)).length + upcomingTasks.length;
   const noopStatusChange = () => {};
 
   return (
@@ -283,6 +318,7 @@ export default function SpacePage({ spacePageId: propSpacePageId }: { spacePageI
         label="Lists"
         lists={visibleLists}
         counts={listCounts}
+        upcomingCounts={upcomingCounts}
         value={listFilter}
         onChange={setListFilter}
         myAccess={space?.my_access_level}
@@ -308,7 +344,7 @@ export default function SpacePage({ spacePageId: propSpacePageId }: { spacePageI
           <div style={{ padding: '28px 20px', fontSize: 13, color: 'var(--sh-ink-3)' }}>
             This space has no lists yet.
           </div>
-        ) : filteredCount === 0 ? (
+        ) : visibleCount === 0 ? (
           <div style={{ padding: '28px 20px', fontSize: 13, color: 'var(--sh-ink-3)' }}>
             {activeFilterCount > 0 ? (
               <>
@@ -342,17 +378,19 @@ export default function SpacePage({ spacePageId: propSpacePageId }: { spacePageI
               />
             )}
             {groupBy === 'none' ? (
-              <TaskGroupCard
-                groupKey="sp-all"
-                label="All tasks"
-                tasks={openTasks}
-                allStatuses={spaceStatuses}
-                listId={null}
-                onStatusChange={noopStatusChange}
-                canEdit
-                showAddRow={false}
-                dimFocused={!!focusGroup}
-              />
+              (currentOpenTasks.length > 0 || (upcomingTasks.length === 0 && completedTasks.length === 0)) && (
+                <TaskGroupCard
+                  groupKey="sp-all"
+                  label="All tasks"
+                  tasks={currentOpenTasks}
+                  allStatuses={spaceStatuses}
+                  listId={null}
+                  onStatusChange={noopStatusChange}
+                  canEdit
+                  showAddRow={false}
+                  dimFocused={!!focusGroup}
+                />
+              )
             ) : (
               groups.map((g) => (
                 <TaskGroupCard
@@ -369,6 +407,21 @@ export default function SpacePage({ spacePageId: propSpacePageId }: { spacePageI
                   dimFocused={!!focusGroup}
                 />
               ))
+            )}
+            {upcomingTasks.length > 0 && (
+              <TaskGroupCard
+                groupKey="sp-upcoming"
+                label="Upcoming"
+                dotColor="#0ea5e9"
+                tasks={upcomingTasks}
+                allStatuses={spaceStatuses}
+                listId={null}
+                onStatusChange={noopStatusChange}
+                canEdit
+                showAddRow={false}
+                dimFocused={!!focusGroup}
+                defaultCollapsed
+              />
             )}
             {completedTasks.length > 0 && (
               <TaskGroupCard

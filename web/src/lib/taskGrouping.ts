@@ -101,6 +101,16 @@ export function isTaskForToday(t: Task, tz: string): boolean {
   return isToday(t.work_date, tz) || isToday(t.due_date, tz);
 }
 
+// An open task whose work date and/or due date falls on a day strictly after
+// today. The List view snoozes these out of the main groups into a collapsed
+// "Upcoming" section (which bypasses date filters), so a future-dated task is
+// never invisible — and it automatically rejoins the main list once its day
+// arrives.
+export function isTaskUpcoming(t: Task, tz: string): boolean {
+  if (isTaskCompleted(t)) return false;
+  return isFutureDay(t.work_date, tz) || isFutureDay(t.due_date, tz);
+}
+
 export const PRIORITY_ORDER: Record<string, number> = {
   emergency: 0,
   urgent: 1,
