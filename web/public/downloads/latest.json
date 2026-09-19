@@ -1,10 +1,10 @@
 {
-  "version": "0.1.14",
-  "notes": "Quick-add now adds the task instantly \u2014 dropped attachments upload in the background after Enter / Add-a-Task, with a retry prompt on the next summon if any fail. Adds an explicit close button to the panel.",
-  "pub_date": "2026-08-21T20:46:14Z",
+  "version": "0.1.15",
+  "notes": "Quick-add can now attach labels, sign you in right inside the window, and shows your open tasks with one-tap complete plus a complete-on-add toggle. Tasks created here are now tracked as coming from the companion app.",
+  "pub_date": "2026-09-19T16:55:19Z",
   "platforms": {
     "darwin-aarch64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUQ003TTR4K1pKdzBxdktTWStzTkNqVnVUR3FsUDFTKzViS1JwcGFEQWVvVUZYVkZUT0lybkNHV3N3L3ZuRjhnUXJ0TU1semhyZHJCdFgzMHhXZmZBeTc3WVovSmJkdHdFPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg3MzQ1MTYyCWZpbGU6U3F1YWRIdWIgQ29tcGFuaW9uLmFwcC50YXIuZ3oKNmJMSEkvclhXUmx4eDY0K3IwWjlKb21jWHloMVpTOE5NdVIrWEdvUXJ4UG1hblI4ZmdJT1YyV3pXZ1lkN2tqYXZtQTMzM21PMHJ6RGNsNHpNY0FlREE9PQo=",
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUQ003TTR4K1pKdzJVOXRjc3UvMEk0WTNyV1FwZTRtVXBqN2VWc0JzZ3R5NGY3RnQrN0xCWFlDaFV5M1RBMU4rd29OaFpqRE5vK2k4cnoxK0FNa2ZBLzF6bFhKdDN6bHdRPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg5ODM2Nzc2CWZpbGU6U3F1YWRIdWIgQ29tcGFuaW9uLmFwcC50YXIuZ3oKOS9Fb2EveHdJNFJnRWE1L05Ta2hqb1Q4Yk9XTTRJcGpzYml0aHNWUTdnWjlWdjdSekdNK25ja0M0NGpzNVozM2tvdDJPUS9YTUNDRThBRWU0bHppQ2c9PQo=",
       "url": "https://squadhub.in/downloads/SquadHub.app.tar.gz"
     }
   }
