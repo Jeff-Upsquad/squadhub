@@ -139,15 +139,6 @@ export interface LabelPickerData {
   can_create: boolean;
 }
 
-export interface MyTaskLite {
-  id: string;
-  title: string;
-  status: string;
-  list_id: string;
-  list?: { id: string; name: string } | null;
-  space?: { id: string; name: string } | null;
-}
-
 export interface CreateTaskPayload {
   list_id: string;
   title: string;
@@ -170,27 +161,9 @@ export function attachTaskLabel(taskId: string, tagId: string): Promise<TaskTag>
   });
 }
 
-/** GET /pm/tasks/my — assigned open tasks, flattened from the day buckets. */
-export async function fetchMyOpenTasks(limit = 12): Promise<MyTaskLite[]> {
-  const buckets = await apiJson<Record<string, MyTaskLite[]>>('/pm/tasks/my');
-  const seen = new Set<string>();
-  const out: MyTaskLite[] = [];
-  // Prefer actionable buckets first; fall back to the rest.
-  const order = ['day_planner', 'overdue', 'today', 'tomorrow', 'unscheduled', 'upcoming', 'later', 'focused'];
-  for (const key of [...order, ...Object.keys(buckets)]) {
-    for (const t of buckets[key] || []) {
-      if (!t || seen.has(t.id)) continue;
-      seen.add(t.id);
-      out.push(t);
-      if (out.length >= limit) return out;
-    }
-  }
-  return out;
-}
-
-/** PUT /pm/tasks/:id — update status (used for mark-complete / reopen). */
-export function updateTaskStatus(taskId: string, status: string): Promise<MyTaskLite> {
-  return apiJson<MyTaskLite>(`/pm/tasks/${taskId}`, {
+/** PUT /pm/tasks/:id — update status (used for complete-on-add). */
+export function updateTaskStatus(taskId: string, status: string): Promise<{ id: string }> {
+  return apiJson<{ id: string }>(`/pm/tasks/${taskId}`, {
     method: 'PUT',
     body: JSON.stringify({ status }),
   });

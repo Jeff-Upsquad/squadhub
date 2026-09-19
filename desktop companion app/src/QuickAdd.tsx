@@ -12,14 +12,12 @@ import {
   uploadTaskAttachment,
   fetchLabelsForList,
   attachTaskLabel,
-  fetchMyOpenTasks,
   updateTaskStatus,
   type AssignableUser,
   type ListLite,
   type TaskPriority,
   type TaskTag,
   type LabelPickerGroup,
-  type MyTaskLite,
 } from './services/api';
 import { login } from './services/auth';
 import { getRecentLists, pushRecentList, type RecentList } from './services/recents';
@@ -156,11 +154,7 @@ export default function QuickAdd() {
   const [labelGroups, setLabelGroups] = useState<LabelPickerGroup[]>([]);
   const [labelQuery, setLabelQuery] = useState('');
   const [selectedLabels, setSelectedLabels] = useState<TaskTag[]>([]);
-  // My open tasks — tick to mark complete without leaving the panel.
-  const [myTasks, setMyTasks] = useState<MyTaskLite[]>([]);
-  const [myTasksLoading, setMyTasksLoading] = useState(false);
-  const [myTasksError, setMyTasksError] = useState('');
-  const [completingId, setCompletingId] = useState<string | null>(null);
+  // Mark the task being created as completed on add.
   const [completeOnCreate, setCompleteOnCreate] = useState(false);
 
   // Once the task is created we keep its id so a retry (e.g. after an attachment
@@ -193,16 +187,6 @@ export default function QuickAdd() {
     });
   };
 
-  const refreshMyTasks = () => {
-    if (!useAuthStore.getState().accessToken) return;
-    setMyTasksLoading(true);
-    setMyTasksError('');
-    fetchMyOpenTasks(12)
-      .then(setMyTasks)
-      .catch((e) => setMyTasksError(e instanceof Error ? e.message : 'Could not load tasks'))
-      .finally(() => setMyTasksLoading(false));
-  };
-
   const reset = () => {
     setTitle('');
     setDescription('');
@@ -226,7 +210,6 @@ export default function QuickAdd() {
     setAssigneeIds(self ? [self] : []);
     if (defaultListRef.current) setSelectedList(defaultListRef.current);
     void getRecentLists().then(setRecents);
-    refreshMyTasks();
     setTimeout(() => inputRef.current?.focus(), 0);
   };
 
@@ -328,12 +311,7 @@ export default function QuickAdd() {
     };
   }, [selectedList?.id]);
 
-  // Pull open tasks once authenticated so the panel can complete + create.
-  useEffect(() => {
-    if (isAuthenticated) refreshMyTasks();
-    else setMyTasks([]);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAuthenticated]);
+
 
   const handleQuickSignIn = async (e?: React.FormEvent) => {
     e?.preventDefault();
@@ -360,22 +338,6 @@ export default function QuickAdd() {
       setLoginError('Could not connect to server');
     } finally {
       setLoginLoading(false);
-    }
-  };
-
-  const completeTask = async (taskId: string) => {
-    if (completingId) return;
-    setCompletingId(taskId);
-    setMyTasksError('');
-    const prev = myTasks;
-    setMyTasks((cur) => cur.filter((t) => t.id !== taskId));
-    try {
-      await updateTaskStatus(taskId, 'done');
-    } catch (e) {
-      setMyTasks(prev);
-      setMyTasksError(e instanceof Error ? e.message : 'Could not complete task');
-    } finally {
-      setCompletingId(null);
     }
   };
 
@@ -450,8 +412,6 @@ export default function QuickAdd() {
         if (!cachedPersonal || list.id !== cachedPersonal.id) {
           void pushRecentList({ id: list.id, name: list.name });
         }
-        // Refresh the completable list so the new task state shows up.
-        refreshMyTasks();
       }
 
       // Hand dropped files to the background uploader and close right away —
@@ -1008,38 +968,6 @@ export default function QuickAdd() {
           ))}
         </div>
       )}
-
-            <div className="qa-mytasks">
-        <div className="qa-mytasks-head">
-          <span>My open tasks</span>
-          <button type="button" className="qa-mytasks-refresh" onClick={() => refreshMyTasks()} title="Refresh">
-            ↻
-          </button>
-        </div>
-        {myTasksLoading && <div className="qa-menu-empty">Loading tasks…</div>}
-        {!myTasksLoading && myTasksError && <div className="qa-err">{myTasksError}</div>}
-        {!myTasksLoading && !myTasksError && myTasks.length === 0 && (
-          <div className="qa-menu-empty">Nothing open — create one above.</div>
-        )}
-        {!myTasksLoading && myTasks.map((t) => (
-          <div key={t.id} className="qa-taskrow">
-            <button
-              type="button"
-              className="qa-taskcheck"
-              disabled={completingId === t.id}
-              onClick={() => void completeTask(t.id)}
-              title="Mark as completed"
-              aria-label={`Mark ${t.title} as completed`}
-            >
-              {completingId === t.id ? '…' : '○'}
-            </button>
-            <div className="qa-taskmain">
-              <div className="qa-tasktitle">{t.title}</div>
-              <div className="qa-tasksub">{[t.space?.name, t.list?.name].filter(Boolean).join(' / ') || 'My Tasks'}</div>
-            </div>
-          </div>
-        ))}
-      </div>
 
 <div className="qa-footer">
         <div className="qa-hint">
