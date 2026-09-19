@@ -12,6 +12,7 @@ import { spawnRoutineInstance } from '../../services/routineSpawner';
 import { todayIST } from '../../utils/ist';
 import { logTaskTimeEntry, ensureAssigneeOnTimeLogged } from '../../utils/taskTime';
 import { logTaskActivity, type TaskActivityEvent } from '../../utils/taskActivity';
+import { resolveClientSource } from '../../utils/clientSource';
 
 const router = Router();
 router.use(requireAuth);
@@ -42,6 +43,10 @@ const createSchema = z.object({
   assignee_ids: z.array(z.string().uuid()).optional(),
   metadata: z.record(z.string(), z.any()).optional(),
   recurrence: recurrenceSchema.nullable().optional(),
+  // Client platform that created the task (web|mobile_web|desktop_app|companion|
+  // partner_app|internal_app|business_app|...). Prefer the X-Client-Source
+  // header; this body field is the fallback for writers that can't set headers.
+  client_source: z.string().optional(),
 });
 
 const updateSchema = z.object({
@@ -1213,6 +1218,7 @@ router.post('/tasks', async (req: Request, res: Response) => {
       assignee_ids: mergedAssigneeIds,
       metadata: body.metadata || {},
       created_by: req.userId!,
+      created_via: resolveClientSource(req, { explicit: (body as any).client_source }),
     };
     if (displayNumber != null) {
       insertData.display_number = displayNumber;

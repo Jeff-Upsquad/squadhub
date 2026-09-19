@@ -19,6 +19,8 @@ export async function apiFetch(
     ...init,
     headers: {
       'Content-Type': 'application/json',
+      // Task-creation tracking (tasks.created_via) — identifies the menu-bar companion.
+      'X-Client-Source': 'companion',
       ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
       ...(init.headers || {}),
     },

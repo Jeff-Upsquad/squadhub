@@ -221,6 +221,7 @@ router.post('/:token/request', writeLimit, async (req: Request, res: Response) =
       assignee_ids: [],
       metadata,
       created_by: link.created_by as string,
+      created_via: 'public_form',
     };
     if (displayNumber != null) insertData.display_number = displayNumber;
 

@@ -7,12 +7,24 @@ const api = axios.create({
   headers: { 'Content-Type': 'application/json' },
 });
 
-// Attach auth token to every request
+// Client platform for task-creation tracking (tasks.created_via). The full
+// desktop-app shell is a Tauri wrapper around this same web build, so detect
+// it via the Tauri bridge; otherwise split mobile browsers (responsive shell)
+// from desktop by UA. Sent as X-Client-Source; the server falls back to its
+// own UA heuristics when the header is absent.
+function getClientSource(): string {
+  if (typeof window !== 'undefined' && (window as any).__TAURI__ !== undefined) return 'desktop_app';
+  const ua = typeof navigator !== 'undefined' ? navigator.userAgent || '' : '';
+  return /Mobi|Android|iPhone|iPad|Mobile/i.test(ua) ? 'mobile_web' : 'web';
+}
+
+// Attach auth token + client source to every request
 api.interceptors.request.use((config) => {
   const token = useAuthStore.getState().accessToken;
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
+  config.headers['X-Client-Source'] = getClientSource();
   return config;
 });
 
