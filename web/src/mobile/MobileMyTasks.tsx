@@ -13,6 +13,7 @@ import { useMyTasksSummary, type MyTasksBuckets } from '../hooks/useMyTasksSumma
 import { useUpdateTask } from '../hooks/useTasks';
 import { usePMStore } from '../stores/pmStore';
 import { MAvatar, MEmpty, MLoading } from './MobileKit';
+import { formatDated } from '../views/app/pm/taskHelpers';
 
 type Filter = 'all' | 'today' | 'overdue';
 
@@ -121,7 +122,10 @@ function MobileTaskRow({ task, overdue }: { task: Task; overdue: boolean }) {
   const qc = useQueryClient();
   const done = isDone(task);
   const assignee = task.assignees?.[0];
-  const due = shortDate(task.due_date);
+  const workLabel = formatDated(task.work_date, 'Work');
+  const dueLabel = formatDated(task.due_date, 'Due');
+  const dateParts = [workLabel?.text, dueLabel?.text].filter(Boolean) as string[];
+  const dateText = dateParts.join(' · ') || null;
   const pri = task.priority === 'emergency' || task.priority === 'urgent' || task.priority === 'high'
     ? task.priority
     : null;
@@ -150,8 +154,8 @@ function MobileTaskRow({ task, overdue }: { task: Task; overdue: boolean }) {
       {assignee && (
         <MAvatar name={assignee.display_name || assignee.email} url={assignee.avatar_url} size={22} />
       )}
-      {due && (
-        <span className="mmt-date" data-overdue={overdue ? '' : undefined}>{due}</span>
+      {dateText && (
+        <span className="mmt-date" data-overdue={overdue ? '' : undefined}>{dateText}</span>
       )}
       {pri && <span className="mmt-flag" data-p={pri} aria-hidden />}
     </div>

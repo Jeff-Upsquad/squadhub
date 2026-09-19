@@ -136,13 +136,15 @@ export default function CalendarTaskPalette({
                   <div className="cal-prow-title">{t.title}</div>
                   <div className="cal-prow-meta">
                     {pri && <span className="cal-prow-prilabel" data-level={priorityLevel(t.priority)}>{pri}</span>}
-                    {t.work_date ? (
+                    {t.work_date && (
                       <span className="cal-prow-when">Work {fmtShort(t.work_date)}</span>
-                    ) : isScheduled ? (
+                    )}
+                    {!t.work_date && isScheduled && (
                       <span className="cal-prow-when">Scheduled</span>
-                    ) : t.due_date ? (
+                    )}
+                    {t.due_date && (
                       <span className="cal-prow-when" data-overdue={overdue || undefined}>Due {fmtShort(t.due_date)}</span>
-                    ) : null}
+                    )}
                     {label && <span className="cal-prow-tag">{label}</span>}
                   </div>
                 </div>

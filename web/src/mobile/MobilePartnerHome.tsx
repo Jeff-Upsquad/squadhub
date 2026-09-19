@@ -14,6 +14,7 @@ import { useFavorites } from '../hooks/useFavorites';
 import { useMyTasksSummary } from '../hooks/useMyTasksSummary';
 import { usePMStore } from '../stores/pmStore';
 import { MIcon } from './MobileKit';
+import { formatTaskDates } from '../views/app/pm/taskHelpers';
 import { MobileSpaceGroups } from './MobileHome';
 import { useMobileSpaces, type OpenTarget } from './useMobileSpaces';
 
@@ -172,14 +173,15 @@ function LaunchCard({
 
 function TaskSheetRow({ task, onClick }: { task: Task; onClick: () => void }) {
   const context = task.list?.name || task.folder?.name || task.space?.name;
-  const date = task.work_date || task.due_date;
+  const dates = formatTaskDates(task);
+  const dateText = dates.text === 'No dates' ? null : dates.text;
   return (
     <button type="button" className="mph-sheet-row" onClick={onClick}>
       <span className="mph-task-dot" data-p={task.priority ?? 'none'} aria-hidden />
       <span className="mph-sheet-row-body">
         <b>{task.title}</b>
-        {(context || date) && (
-          <span>{[context, date ? formatShortDate(date) : null].filter(Boolean).join(' · ')}</span>
+        {(context || dateText) && (
+          <span>{[context, dateText].filter(Boolean).join(' · ')}</span>
         )}
       </span>
       <span className="msh-row-chev">{MIcon.chevron}</span>

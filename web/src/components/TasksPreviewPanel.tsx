@@ -23,6 +23,7 @@ import {
 } from '../lib/taskGrouping';
 import { EMPTY_FILTER, filterTasks, type TaskFilterState } from '../lib/filters';
 import { PRIORITY_META } from '../views/app/pm/PriorityPicker';
+import { formatTaskDates } from '../views/app/pm/taskHelpers';
 import { useIsMobile } from '../hooks/useIsMobile';
 import type { SpaceStatus, Task } from '@squadhub/shared';
 
@@ -37,25 +38,16 @@ import type { SpaceStatus, Task } from '@squadhub/shared';
 
 const MAX_ROWS_PER_GROUP = 7;
 
-function dueMeta(due: string | null): { text: string; overdue: boolean } | null {
-  if (!due) return null;
-  const d = new Date(due);
-  if (Number.isNaN(d.getTime())) return null;
-  const day = new Date(d.getFullYear(), d.getMonth(), d.getDate());
-  const now = new Date();
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const diffDays = Math.round((day.getTime() - today.getTime()) / 86_400_000);
-  const md = d.toLocaleDateString(undefined, { month: 'numeric', day: 'numeric' });
-  if (diffDays === 0) return { text: 'Today', overdue: false };
-  if (diffDays === 1) return { text: 'Tomorrow', overdue: false };
-  if (diffDays === -1) return { text: 'Yesterday', overdue: true };
-  return { text: md, overdue: diffDays < 0 };
+function dueMeta(task: Task): { text: string; overdue: boolean } | null {
+  const display = formatTaskDates(task);
+  if (display.text === 'No dates') return null;
+  return { text: display.text, overdue: display.overdue };
 }
 
 function PreviewRow({ task, listId, onOpen }: { task: Task; listId: string; onOpen: (t: Task) => void }) {
   const updateTask = useUpdateTask(listId);
   const done = isTaskCompleted(task);
-  const due = dueMeta(task.due_date);
+  const due = dueMeta(task);
   const pri = task.priority && task.priority !== 'none' ? PRIORITY_META[task.priority] : null;
 
   return (

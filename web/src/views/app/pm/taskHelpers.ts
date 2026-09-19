@@ -94,3 +94,74 @@ export function formatWhen(iso: string | null | undefined): { text: string; stat
   if (delta < 7) return { text: d.toLocaleDateString([], { weekday: 'long' }), state: 'later' };
   return { text: d.toLocaleDateString([], { month: 'short', day: 'numeric' }), state: 'later' };
 }
+
+/**
+ * Format a single date with an explicit Work / Due / Starts prefix so rows
+ * never mislabel a work date as a due date (or vice versa).
+ * - Work today / Due today / Starts today
+ * - Work tomorrow · 3:00 PM / Due tomorrow
+ * - Work Friday / Due Sep 19
+ * - Work overdue · Sep 10 / Due overdue · Sep 10
+ * Returns null when there is no date so callers can fall through.
+ */
+export function formatDated(
+  iso: string | null | undefined,
+  kind: 'Work' | 'Due' | 'Starts',
+): { text: string; state: WhenState } | null {
+  if (!iso) return null;
+  const base = formatWhen(iso);
+  if (base.state === 'none' || !base.text) return null;
+  if (base.state === 'overdue') {
+    const datePart = base.text.includes('·')
+      ? base.text.slice(base.text.indexOf('·') + 1).trim()
+      : base.text;
+    return { text: `${kind} overdue · ${datePart}`, state: 'overdue' };
+  }
+  if (base.state === 'today' || base.state === 'tomorrow') {
+    const [day, ...rest] = base.text.split('·').map((s) => s.trim());
+    const lowerDay = day.toLowerCase();
+    const timePart = rest.length > 0 ? ` · ${rest.join(' · ')}` : '';
+    return { text: `${kind} ${lowerDay}${timePart}`, state: base.state };
+  }
+  // later: weekday ("Friday") or short date ("Sep 19")
+  return { text: `${kind} ${base.text}`, state: base.state };
+}
+
+export interface TaskDateDisplay {
+  text: string;
+  overdue: boolean;
+  hasWorkDate: boolean;
+  hasDueDate: boolean;
+}
+
+/**
+ * Combined work + due label for task rows.
+ * - work date only → "Work today"
+ * - due date only → "Due today"
+ * - both → "Work today · Due Fri" (both dates shown)
+ * - neither (falls back to start_date) → "Starts today" or "No dates"
+ */
+export function formatTaskDates(task: {
+  work_date?: string | null;
+  due_date?: string | null;
+  start_date?: string | null;
+}): TaskDateDisplay {
+  const work = formatDated(task.work_date, 'Work');
+  const due = formatDated(task.due_date, 'Due');
+  const parts: string[] = [];
+  if (work) parts.push(work.text);
+  if (due) parts.push(due.text);
+  if (parts.length > 0) {
+    return {
+      text: parts.join(' · '),
+      overdue: work?.state === 'overdue' || due?.state === 'overdue',
+      hasWorkDate: !!work,
+      hasDueDate: !!due,
+    };
+  }
+  const starts = formatDated(task.start_date, 'Starts');
+  if (starts) {
+    return { text: starts.text, overdue: starts.state === 'overdue', hasWorkDate: false, hasDueDate: false };
+  }
+  return { text: 'No dates', overdue: false, hasWorkDate: false, hasDueDate: false };
+}

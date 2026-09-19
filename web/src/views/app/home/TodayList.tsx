@@ -5,7 +5,7 @@ import { useMyTasks, useUpdateTask } from '../../../hooks/useTasks';
 import { useMyTimeEntries } from '../../../hooks/useTaskTimeEntries';
 import { useParallelTimers } from '../../../hooks/useParallelTimers';
 import { usePMStore, todayKey, effectiveFocusBucket, type FocusBucket } from '../../../stores/pmStore';
-import { avatarColor, initialOf, formatWhen } from '../pm/taskHelpers';
+import { avatarColor, initialOf, formatTaskDates } from '../pm/taskHelpers';
 import { formatTracked, toLocalDateKey } from '../../../lib/formatDuration';
 import { groupTasks, isFutureDay, isTaskFocused, collapseGroupedTasks, isGroupedRow, GROUP_BY_OPTIONS } from '../../../lib/taskGrouping';
 import GroupedTaskRow from './GroupedTaskRow';
@@ -642,7 +642,9 @@ function TodayRow({ task: t, onOpen, secondsToday = 0 }: { task: Task; onOpen: (
     );
   };
 
-  const when = formatWhen(t.due_date);
+  const when = formatTaskDates(t);
+  const whenText = when.text;
+  const whenOverdue = when.overdue;
   const assignee = t.assignees?.[0];
   const label = t.list?.name || t.space?.name || '';
   const isSubtask = !!t.parent_task_id;
@@ -737,9 +739,9 @@ function TodayRow({ task: t, onOpen, secondsToday = 0 }: { task: Task; onOpen: (
         {isSubtask && parentTitle && <span className="hm-parent">↳ {parentTitle}</span>}
         {label && <span className="hm-tag">{label}</span>}
       </div>
-      {when.text && (
-        <span className="hm-when" data-overdue={when.state === 'overdue' || undefined}>
-          {when.text}
+      {whenText && (
+        <span className="hm-when" data-overdue={whenOverdue || undefined}>
+          {whenText}
         </span>
       )}
       {secondsToday > 0 && (
@@ -845,7 +847,7 @@ function HomeSubtaskRow({ sub: s, onOpen }: { sub: Task; onOpen: (id: string) =>
   const updateTask = useUpdateTask(null);
   const status = (s as any).status as string | undefined;
   const isDone = status === 'done' || status === 'closed' || status === 'cancelled';
-  const when = formatWhen(s.due_date);
+  const when = formatTaskDates(s);
   const assignee = s.assignees?.[0];
   return (
     <div
@@ -868,7 +870,7 @@ function HomeSubtaskRow({ sub: s, onOpen }: { sub: Task; onOpen: (id: string) =>
       />
       <span className="t">{s.title}</span>
       {when.text && (
-        <span className="hm-when" data-overdue={when.state === 'overdue' || undefined}>
+        <span className="hm-when" data-overdue={when.overdue || undefined}>
           {when.text}
         </span>
       )}
