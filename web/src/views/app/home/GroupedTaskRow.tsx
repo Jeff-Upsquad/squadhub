@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import type { Task } from '@squadhub/shared';
 import type { GroupedRow } from '../../../lib/taskGrouping';
 import { usePMStore, effectiveFocusBucket, type FocusBucket } from '../../../stores/pmStore';
 import { useUpdateTask } from '../../../hooks/useTasks';
+import { computeSnoozeTargets } from '../../../hooks/useDayPlanner';
 import { useActiveGroupRun, useStartGroupRun, useStopGroupRun } from '../../../hooks/useGroupRuns';
 import DatePicker from '../pm/DatePicker';
 import {
@@ -99,7 +100,7 @@ export default function GroupedTaskRow({
     if (menuPos) { setMenuPos(null); return; }
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
     const MENU_W = 200;
-    const MENU_H = 210;
+    const MENU_H = 300;
     const MARGIN = 6;
     const flipUp = rect.bottom + MARGIN + MENU_H > window.innerHeight;
     setMenuPos({
@@ -137,18 +138,16 @@ export default function GroupedTaskRow({
     setMenuPos(null);
   };
 
-  // "Tomorrow" — push every task's work_date to tomorrow's local-midnight
-  // (mirrors TodayRow.moveToTomorrow). A future work_date drops a task from the
-  // focus list, so the whole group slides off after the refetch.
-  const moveToTomorrow = (e: React.MouseEvent) => {
+  // Date moves — push every task's work_date to the target local-midnight. A
+  // future work_date drops a task from the focus list, so the whole group
+  // slides off after the refetch.
+  const snoozeTargets = useMemo(() => computeSnoozeTargets(), []);
+  const moveWorkDate = (e: React.MouseEvent, iso: string) => {
     e.stopPropagation();
     setMenuPos(null);
-    const tomorrow = new Date();
-    tomorrow.setHours(0, 0, 0, 0);
-    tomorrow.setDate(tomorrow.getDate() + 1);
     for (const t of row.tasks) {
       if (focusBuckets[t.id]) setFocusBucket(t.id, null);
-      updateTask.mutate({ id: t.id, work_date: tomorrow.toISOString() } as any);
+      updateTask.mutate({ id: t.id, work_date: iso } as any);
     }
   };
 
@@ -298,9 +297,17 @@ export default function GroupedTaskRow({
             <span>Set work date…</span>
             <span className="dim">all {row.count} tasks</span>
           </button>
-          <button type="button" role="menuitem" className="hm-bucket-menu-item" onClick={moveToTomorrow}>
-            <span>Tomorrow</span>
-            <span className="dim">moves work date</span>
+          <button type="button" role="menuitem" className="hm-bucket-menu-item" onClick={(e) => moveWorkDate(e, snoozeTargets.tomorrow.iso)}>
+            <span>To tomorrow</span>
+            <span className="dim">{snoozeTargets.tomorrow.date}</span>
+          </button>
+          <button type="button" role="menuitem" className="hm-bucket-menu-item" onClick={(e) => moveWorkDate(e, snoozeTargets.saturday.iso)}>
+            <span>This weekend</span>
+            <span className="dim">{snoozeTargets.saturday.date}</span>
+          </button>
+          <button type="button" role="menuitem" className="hm-bucket-menu-item" onClick={(e) => moveWorkDate(e, snoozeTargets.nextMonday.iso)}>
+            <span>Next week</span>
+            <span className="dim">{snoozeTargets.nextMonday.date}</span>
           </button>
           {groupBucket && (
             <button type="button" role="menuitem" className="hm-bucket-menu-item" onClick={(e) => moveTo(e, null)}>
