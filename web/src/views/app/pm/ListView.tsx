@@ -3,7 +3,7 @@ import type { SpaceStatus, Task } from '@squadhub/shared';
 import { useTasks, useUpdateTask, groupTasksByStatus } from '../../../hooks/useTasks';
 import { usePMStore, type ListGroupBy } from '../../../stores/pmStore';
 import { useAuthStore } from '../../../stores/authStore';
-import { groupTasks as groupTasksGeneric, partitionByCompletion, sortTasks, buildFocusTodayGroup, isTaskFocused, nestSubtasks, filterWithSubtasks, sortByCreationOrder, type SortBy } from '../../../lib/taskGrouping';
+import { groupTasks as groupTasksGeneric, partitionByCompletion, sortTasks, buildFocusTodayGroup, isTaskFocused, isTaskUpcoming, nestSubtasks, filterWithSubtasks, sortByCreationOrder, type SortBy } from '../../../lib/taskGrouping';
 import { filterTasks, countActiveFilters, EMPTY_FILTER, type TaskFilterState } from '../../../lib/filters';
 import { useIsMobile } from '../../../hooks/useIsMobile';
 import TaskGroupCard from './TaskGroupCard';
@@ -71,24 +71,102 @@ export default function ListView({
     [filteredTasks, fadingTaskIds],
   );
 
+  // "Upcoming" — snoozed future-dated tasks. A task whose work date and/or due
+  // date falls after today is pulled out of the main groups into a collapsed
+  // section just above Completed. It bypasses date filters (e.g. a "Today"
+  // filter that would otherwise hide it) while still respecting every other
+  // active filter + search + scope, and it automatically rejoins the main list
+  // once its day arrives (isTaskUpcoming goes false overnight).
+  const upcomingTasks = useMemo(() => {
+    const f = filters ?? EMPTY_FILTER;
+    const hasDateFilter = (f.dueDate?.length ?? 0) > 0 || (f.workDate?.length ?? 0) > 0;
+    if (!hasDateFilter) {
+      // Snooze mode: future-dated open tasks that passed every filter move here.
+      const upcoming = openTasks.filter((t) => isTaskUpcoming(t, tz));
+      return sortBy !== 'manual' ? sortTasks(upcoming, sortBy) : sortByCreationOrder(upcoming);
+    }
+    const noDateFilters = { ...f, dueDate: undefined, workDate: undefined };
+    const q = searchQuery.trim().toLowerCase();
+    const matches = (t: Task): boolean => {
+      if (filterTasks([t], noDateFilters, tz).length === 0) return false;
+      if (q && !t.title.toLowerCase().includes(q)) return false;
+      if (myTasksOnly) {
+        if (!currentUserId) return false;
+        const assignees = (t.assignees || []) as { id: string }[];
+        if (!assignees.some((a) => a.id === currentUserId)) return false;
+      }
+      if (focusToday && !isTaskFocused(t)) return false;
+      return true;
+    };
+    const base = filterWithSubtasks(tasks, matches);
+    const { open } = partitionByCompletion(base, fadingTaskIds);
+    const upcoming = open.filter((t) => isTaskUpcoming(t, tz));
+    return sortBy !== 'manual' ? sortTasks(upcoming, sortBy) : sortByCreationOrder(upcoming);
+  }, [tasks, filters, searchQuery, myTasksOnly, currentUserId, tz, focusToday, sortBy, openTasks, fadingTaskIds]);
+
+  const upcomingIds = useMemo(() => new Set(upcomingTasks.map((t) => t.id)), [upcomingTasks]);
+
+  // Main groups exclude snoozed tasks so a future task never shows twice.
+  const currentOpenTasks = useMemo(
+    () => openTasks.filter((t) => !upcomingIds.has(t.id)),
+    [openTasks, upcomingIds],
+  );
+  const filteredCurrent = useMemo(
+    () => filteredTasks.filter((t) => !upcomingIds.has(t.id)),
+    [filteredTasks, upcomingIds],
+  );
+
   const focusGroup = useMemo(() => {
     if (isMobile || focusToday) return null;
-    return buildFocusTodayGroup(openTasks, sortBy);
-  }, [openTasks, focusToday, sortBy, isMobile]);
+    return buildFocusTodayGroup(currentOpenTasks, sortBy);
+  }, [currentOpenTasks, focusToday, sortBy, isMobile]);
 
   const statusGroups = useMemo(() => {
     if (groupBy !== 'status') return null;
-    return groupTasksByStatus(filteredTasks, statuses, fadingTaskIds);
-  }, [filteredTasks, statuses, groupBy, fadingTaskIds]);
+    return groupTasksByStatus(filteredCurrent, statuses, fadingTaskIds);
+  }, [filteredCurrent, statuses, groupBy, fadingTaskIds]);
 
   const genericGroups = useMemo(() => {
     if (groupBy === 'status' || groupBy === 'none') return null;
-    return groupTasksGeneric(openTasks, groupBy, tz, fadingTaskIds);
-  }, [openTasks, groupBy, tz, fadingTaskIds]);
+    return groupTasksGeneric(currentOpenTasks, groupBy, tz, fadingTaskIds);
+  }, [currentOpenTasks, groupBy, tz, fadingTaskIds]);
 
   const handleStatusChange = (taskId: string, statusId: string) => {
     updateTask.mutate({ id: taskId, status: statusId });
   };
+
+  const upcomingCard = () =>
+    upcomingTasks.length > 0 ? (
+      <TaskGroupCard
+        groupKey="upcoming"
+        label="Upcoming"
+        dotColor="#0ea5e9"
+        tasks={upcomingTasks}
+        allStatuses={statuses}
+        listId={listId}
+        onStatusChange={handleStatusChange}
+        canEdit={canEdit}
+        showAddRow={false}
+        dimFocused={!!focusGroup}
+        defaultCollapsed
+      />
+    ) : null;
+
+  const completedCard = (tasksToShow = completedTasks) =>
+    tasksToShow.length > 0 ? (
+      <TaskGroupCard
+        groupKey="completed"
+        label="Completed"
+        dotColor="#7c3aed"
+        tasks={tasksToShow}
+        allStatuses={statuses}
+        listId={listId}
+        onStatusChange={handleStatusChange}
+        canEdit={canEdit}
+        showAddRow={false}
+        defaultCollapsed
+      />
+    ) : null;
 
   if (isLoading) {
     return (
@@ -98,7 +176,7 @@ export default function ListView({
     );
   }
 
-  const totalVisible = filteredTasks.length;
+  const totalVisible = filteredCurrent.length + upcomingTasks.length;
   const emptyMessage = searchQuery
     ? `No tasks match "${searchQuery}".`
     : activeFilterCount > 0
@@ -141,50 +219,43 @@ export default function ListView({
             )}
           </div>
         ) : groupBy === 'status' && statusGroups ? (
-          statusGroups.map(({ status, tasks: groupTasks }) => (
-            <TaskGroupCard
-              key={status.id}
-              groupKey={status.id}
-              label={status.name}
-              dotColor={status.color}
-              tasks={groupTasks}
-              allStatuses={statuses}
-              listId={listId}
-              onStatusChange={handleStatusChange}
-              canEdit={canEdit}
-              showAddRow={canEdit}
-              dimFocused={!!focusGroup}
-              defaultNewTaskStatus={status.category}
-              onDrop={handleStatusChange}
-            />
-          ))
-        ) : groupBy === 'none' ? (
           <>
-            <TaskGroupCard
-              groupKey="all"
-              label="All tasks"
-              tasks={openTasks}
-              allStatuses={statuses}
-              listId={listId}
-              onStatusChange={handleStatusChange}
-              canEdit={canEdit}
-              showAddRow={canEdit}
-              dimFocused={!!focusGroup}
-            />
-            {completedTasks.length > 0 && (
+            {statusGroups.map(({ status, tasks: groupTasks }) => (
               <TaskGroupCard
-                groupKey="completed"
-                label="Completed"
-                dotColor="#7c3aed"
-                tasks={completedTasks}
+                key={status.id}
+                groupKey={status.id}
+                label={status.name}
+                dotColor={status.color}
+                tasks={groupTasks}
                 allStatuses={statuses}
                 listId={listId}
                 onStatusChange={handleStatusChange}
                 canEdit={canEdit}
-                showAddRow={false}
-                defaultCollapsed
+                showAddRow={canEdit}
+                dimFocused={!!focusGroup}
+                defaultNewTaskStatus={status.category}
+                onDrop={handleStatusChange}
+              />
+            ))}
+            {upcomingCard()}
+          </>
+        ) : groupBy === 'none' ? (
+          <>
+            {(currentOpenTasks.length > 0 || (upcomingTasks.length === 0 && completedTasks.length === 0)) && (
+              <TaskGroupCard
+                groupKey="all"
+                label="All tasks"
+                tasks={currentOpenTasks}
+                allStatuses={statuses}
+                listId={listId}
+                onStatusChange={handleStatusChange}
+                canEdit={canEdit}
+                showAddRow={canEdit}
+                dimFocused={!!focusGroup}
               />
             )}
+            {upcomingCard()}
+            {completedCard()}
           </>
         ) : genericGroups ? (
           <>
@@ -203,20 +274,8 @@ export default function ListView({
                 dimFocused={!!focusGroup}
               />
             ))}
-            {completedTasks.length > 0 && (
-              <TaskGroupCard
-                groupKey="completed"
-                label="Completed"
-                dotColor="#7c3aed"
-                tasks={completedTasks}
-                allStatuses={statuses}
-                listId={listId}
-                onStatusChange={handleStatusChange}
-                canEdit={canEdit}
-                showAddRow={false}
-                defaultCollapsed
-              />
-            )}
+            {upcomingCard()}
+            {completedCard()}
           </>
         ) : null}
 
