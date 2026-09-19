@@ -81,10 +81,12 @@ export default function ListChipsFilter({
     () => enriched.filter((e) => e.current === undefined || e.current > 0),
     [enriched],
   );
-  const emptyLists = useMemo(
-    () => enriched.filter((e) => e.current !== undefined && e.current === 0),
-    [enriched],
-  );
+  const emptyLists = useMemo(() => {
+    // Lists holding snoozed work float to the top of the dropdown so upcoming
+    // items are found first; relative order is otherwise preserved.
+    const all = enriched.filter((e) => e.current !== undefined && e.current === 0);
+    return [...all.filter((e) => e.upcoming > 0), ...all.filter((e) => e.upcoming === 0)];
+  }, [enriched]);
 
   // If the filtered list disappears (deleted / moved out), fall back to All.
   useEffect(() => {
@@ -375,7 +377,7 @@ export default function ListChipsFilter({
                         title={`${upcoming} upcoming task${upcoming === 1 ? '' : 's'}`}
                         style={{ background: '#0ea5e922', color: '#0284c7' }}
                       >
-                        {upcoming > 99 ? '99+' : upcoming} upcoming
+                        {upcoming > 99 ? '99+' : upcoming}
                       </span>
                     )}
                     {value === list.id && (
