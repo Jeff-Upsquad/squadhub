@@ -119,6 +119,33 @@ export function fetchAssignableUsers(listId: string): Promise<AssignableUser[]> 
   return apiJson<AssignableUser[]>(`/pm/lists/${listId}/assignable-users`);
 }
 
+export interface TaskTag {
+  id: string;
+  workspace_id: string;
+  group_id: string;
+  name: string;
+  color: string;
+}
+
+export interface LabelPickerGroup {
+  group: { id: string; name: string; is_default: boolean };
+  labels: TaskTag[];
+}
+
+export interface LabelPickerData {
+  groups: LabelPickerGroup[];
+  can_create: boolean;
+}
+
+export interface MyTaskLite {
+  id: string;
+  title: string;
+  status: string;
+  list_id: string;
+  list?: { id: string; name: string } | null;
+  space?: { id: string; name: string } | null;
+}
+
 export interface CreateTaskPayload {
   list_id: string;
   title: string;
@@ -126,6 +153,45 @@ export interface CreateTaskPayload {
   priority?: TaskPriority;
   work_date?: string | null;
   assignee_ids?: string[];
+}
+
+/** GET /pm/labels?list_id=xxx — labels visible for a list's workspace (draft mode). */
+export function fetchLabelsForList(listId: string): Promise<LabelPickerData> {
+  return apiJson<LabelPickerData>(`/pm/labels?list_id=${encodeURIComponent(listId)}`);
+}
+
+/** POST /pm/tasks/:id/labels — attach a label to a task. */
+export function attachTaskLabel(taskId: string, tagId: string): Promise<TaskTag> {
+  return apiJson<TaskTag>(`/pm/tasks/${taskId}/labels`, {
+    method: 'POST',
+    body: JSON.stringify({ tag_id: tagId }),
+  });
+}
+
+/** GET /pm/tasks/my — assigned open tasks, flattened from the day buckets. */
+export async function fetchMyOpenTasks(limit = 12): Promise<MyTaskLite[]> {
+  const buckets = await apiJson<Record<string, MyTaskLite[]>>('/pm/tasks/my');
+  const seen = new Set<string>();
+  const out: MyTaskLite[] = [];
+  // Prefer actionable buckets first; fall back to the rest.
+  const order = ['day_planner', 'overdue', 'today', 'tomorrow', 'unscheduled', 'upcoming', 'later', 'focused'];
+  for (const key of [...order, ...Object.keys(buckets)]) {
+    for (const t of buckets[key] || []) {
+      if (!t || seen.has(t.id)) continue;
+      seen.add(t.id);
+      out.push(t);
+      if (out.length >= limit) return out;
+    }
+  }
+  return out;
+}
+
+/** PUT /pm/tasks/:id — update status (used for mark-complete / reopen). */
+export function updateTaskStatus(taskId: string, status: string): Promise<MyTaskLite> {
+  return apiJson<MyTaskLite>(`/pm/tasks/${taskId}`, {
+    method: 'PUT',
+    body: JSON.stringify({ status }),
+  });
 }
 
 /** POST /pm/tasks — create a task; returns the created task (we need its id). */
