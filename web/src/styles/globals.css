@@ -2689,7 +2689,7 @@ body.sb-resizing { user-select: none; -webkit-user-select: none; cursor: col-res
 /* ── Date picker popover ──────────────────────────────── */
 .dp-panel {
   position: fixed;
-  z-index: 60;
+  z-index: 130;
   display: flex;
   flex-direction: column;
   background: var(--surface);
@@ -8162,7 +8162,7 @@ ol.sqc-list {
 .hm-home .hm-task[data-tracking="true"] { background: color-mix(in srgb, var(--hm-accent) 9%, transparent); box-shadow: inset 2px 0 0 var(--hm-accent); }
 .hm-home .hm-task[data-tracking="true"]:hover { background: color-mix(in srgb, var(--hm-accent) 14%, transparent); }
 /* Bucket menu is portaled to <body>, so these are NOT scoped under .hm-home */
-.hm-bucket-menu { position: fixed; z-index: 50; min-width: 188px; background: var(--surface); border: 1px solid var(--sh-hair); border-radius: 10px; box-shadow: 0 10px 28px rgba(10, 10, 10, 0.12); padding: 4px; }
+.hm-bucket-menu { position: fixed; z-index: 120; min-width: 188px; background: var(--surface); border: 1px solid var(--sh-hair); border-radius: 10px; box-shadow: 0 10px 28px rgba(10, 10, 10, 0.12); padding: 4px; }
 .hm-bucket-menu-item { display: flex; align-items: center; justify-content: space-between; gap: 16px; width: 100%; padding: 6px 10px; border-radius: 7px; border: none; background: transparent; font-family: inherit; font-size: 12.5px; font-weight: 450; color: color-mix(in srgb, var(--sh-ink) 65%, transparent); text-align: left; cursor: pointer; }
 .hm-bucket-menu-item:hover { background: var(--sh-hair-3); color: var(--sh-ink); }
 .hm-bucket-menu-item[data-active="true"] { color: var(--sh-ink); font-weight: 600; }
