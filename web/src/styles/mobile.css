@@ -2023,9 +2023,9 @@
 }
 .mbk-list .hmp-task {
   display: grid;
-  grid-template-columns: auto 1fr auto auto;
+  grid-template-columns: auto minmax(0, 1fr) auto auto auto auto;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
   padding: 9px 4px;
   cursor: pointer;
 }
@@ -2061,6 +2061,11 @@
 }
 .mbk-list .hmp-task .meta .path { display: none; }
 .mbk-list .hmp-task .open-ind { color: var(--m-ink-4); opacity: 1; }
+/* Timer + work-date move controls — always visible on touch (no hover). */
+.mbk-list .hmp-task .hmp-move { display: flex; align-items: center; }
+.mbk-list .hmp-task .hmp-timer-btn,
+.mbk-list .hmp-task .hmp-move-btn { display: grid; place-items: center; width: 26px; height: 26px; padding: 0; border: none; border-radius: 7px; background: transparent; color: var(--m-ink-3); cursor: pointer; flex: none; opacity: 1; }
+.mbk-list .hmp-task .hmp-timer-btn[data-active] { color: var(--m-accent, #7CB65B); }
 .mbk-list .hm-ava {
   width: 22px;
   height: 22px;

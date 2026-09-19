@@ -10,7 +10,7 @@ import { formatTracked, toLocalDateKey } from '../../../lib/formatDuration';
 import { groupTasks, isFutureDay, isTaskFocused, collapseGroupedTasks, isGroupedRow, GROUP_BY_OPTIONS } from '../../../lib/taskGrouping';
 import GroupedTaskRow from './GroupedTaskRow';
 import DayCalendar from '../day-planner/DayCalendar';
-import { planDateKey } from '../../../hooks/useDayPlanner';
+import { planDateKey, computeSnoozeTargets } from '../../../hooks/useDayPlanner';
 import { useIsMobile } from '../../../hooks/useIsMobile';
 
 // Full group-by set shared with Home tabs + Space/Folder views (None, Work
@@ -573,6 +573,9 @@ function TodayRow({ task: t, onOpen, secondsToday = 0 }: { task: Task; onOpen: (
     await requestStartTimer({ taskId: t.id, taskTitle: t.title, listId: t.list_id || '', baseTracked: t.time_tracked || 0 });
   };
   const [isHidden, setIsHidden] = useState(false);
+  // Tomorrow / This Saturday / Next Monday at local midnight — shared with the
+  // dashboard panels so every surface moves dates identically.
+  const snoozeTargets = useMemo(() => computeSnoozeTargets(), []);
   // Fixed-viewport coordinates for the bucket menu (null = closed). The menu is
   // portaled to <body> and positioned via getBoundingClientRect so it can't be
   // clipped by `.hm-card { overflow: hidden }`.
@@ -585,7 +588,7 @@ function TodayRow({ task: t, onOpen, secondsToday = 0 }: { task: Task; onOpen: (
     if (menuPos) { setMenuPos(null); return; }
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
     const MENU_W = 188;
-    const MENU_H = 184;
+    const MENU_H = 260;
     const MARGIN = 6;
     const flipUp = rect.bottom + MARGIN + MENU_H > window.innerHeight;
     setMenuPos({
@@ -623,21 +626,18 @@ function TodayRow({ task: t, onOpen, secondsToday = 0 }: { task: Task; onOpen: (
     setMenuPos(null);
   };
 
-  // "Tomorrow" — push the task's work_date to tomorrow's local-midnight (mirrors
-  // taskHelpers.nextQuickDate). A future work_date drops the task from the focus
-  // list (see TodayList's `!isFutureDay` filter), so hide the row immediately for
-  // instant feedback; the refetch then unmounts it for good. Clear any
-  // Evening/Night bucket so it doesn't linger client-side if the task comes back.
-  const moveToTomorrow = (e: React.MouseEvent) => {
+  // Date moves — push the task's work_date to the target local-midnight. A
+  // future work_date drops the task from the focus list (see TodayList's
+  // `!isFutureDay` filter), so hide the row immediately for instant feedback;
+  // the refetch then unmounts it for good. Clear any Evening/Night bucket so
+  // it doesn't linger client-side if the task comes back.
+  const moveWorkDate = (e: React.MouseEvent, iso: string) => {
     e.stopPropagation();
     setMenuPos(null);
     if (bucket) setFocusBucket(t.id, null);
-    const tomorrow = new Date();
-    tomorrow.setHours(0, 0, 0, 0);
-    tomorrow.setDate(tomorrow.getDate() + 1);
     setIsHidden(true);
     updateTask.mutate(
-      { id: t.id, work_date: tomorrow.toISOString() } as any,
+      { id: t.id, work_date: iso } as any,
       { onError: () => setIsHidden(false) },
     );
   };
@@ -816,9 +816,17 @@ function TodayRow({ task: t, onOpen, secondsToday = 0 }: { task: Task; onOpen: (
             <span className="dim">after 7 PM</span>
           </button>
           <div className="hm-bucket-menu-sep" role="separator" />
-          <button type="button" role="menuitem" className="hm-bucket-menu-item" onClick={moveToTomorrow}>
-            <span>Tomorrow</span>
-            <span className="dim">moves work date</span>
+          <button type="button" role="menuitem" className="hm-bucket-menu-item" onClick={(e) => moveWorkDate(e, snoozeTargets.tomorrow.iso)}>
+            <span>To tomorrow</span>
+            <span className="dim">{snoozeTargets.tomorrow.date}</span>
+          </button>
+          <button type="button" role="menuitem" className="hm-bucket-menu-item" onClick={(e) => moveWorkDate(e, snoozeTargets.saturday.iso)}>
+            <span>This weekend</span>
+            <span className="dim">{snoozeTargets.saturday.date}</span>
+          </button>
+          <button type="button" role="menuitem" className="hm-bucket-menu-item" onClick={(e) => moveWorkDate(e, snoozeTargets.nextMonday.iso)}>
+            <span>Next week</span>
+            <span className="dim">{snoozeTargets.nextMonday.date}</span>
           </button>
           {bucket && (
             <button type="button" role="menuitem" className="hm-bucket-menu-item" onClick={(e) => moveTo(e, null)}>

@@ -8133,6 +8133,10 @@ ol.sqc-list {
 .hm-home .hm-task .hm-timer-btn[data-active] { opacity: 1; }
 .hm-home .hm-task .hm-timer-btn:hover { background: var(--sh-hair); color: var(--hm-accent); }
 .hm-home .hm-task .hm-timer-btn[data-active] { color: var(--hm-accent); }
+@media (hover: none) {
+  .hm-home .hm-task .hm-timer-btn,
+  .hm-home .hm-task .hm-bucket-btn { opacity: 1; }
+}
 
 /* "In progress today" section — a subtly accented variant of the focus card. */
 .hm-home .hm-inprogress-card { box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--hm-accent) 55%, transparent); }
@@ -8312,7 +8316,7 @@ ol.sqc-list {
 .hm-home .hmp-center { display: grid; place-items: center; height: 100%; }
 .hm-home .hmp-list { padding: 6px 8px; }
 @keyframes hmp-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
-.hm-home .hmp-task { display: grid; grid-template-columns: auto 1fr auto auto; align-items: center; gap: 11px; padding: 9px 10px; border-radius: 10px; cursor: pointer; max-height: 200px; animation: hmp-in 0.32s cubic-bezier(0.22, 1, 0.36, 1) backwards; transition: background 120ms ease, opacity 0.6s ease-in 0.35s, transform 0.6s cubic-bezier(0.4, 0, 0.7, 0.1) 0.35s, max-height 0.6s ease-in 0.5s, min-height 0.6s ease-in 0.5s, padding-block 0.6s ease-in 0.5s; }
+.hm-home .hmp-task { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto auto auto; align-items: center; gap: 8px; padding: 9px 10px; border-radius: 10px; cursor: pointer; max-height: 200px; animation: hmp-in 0.32s cubic-bezier(0.22, 1, 0.36, 1) backwards; transition: background 120ms ease, opacity 0.6s ease-in 0.35s, transform 0.6s cubic-bezier(0.4, 0, 0.7, 0.1) 0.35s, max-height 0.6s ease-in 0.5s, min-height 0.6s ease-in 0.5s, padding-block 0.6s ease-in 0.5s; }
 .hm-home .hmp-task:nth-child(1) { animation-delay: 0.02s; }
 .hm-home .hmp-task:nth-child(2) { animation-delay: 0.05s; }
 .hm-home .hmp-task:nth-child(3) { animation-delay: 0.08s; }
@@ -8335,6 +8339,26 @@ ol.sqc-list {
 .hm-home .hmp-task .meta .path { min-width: 0; flex: 0 1 auto; overflow: hidden; text-overflow: ellipsis; }
 .hm-home .hmp-task .open-ind { color: var(--sh-ink-4); opacity: 0; transform: translateX(-3px); transition: opacity 0.13s ease, transform 0.2s ease; }
 .hm-home .hmp-task:hover .open-ind { opacity: 1; transform: none; }
+/* Timer + work-date move controls on slide-over rows — same behaviour as the
+   Focus list rows: hidden until row hover, kept visible while tracking / open. */
+.hm-home .hmp-task .hmp-move { position: relative; flex: none; display: flex; align-items: center; }
+.hm-home .hmp-task .hmp-timer-btn,
+.hm-home .hmp-task .hmp-move-btn { display: grid; place-items: center; width: 22px; height: 22px; padding: 0; border: none; border-radius: 6px; background: transparent; color: var(--sh-ink-4); cursor: pointer; flex: none; opacity: 0; transition: opacity 0.13s ease, background 0.13s ease, color 0.13s ease; }
+.hm-home .hmp-task:hover .hmp-timer-btn,
+.hm-home .hmp-task:hover .hmp-move-btn,
+.hm-home .hmp-task .hmp-timer-btn[data-active],
+.hm-home .hmp-task .hmp-move-btn[data-open] { opacity: 1; }
+.hm-home .hmp-task .hmp-timer-btn:hover,
+.hm-home .hmp-task .hmp-move-btn:hover { background: var(--sh-hair); color: var(--sh-ink); }
+.hm-home .hmp-task .hmp-timer-btn:hover { color: var(--hm-accent); }
+.hm-home .hmp-task .hmp-timer-btn[data-active] { color: var(--hm-accent); }
+.hm-home .hmp-task[data-tracking="true"] { background: color-mix(in srgb, var(--hm-accent) 9%, transparent); box-shadow: inset 2px 0 0 var(--hm-accent); }
+.hm-home .hmp-task[data-tracking="true"]:hover { background: color-mix(in srgb, var(--hm-accent) 14%, transparent); }
+@media (hover: none) {
+  .hm-home .hmp-task .hmp-timer-btn,
+  .hm-home .hmp-task .hmp-move-btn,
+  .hm-home .hmp-task .open-ind { opacity: 1; transform: none; }
+}
 .hm-home .hmp-task[data-fading="true"] { opacity: 0; transform: translateX(200px); pointer-events: none; max-height: 0; min-height: 0; padding-block: 0; overflow: hidden; }
 /* Leading marker for non-completable secondary rows (e.g. courses) */
 .hm-home .hmp-task .sc-dot { width: 7px; height: 7px; border-radius: 50%; background: color-mix(in srgb, var(--sh-ink) 30%, transparent); justify-self: center; }
