@@ -23,6 +23,8 @@ import { usePMStore } from '../../../stores/pmStore';
 import { showToast } from '../../../components/Toast';
 import { usePanelFileDrop } from './usePanelFileDrop';
 import { inputTimeToMinute, type Recurrence } from '../../../utils/workBlockRecurrence';
+import EstimatePopover from '../../../components/pm/EstimatePopover';
+import { formatDuration } from '../../../lib/timeDuration';
 
 /* -------------------------------------------------------------------------- */
 /* Helpers (duplicated from TaskDetailPanel — keep in sync if they change)    */
@@ -57,31 +59,6 @@ function formatSize(bytes: number): string {
 
 function fileExtension(name: string): string {
   return name.split('.').pop()?.toUpperCase().slice(0, 4) || 'FILE';
-}
-
-function parseTimeInput(input: string): number | null {
-  const trimmed = input.trim().toLowerCase();
-  if (!trimmed) return null;
-  let totalMinutes = 0;
-  const hourMatch = trimmed.match(/(\d+)\s*h/);
-  const minMatch = trimmed.match(/(\d+)\s*m/);
-  if (hourMatch) totalMinutes += parseInt(hourMatch[1]) * 60;
-  if (minMatch) totalMinutes += parseInt(minMatch[1]);
-  if (!hourMatch && !minMatch) {
-    const num = parseFloat(trimmed);
-    if (!isNaN(num)) totalMinutes = Math.round(num * 60);
-    else return null;
-  }
-  return totalMinutes > 0 ? totalMinutes : null;
-}
-
-function formatMinutes(minutes: number | null | undefined): string {
-  if (!minutes) return '';
-  const h = Math.floor(minutes / 60);
-  const m = minutes % 60;
-  if (h && m) return `${h}h ${m}m`;
-  if (h) return `${h}h`;
-  return `${m}m`;
 }
 
 function formatDueRelative(iso: string | null | undefined): { text: string; accent: boolean } {
@@ -412,8 +389,7 @@ export default function TaskCreatePanel({
   const [dueDateAnchor, setDueDateAnchor] = useState<DOMRect | null>(null);
   const [repeatOpen, setRepeatOpen] = useState(false);
   const [repeatAnchor, setRepeatAnchor] = useState<DOMRect | null>(null);
-  const [editingEstimate, setEditingEstimate] = useState(false);
-  const [estimateInput, setEstimateInput] = useState('');
+  const [estimateAnchor, setEstimateAnchor] = useState<DOMRect | null>(null);
   const [newSubtaskTitle, setNewSubtaskTitle] = useState<string | null>(null);
   const [newChecklistTitle, setNewChecklistTitle] = useState<string | null>(null);
   const [newItemDrafts, setNewItemDrafts] = useState<Record<string, string>>({});
@@ -714,13 +690,6 @@ export default function TaskCreatePanel({
   };
 
   const { dragActive: panelDragActive, panelHandlers } = usePanelFileDrop(addDraftFiles);
-
-  // Estimate input commit
-  const commitEstimate = () => {
-    const mins = parseTimeInput(estimateInput);
-    setDraft((d) => ({ ...d, time_estimate: mins }));
-    setEditingEstimate(false);
-  };
 
   return (
     <div className="fixed inset-0 z-[90]">
@@ -1353,32 +1322,17 @@ export default function TaskCreatePanel({
                 </span>
               </div>
 
-              {/* Estimate */}
+              {/* Estimate — same shorthand popover as the task detail panel */}
               <div
                 data-td="estimate" className="td-settings-row"
                 data-half="true"
                 style={{ cursor: 'pointer' }}
-                onClick={!editingEstimate ? () => { setEditingEstimate(true); setEstimateInput(formatMinutes(draft.time_estimate)); } : undefined}
+                onClick={(e) => setEstimateAnchor((e.currentTarget as HTMLElement).getBoundingClientRect())}
               >
                 <span className="k">{META_ICONS.Estimate}Estimate</span>
                 <span className="v">
-                  {editingEstimate ? (
-                    <input
-                      autoFocus
-                      value={estimateInput}
-                      onChange={(e) => setEstimateInput(e.target.value)}
-                      onClick={(e) => e.stopPropagation()}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') commitEstimate();
-                        if (e.key === 'Escape') setEditingEstimate(false);
-                      }}
-                      onBlur={commitEstimate}
-                      placeholder="e.g. 2h 30m"
-                      className="text-[12.5px] bg-transparent border-b outline-none w-28"
-                      style={{ borderColor: 'var(--sh-ink)' }}
-                    />
-                  ) : draft.time_estimate ? (
-                    <span>{formatMinutes(draft.time_estimate)}</span>
+                  {draft.time_estimate ? (
+                    <span>{formatDuration(draft.time_estimate)}</span>
                   ) : (
                     <span className="td-prop-empty">Not set</span>
                   )}
@@ -1784,6 +1738,15 @@ export default function TaskCreatePanel({
           </div>
         </div>
       </aside>
+
+      {estimateAnchor && (
+        <EstimatePopover
+          anchorRect={estimateAnchor}
+          value={draft.time_estimate}
+          onApply={(mins) => setDraft((d) => ({ ...d, time_estimate: mins }))}
+          onClose={() => setEstimateAnchor(null)}
+        />
+      )}
 
       {assigneePickerOpen && effectiveListId && (
         <AssigneePicker

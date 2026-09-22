@@ -11,6 +11,8 @@ import AssigneePicker from '../pm/AssigneePicker';
 import TaskStatusPicker from '../pm/TaskStatusPicker';
 import DatePicker from '../pm/DatePicker';
 import ListPickerCombobox from '../pm/ListPickerCombobox';
+import EstimatePopover from '../../../components/pm/EstimatePopover';
+import { formatDuration } from '../../../lib/timeDuration';
 
 // ---- small display helpers (mirrors DashboardTaskRow's avatar logic) ----
 function hashHue(input: string): number {
@@ -47,31 +49,6 @@ function fmtDateCell(iso?: string | null): string {
 
 // Time-estimate parse/format — mirrors TaskDetailPanel / TaskCreatePanel so the
 // "2h 30m" shorthand reads and writes the same everywhere.
-function parseTimeInput(input: string): number | null {
-  const trimmed = input.trim().toLowerCase();
-  if (!trimmed) return null;
-  let totalMinutes = 0;
-  const hourMatch = trimmed.match(/(\d+)\s*h/);
-  const minMatch = trimmed.match(/(\d+)\s*m/);
-  if (hourMatch) totalMinutes += parseInt(hourMatch[1]) * 60;
-  if (minMatch) totalMinutes += parseInt(minMatch[1]);
-  if (!hourMatch && !minMatch) {
-    const num = parseFloat(trimmed);
-    if (!isNaN(num)) totalMinutes = Math.round(num * 60);
-    else return null;
-  }
-  return totalMinutes > 0 ? totalMinutes : null;
-}
-
-function formatMinutes(minutes: number | null | undefined): string {
-  if (!minutes) return '';
-  const h = Math.floor(minutes / 60);
-  const m = minutes % 60;
-  if (h && m) return `${h}h ${m}m`;
-  if (h) return `${h}h`;
-  return `${m}m`;
-}
-
 const PRIORITIES: { key: string; label: string; color: string }[] = [
   { key: 'emergency', label: 'Emergency', color: '#DC2626' },
   { key: 'urgent', label: 'Urgent', color: '#F97316' },
@@ -135,55 +112,6 @@ function PriorityMenu({
           {p.label}
         </button>
       ))}
-    </div>,
-    document.body,
-  );
-}
-
-// A tiny inline editor for the time estimate — accepts the same "2h 30m" shorthand
-// as the task detail panel. Commits on Enter or click-away; Escape discards.
-function EstimateMenu({
-  anchorRect,
-  value,
-  onApply,
-  onClose,
-}: {
-  anchorRect: DOMRect | null;
-  value: number | null;
-  onApply: (mins: number | null) => void;
-  onClose: () => void;
-}) {
-  const ref = useRef<HTMLDivElement>(null);
-  const [input, setInput] = useState(() => formatMinutes(value));
-
-  useEffect(() => {
-    const onDown = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) onApply(parseTimeInput(input));
-    };
-    document.addEventListener('mousedown', onDown);
-    return () => document.removeEventListener('mousedown', onDown);
-  }, [input, onApply]);
-
-  if (!anchorRect || typeof document === 'undefined') return null;
-  const width = 168;
-  let left = anchorRect.left;
-  if (left + width > window.innerWidth - 8) left = window.innerWidth - width - 8;
-  const top = anchorRect.bottom + 4;
-
-  return createPortal(
-    <div ref={ref} className="nt-menu nt-estimate-menu" style={{ position: 'fixed', top, left, width, zIndex: 100 }}>
-      <input
-        autoFocus
-        value={input}
-        onChange={(e) => setInput(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') onApply(parseTimeInput(input));
-          if (e.key === 'Escape') onClose();
-        }}
-        placeholder="e.g. 2h 30m"
-        className="nt-estimate-input"
-      />
-      <div className="nt-estimate-hint">Enter to save · Esc to cancel</div>
     </div>,
     document.body,
   );
@@ -495,7 +423,7 @@ export default function NewTaskRow({
       {/* Estimate — last: useful metadata once what/where/who/when is settled */}
       <div className="nt-cell nt-c-estimate">
         <button type="button" className="nt-cellbtn" onClick={(e) => openEditor('estimate', e)}>
-          {t.time_estimate ? <span>{formatMinutes(t.time_estimate)}</span> : <span className="nt-placeholder">Estimate</span>}
+          {t.time_estimate ? <span>{formatDuration(t.time_estimate)}</span> : <span className="nt-placeholder">Estimate</span>}
         </button>
       </div>
 
@@ -520,7 +448,7 @@ export default function NewTaskRow({
         />
       )}
       {editor === 'estimate' && (
-        <EstimateMenu
+        <EstimatePopover
           anchorRect={anchorRect}
           value={(t.time_estimate as number | null) ?? null}
           onApply={(mins) => { applyEdit({ time_estimate: mins }); closeEditor(); }}

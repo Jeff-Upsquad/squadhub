@@ -10,7 +10,7 @@ import { getUserRoleIds } from '../../utils/roles';
 import { PARTNER_USER_TYPES } from '@squadhub/shared';
 import { spawnRoutineInstance } from '../../services/routineSpawner';
 import { todayIST } from '../../utils/ist';
-import { logTaskTimeEntry, ensureAssigneeOnTimeLogged } from '../../utils/taskTime';
+import { logTaskTimeEntry, ensureAssigneeOnTimeLogged, addDailyWorkSeconds } from '../../utils/taskTime';
 import { logTaskActivity, type TaskActivityEvent } from '../../utils/taskActivity';
 import { resolveClientSource } from '../../utils/clientSource';
 
@@ -951,15 +951,20 @@ router.get('/tasks/my-time-entries', async (req: Request, res: Response) => {
 // POST /pm/tasks/:id/time-entries — record one timer session. Creates a row
 // in task_time_entries AND atomically bumps tasks.time_tracked so existing
 // aggregate UIs (task detail "Logged" field) stay in sync.
+// duration_seconds may be negative: the "Log time" popover accepts a leading
+// minus ("-30m") to subtract over-logged time, stored as a correction entry so
+// the sum of entries keeps matching tasks.time_tracked (see migration 042).
 const createTimeEntrySchema = z.object({
   started_at: z.string(),
-  duration_seconds: z.number().int().min(1),
+  duration_seconds: z.number().int().refine((n) => n !== 0, 'Duration cannot be zero'),
+  note: z.string().trim().max(500).optional().nullable(),
+  source: z.enum(['timer', 'manual']).optional(),
 });
 
 router.post('/tasks/:id/time-entries', async (req: Request, res: Response) => {
   try {
     const taskId = req.params.id as string;
-    const { started_at, duration_seconds } = createTimeEntrySchema.parse(req.body);
+    const { started_at, duration_seconds, note, source } = createTimeEntrySchema.parse(req.body);
 
     // Access control: caller must have access to the task's list.
     const { data: task } = await supabaseAdmin
@@ -978,10 +983,23 @@ router.post('/tasks/:id/time-entries', async (req: Request, res: Response) => {
       return;
     }
 
+    // Subtracting time is an edit of the logged total, so it carries the same
+    // role gate as PATCH /time-tracked. Adding time does not — that is just
+    // logging your own work, which any member of the list may do.
+    if (duration_seconds < 0) {
+      const primary = await getPrimaryRolePermissions(req.userId!);
+      if (primary.can_edit_time_logs !== true) {
+        res.status(403).json({ success: false, error: 'Your role cannot edit logged time' });
+        return;
+      }
+    }
+
     // If this timer overlapped a work-block run, the block already counts this
     // wall-clock toward the daily total — log the entry (per-task history +
     // "Logged" field) but skip the daily aggregate so we don't double-count.
-    const stoppedAt = new Date(new Date(started_at).getTime() + duration_seconds * 1000).toISOString();
+    const stoppedAt = new Date(
+      new Date(started_at).getTime() + Math.max(0, duration_seconds) * 1000,
+    ).toISOString();
     const { data: activeRun } = await supabaseAdmin
       .from('work_block_runs')
       .select('id')
@@ -1007,7 +1025,8 @@ router.post('/tasks/:id/time-entries', async (req: Request, res: Response) => {
       userId: req.userId!,
       startedAt: started_at,
       durationSeconds: duration_seconds,
-      source: 'timer',
+      source: source ?? 'timer',
+      note: note ?? null,
       skipDailySummary: withinBlock,
     });
     if (!result.ok) {
@@ -1023,6 +1042,130 @@ router.post('/tasks/:id/time-entries', async (req: Request, res: Response) => {
       return;
     }
     console.error('Create time entry error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// GET /pm/tasks/:id/time-entries — this task's logged sessions (every user's),
+// newest first, with the logger hydrated. Feeds the "Recent" list inside the
+// Log time popover; the rail Time Sheet keeps using /tasks/my-time-entries.
+router.get('/tasks/:id/time-entries', async (req: Request, res: Response) => {
+  try {
+    const taskId = req.params.id as string;
+
+    const listId = await getTaskListId(taskId);
+    if (!listId) {
+      res.status(404).json({ success: false, error: 'Task not found' });
+      return;
+    }
+    const userLevel = await checkResourceAccess(req.userId!, 'list', listId);
+    if (!userLevel) {
+      res.status(403).json({ success: false, error: 'You do not have access to this task' });
+      return;
+    }
+
+    const { data: entries, error } = await supabaseAdmin
+      .from('task_time_entries')
+      .select('*')
+      .eq('task_id', taskId)
+      .order('started_at', { ascending: false })
+      .limit(50);
+    if (error) {
+      res.status(500).json({ success: false, error: error.message });
+      return;
+    }
+
+    const rows = (entries || []) as any[];
+    const userIds = Array.from(new Set(rows.map((e) => e.user_id))).filter(Boolean);
+    const { data: users } = userIds.length
+      ? await supabaseAdmin.from('users').select('id, display_name, email').in('id', userIds)
+      : { data: [] as any[] };
+    const byId = new Map<string, any>((users || []).map((u: any) => [u.id, u]));
+
+    res.json({
+      success: true,
+      data: rows.map((e) => ({ ...e, user: byId.get(e.user_id) ?? null })),
+    });
+  } catch (err) {
+    console.error('Get task time entries error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// DELETE /pm/tasks/:id/time-entries/:entryId — remove one logged session and
+// unwind the two aggregates it fed (tasks.time_tracked + the day's summary), so
+// the popover's "Recent" list is the correction path for a mis-logged block.
+// You may delete your own entries; deleting someone else's needs the same
+// can_edit_time_logs role gate as PATCH /time-tracked. Work-block rows are
+// owned by their run and are not deletable here.
+router.delete('/tasks/:id/time-entries/:entryId', async (req: Request, res: Response) => {
+  try {
+    const taskId = req.params.id as string;
+    const entryId = req.params.entryId as string;
+
+    const listId = await getTaskListId(taskId);
+    if (!listId) {
+      res.status(404).json({ success: false, error: 'Task not found' });
+      return;
+    }
+    const userLevel = await checkResourceAccess(req.userId!, 'list', listId);
+    if (!userLevel || !meetsAccessLevel(userLevel, 'member')) {
+      res.status(403).json({ success: false, error: 'Member access required' });
+      return;
+    }
+
+    const { data: entry } = await supabaseAdmin
+      .from('task_time_entries')
+      .select('id, task_id, user_id, workspace_id, started_at, duration_seconds, source')
+      .eq('id', entryId)
+      .eq('task_id', taskId)
+      .maybeSingle();
+    if (!entry) {
+      res.status(404).json({ success: false, error: 'Time entry not found' });
+      return;
+    }
+    if ((entry as any).source === 'work_block') {
+      res.status(400).json({ success: false, error: 'Work-block time is managed by its run' });
+      return;
+    }
+    if ((entry as any).user_id !== req.userId!) {
+      const primary = await getPrimaryRolePermissions(req.userId!);
+      if (primary.can_edit_time_logs !== true) {
+        res.status(403).json({ success: false, error: "Your role cannot edit another person's logged time" });
+        return;
+      }
+    }
+
+    const { error: delErr } = await supabaseAdmin
+      .from('task_time_entries')
+      .delete()
+      .eq('id', entryId);
+    if (delErr) {
+      res.status(500).json({ success: false, error: delErr.message });
+      return;
+    }
+
+    // Unwind the aggregates the entry fed. tasks.time_tracked is a plain cache;
+    // the daily summary is nudged by the inverse on the entry's own day.
+    const seconds = (entry as any).duration_seconds as number;
+    const { data: taskRow } = await supabaseAdmin
+      .from('tasks').select('time_tracked').eq('id', taskId).single();
+    await supabaseAdmin
+      .from('tasks')
+      .update({ time_tracked: Math.max(0, ((taskRow as any)?.time_tracked || 0) - seconds) })
+      .eq('id', taskId);
+    if ((entry as any).workspace_id) {
+      await addDailyWorkSeconds({
+        userId: (entry as any).user_id,
+        workspaceId: (entry as any).workspace_id,
+        startedAt: (entry as any).started_at,
+        durationSeconds: -seconds,
+      });
+    }
+
+    res.json({ success: true, data: { id: entryId } });
+  } catch (err) {
+    console.error('Delete task time entry error:', err);
     res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });

@@ -867,7 +867,11 @@ export interface TaskTimeEntry {
   source: 'timer' | 'manual' | 'work_block';
   // Set for source='work_block' — links the entry back to its work_block_run.
   work_block_run_id?: string | null;
+  // Optional free-text note the logger attached to this block of time.
+  note?: string | null;
   created_at: string;
+  // Joined on the task-scoped history endpoint (who logged it).
+  user?: { id: string; display_name: string | null; email: string | null } | null;
   // Joined — task + its list/folder/space + parent (for UI breadcrumbs)
   task?: Pick<Task, 'id' | 'title' | 'list_id' | 'time_tracked'> & {
     list?: { id: string; name: string } | null;
