@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useRef, useCallback, type ReactNode } fro
 import { createPortal } from 'react-dom';
 import { useQueryClient, useQuery } from '@tanstack/react-query';
 import { usePMStore } from '../../../stores/pmStore';
-import { useTask, useUpdateTask, useDeleteTask, useTaskComments, useAddComment, useCreateTask, useUpdateTaskTimeTracked, useTaskLists, useAddTaskToLists, useRemoveTaskFromList, useTaskActivity } from '../../../hooks/useTasks';
+import { useTask, useUpdateTask, useDeleteTask, useTaskComments, useAddComment, useCreateTask, useTaskLists, useAddTaskToLists, useRemoveTaskFromList, useTaskActivity } from '../../../hooks/useTasks';
 import { useTimeStats } from '../../../hooks/useTimer';
 import { useFocusTask } from '../../../hooks/useDayPlanner';
 import { isTaskFocused } from '../../../lib/taskGrouping';
@@ -52,31 +52,9 @@ import { useParallelTimers } from '../../../hooks/useParallelTimers';
 import { useLearningStore } from '../../../stores/learningStore';
 import { useIsMobile } from '../../../hooks/useIsMobile';
 import FocusStarButton from '../../../components/pm/FocusStarButton';
-
-function parseTimeInput(input: string): number | null {
-  const trimmed = input.trim().toLowerCase();
-  if (!trimmed) return null;
-  let totalMinutes = 0;
-  const hourMatch = trimmed.match(/(\d+)\s*h/);
-  const minMatch = trimmed.match(/(\d+)\s*m/);
-  if (hourMatch) totalMinutes += parseInt(hourMatch[1]) * 60;
-  if (minMatch) totalMinutes += parseInt(minMatch[1]);
-  if (!hourMatch && !minMatch) {
-    const num = parseFloat(trimmed);
-    if (!isNaN(num)) totalMinutes = Math.round(num * 60);
-    else return null;
-  }
-  return totalMinutes > 0 ? totalMinutes : null;
-}
-
-function formatMinutes(minutes: number | null | undefined): string {
-  if (!minutes) return '';
-  const h = Math.floor(minutes / 60);
-  const m = minutes % 60;
-  if (h && m) return `${h}h ${m}m`;
-  if (h) return `${h}h`;
-  return `${m}m`;
-}
+import EstimatePopover from '../../../components/pm/EstimatePopover';
+import LogTimePopover from '../../../components/pm/LogTimePopover';
+import { formatDuration } from '../../../lib/timeDuration';
 
 function formatTracked(seconds: number | null | undefined): string {
   if (!seconds) return '';
@@ -351,7 +329,6 @@ export default function TaskDetailPanel({
   useEffect(() => { pendingDates.current.work = undefined; }, [task?.work_date]);
   useEffect(() => { pendingDates.current.start = undefined; }, [task?.start_date]);
   useEffect(() => { pendingDates.current.due = undefined; }, [task?.due_date]);
-  const updateTaskTimeTracked = useUpdateTaskTimeTracked(listId);
   const deleteTask = useDeleteTask(listId);
   const workspaceId = useWorkspaceStore((s) => s.currentWorkspace?.id);
   const currentUser = useAuthStore((s) => s.user);
@@ -429,11 +406,8 @@ export default function TaskDetailPanel({
   // Activity is fetched only once its (collapsed-by-default) section is opened.
   const { data: activityFeed } = useTaskActivity(effectiveTaskId, showActivity);
   const [commentFocus, setCommentFocus] = useState(false);
-  const [estimateInput, setEstimateInput] = useState('');
-  const [editingEstimate, setEditingEstimate] = useState(false);
-  const [loggedHours, setLoggedHours] = useState('');
-  const [loggedMinutes, setLoggedMinutes] = useState('');
-  const [editingLogged, setEditingLogged] = useState(false);
+  const [estimateAnchor, setEstimateAnchor] = useState<DOMRect | null>(null);
+  const [logTimeAnchor, setLogTimeAnchor] = useState<DOMRect | null>(null);
   const [timerElapsed, setTimerElapsed] = useState(0);
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
   const [movePickerOpen, setMovePickerOpen] = useState(false);
@@ -1901,119 +1875,47 @@ export default function TaskDetailPanel({
                   </span>
                 </div>
 
-                {/* Estimate */}
+                {/* Estimate — opens the shorthand popover ("1d 4h" + presets) */}
                 <div
                   className="td-settings-row"
                   data-half="true"
                   data-td="estimate"
                   style={{ cursor: canEdit ? 'pointer' : 'default' }}
-                  onClick={canEdit && !editingEstimate ? () => { setEditingEstimate(true); setEstimateInput(formatMinutes(task.time_estimate)); } : undefined}
+                  onClick={canEdit ? (e) => {
+                    setEstimateAnchor((e.currentTarget as HTMLElement).getBoundingClientRect());
+                  } : undefined}
                 >
                   <span className="k">{META_ICONS.Estimate}Estimate</span>
                   <span className="v">
-                    {editingEstimate ? (
-                      <input
-                        autoFocus
-                        value={estimateInput}
-                        onChange={(e) => setEstimateInput(e.target.value)}
-                        onClick={(e) => e.stopPropagation()}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            const mins = parseTimeInput(estimateInput);
-                            updateTask.mutate({ id: task.id, time_estimate: mins });
-                            setEditingEstimate(false);
-                          }
-                          if (e.key === 'Escape') setEditingEstimate(false);
-                        }}
-                        onBlur={() => {
-                          const mins = parseTimeInput(estimateInput);
-                          updateTask.mutate({ id: task.id, time_estimate: mins });
-                          setEditingEstimate(false);
-                        }}
-                        placeholder="e.g. 2h 30m"
-                        className="text-[12.5px] bg-transparent border-b outline-none w-28"
-                        style={{ borderColor: 'var(--sh-ink)' }}
-                      />
-                    ) : task.time_estimate ? (
-                      <span>{formatMinutes(task.time_estimate)}</span>
+                    {task.time_estimate ? (
+                      <span>{formatDuration(task.time_estimate)}</span>
                     ) : (
                       <span className="td-prop-empty">Not set</span>
                     )}
                   </span>
                 </div>
 
-                {/* Time logged */}
+                {/* Time logged — totals, the log form, the timer and the
+                    entries behind the number, all in one popover. */}
                 <div
                   className="td-settings-row"
                   data-half="true"
                   data-td="time"
-                  style={{ cursor: canEditTimeLogs && !editingLogged && !isTimerForThisTask ? 'pointer' : 'default' }}
-                  onClick={canEditTimeLogs && !editingLogged && !isTimerForThisTask ? () => {
-                    const total = task.time_tracked || 0;
-                    setLoggedHours(String(Math.floor(total / 3600)));
-                    setLoggedMinutes(String(Math.floor((total % 3600) / 60)));
-                    setEditingLogged(true);
-                  } : undefined}
+                  style={{ cursor: 'pointer' }}
+                  onClick={(e) => {
+                    // Opens for everyone — the popover itself is read-only
+                    // below member access (canLog), matching the server.
+                    setLogTimeAnchor((e.currentTarget as HTMLElement).getBoundingClientRect());
+                  }}
                 >
                   <span className="k">{META_ICONS.Estimate}Time logged</span>
                   <span className="v">
-                    {editingLogged ? (
-                      (() => {
-                        const commit = () => {
-                          const h = Math.max(0, Math.min(999, parseInt(loggedHours || '0', 10) || 0));
-                          const m = Math.max(0, Math.min(59, parseInt(loggedMinutes || '0', 10) || 0));
-                          const seconds = h * 3600 + m * 60;
-                          updateTaskTimeTracked.mutate({ id: task.id, time_tracked: seconds });
-                          setEditingLogged(false);
-                        };
-                        return (
-                          <span
-                            className="inline-flex items-center gap-1"
-                            onClick={(e) => e.stopPropagation()}
-                            onBlur={(e) => {
-                              if (!e.currentTarget.contains(e.relatedTarget as Node)) commit();
-                            }}
-                          >
-                            <input
-                              autoFocus
-                              type="number"
-                              min={0}
-                              max={999}
-                              value={loggedHours}
-                              onChange={(e) => setLoggedHours(e.target.value)}
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter') commit();
-                                if (e.key === 'Escape') setEditingLogged(false);
-                              }}
-                              placeholder="0"
-                              className="w-10 text-[12.5px] text-right bg-transparent border-b outline-none tabular-nums"
-                              style={{ borderColor: 'var(--sh-ink)' }}
-                            />
-                            <span className="text-[11px] text-[var(--sh-ink-3)]">h</span>
-                            <input
-                              type="number"
-                              min={0}
-                              max={59}
-                              value={loggedMinutes}
-                              onChange={(e) => setLoggedMinutes(e.target.value)}
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter') commit();
-                                if (e.key === 'Escape') setEditingLogged(false);
-                              }}
-                              placeholder="0"
-                              className="w-10 text-[12.5px] text-right bg-transparent border-b outline-none tabular-nums"
-                              style={{ borderColor: 'var(--sh-ink)' }}
-                            />
-                            <span className="text-[11px] text-[var(--sh-ink-3)]">m</span>
-                          </span>
-                        );
-                      })()
-                    ) : (task.time_tracked || isTimerForThisTask) ? (
+                    {(task.time_tracked || isTimerForThisTask) ? (
                       <span>
                         {formatTracked(isTimerForThisTask ? ((task.time_tracked || 0) + timerElapsed) : task.time_tracked) || '0m'}
                       </span>
                     ) : (
-                      <span className="td-prop-empty">0h</span>
+                      <span className="td-prop-empty">Add time</span>
                     )}
                   </span>
                 </div>
@@ -2531,6 +2433,32 @@ export default function TaskDetailPanel({
             setAssignCompleteAnchor(null);
           }}
           onClose={() => setAssignCompleteAnchor(null)}
+        />
+      )}
+
+      {estimateAnchor && task && (
+        <EstimatePopover
+          anchorRect={estimateAnchor}
+          value={task.time_estimate ?? null}
+          onApply={(mins) => updateTask.mutate({ id: task.id, time_estimate: mins })}
+          onClose={() => setEstimateAnchor(null)}
+        />
+      )}
+
+      {logTimeAnchor && task && (
+        <LogTimePopover
+          anchorRect={logTimeAnchor}
+          taskId={task.id}
+          totalSeconds={task.time_tracked || 0}
+          estimateMinutes={task.time_estimate ?? null}
+          currentUserId={currentUser?.id ?? null}
+          canLog={canEdit}
+          canAdjust={canEditTimeLogs}
+          isRunning={isAnyRunningForThisTask}
+          runningSeconds={timerElapsed}
+          onStartTimer={canEdit ? () => void handleStartTimer() : undefined}
+          onStopTimer={canEdit ? () => void handleStopTimer() : undefined}
+          onClose={() => setLogTimeAnchor(null)}
         />
       )}
 

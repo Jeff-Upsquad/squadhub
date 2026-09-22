@@ -13,6 +13,8 @@ export interface LogTaskTimeParams {
   source: LogTaskTimeSource;
   /** Set for source='work_block' so the Time Sheet can nest the run's sub-items. */
   workBlockRunId?: string | null;
+  /** Free-text note the logger attached to this entry (manual logs only). */
+  note?: string | null;
   /**
    * Skip the daily_time_summaries bump when this wall-clock is already counted
    * elsewhere — e.g. a per-task timer that overlapped a work-block run, where
@@ -42,8 +44,41 @@ export interface LogTaskTimeResult {
  * path logs block time through the exact same flow. Callers are responsible for
  * any access-control checks before invoking.
  */
+/**
+ * Did this user's [startedAt, stoppedAt] window fall inside one of their work
+ * block runs? A block already counts that wall-clock toward the daily total, so
+ * an overlapping per-task entry must NOT bump daily_time_summaries.
+ *
+ * Both the log path and the delete path ask this, so that a delete only unwinds
+ * the day when the log actually fed it.
+ */
+export async function overlapsWorkBlockRun(
+  userId: string,
+  startedAt: string,
+  stoppedAt: string,
+): Promise<boolean> {
+  const { data: activeRun } = await supabaseAdmin
+    .from('work_block_runs')
+    .select('id')
+    .eq('user_id', userId)
+    .is('ended_at', null)
+    .lte('started_at', stoppedAt)
+    .limit(1);
+  if (activeRun && activeRun.length) return true;
+
+  const { data: closedRun } = await supabaseAdmin
+    .from('work_block_runs')
+    .select('id')
+    .eq('user_id', userId)
+    .not('ended_at', 'is', null)
+    .lte('started_at', stoppedAt)
+    .gte('ended_at', startedAt)
+    .limit(1);
+  return !!(closedRun && closedRun.length);
+}
+
 export async function logTaskTimeEntry(params: LogTaskTimeParams): Promise<LogTaskTimeResult> {
-  const { taskId, userId, startedAt, durationSeconds, source, workBlockRunId, skipDailySummary } = params;
+  const { taskId, userId, startedAt, durationSeconds, source, workBlockRunId, note, skipDailySummary } = params;
 
   // Resolve list → space → workspace for the entry's workspace_id.
   const { data: task } = await supabaseAdmin
@@ -61,7 +96,12 @@ export async function logTaskTimeEntry(params: LogTaskTimeParams): Promise<LogTa
   const workspaceId = (space as any)?.workspace_id;
   if (!workspaceId) return { ok: false, error: 'Cannot resolve workspace for task' };
 
-  const stoppedAt = new Date(new Date(startedAt).getTime() + durationSeconds * 1000).toISOString();
+  // A negative correction (source='manual') runs backwards in wall clock. Store
+  // the pair ordered so `started_at <= stopped_at` holds for every row — the
+  // sign lives in duration_seconds, which is what every aggregate reads.
+  const edgeAt = new Date(new Date(startedAt).getTime() + durationSeconds * 1000).toISOString();
+  const entryStartedAt = durationSeconds < 0 ? edgeAt : startedAt;
+  const stoppedAt = durationSeconds < 0 ? startedAt : edgeAt;
 
   const { data: entry, error: insertErr } = await supabaseAdmin
     .from('task_time_entries')
@@ -69,11 +109,12 @@ export async function logTaskTimeEntry(params: LogTaskTimeParams): Promise<LogTa
       task_id: taskId,
       user_id: userId,
       workspace_id: workspaceId,
-      started_at: startedAt,
+      started_at: entryStartedAt,
       stopped_at: stoppedAt,
       duration_seconds: durationSeconds,
       source,
       work_block_run_id: workBlockRunId ?? null,
+      note: note ?? null,
     })
     .select()
     .single();
@@ -91,6 +132,8 @@ export async function logTaskTimeEntry(params: LogTaskTimeParams): Promise<LogTa
   }
 
   if (!skipDailySummary) {
+    // Bucket the day by the entry's own start, not the reordered row, so a
+    // negative correction lands on the date the user picked.
     await upsertDailySummary(userId, workspaceId, startedAt, stoppedAt, durationSeconds);
   }
 
@@ -168,7 +211,9 @@ async function upsertDailySummary(
     await supabaseAdmin
       .from('daily_time_summaries')
       .update({
-        total_work_seconds: (existingSummary as any).total_work_seconds + durationSeconds,
+        // Clamp: a negative correction can exceed what the day actually holds
+        // (e.g. removing time logged on an earlier date).
+        total_work_seconds: Math.max(0, (existingSummary as any).total_work_seconds + durationSeconds),
         updated_at: new Date().toISOString(),
       })
       .eq('id', (existingSummary as any).id);
@@ -180,7 +225,7 @@ async function upsertDailySummary(
         workspace_id: workspaceId,
         context: 'default',
         date: entryDate,
-        total_work_seconds: durationSeconds,
+        total_work_seconds: Math.max(0, durationSeconds),
         total_break_seconds: 0,
         total_no_work_seconds: 0,
         session_count: 1,
