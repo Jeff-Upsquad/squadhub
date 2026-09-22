@@ -5593,6 +5593,86 @@ button.td-bcrumb:hover .name { color: var(--sh-ink); }
 .td-section-add-strong:hover { background: color-mix(in oklch, var(--td-accent-soft) 70%, var(--td-accent) 10%); }
 .td-section-add-strong:disabled { opacity: 0.6; cursor: default; }
 
+/* Item-first add controls. The main half is the common action; the chevron
+   exposes section creation without interrupting the quick-entry flow. */
+.td-entry-split {
+  position: relative;
+  margin-left: auto;
+  display: inline-flex;
+  align-items: stretch;
+  border-radius: 7px;
+  color: var(--td-accent);
+  background: var(--td-accent-soft);
+}
+.td-entry-split-main,
+.td-entry-split-toggle {
+  border: 0;
+  color: inherit;
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+}
+.td-entry-split-main {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 9px 5px 10px;
+  border-radius: 7px 0 0 7px;
+  font-size: 12px;
+  font-weight: 650;
+}
+.td-entry-split-toggle {
+  display: grid;
+  place-items: center;
+  width: 25px;
+  border-left: 1px solid color-mix(in oklch, currentColor 18%, transparent);
+  border-radius: 0 7px 7px 0;
+}
+.td-entry-split-main:hover,
+.td-entry-split-toggle:hover {
+  background: color-mix(in oklch, var(--td-accent-soft) 70%, var(--td-accent) 10%);
+}
+.td-entry-split button:disabled { opacity: .55; cursor: default; }
+.td-entry-split[data-compact="true"] {
+  color: var(--sh-ink-2);
+  background: var(--surface-alt);
+}
+.td-entry-split[data-compact="true"] .td-entry-split-main {
+  padding-top: 4px;
+  padding-bottom: 4px;
+  font-size: 11.5px;
+}
+.td-entry-split-menu {
+  position: absolute;
+  z-index: 80;
+  top: calc(100% + 7px);
+  right: 0;
+  min-width: 190px;
+  padding: 5px;
+  border: 1px solid var(--sh-hair-2);
+  border-radius: 10px;
+  background: var(--surface);
+  box-shadow: 0 14px 36px rgba(0, 0, 0, .16);
+}
+.td-entry-split-menu button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 9px;
+  border: 0;
+  border-radius: 7px;
+  color: var(--sh-ink-2);
+  background: transparent;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 550;
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.td-entry-split-menu button:hover { color: var(--sh-ink); background: var(--surface-alt); }
+
 /* Subtask list — bordered card */
 .td-subtask-list {
   display: flex;
@@ -5670,6 +5750,39 @@ button.td-bcrumb:hover .name { color: var(--sh-ink); }
   border: 1px solid var(--sh-hair-3);
   border-radius: 4px;
 }
+
+.td-subtask-section {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px 6px;
+  color: var(--sh-ink-3);
+  background: color-mix(in oklch, var(--surface-alt) 72%, transparent);
+  border-top: 1px solid var(--sh-hair-3);
+  font-size: 10.5px;
+  font-weight: 750;
+  letter-spacing: .055em;
+  text-transform: uppercase;
+}
+.td-subtask-section:first-child { border-top: 0; }
+.td-subtask-section::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--sh-hair-3);
+}
+.td-section-name-input {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid var(--sh-hair-2);
+  border-radius: 8px;
+  color: var(--sh-ink);
+  background: var(--surface);
+  font: inherit;
+  font-size: 12.5px;
+  outline: none;
+}
+.td-section-name-input:focus { border-color: color-mix(in oklch, var(--td-accent) 62%, var(--sh-hair-2)); }
 
 /* Files dashed drop-zone wrapper — used as empty-state hint */
 .td-files-empty {
