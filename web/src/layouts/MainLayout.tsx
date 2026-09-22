@@ -23,6 +23,7 @@ import type { SavedDraft } from '../stores/draftTaskStore';
 import ToastContainer from '../components/Toast';
 import { useWorkBlockNotifier } from '../hooks/useWorkBlockNotifier';
 import DraftTasksWidget from '../components/DraftTasksWidget';
+import GlobalQuickCreateFab from '../components/GlobalQuickCreateFab';
 import ListPage from '../views/app/pm/ListPage';
 import FolderPage from '../views/app/pm/FolderPage';
 import SpacePage from '../views/app/pm/SpacePage';
@@ -1136,10 +1137,11 @@ export default function MainLayout() {
     );
   }
 
-  // The global top-bar "+" creates a SquadHub task. Hide it where the current
-  // surface already owns the top-right create affordance, so it doesn't stack a
+  // The mobile top-bar "+" creates a SquadHub task. Hide it where the current
+  // surface already owns the create affordance, so it doesn't stack a
   // redundant button on top of theirs:
-  //   • list/board views — their own floating "New task" FAB (newTaskFabVisible)
+  //   • list/board views — creation lives in the global bottom-right FAB
+  //     (flag kept so mobile stays hidden; mobile uses MobileCreateSheet)
   //   • embedded standalone apps (Squad Clips, Daily Check-In, Time Management,
   //     Sales Leads) — each renders its own header/actions; the global "+" was
   //     overlapping e.g. Squad Clips' "New recording ▾" dropdown chevron.
@@ -1822,24 +1824,8 @@ export default function MainLayout() {
         {/* Chrome-style tab strip (desktop only) — each tab is a saved view. */}
         <TabBar />
         {/* The universal top-right "New task" floating "+" was removed per request
-            — task-surface create actions live in each surface's own header (e.g.
-            the design space "New Design Task" button) and the list/board FAB. */}
-        {/* Day Planner: the create button lives as a bottom-right floating FAB
-            (same style as the list view's) instead of the top-right "+". */}
-        {onDayPlanner && (
-          <button
-            type="button"
-            onClick={() => setShowCreateTaskModal(true)}
-            className="lv-newtask-fab"
-            aria-label="New task"
-            title="New task"
-          >
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-              <path d="M12 5v14M5 12h14" />
-            </svg>
-            New task
-          </button>
-        )}
+            — creation now lives in the small global bottom-right quick-create
+            FAB (plus each surface's own header actions). */}
         <EmergencyBanner />
         <ActiveTimer />
         <TimerConflictDialog />
@@ -1950,6 +1936,9 @@ export default function MainLayout() {
           setShowCreateTaskModal(true);
         }}
       />
+
+      {/* Small global quick-create FAB — bottom-right above all screens */}
+      <GlobalQuickCreateFab onNewTask={() => setShowCreateTaskModal(true)} />
 
       {/* Toast notifications */}
       <ToastContainer />

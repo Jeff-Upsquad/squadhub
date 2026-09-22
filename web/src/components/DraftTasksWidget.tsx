@@ -2,7 +2,6 @@
 
 import { useState } from 'react';
 import { useDraftTaskStore, type SavedDraft } from '../stores/draftTaskStore';
-import { usePMStore } from '../stores/pmStore';
 
 function timeAgo(ts: number): string {
   const diff = Math.floor((Date.now() - ts) / 1000);
@@ -20,19 +19,15 @@ export default function DraftTasksWidget({
   const drafts = useDraftTaskStore((s) => s.drafts);
   const removeDraft = useDraftTaskStore((s) => s.removeDraft);
   const clearAll = useDraftTaskStore((s) => s.clearAll);
-  // When the list view's floating "New task" FAB is showing, lift this widget
-  // above it so the two don't overlap in the bottom-right corner. On every
-  // other page (no FAB) it stays anchored at the normal bottom inset.
-  const newTaskFabVisible = usePMStore((s) => s.newTaskFabVisible);
+  // The small global quick-create FAB is always pinned to the bottom-right,
+  // so keep this widget lifted above it to avoid overlap.
   const [open, setOpen] = useState(false);
 
   if (!drafts.length) return null;
 
   return (
     <div
-      className={`fixed right-5 z-[20] flex flex-col items-end gap-2 transition-all duration-200 ${
-        newTaskFabVisible ? 'bottom-20' : 'bottom-5'
-      }`}
+      className="fixed right-5 bottom-16 z-[20] flex flex-col items-end gap-2 transition-all duration-200"
     >
       {/* Expanded list */}
       {open && (
