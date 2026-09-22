@@ -21,7 +21,10 @@ export function useDeleteTaskAttachment(taskId: string | null) {
       return res.data;
     },
     onSuccess: () => {
-      if (taskId) qc.invalidateQueries({ queryKey: ['task-attachments', taskId] });
+      if (taskId) {
+        qc.invalidateQueries({ queryKey: ['task-attachments', taskId] });
+        qc.invalidateQueries({ queryKey: ['task-activity', taskId] });
+      }
     },
   });
 }

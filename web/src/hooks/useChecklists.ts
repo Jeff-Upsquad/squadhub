@@ -20,7 +20,10 @@ export function useCreateChecklist(taskId: string | null) {
       const res = await api.post(`/pm/tasks/${taskId}/checklists`, { title });
       return res.data.data;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['checklists', taskId] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['checklists', taskId] });
+      qc.invalidateQueries({ queryKey: ['task-activity', taskId] });
+    },
   });
 }
 
@@ -30,7 +33,10 @@ export function useUpdateChecklist(taskId: string | null) {
     mutationFn: async ({ id, ...body }: { id: string; title?: string }) => {
       await api.put(`/pm/checklists/${id}`, body);
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['checklists', taskId] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['checklists', taskId] });
+      qc.invalidateQueries({ queryKey: ['task-activity', taskId] });
+    },
   });
 }
 
@@ -40,7 +46,10 @@ export function useDeleteChecklist(taskId: string | null) {
     mutationFn: async (id: string) => {
       await api.delete(`/pm/checklists/${id}`);
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['checklists', taskId] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['checklists', taskId] });
+      qc.invalidateQueries({ queryKey: ['task-activity', taskId] });
+    },
   });
 }
 
@@ -51,7 +60,10 @@ export function useCreateChecklistItem(taskId: string | null) {
       const res = await api.post(`/pm/checklists/${checklistId}/items`, { content });
       return res.data.data as TaskChecklistItem;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['checklists', taskId] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['checklists', taskId] });
+      qc.invalidateQueries({ queryKey: ['task-activity', taskId] });
+    },
   });
 }
 
@@ -61,7 +73,10 @@ export function useUpdateChecklistItem(taskId: string | null) {
     mutationFn: async ({ id, ...body }: { id: string; content?: string; is_done?: boolean }) => {
       await api.put(`/pm/checklist-items/${id}`, body);
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['checklists', taskId] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['checklists', taskId] });
+      qc.invalidateQueries({ queryKey: ['task-activity', taskId] });
+    },
   });
 }
 
@@ -71,6 +86,9 @@ export function useDeleteChecklistItem(taskId: string | null) {
     mutationFn: async (id: string) => {
       await api.delete(`/pm/checklist-items/${id}`);
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['checklists', taskId] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['checklists', taskId] });
+      qc.invalidateQueries({ queryKey: ['task-activity', taskId] });
+    },
   });
 }

@@ -178,6 +178,7 @@ export function useCreateTask(listId: string | null) {
       qc.invalidateQueries({ queryKey: ['notifications', 'list'] });
       if (vars.parent_task_id) {
         qc.invalidateQueries({ queryKey: ['task', vars.parent_task_id] });
+        qc.invalidateQueries({ queryKey: ['task-activity', vars.parent_task_id] });
       }
       if (data?.id) {
         showToastCard({
@@ -317,7 +318,10 @@ export function useUpdateTask(listId: string | null) {
       // Updating a subtask must also refresh the parent's detail — its
       // `subtasks` array drives the checkbox + N/M counter in the panel.
       const parentId = (data as { parent_task_id?: string | null } | undefined)?.parent_task_id;
-      if (parentId) qc.invalidateQueries({ queryKey: ['task', parentId] });
+      if (parentId) {
+        qc.invalidateQueries({ queryKey: ['task', parentId] });
+        qc.invalidateQueries({ queryKey: ['task-activity', parentId] });
+      }
       qc.invalidateQueries({ queryKey: ['task-activity', vars.id] });
       qc.invalidateQueries({ queryKey: ['notifications', 'unread-count'] });
       qc.invalidateQueries({ queryKey: ['notifications', 'list'] });
@@ -339,6 +343,7 @@ export function useUpdateTaskTimeTracked(listId: string | null) {
     onSuccess: (_data, vars) => {
       invalidateTaskLists(qc, listId);
       qc.invalidateQueries({ queryKey: ['task', vars.id] });
+      qc.invalidateQueries({ queryKey: ['task-activity', vars.id] });
       qc.invalidateQueries({ queryKey: ['task-time-entries'] });
       qc.invalidateQueries({ queryKey: ['folder-time-summary'] });
     },
@@ -384,6 +389,7 @@ export function useAddTaskToLists(taskId: string | null) {
     },
     onSuccess: (data) => {
       qc.invalidateQueries({ queryKey: ['task-lists', taskId] });
+      qc.invalidateQueries({ queryKey: ['task-activity', taskId] });
       for (const lid of data?.added || []) invalidateTaskLists(qc, lid);
     },
   });
@@ -399,6 +405,7 @@ export function useRemoveTaskFromList(taskId: string | null) {
     },
     onSuccess: (listId) => {
       qc.invalidateQueries({ queryKey: ['task-lists', taskId] });
+      qc.invalidateQueries({ queryKey: ['task-activity', taskId] });
       invalidateTaskLists(qc, listId);
     },
   });
