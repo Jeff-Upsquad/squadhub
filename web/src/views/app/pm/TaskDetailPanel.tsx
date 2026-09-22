@@ -1903,6 +1903,8 @@ export default function TaskDetailPanel({
                   data-td="time"
                   style={{ cursor: 'pointer' }}
                   onClick={(e) => {
+                    // Opens for everyone — the popover itself is read-only
+                    // below member access (canLog), matching the server.
                     setLogTimeAnchor((e.currentTarget as HTMLElement).getBoundingClientRect());
                   }}
                 >
@@ -2450,6 +2452,7 @@ export default function TaskDetailPanel({
           totalSeconds={task.time_tracked || 0}
           estimateMinutes={task.time_estimate ?? null}
           currentUserId={currentUser?.id ?? null}
+          canLog={canEdit}
           canAdjust={canEditTimeLogs}
           isRunning={isAnyRunningForThisTask}
           runningSeconds={timerElapsed}

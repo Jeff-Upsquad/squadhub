@@ -10,7 +10,7 @@ import { getUserRoleIds } from '../../utils/roles';
 import { PARTNER_USER_TYPES } from '@squadhub/shared';
 import { spawnRoutineInstance } from '../../services/routineSpawner';
 import { todayIST } from '../../utils/ist';
-import { logTaskTimeEntry, ensureAssigneeOnTimeLogged, addDailyWorkSeconds } from '../../utils/taskTime';
+import { logTaskTimeEntry, ensureAssigneeOnTimeLogged, addDailyWorkSeconds, overlapsWorkBlockRun } from '../../utils/taskTime';
 import { logTaskActivity, type TaskActivityEvent } from '../../utils/taskActivity';
 import { resolveClientSource } from '../../utils/clientSource';
 
@@ -1000,25 +1000,7 @@ router.post('/tasks/:id/time-entries', async (req: Request, res: Response) => {
     const stoppedAt = new Date(
       new Date(started_at).getTime() + Math.max(0, duration_seconds) * 1000,
     ).toISOString();
-    const { data: activeRun } = await supabaseAdmin
-      .from('work_block_runs')
-      .select('id')
-      .eq('user_id', req.userId!)
-      .is('ended_at', null)
-      .lte('started_at', stoppedAt)
-      .limit(1);
-    let withinBlock = !!(activeRun && activeRun.length);
-    if (!withinBlock) {
-      const { data: closedRun } = await supabaseAdmin
-        .from('work_block_runs')
-        .select('id')
-        .eq('user_id', req.userId!)
-        .not('ended_at', 'is', null)
-        .lte('started_at', stoppedAt)
-        .gte('ended_at', started_at)
-        .limit(1);
-      withinBlock = !!(closedRun && closedRun.length);
-    }
+    const withinBlock = await overlapsWorkBlockRun(req.userId!, started_at, stoppedAt);
 
     const result = await logTaskTimeEntry({
       taskId,
@@ -1128,12 +1110,17 @@ router.delete('/tasks/:id/time-entries/:entryId', async (req: Request, res: Resp
       res.status(400).json({ success: false, error: 'Work-block time is managed by its run' });
       return;
     }
-    if ((entry as any).user_id !== req.userId!) {
-      const primary = await getPrimaryRolePermissions(req.userId!);
-      if (primary.can_edit_time_logs !== true) {
-        res.status(403).json({ success: false, error: "Your role cannot edit another person's logged time" });
-        return;
-      }
+    // Removing an entry lowers the logged total, which is the same capability
+    // PATCH /time-tracked and a negative entry both gate on. Gate it the same
+    // way for everyone, so the restriction can't be sidestepped by deleting an
+    // entry instead of subtracting from it.
+    const primary = await getPrimaryRolePermissions(req.userId!);
+    if (primary.can_edit_time_logs !== true) {
+      res.status(403).json({
+        success: false,
+        error: 'Your role cannot edit logged time',
+      });
+      return;
     }
 
     const { error: delErr } = await supabaseAdmin
@@ -1154,13 +1141,26 @@ router.delete('/tasks/:id/time-entries/:entryId', async (req: Request, res: Resp
       .from('tasks')
       .update({ time_tracked: Math.max(0, ((taskRow as any)?.time_tracked || 0) - seconds) })
       .eq('id', taskId);
+    // Only unwind the day if this entry ever fed it. A timer that overlapped a
+    // work-block run was logged with skipDailySummary (the block owns that
+    // wall-clock), so subtracting here would remove time the day never counted.
     if ((entry as any).workspace_id) {
-      await addDailyWorkSeconds({
-        userId: (entry as any).user_id,
-        workspaceId: (entry as any).workspace_id,
-        startedAt: (entry as any).started_at,
-        durationSeconds: -seconds,
-      });
+      const entryStoppedAt = new Date(
+        new Date((entry as any).started_at).getTime() + Math.max(0, seconds) * 1000,
+      ).toISOString();
+      const fedTheDay = !(await overlapsWorkBlockRun(
+        (entry as any).user_id,
+        (entry as any).started_at,
+        entryStoppedAt,
+      ));
+      if (fedTheDay) {
+        await addDailyWorkSeconds({
+          userId: (entry as any).user_id,
+          workspaceId: (entry as any).workspace_id,
+          startedAt: (entry as any).started_at,
+          durationSeconds: -seconds,
+        });
+      }
     }
 
     res.json({ success: true, data: { id: entryId } });

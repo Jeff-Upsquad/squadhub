@@ -44,6 +44,39 @@ export interface LogTaskTimeResult {
  * path logs block time through the exact same flow. Callers are responsible for
  * any access-control checks before invoking.
  */
+/**
+ * Did this user's [startedAt, stoppedAt] window fall inside one of their work
+ * block runs? A block already counts that wall-clock toward the daily total, so
+ * an overlapping per-task entry must NOT bump daily_time_summaries.
+ *
+ * Both the log path and the delete path ask this, so that a delete only unwinds
+ * the day when the log actually fed it.
+ */
+export async function overlapsWorkBlockRun(
+  userId: string,
+  startedAt: string,
+  stoppedAt: string,
+): Promise<boolean> {
+  const { data: activeRun } = await supabaseAdmin
+    .from('work_block_runs')
+    .select('id')
+    .eq('user_id', userId)
+    .is('ended_at', null)
+    .lte('started_at', stoppedAt)
+    .limit(1);
+  if (activeRun && activeRun.length) return true;
+
+  const { data: closedRun } = await supabaseAdmin
+    .from('work_block_runs')
+    .select('id')
+    .eq('user_id', userId)
+    .not('ended_at', 'is', null)
+    .lte('started_at', stoppedAt)
+    .gte('ended_at', startedAt)
+    .limit(1);
+  return !!(closedRun && closedRun.length);
+}
+
 export async function logTaskTimeEntry(params: LogTaskTimeParams): Promise<LogTaskTimeResult> {
   const { taskId, userId, startedAt, durationSeconds, source, workBlockRunId, note, skipDailySummary } = params;
 

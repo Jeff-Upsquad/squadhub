@@ -31,8 +31,9 @@ export default function LogTimePopover({
   taskId,
   totalSeconds,
   estimateMinutes,
-  currentUserId,
+  canLog,
   canAdjust,
+  currentUserId,
   isRunning,
   runningSeconds,
   onStartTimer,
@@ -44,9 +45,11 @@ export default function LogTimePopover({
   /** tasks.time_tracked — every user's logged time on this task, in seconds. */
   totalSeconds: number;
   estimateMinutes: number | null;
-  currentUserId: string | null;
-  /** can_edit_time_logs — required to subtract time or remove someone else's. */
+  /** Member access on the task. Below that, the popover is a read-only view. */
+  canLog: boolean;
+  /** can_edit_time_logs — required to subtract time or remove an entry. */
   canAdjust: boolean;
+  currentUserId: string | null;
   isRunning: boolean;
   /** Live seconds for the running timer, already split across parallel timers. */
   runningSeconds: number;
@@ -68,6 +71,7 @@ export default function LogTimePopover({
   const [whenTouched, setWhenTouched] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [justLogged, setJustLogged] = useState<number | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const entriesQuery = useTaskTimeEntries(taskId);
   const createEntry = useCreateTaskTimeEntry();
@@ -82,9 +86,10 @@ export default function LogTimePopover({
   const subtracting = (minutes ?? 0) < 0;
 
   useEffect(() => {
+    if (!canLog) return undefined;
     const t = setTimeout(() => durationRef.current?.focus(), 0);
     return () => clearTimeout(t);
-  }, []);
+  }, [canLog]);
 
   useEffect(() => {
     if (whenTouched || minutes == null || minutes <= 0) return;
@@ -214,7 +219,7 @@ export default function LogTimePopover({
       </div>
 
       {/* Tabs — only when a timer is actually available for this task */}
-      {onStartTimer && (
+      {canLog && onStartTimer && (
         <div className="tp-tabs" role="tablist">
           <button
             type="button"
@@ -237,7 +242,11 @@ export default function LogTimePopover({
         </div>
       )}
 
-      {tab === 'log' || !onStartTimer ? (
+      {!canLog ? (
+        <div className="tp-body tp-readonly">
+          You can see the time on this task, but logging it needs edit access.
+        </div>
+      ) : tab === 'log' || !onStartTimer ? (
         <div className="tp-body">
           <div className="tp-row">
             <label className="tp-label" htmlFor="tp-duration">How long</label>
@@ -350,7 +359,10 @@ export default function LogTimePopover({
 
       {/* Recent entries — the audit trail behind the total, and the undo path */}
       <div className="tp-recent">
-        <div className="tp-recent-head">Recent</div>
+        <div className="tp-recent-head">
+          Recent
+          {deleteError && <span className="tp-recent-err"> · {deleteError}</span>}
+        </div>
         {entriesQuery.isLoading ? (
           <div className="tp-recent-empty">Loading…</div>
         ) : entries.length === 0 ? (
@@ -361,11 +373,19 @@ export default function LogTimePopover({
               <RecentRow
                 key={entry.id}
                 entry={entry}
-                canDelete={
-                  entry.source !== 'work_block' &&
-                  (entry.user_id === currentUserId || canAdjust)
-                }
-                onDelete={() => deleteEntry.mutate({ taskId, entryId: entry.id })}
+                // Removing an entry lowers the logged total, so it carries the
+                // same role gate the server applies — for your own rows too.
+                canDelete={canLog && canAdjust && entry.source !== 'work_block'}
+                onDelete={() => {
+                  setDeleteError(null);
+                  deleteEntry.mutate({ taskId, entryId: entry.id }, {
+                    onError: (err: unknown) => {
+                      const msg = (err as { response?: { data?: { error?: string } } })
+                        ?.response?.data?.error;
+                      setDeleteError(msg || 'Could not remove that entry');
+                    },
+                  });
+                }}
                 isMine={entry.user_id === currentUserId}
               />
             ))}
