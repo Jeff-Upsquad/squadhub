@@ -111,9 +111,11 @@ function MessageRowView({ m, dim, animateIn }: { m: MessageRow; dim?: boolean; a
 export default function InboxMessageDetail({
   messageId,
   onOpen,
+  onStay,
 }: {
   messageId: string;
   onOpen: (jump?: ChatJump) => void;
+  onStay?: () => void;
 }) {
   const queryClient = useQueryClient();
 
@@ -198,7 +200,10 @@ export default function InboxMessageDetail({
   // should clear instead of leaving the bell badge nagging. Optimistically
   // drop the matching rows, persist via read-conversation, then refresh the
   // badge (mirrors the old inline send path + ChatPanel's behaviour).
+  // Pin the inbox selection first so the detail pane stays on this thread
+  // instead of falling through to the next notification.
   const handleSent = () => {
+    onStay?.();
     queryClient.invalidateQueries({ queryKey: ['message-thread', messageId] });
 
     const root = data?.root;
