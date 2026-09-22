@@ -123,9 +123,10 @@ export default function BusinessAppLanding() {
         <div className="mx-auto max-w-2xl">
           {/* Hero */}
           <div className="mb-10 text-center">
-            <div className="relative mx-auto mb-5 flex h-20 w-20 items-center justify-center rounded-[22px] bg-[#0A0A0A] shadow-[0_16px_38px_-16px_rgba(0,0,0,0.45)]">
-              <span className="up-heading text-[26px] font-extrabold tracking-tight text-white">SH</span>
-              <span className="absolute -right-1.5 -top-1.5 h-4 w-4 rounded-full border-2 border-[#FAFAFA] bg-[#FFFF99]" />
+            <div className="relative mx-auto mb-5 flex h-20 w-20 items-center justify-center overflow-hidden rounded-[22px] bg-[#0A0A0A] shadow-[0_16px_38px_-16px_rgba(0,0,0,0.45)]">
+              <span className="up-heading -translate-y-[9px] text-[26px] font-extrabold tracking-tight text-white">SH</span>
+              {/* Role tab — mirrors the Android launcher icon (blue B tab) */}
+              <span className="up-heading absolute inset-x-0 bottom-0 flex h-[22px] items-center justify-center bg-[#2563EB] text-[13px] font-extrabold text-white">B</span>
             </div>
             <h1 className="up-heading text-[32px] font-extrabold tracking-[-0.03em] text-[#0A0A0A] sm:text-[40px]">
               SquadHub Business
