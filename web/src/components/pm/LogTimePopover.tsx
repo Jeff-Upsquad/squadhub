@@ -400,11 +400,22 @@ function RecentRow({
   return (
     <li className="tp-recent-row">
       <span className={`tp-recent-dur${negative ? ' is-neg' : ''}`}>
-        {formatHoursMinutes(Math.round(entry.duration_seconds / 60)) || '<1m'}
+        {/* Sub-minute entries round to nothing — keep the sign so a small
+            correction doesn't read as a small amount of logged work. */}
+        {formatHoursMinutes(Math.round(entry.duration_seconds / 60))
+          || `${negative ? '-' : ''}<1m`}
       </span>
       <span className="tp-recent-meta">
         <span className="tp-recent-who">{who}</span>
         <span className="tp-recent-when">{when}</span>
+        {negative && (
+          <span
+            className="tp-recent-tag"
+            title="Time taken back off the total, not work logged"
+          >
+            adjustment
+          </span>
+        )}
         {entry.note && <span className="tp-recent-note">{entry.note}</span>}
       </span>
       {entry.source === 'work_block' ? (
