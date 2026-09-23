@@ -2,7 +2,7 @@
 
 ## Objective
 
-Validate, stage, and commit the current changes on a feature branch. Do not push, open a PR, or deploy. This is the first half of `CMPD`. Direct commits to `main` are not allowed — `main` only moves via reviewed PR merges (or fast-forward sync), so Greptile reviews every change.
+Validate, stage, and commit the current changes on a feature branch. Do not push, open a PR, or deploy. This is the first half of `CMPD`. Direct commits to `main` are not allowed — `main` only moves via PR merges (or fast-forward sync).
 
 ## Steps
 

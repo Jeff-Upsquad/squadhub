@@ -16,7 +16,8 @@ export type SerializableDraft = {
   task_type_id: string | null;
   time_estimate: number | null;
   recurrence?: TaskRecurrence | null;
-  subtasks: { id: string; title: string }[];
+  subtaskSections?: { id: string; title: string }[];
+  subtasks: { id: string; title: string; section_id?: string | null }[];
   checklists: {
     id: string;
     title: string;

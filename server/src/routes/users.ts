@@ -5,6 +5,7 @@ import { supabaseAdmin } from '../supabase';
 import { hydrateCard } from '../utils/subscriptionCards';
 import { propagateUserDisplayName } from '../utils/propagateIdentityNames';
 import { isUserWorkLocked, resolveWorkAccess } from '../utils/workAccess';
+import { getUserSkills } from '../utils/skills';
 
 const router = Router();
 
@@ -185,6 +186,18 @@ router.get('/me', requireAuth, async (req: Request, res: Response) => {
     res.json({ success: true, data: await resolveWorkAccess(data) });
   } catch (err) {
     console.error('Get user error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// GET /users/me/skills — the caller's effective level of every skill (admin
+// "Skills" module), e.g. { edit_logged_time: 'reduce' }. Drives which edit
+// affordances the web shows; the server re-checks on every mutation.
+router.get('/me/skills', requireAuth, async (req: Request, res: Response) => {
+  try {
+    res.json({ success: true, data: await getUserSkills(req.userId!) });
+  } catch (err) {
+    console.error('Get my skills error:', err);
     res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });

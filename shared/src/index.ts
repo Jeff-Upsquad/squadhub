@@ -900,6 +900,9 @@ export interface TaskTimeEntry {
   work_block_run_id?: string | null;
   // Optional free-text note the logger attached to this block of time.
   note?: string | null;
+  // Set when the entry was changed after logging (edit_logged_time skill).
+  edited_at?: string | null;
+  edited_by?: string | null;
   created_at: string;
   // Joined on the task-scoped history endpoint (who logged it).
   user?: { id: string; display_name: string | null; email: string | null } | null;
@@ -4631,3 +4634,81 @@ export interface JobCardQuestion {
   created_at: string;
   updated_at: string;
 }
+
+// ============================================================
+// Skills (admin "Skills" module)
+//
+// A skill is a capability defined here in code, with an ordered set of levels
+// (lowest first). Admins grant a skill at one level to a user, a role, or a
+// whole user type; a user's effective level is the highest matching grant.
+// Platform admins always hold the top level.
+// ============================================================
+export type SkillKey = 'edit_logged_time';
+export type SkillPrincipalType = 'user' | 'role' | 'user_type';
+
+export interface SkillLevelDef {
+  value: string;
+  label: string;
+  description: string;
+}
+
+export interface SkillDef {
+  key: SkillKey;
+  name: string;
+  category: string;
+  description: string;
+  /** Ordered lowest → highest. */
+  levels: SkillLevelDef[];
+}
+
+export type EditLoggedTimeLevel = 'reduce' | 'full';
+
+export const SKILL_CATALOG: SkillDef[] = [
+  {
+    key: 'edit_logged_time',
+    name: 'Edit logged time',
+    category: 'Time tracking',
+    description:
+      'Change time that is already logged on a task — edit an entry, take time off, or remove an entry. Without this skill people can only add time.',
+    levels: [
+      {
+        value: 'reduce',
+        label: 'Reduce only',
+        description: 'Can lower or remove logged time, but never increase it.',
+      },
+      {
+        value: 'full',
+        label: 'Full edit',
+        description: 'Can change logged time up or down, and remove entries.',
+      },
+    ],
+  },
+];
+
+export function getSkillDef(key: string): SkillDef | undefined {
+  return SKILL_CATALOG.find((s) => s.key === key);
+}
+
+/** Rank of a level within its skill (-1 when unknown / not held). */
+export function skillLevelRank(key: string, level: string | null | undefined): number {
+  if (!level) return -1;
+  const def = getSkillDef(key);
+  return def ? def.levels.findIndex((l) => l.value === level) : -1;
+}
+
+export interface SkillGrant {
+  id: string;
+  skill_key: SkillKey;
+  principal_type: SkillPrincipalType;
+  principal_id: string;
+  level: string;
+  granted_by: string | null;
+  created_at: string;
+  updated_at: string;
+  // Joined for display, keyed by principal_type
+  user?: Pick<User, 'id' | 'display_name' | 'email' | 'avatar_url' | 'user_type'> | null;
+  role?: Pick<Role, 'id' | 'name' | 'color'> | null;
+}
+
+/** The caller's effective level per skill (null = not held). */
+export type MySkills = Partial<Record<SkillKey, string | null>>;

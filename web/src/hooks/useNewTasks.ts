@@ -35,9 +35,10 @@ export function useReviewTask() {
       else await api.delete(`/pm/tasks/${taskId}/review`);
     },
     // The count badge and both popup modes read from these; refresh after either way.
-    onSettled: () => {
+    onSettled: (_d, _e, vars) => {
       qc.invalidateQueries({ queryKey: ['new-tasks'] });
       qc.invalidateQueries({ queryKey: ['my-tasks-summary'] });
+      if (vars?.taskId) qc.invalidateQueries({ queryKey: ['task-activity', vars.taskId] });
     },
   });
 }

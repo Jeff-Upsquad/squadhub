@@ -59,12 +59,14 @@ export default function NoAssigneeCompleteDialog({
     return { top, left, width };
   }, [anchorRect]);
 
+  // z-[105]: above slide-over panels (z-90) and their overlays (z-100),
+  // below toasts (z-110) — see IncompleteItemsDialog.
   return (
     <div
       ref={panelRef}
       role="dialog"
       aria-label="Task has no assignee"
-      className="sh-float fixed z-[80] rounded-xl border border-[var(--sh-hair)] bg-[var(--surface)] p-3 shadow-2xl"
+      className="sh-float fixed z-[105] rounded-xl border border-[var(--sh-hair)] bg-[var(--surface)] p-3 shadow-2xl"
       style={style}
     >
       <p className="text-[13px] font-semibold text-[var(--sh-ink)]">No assignee</p>

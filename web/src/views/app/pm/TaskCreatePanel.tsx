@@ -25,6 +25,7 @@ import { usePanelFileDrop } from './usePanelFileDrop';
 import { inputTimeToMinute, type Recurrence } from '../../../utils/workBlockRecurrence';
 import EstimatePopover from '../../../components/pm/EstimatePopover';
 import { formatDuration } from '../../../lib/timeDuration';
+import AddEntrySplitButton from './AddEntrySplitButton';
 
 /* -------------------------------------------------------------------------- */
 /* Helpers (duplicated from TaskDetailPanel — keep in sync if they change)    */
@@ -172,7 +173,8 @@ const META_ICONS: Record<string, React.ReactNode> = {
 /* Component                                                                   */
 /* -------------------------------------------------------------------------- */
 
-type DraftSubtask = { id: string; title: string };
+type DraftSubtaskSection = { id: string; title: string };
+type DraftSubtask = { id: string; title: string; section_id?: string | null };
 type DraftChecklistItem = { id: string; content: string; is_done: boolean };
 type DraftChecklist = { id: string; title: string; items: DraftChecklistItem[] };
 type DraftFile = { id: string; file: File };
@@ -189,6 +191,7 @@ type Draft = {
   task_type_id: string | null;
   time_estimate: number | null;
   recurrence: TaskRecurrence | null;
+  subtaskSections: DraftSubtaskSection[];
   subtasks: DraftSubtask[];
   checklists: DraftChecklist[];
   pendingFiles: DraftFile[];
@@ -207,6 +210,7 @@ function makeDraft(defaultStatus: string | undefined): Draft {
     task_type_id: null,
     time_estimate: null,
     recurrence: null,
+    subtaskSections: [],
     subtasks: [],
     checklists: [],
     pendingFiles: [],
@@ -218,6 +222,7 @@ function isDraftNonEmpty(d: Draft): boolean {
     d.title.trim().length > 0 ||
     d.description.trim().length > 0 ||
     d.assignee_ids.length > 0 ||
+    d.subtaskSections.length > 0 ||
     d.subtasks.length > 0 ||
     d.checklists.length > 0 ||
     d.pendingFiles.length > 0 ||
@@ -334,8 +339,8 @@ export default function TaskCreatePanel({
   const initialStatus = defaultStatus || effectiveStatuses[0]?.name || 'todo';
   const [draft, setDraft] = useState<Draft>(() => {
     if (initialDraft) {
-      // Older persisted drafts predate `recurrence` — default it.
-      return { recurrence: null, ...initialDraft, pendingFiles: [] };
+      // Older persisted drafts predate recurrence and subtask sections.
+      return { recurrence: null, subtaskSections: [], ...initialDraft, pendingFiles: [] };
     }
     return makeDraft(initialStatus);
   });
@@ -391,6 +396,8 @@ export default function TaskCreatePanel({
   const [repeatAnchor, setRepeatAnchor] = useState<DOMRect | null>(null);
   const [estimateAnchor, setEstimateAnchor] = useState<DOMRect | null>(null);
   const [newSubtaskTitle, setNewSubtaskTitle] = useState<string | null>(null);
+  const [newSubtaskSectionTitle, setNewSubtaskSectionTitle] = useState<string | null>(null);
+  const [newSubtaskSectionId, setNewSubtaskSectionId] = useState<string | null>(null);
   const [newChecklistTitle, setNewChecklistTitle] = useState<string | null>(null);
   const [newItemDrafts, setNewItemDrafts] = useState<Record<string, string>>({});
   const [dragOver, setDragOver] = useState(false);
@@ -398,6 +405,7 @@ export default function TaskCreatePanel({
   const [focusOnCreate, setFocusOnCreate] = useState(false);
   const focusTask = useFocusTask();
   const filePickerRef = useRef<HTMLInputElement>(null);
+  const checklistInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
   // Default task type, once the list of types is available.
   useEffect(() => {
@@ -492,6 +500,9 @@ export default function TaskCreatePanel({
           .filter(Boolean)[0];
         metadata = { custom: designCustom, ...(categoryLabel ? { category: categoryLabel } : {}) };
       }
+      if (draft.subtaskSections.length > 0) {
+        metadata = { ...(metadata || {}), subtask_sections: draft.subtaskSections };
+      }
 
       const newTask = await createTask.mutateAsync({
         title,
@@ -537,6 +548,7 @@ export default function TaskCreatePanel({
             title: st.title,
             parent_task_id: newTask.id,
             list_id: newTask.list_id,
+            ...(st.section_id ? { metadata: { subtask_section_id: st.section_id } } : {}),
           });
         } catch (err) {
           console.error('Failed to create subtask:', err);
@@ -624,8 +636,30 @@ export default function TaskCreatePanel({
       setNewSubtaskTitle(null);
       return;
     }
-    setDraft((d) => ({ ...d, subtasks: [...d.subtasks, { id: tempId(), title: t }] }));
+    setDraft((d) => ({
+      ...d,
+      subtasks: [...d.subtasks, { id: tempId(), title: t, section_id: newSubtaskSectionId }],
+    }));
     setNewSubtaskTitle(keepInputOpen ? '' : null);
+  };
+
+  const addDraftSubtaskSection = (title: string) => {
+    const t = title.trim();
+    if (!t) {
+      setNewSubtaskSectionTitle(null);
+      return;
+    }
+    const id = tempId();
+    setDraft((d) => ({ ...d, subtaskSections: [...d.subtaskSections, { id, title: t }] }));
+    setNewSubtaskSectionTitle(null);
+    setNewSubtaskSectionId(id);
+    setNewSubtaskTitle('');
+  };
+
+  const startDraftSubtask = () => {
+    const lastSection = draft.subtaskSections.at(-1);
+    setNewSubtaskSectionId(lastSection?.id || null);
+    setNewSubtaskTitle('');
   };
 
   const removeDraftSubtask = (id: string) => {
@@ -638,8 +672,10 @@ export default function TaskCreatePanel({
       setNewChecklistTitle(null);
       return;
     }
-    setDraft((d) => ({ ...d, checklists: [...d.checklists, { id: tempId(), title: t, items: [] }] }));
+    const id = tempId();
+    setDraft((d) => ({ ...d, checklists: [...d.checklists, { id, title: t, items: [] }] }));
     setNewChecklistTitle(null);
+    focusDraftChecklistItem(id);
   };
 
   const removeDraftChecklist = (id: string) => {
@@ -658,6 +694,24 @@ export default function TaskCreatePanel({
       ),
     }));
     setNewItemDrafts((prev) => ({ ...prev, [checklistId]: '' }));
+  };
+
+  const focusDraftChecklistItem = (checklistId: string) => {
+    window.requestAnimationFrame(() => checklistInputRefs.current[checklistId]?.focus());
+  };
+
+  const startDraftChecklistItem = () => {
+    const existing = draft.checklists.at(-1);
+    if (existing) {
+      focusDraftChecklistItem(existing.id);
+      return;
+    }
+    const id = tempId();
+    setDraft((d) => ({
+      ...d,
+      checklists: [...d.checklists, { id, title: 'Checklist', items: [] }],
+    }));
+    focusDraftChecklistItem(id);
   };
 
   const toggleDraftChecklistItem = (checklistId: string, itemId: string) => {
@@ -1512,20 +1566,19 @@ export default function TaskCreatePanel({
             {draft.subtasks.length > 0 && (
               <span className="td-section-count-strong">{draft.subtasks.length}</span>
             )}
-            <button
-              type="button"
-              className="td-section-add-strong"
-              onClick={() => setNewSubtaskTitle(newSubtaskTitle === null ? '' : newSubtaskTitle)}
-              disabled={newSubtaskTitle !== null}
-            >
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
-                <path d="M12 5v14M5 12h14" />
-              </svg>
-              Add subtask
-            </button>
+            <AddEntrySplitButton
+              label="Add subtask"
+              sectionLabel="Create subtask section"
+              onAdd={startDraftSubtask}
+              onAddSection={() => {
+                setNewSubtaskTitle(null);
+                setNewSubtaskSectionTitle('');
+              }}
+              disabled={newSubtaskTitle !== null || newSubtaskSectionTitle !== null}
+            />
           </div>
           <div className="td-subtask-list">
-            {draft.subtasks.map((st) => (
+            {draft.subtasks.filter((st) => !st.section_id).map((st) => (
               <div key={st.id} className="td-subtask-row" data-done="false">
                 <span className="td-checkbox shrink-0" data-done="false" aria-hidden />
                 <span className="title">{st.title}</span>
@@ -1543,6 +1596,51 @@ export default function TaskCreatePanel({
                 </button>
               </div>
             ))}
+            {draft.subtaskSections.map((section) => (
+              <div key={section.id} style={{ display: 'contents' }}>
+                <div className="td-subtask-section">{section.title}</div>
+                {draft.subtasks.filter((st) => st.section_id === section.id).map((st) => (
+                  <div key={st.id} className="td-subtask-row" data-done="false">
+                    <span className="td-checkbox shrink-0" data-done="false" aria-hidden />
+                    <span className="title">{st.title}</span>
+                    <span className="td-subtask-mini">
+                      <span style={{ color: 'var(--sh-ink-4)' }}>—</span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => removeDraftSubtask(st.id)}
+                      className="text-[14px] leading-none w-6 h-6 rounded text-[color:var(--sh-ink-4)] hover:text-red-600"
+                      title="Remove"
+                      aria-label="Remove subtask"
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ))}
+            {newSubtaskSectionTitle !== null && (
+              <input
+                autoFocus
+                value={newSubtaskSectionTitle}
+                onChange={(e) => setNewSubtaskSectionTitle(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    e.currentTarget.blur();
+                  } else if (e.key === 'Escape') {
+                    e.currentTarget.dataset.cancel = 'true';
+                    e.currentTarget.blur();
+                  }
+                }}
+                onBlur={(e) => {
+                  if (e.currentTarget.dataset.cancel === 'true') setNewSubtaskSectionTitle(null);
+                  else addDraftSubtaskSection(newSubtaskSectionTitle);
+                }}
+                placeholder="Section name, Enter to create"
+                className="td-section-name-input"
+              />
+            )}
             {newSubtaskTitle !== null ? (
               <input
                 autoFocus
@@ -1566,7 +1664,7 @@ export default function TaskCreatePanel({
               <button
                 type="button"
                 className="td-subtask-add-row"
-                onClick={() => setNewSubtaskTitle('')}
+                onClick={startDraftSubtask}
               >
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
                   <path d="M12 5v14M5 12h14" />
@@ -1588,7 +1686,13 @@ export default function TaskCreatePanel({
               return <span className="muted">· {done}/{allItems.length}</span>;
             })()}
             {newChecklistTitle === null && (
-              <button className="action" onClick={() => setNewChecklistTitle('')}>+ New list</button>
+              <AddEntrySplitButton
+                label="Add checklist"
+                sectionLabel="Create checklist section"
+                onAdd={startDraftChecklistItem}
+                onAddSection={() => setNewChecklistTitle('')}
+                compact
+              />
             )}
           </div>
           {newChecklistTitle !== null && (
@@ -1652,6 +1756,7 @@ export default function TaskCreatePanel({
                       ))}
                     </ul>
                     <input
+                      ref={(node) => { checklistInputRefs.current[cl.id] = node; }}
                       placeholder="+ Add item"
                       value={newItemDrafts[cl.id] || ''}
                       onChange={(e) => setNewItemDrafts((prev) => ({ ...prev, [cl.id]: e.target.value }))}

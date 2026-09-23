@@ -1,7 +1,13 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import type { TaskTimeEntry } from '@squadhub/shared';
-import { useTaskTimeEntries, useCreateTaskTimeEntry, useDeleteTaskTimeEntry } from '../../hooks/useTaskTimeEntries';
+import type { TaskTimeEntry, EditLoggedTimeLevel } from '@squadhub/shared';
+import {
+  useTaskTimeEntries,
+  useCreateTaskTimeEntry,
+  useDeleteTaskTimeEntry,
+  useUpdateTaskTimeEntry,
+} from '../../hooks/useTaskTimeEntries';
+import { useEditLoggedTimeLevel } from '../../hooks/useMySkills';
 import {
   parseDuration,
   formatDuration,
@@ -23,8 +29,10 @@ type Tab = 'log' | 'timer';
  *
  * Logging is entry-based rather than "overwrite the total" — that keeps the
  * per-session history, the daily timesheet and the task's own aggregate
- * telling the same story. Subtracting is a negative entry, which the server
- * gates on the can_edit_time_logs role.
+ * telling the same story. Changing time that is already logged — editing an
+ * entry, a negative entry, removing an entry — needs the edit_logged_time
+ * skill (admin → Skills): 'reduce' can only lower time, 'full' can change it
+ * either way. The server enforces the same rule on every call.
  */
 export default function LogTimePopover({
   anchorRect,
@@ -32,7 +40,6 @@ export default function LogTimePopover({
   totalSeconds,
   estimateMinutes,
   canLog,
-  canAdjust,
   currentUserId,
   isRunning,
   runningSeconds,
@@ -47,8 +54,6 @@ export default function LogTimePopover({
   estimateMinutes: number | null;
   /** Member access on the task. Below that, the popover is a read-only view. */
   canLog: boolean;
-  /** can_edit_time_logs — required to subtract time or remove an entry. */
-  canAdjust: boolean;
   currentUserId: string | null;
   isRunning: boolean;
   /** Live seconds for the running timer, already split across parallel timers. */
@@ -72,6 +77,11 @@ export default function LogTimePopover({
   const [error, setError] = useState<string | null>(null);
   const [justLogged, setJustLogged] = useState<number | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+
+  const editLevel = useEditLoggedTimeLevel();
+  // Any level may take time off; only the skill lets you change logged time.
+  const canAdjust = editLevel != null;
 
   const entriesQuery = useTaskTimeEntries(taskId);
   const createEntry = useCreateTaskTimeEntry();
@@ -134,7 +144,7 @@ export default function LogTimePopover({
   const submit = async () => {
     if (createEntry.isPending) return;
     if (minutes == null || minutes === 0) { setError('Enter a duration, e.g. 1h 30m'); return; }
-    if (minutes < 0 && !canAdjust) { setError('Your role cannot subtract logged time'); return; }
+    if (minutes < 0 && !canAdjust) { setError('Taking time off needs the “Edit logged time” skill'); return; }
     if (!startAt) { setError('Pick a valid date and time'); return; }
     if (startAt.getTime() > Date.now() + 60_000) { setError("That's in the future"); return; }
 
@@ -361,6 +371,9 @@ export default function LogTimePopover({
       <div className="tp-recent">
         <div className="tp-recent-head">
           Recent
+          {canLog && editLevel === 'reduce' && (
+            <span className="tp-recent-lvl" title="Your “Edit logged time” skill level"> · you can reduce entries</span>
+          )}
           {deleteError && <span className="tp-recent-err"> · {deleteError}</span>}
         </div>
         {entriesQuery.isLoading ? (
@@ -369,13 +382,26 @@ export default function LogTimePopover({
           <div className="tp-recent-empty">No time logged yet.</div>
         ) : (
           <ul className="tp-recent-list">
-            {entries.slice(0, 12).map((entry) => (
+            {entries.slice(0, 12).map((entry) => editingId === entry.id && editLevel ? (
+              <EditEntryRow
+                key={entry.id}
+                taskId={taskId}
+                entry={entry}
+                level={editLevel}
+                isMine={entry.user_id === currentUserId}
+                onDone={() => setEditingId(null)}
+              />
+            ) : (
               <RecentRow
                 key={entry.id}
                 entry={entry}
-                // Removing an entry lowers the logged total, so it carries the
-                // same role gate the server applies — for your own rows too.
-                canDelete={canLog && canAdjust && entry.source !== 'work_block'}
+                // Removing an entry changes the logged total, so it carries the
+                // same skill gate the server applies — for your own rows too.
+                // 'reduce' can't remove a negative adjustment (that adds time).
+                canDelete={canLog && canAdjust && entry.source !== 'work_block'
+                  && (editLevel === 'full' || entry.duration_seconds > 0)}
+                canEdit={canLog && canAdjust && entry.source !== 'work_block'}
+                onEdit={() => { setDeleteError(null); setEditingId(entry.id); }}
                 onDelete={() => {
                   setDeleteError(null);
                   deleteEntry.mutate({ taskId, entryId: entry.id }, {
@@ -401,11 +427,15 @@ function RecentRow({
   entry,
   isMine,
   canDelete,
+  canEdit,
+  onEdit,
   onDelete,
 }: {
   entry: TaskTimeEntry;
   isMine: boolean;
   canDelete: boolean;
+  canEdit: boolean;
+  onEdit: () => void;
   onDelete: () => void;
 }) {
   const started = new Date(entry.started_at);
@@ -436,15 +466,192 @@ function RecentRow({
             adjustment
           </span>
         )}
+        {entry.edited_at && (
+          <span
+            className="tp-recent-tag"
+            title={`Changed ${new Date(entry.edited_at).toLocaleString()}`}
+          >
+            edited
+          </span>
+        )}
         {entry.note && <span className="tp-recent-note">{entry.note}</span>}
       </span>
       {entry.source === 'work_block' ? (
         <span className="tp-recent-tag" title="Logged by a work block">block</span>
-      ) : canDelete ? (
-        <button type="button" className="tp-recent-del" onClick={onDelete} aria-label="Remove this entry">
-          ×
+      ) : (
+        <>
+          {canEdit && (
+            <button type="button" className="tp-recent-del tp-recent-edit" onClick={onEdit} aria-label="Edit this entry" title="Edit">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                <path d="M12 20h9" />
+                <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z" />
+              </svg>
+            </button>
+          )}
+          {canDelete && (
+            <button type="button" className="tp-recent-del" onClick={onDelete} aria-label="Remove this entry" title="Remove">
+              ×
+            </button>
+          )}
+        </>
+      )}
+    </li>
+  );
+}
+
+/**
+ * One entry opened for editing, in place of its row: duration, when it was
+ * logged from, and the note. With the 'reduce' level the duration may only go
+ * down — the form says so up front and blocks a raise before the server does.
+ */
+function EditEntryRow({
+  taskId,
+  entry,
+  level,
+  isMine,
+  onDone,
+}: {
+  taskId: string;
+  entry: TaskTimeEntry;
+  level: EditLoggedTimeLevel;
+  isMine: boolean;
+  onDone: () => void;
+}) {
+  const update = useUpdateTaskTimeEntry();
+  const oldSeconds = entry.duration_seconds;
+  // A negative entry is stored with its pair reordered, so the moment it was
+  // logged "from" is stopped_at.
+  const anchor = new Date(oldSeconds < 0 ? entry.stopped_at : entry.started_at);
+
+  const [duration, setDuration] = useState(
+    () => formatHoursMinutes(Math.round(oldSeconds / 60)) || (oldSeconds < 0 ? '-1m' : '1m'),
+  );
+  const [durationTouched, setDurationTouched] = useState(false);
+  const [dateValue, setDateValue] = useState(() => toDateInputValue(anchor));
+  const [timeValue, setTimeValue] = useState(() => toTimeInputValue(anchor));
+  const [whenTouched, setWhenTouched] = useState(false);
+  const [note, setNote] = useState(entry.note || '');
+  const [error, setError] = useState<string | null>(null);
+  const durationRef = useRef<HTMLInputElement>(null);
+  const rowRef = useRef<HTMLLIElement>(null);
+
+  useEffect(() => {
+    durationRef.current?.focus();
+    durationRef.current?.select();
+    rowRef.current?.scrollIntoView({ block: 'nearest' });
+  }, []);
+
+  const minutes = duration.trim() ? parseDuration(duration) : null;
+  const invalid = minutes == null || minutes === 0;
+  // Untouched, the typed value is a minute-rounded view of the real seconds —
+  // don't let that rounding count as a change.
+  const newSeconds = durationTouched && minutes != null ? Math.round(minutes * 60) : oldSeconds;
+  const raising = newSeconds > oldSeconds;
+  const blocked = level === 'reduce' && raising;
+
+  const save = async () => {
+    if (update.isPending) return;
+    if (durationTouched && invalid) { setError('Enter a duration, e.g. 1h 30m'); return; }
+    if (blocked) { setError('You can only reduce this entry'); return; }
+    const start = whenTouched ? fromDateTimeInputs(dateValue, timeValue) : null;
+    if (whenTouched && !start) { setError('Pick a valid date and time'); return; }
+
+    const noteValue = note.trim() || null;
+    const changed = newSeconds !== oldSeconds || whenTouched || noteValue !== (entry.note || null);
+    if (!changed) { onDone(); return; }
+
+    try {
+      await update.mutateAsync({
+        taskId,
+        entryId: entry.id,
+        durationSeconds: newSeconds !== oldSeconds ? newSeconds : undefined,
+        startedAt: start ? start.toISOString() : undefined,
+        note: noteValue,
+      });
+      onDone();
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error;
+      setError(msg || 'Could not save that change');
+    }
+  };
+
+  const onKey = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') { e.preventDefault(); void save(); }
+    // Escape closes the edit, not the whole popover.
+    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); e.nativeEvent.stopImmediatePropagation(); onDone(); }
+  };
+
+  const who = isMine ? 'your' : `${entry.user?.display_name || entry.user?.email || 'their'}’s`;
+  const hint = error
+    ? error
+    : level === 'reduce'
+      ? `Reduce only · up to ${formatHoursMinutes(Math.round(oldSeconds / 60)) || '<1m'}`
+      : durationTouched && newSeconds !== oldSeconds
+        ? `${raising ? '+' : '−'}${formatHoursMinutes(Math.abs(Math.round((newSeconds - oldSeconds) / 60))) || '<1m'} on ${who} entry`
+        : 'Enter to save';
+
+  return (
+    <li ref={rowRef} className="tp-edit" onKeyDown={onKey}>
+      <div className="tp-row">
+        <label className="tp-label" htmlFor={`tp-edit-dur-${entry.id}`}>Time</label>
+        <div className="tp-row-main">
+          <input
+            id={`tp-edit-dur-${entry.id}`}
+            ref={durationRef}
+            value={duration}
+            onChange={(e) => { setDuration(e.target.value); setDurationTouched(true); setError(null); }}
+            className="tp-input tp-input-sm"
+            aria-invalid={(durationTouched && invalid) || blocked}
+            placeholder="1h 30m"
+          />
+        </div>
+      </div>
+      <div className="tp-row">
+        <label className="tp-label" htmlFor={`tp-edit-date-${entry.id}`}>Started</label>
+        <div className="tp-row-main">
+          <input
+            id={`tp-edit-date-${entry.id}`}
+            type="date"
+            value={dateValue}
+            max={toDateInputValue(new Date())}
+            onChange={(e) => { setDateValue(e.target.value); setWhenTouched(true); setError(null); }}
+            className="tp-input tp-input-date"
+          />
+          <input
+            type="time"
+            value={timeValue}
+            onChange={(e) => { setTimeValue(e.target.value); setWhenTouched(true); setError(null); }}
+            className="tp-input tp-input-time"
+          />
+        </div>
+      </div>
+      <div className="tp-row">
+        <label className="tp-label" htmlFor={`tp-edit-note-${entry.id}`}>Note</label>
+        <div className="tp-row-main">
+          <input
+            id={`tp-edit-note-${entry.id}`}
+            value={note}
+            maxLength={500}
+            onChange={(e) => setNote(e.target.value)}
+            placeholder="Optional"
+            className="tp-input tp-input-sm"
+          />
+        </div>
+      </div>
+      <div className="tp-edit-foot">
+        <span className={`tp-foot-hint${error || blocked ? ' is-bad' : ''}`}>
+          {blocked && !error ? 'You can only reduce this entry' : hint}
+        </span>
+        <button type="button" className="tp-btn-ghost" onClick={onDone}>Cancel</button>
+        <button
+          type="button"
+          className="tp-btn"
+          disabled={(durationTouched && invalid) || blocked || update.isPending}
+          onClick={() => void save()}
+        >
+          {update.isPending ? 'Saving…' : 'Save'}
         </button>
-      ) : null}
+      </div>
     </li>
   );
 }
