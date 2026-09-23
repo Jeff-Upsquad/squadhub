@@ -262,10 +262,11 @@ export function useFocusTask() {
     onError: (_err, _vars, ctx) => {
       if (ctx?.snapshots) rollback(qc, ctx.snapshots);
     },
-    onSettled: () => {
+    onSettled: (_d, _e, vars) => {
       qc.invalidateQueries({ queryKey: ['day-planner'] });
       qc.invalidateQueries({ queryKey: ['my-tasks'] });
       qc.invalidateQueries({ queryKey: ['my-tasks-summary'] });
+      if (vars?.id) qc.invalidateQueries({ queryKey: ['task-activity', vars.id] });
     },
   });
 }
@@ -288,9 +289,10 @@ export function useSnoozeTask() {
     onError: (_err, _vars, ctx) => {
       if (ctx?.snapshots) rollback(qc, ctx.snapshots);
     },
-    onSettled: () => {
+    onSettled: (_d, _e, vars) => {
       qc.invalidateQueries({ queryKey: ['day-planner'] });
       qc.invalidateQueries({ queryKey: ['my-tasks'] });
+      if (vars?.id) qc.invalidateQueries({ queryKey: ['task-activity', vars.id] });
     },
   });
 }

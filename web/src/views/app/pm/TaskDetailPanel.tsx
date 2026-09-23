@@ -199,6 +199,15 @@ function entityName(v: unknown): string {
   return v == null ? 'none' : String(v);
 }
 
+// Checklist payloads carry {id, title} (checklist) or {id, content} (item).
+function checklistName(v: unknown): string {
+  if (v && typeof v === 'object') {
+    const o = v as Record<string, unknown>;
+    return (o.title as string) || (o.content as string) || (o.name as string) || '—';
+  }
+  return v == null ? 'none' : String(v);
+}
+
 type ActivityForRender = {
   event_type: string;
   field: string | null;
@@ -226,6 +235,8 @@ function renderActivity(e: ActivityForRender): { icon: string; body: React.React
     case 'attachment_added': return { icon: '▣', body: line('attached', entityName(e.new_value)) };
     case 'moved': return { icon: '→', body: line('moved to', entityName(e.new_value)) };
     case 'subtask_removed': return { icon: '◇', body: line('removed subtask', entityName(e.old_value)) };
+    case 'subtask_completed': return { icon: '✓', body: line('completed subtask', entityName(e.new_value)) };
+    case 'subtask_reopened': return { icon: '◇', body: line('reopened subtask', entityName(e.new_value)) };
     case 'list_link_added': return { icon: '→', body: line('added to list', entityName(e.new_value)) };
     case 'list_link_removed': return { icon: '←', body: line('removed from list', entityName(e.old_value)) };
     case 'attachment_removed': return { icon: '▢', body: line('removed attachment', entityName(e.old_value)) };
@@ -236,6 +247,21 @@ function renderActivity(e: ActivityForRender): { icon: string; body: React.React
     case 'snooze_cleared': return { icon: '○', body: line('cleared snooze') };
     case 'reviewed': return { icon: '✓', body: line('marked as reviewed') };
     case 'unreviewed': return { icon: '○', body: line('marked as not reviewed') };
+    case 'checklist_added': return { icon: '☑', body: line('added checklist', checklistName(e.new_value)) };
+    case 'checklist_renamed': return {
+      icon: '☑',
+      body: <>{actor} {dim('renamed checklist')} <b>{checklistName(e.old_value)}</b> {dim('to')} <b>{checklistName(e.new_value)}</b></>,
+    };
+    case 'checklist_removed': return { icon: '☑', body: line('removed checklist', checklistName(e.old_value)) };
+    case 'checklist_item_added': return { icon: '＋', body: line('added checklist item', checklistName(e.new_value)) };
+    case 'checklist_item_completed': return { icon: '✓', body: line('checked off', checklistName(e.new_value)) };
+    case 'checklist_item_reopened': return { icon: '○', body: line('reopened', checklistName(e.new_value)) };
+    case 'checklist_item_renamed': return {
+      icon: '○',
+      body: <>{actor} {dim('renamed checklist item')} <b>{checklistName(e.old_value)}</b> {dim('to')} <b>{checklistName(e.new_value)}</b></>,
+    };
+    case 'checklist_item_updated': return { icon: '○', body: line('updated checklist item', checklistName(e.new_value)) };
+    case 'checklist_item_removed': return { icon: '－', body: line('removed checklist item', checklistName(e.old_value)) };
     case 'field_change': {
       const f = e.field || '';
       if (f === 'status') return { icon: '●', body: line('set status to', String(e.new_value ?? 'none')) };
