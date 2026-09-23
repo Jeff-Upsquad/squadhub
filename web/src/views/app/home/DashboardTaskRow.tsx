@@ -124,16 +124,20 @@ export default function DashboardTaskRow({ task }: { task: Task }) {
         onRowTransitionEnd={onRowTransitionEnd}
         isFadingOut={isFadingOut}
       />
-      {gate.incomplete && (
+      {/* Portaled to <body>: the slide-over aside is transformed AND
+          overflow-hidden, which would otherwise contain + clip these
+          fixed-position popups into invisibility (task blocked, no warning). */}
+      {gate.incomplete && createPortal(
         <IncompleteItemsDialog
           anchorRect={gate.incomplete.rect}
           openSubtasks={gate.incomplete.subtasks}
           openChecklistItems={gate.incomplete.checklist}
           onViewTask={() => { gate.closeIncomplete(); onOpen(); }}
           onClose={gate.closeIncomplete}
-        />
+        />,
+        document.body,
       )}
-      {gate.noAssignee && (
+      {gate.noAssignee && createPortal(
         <NoAssigneeCompleteDialog
           anchorRect={gate.noAssignee.rect}
           canAssignToMe={!!currentUser?.id}
@@ -141,16 +145,18 @@ export default function DashboardTaskRow({ task }: { task: Task }) {
           onAssignOther={gate.moveToAssignOther}
           onCompleteAnyway={() => gate.completeAnyway(task.id)}
           onClose={gate.closeNoAssignee}
-        />
+        />,
+        document.body,
       )}
-      {gate.assignAnchor && (
+      {gate.assignAnchor && createPortal(
         <AssigneePicker
           taskId={task.id}
           currentAssigneeIds={[]}
           anchorRect={gate.assignAnchor.rect}
           onChange={(ids) => gate.completeWithAssignees(task.id, ids)}
           onClose={gate.closeAssign}
-        />
+        />,
+        document.body,
       )}
     </>
   );
