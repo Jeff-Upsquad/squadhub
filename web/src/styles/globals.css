@@ -10751,3 +10751,39 @@ html[data-theme="noir"] .inbox-slider-panel {
 @media (hover: none) {
   .tp-recent-del { opacity: 1; }
 }
+
+/* ── Log time: editing a logged entry in place ── */
+.tp-recent-edit { display: inline-flex; align-items: center; justify-content: center; }
+/* Room for the whole edit form (its Save row) without scrolling inside the list. */
+.tp-recent:has(.tp-edit) { max-height: 320px; }
+.tp-recent-lvl { text-transform: none; letter-spacing: -0.01em; font-weight: 600; }
+.tp-edit {
+  list-style: none;
+  margin: 2px -6px 4px;
+  padding: 9px 9px 8px;
+  background: var(--tp-surface);
+  border: 0.5px solid var(--tp-line);
+  border-radius: 10px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+}
+.tp-edit .tp-row { padding-bottom: 6px; }
+.tp-edit .tp-label { flex-basis: 52px; }
+.tp-edit-foot {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-top: 3px;
+}
+.tp-edit-foot .tp-foot-hint { flex: 1 1 auto; min-width: 0; }
+.tp-btn-ghost {
+  height: 28px;
+  padding: 0 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--sh-ink-3);
+  background: transparent;
+  border: 0;
+  border-radius: 999px;
+  cursor: pointer;
+}
+.tp-btn-ghost:hover { background: var(--tp-well); color: var(--sh-ink); }

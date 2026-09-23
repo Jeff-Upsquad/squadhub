@@ -3,7 +3,6 @@ import { createPortal } from 'react-dom';
 import { useQueryClient, useQuery } from '@tanstack/react-query';
 import { usePMStore } from '../../../stores/pmStore';
 import { useTask, useUpdateTask, useDeleteTask, useTaskComments, useAddComment, useCreateTask, useTaskLists, useAddTaskToLists, useRemoveTaskFromList, useTaskActivity } from '../../../hooks/useTasks';
-import { useTimeStats } from '../../../hooks/useTimer';
 import { useFocusTask } from '../../../hooks/useDayPlanner';
 import { isTaskFocused } from '../../../lib/taskGrouping';
 import { useWorkspaceStore } from '../../../stores/workspaceStore';
@@ -360,8 +359,6 @@ export default function TaskDetailPanel({
   const workspaceId = useWorkspaceStore((s) => s.currentWorkspace?.id);
   const currentUser = useAuthStore((s) => s.user);
   const isMobile = useIsMobile();
-  const { data: timeStats } = useTimeStats({ workspaceId, context: 'default' });
-  const canEditTimeLogs = timeStats?.data?.time_log_edit?.can_edit === true;
   const createTask = useCreateTask(listId);
   const addComment = useAddComment(effectiveTaskId);
   const createChecklist = useCreateChecklist(effectiveTaskId);
@@ -2611,7 +2608,6 @@ export default function TaskDetailPanel({
           estimateMinutes={task.time_estimate ?? null}
           currentUserId={currentUser?.id ?? null}
           canLog={canEdit}
-          canAdjust={canEditTimeLogs}
           isRunning={isAnyRunningForThisTask}
           runningSeconds={timerElapsed}
           onStartTimer={canEdit ? () => void handleStartTimer() : undefined}
