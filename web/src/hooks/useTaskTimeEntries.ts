@@ -66,3 +66,27 @@ export function useDeleteTaskTimeEntry() {
     onSuccess: (_data, vars) => invalidateTimeQueries(qc, vars.taskId),
   });
 }
+
+/** Change an already logged entry in place (edit_logged_time skill). */
+export function useUpdateTaskTimeEntry() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ taskId, entryId, durationSeconds, startedAt, note }: {
+      taskId: string;
+      entryId: string;
+      /** Omit to keep the current duration. */
+      durationSeconds?: number;
+      /** When the time was logged from (the entry's anchor). Omit to keep. */
+      startedAt?: string;
+      note?: string | null;
+    }) => {
+      const res = await api.patch(`/pm/tasks/${taskId}/time-entries/${entryId}`, {
+        duration_seconds: durationSeconds,
+        started_at: startedAt,
+        note,
+      });
+      return res.data.data as TaskTimeEntry;
+    },
+    onSuccess: (_data, vars) => invalidateTimeQueries(qc, vars.taskId),
+  });
+}

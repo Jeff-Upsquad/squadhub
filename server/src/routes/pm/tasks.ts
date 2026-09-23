@@ -5,13 +5,14 @@ import { taskRecurrenceOccursOn, getTaskStatusCategory } from '@squadhub/shared'
 import { supabaseAdmin } from '../../supabase';
 import { requireAuth } from '../../middleware/auth';
 import { requireUserType } from '../../middleware/userType';
-import { checkResourceAccess, meetsAccessLevel, requirePermission, isWorkspaceAdmin, isResourceLocked, getPrimaryRolePermissions } from '../../middleware/permissions';
+import { checkResourceAccess, meetsAccessLevel, requirePermission, isWorkspaceAdmin, isResourceLocked } from '../../middleware/permissions';
 import { getUserRoleIds } from '../../utils/roles';
 import { PARTNER_USER_TYPES } from '@squadhub/shared';
 import { spawnRoutineInstance } from '../../services/routineSpawner';
 import { todayIST } from '../../utils/ist';
 import { logTaskTimeEntry, ensureAssigneeOnTimeLogged, addDailyWorkSeconds, overlapsWorkBlockRun } from '../../utils/taskTime';
 import { logTaskActivity, type TaskActivityEvent } from '../../utils/taskActivity';
+import { getUserSkillLevel, checkLoggedTimeChange } from '../../utils/skills';
 import { resolveClientSource } from '../../utils/clientSource';
 
 const router = Router();
@@ -983,13 +984,15 @@ router.post('/tasks/:id/time-entries', async (req: Request, res: Response) => {
       return;
     }
 
-    // Subtracting time is an edit of the logged total, so it carries the same
-    // role gate as PATCH /time-tracked. Adding time does not — that is just
-    // logging your own work, which any member of the list may do.
+    // Subtracting time is an edit of the logged total, so it needs the
+    // edit_logged_time skill (either level — it only ever lowers the total).
+    // Adding time does not — that is just logging your own work, which any
+    // member of the list may do.
     if (duration_seconds < 0) {
-      const primary = await getPrimaryRolePermissions(req.userId!);
-      if (primary.can_edit_time_logs !== true) {
-        res.status(403).json({ success: false, error: 'Your role cannot edit logged time' });
+      const level = await getUserSkillLevel(req.userId!, 'edit_logged_time');
+      const denied = checkLoggedTimeChange(level, 0, duration_seconds);
+      if (denied) {
+        res.status(403).json({ success: false, error: denied });
         return;
       }
     }
@@ -1077,9 +1080,8 @@ router.get('/tasks/:id/time-entries', async (req: Request, res: Response) => {
 // DELETE /pm/tasks/:id/time-entries/:entryId — remove one logged session and
 // unwind the two aggregates it fed (tasks.time_tracked + the day's summary), so
 // the popover's "Recent" list is the correction path for a mis-logged block.
-// You may delete your own entries; deleting someone else's needs the same
-// can_edit_time_logs role gate as PATCH /time-tracked. Work-block rows are
-// owned by their run and are not deletable here.
+// Gated by the edit_logged_time skill for every entry, your own included.
+// Work-block rows are owned by their run and are not deletable here.
 router.delete('/tasks/:id/time-entries/:entryId', async (req: Request, res: Response) => {
   try {
     const taskId = req.params.id as string;
@@ -1110,16 +1112,15 @@ router.delete('/tasks/:id/time-entries/:entryId', async (req: Request, res: Resp
       res.status(400).json({ success: false, error: 'Work-block time is managed by its run' });
       return;
     }
-    // Removing an entry lowers the logged total, which is the same capability
-    // PATCH /time-tracked and a negative entry both gate on. Gate it the same
-    // way for everyone, so the restriction can't be sidestepped by deleting an
-    // entry instead of subtracting from it.
-    const primary = await getPrimaryRolePermissions(req.userId!);
-    if (primary.can_edit_time_logs !== true) {
-      res.status(403).json({
-        success: false,
-        error: 'Your role cannot edit logged time',
-      });
+    // Removing an entry changes the logged total, so it is gated by the
+    // edit_logged_time skill exactly like editing the entry down to zero. That
+    // keeps the restriction from being sidestepped by deleting instead of
+    // editing — and means 'reduce' cannot delete a negative adjustment, which
+    // would put time back on.
+    const level = await getUserSkillLevel(req.userId!, 'edit_logged_time');
+    const denied = checkLoggedTimeChange(level, (entry as any).duration_seconds, 0);
+    if (denied) {
+      res.status(403).json({ success: false, error: denied });
       return;
     }
 
@@ -1166,6 +1167,143 @@ router.delete('/tasks/:id/time-entries/:entryId', async (req: Request, res: Resp
     res.json({ success: true, data: { id: entryId } });
   } catch (err) {
     console.error('Delete task time entry error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// PATCH /pm/tasks/:id/time-entries/:entryId — change an already logged entry
+// (duration, start, note) in place. Gated by the edit_logged_time skill:
+// 'reduce' may only lower the entry's duration, 'full' may change it either
+// way. The entry keeps its logger (user_id); edited_at/edited_by record the
+// change. Both aggregates it fed are moved by the difference: tasks.time_tracked
+// by the delta, and the daily summary by unwinding the old day and re-adding on
+// the (possibly new) day — each only if that window actually fed the day.
+const updateTimeEntrySchema = z.object({
+  duration_seconds: z.number().int().refine((n) => n !== 0, 'Duration cannot be zero').optional(),
+  started_at: z.string().datetime().optional(),
+  note: z.string().trim().max(500).optional().nullable(),
+});
+
+router.patch('/tasks/:id/time-entries/:entryId', async (req: Request, res: Response) => {
+  try {
+    const taskId = req.params.id as string;
+    const entryId = req.params.entryId as string;
+    const body = updateTimeEntrySchema.parse(req.body);
+
+    const listId = await getTaskListId(taskId);
+    if (!listId) {
+      res.status(404).json({ success: false, error: 'Task not found' });
+      return;
+    }
+    const userLevel = await checkResourceAccess(req.userId!, 'list', listId);
+    if (!userLevel || !meetsAccessLevel(userLevel, 'member')) {
+      res.status(403).json({ success: false, error: 'Member access required' });
+      return;
+    }
+
+    const { data: entry } = await supabaseAdmin
+      .from('task_time_entries')
+      .select('id, task_id, user_id, workspace_id, started_at, stopped_at, duration_seconds, source, note')
+      .eq('id', entryId)
+      .eq('task_id', taskId)
+      .maybeSingle();
+    if (!entry) {
+      res.status(404).json({ success: false, error: 'Time entry not found' });
+      return;
+    }
+    const e = entry as any;
+    if (e.source === 'work_block') {
+      res.status(400).json({ success: false, error: 'Work-block time is managed by its run' });
+      return;
+    }
+
+    const oldSeconds = e.duration_seconds as number;
+    const newSeconds = body.duration_seconds ?? oldSeconds;
+    // A negative entry is stored with its pair reordered (see logTaskTimeEntry),
+    // so the moment the user logged "from" is stopped_at, not started_at.
+    const oldAnchor = oldSeconds < 0 ? e.stopped_at as string : e.started_at as string;
+    const newAnchor = body.started_at ?? oldAnchor;
+
+    // Any edit — even a note or a moved start — is changing logged time, so
+    // the skill is required throughout; 'reduce' additionally can't raise it.
+    const level = await getUserSkillLevel(req.userId!, 'edit_logged_time');
+    const denied = checkLoggedTimeChange(level, oldSeconds, newSeconds);
+    if (denied) {
+      res.status(403).json({ success: false, error: denied });
+      return;
+    }
+
+    const anchorMs = new Date(newAnchor).getTime();
+    const newEdgeMs = anchorMs + newSeconds * 1000;
+    if (Math.max(anchorMs, newEdgeMs) > Date.now() + 60_000) {
+      res.status(400).json({ success: false, error: "That entry would end in the future" });
+      return;
+    }
+    const newEdge = new Date(newEdgeMs).toISOString();
+    const newStartedAt = newSeconds < 0 ? newEdge : newAnchor;
+    const newStoppedAt = newSeconds < 0 ? newAnchor : newEdge;
+
+    const { data: updated, error: updErr } = await supabaseAdmin
+      .from('task_time_entries')
+      .update({
+        duration_seconds: newSeconds,
+        started_at: newStartedAt,
+        stopped_at: newStoppedAt,
+        note: body.note !== undefined ? (body.note || null) : e.note,
+        edited_at: new Date().toISOString(),
+        edited_by: req.userId!,
+      })
+      .eq('id', entryId)
+      .select()
+      .single();
+    if (updErr) {
+      res.status(500).json({ success: false, error: updErr.message });
+      return;
+    }
+
+    const delta = newSeconds - oldSeconds;
+    if (delta !== 0) {
+      const { data: taskRow } = await supabaseAdmin
+        .from('tasks').select('time_tracked').eq('id', taskId).single();
+      await supabaseAdmin
+        .from('tasks')
+        .update({ time_tracked: Math.max(0, ((taskRow as any)?.time_tracked || 0) + delta) })
+        .eq('id', taskId);
+      await logTaskActivity(taskId, req.userId!, [{
+        event_type: 'field_change', field: 'time_tracked',
+        old_value: (taskRow as any)?.time_tracked || 0,
+        new_value: Math.max(0, ((taskRow as any)?.time_tracked || 0) + delta),
+      }]);
+    }
+
+    // Move the day's aggregate: take the old window off the day it fed, put
+    // the new one on the day it lands. A window inside a work-block run never
+    // fed the day (the block owns that wall-clock), so skip it on either side.
+    if (e.workspace_id && (delta !== 0 || newAnchor !== oldAnchor)) {
+      // Same window the log path asked about: [anchor, anchor + positive span].
+      const windowEnd = (anchor: string, secs: number) =>
+        new Date(new Date(anchor).getTime() + Math.max(0, secs) * 1000).toISOString();
+      const oldFed = !(await overlapsWorkBlockRun(e.user_id, oldAnchor, windowEnd(oldAnchor, oldSeconds)));
+      if (oldFed) {
+        await addDailyWorkSeconds({
+          userId: e.user_id, workspaceId: e.workspace_id, startedAt: oldAnchor, durationSeconds: -oldSeconds,
+        });
+      }
+      const newFeeds = !(await overlapsWorkBlockRun(e.user_id, newAnchor, windowEnd(newAnchor, newSeconds)));
+      if (newFeeds) {
+        await addDailyWorkSeconds({
+          userId: e.user_id, workspaceId: e.workspace_id, startedAt: newAnchor, durationSeconds: newSeconds,
+        });
+      }
+    }
+
+    res.json({ success: true, data: updated });
+  } catch (err) {
+    if (err instanceof z.ZodError) {
+      res.status(400).json({ success: false, error: err.errors[0].message });
+      return;
+    }
+    console.error('Update task time entry error:', err);
     res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });
@@ -1899,7 +2037,7 @@ router.delete('/tasks/:id/lists/:listId', async (req: Request, res: Response) =>
 });
 
 // PATCH /pm/tasks/:id/time-tracked — manual edit of the "Logged" value on a task.
-// Requires can_edit_time_logs on the user's PRIMARY role (not unioned). This is
+// Requires the edit_logged_time skill ('reduce' may only lower it). This is
 // separate from PUT /pm/tasks/:id so that ActiveTimer can keep writing through
 // PUT without tripping the role check.
 const patchTimeTrackedSchema = z.object({
@@ -1923,12 +2061,6 @@ router.patch('/tasks/:id/time-tracked', async (req: Request, res: Response) => {
       return;
     }
 
-    const primary = await getPrimaryRolePermissions(req.userId!);
-    if (primary.can_edit_time_logs !== true) {
-      res.status(403).json({ success: false, error: 'Your role cannot edit logged time' });
-      return;
-    }
-
     // Read the old aggregate + workspace_id to compute the delta and attribute
     // the entry correctly. If old == new, skip the entry (no-op edit).
     const { data: existing } = await supabaseAdmin
@@ -1938,6 +2070,13 @@ router.patch('/tasks/:id/time-tracked', async (req: Request, res: Response) => {
       .single();
     const oldTotal = (existing as any)?.time_tracked || 0;
     const delta = time_tracked - oldTotal;
+
+    const level = await getUserSkillLevel(req.userId!, 'edit_logged_time');
+    const denied = checkLoggedTimeChange(level, oldTotal, time_tracked);
+    if (denied) {
+      res.status(403).json({ success: false, error: denied });
+      return;
+    }
 
     const { data, error } = await supabaseAdmin
       .from('tasks')
