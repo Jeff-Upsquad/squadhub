@@ -6,6 +6,7 @@ import { useAuthStore } from '../stores/authStore';
 import { useTabsStore } from '../stores/tabsStore';
 import { buildHomeSnapshot } from '../lib/tabSnapshots';
 import { usePersonalList, useTasks, useUpdateTask, groupTasksByStatus } from '../hooks/useTasks';
+import { useCompletionGate } from '../hooks/useCompletionGate';
 import { useListViews } from '../hooks/useListViews';
 import {
   LIST_GROUP_BY_OPTIONS,
@@ -25,6 +26,9 @@ import { EMPTY_FILTER, filterTasks, type TaskFilterState } from '../lib/filters'
 import { PRIORITY_META } from '../views/app/pm/PriorityPicker';
 import { formatTaskDates } from '../views/app/pm/taskHelpers';
 import { useIsMobile } from '../hooks/useIsMobile';
+import AssigneePicker from '../views/app/pm/AssigneePicker';
+import IncompleteItemsDialog from '../views/app/pm/IncompleteItemsDialog';
+import NoAssigneeCompleteDialog from '../views/app/pm/NoAssigneeCompleteDialog';
 import type { SpaceStatus, Task } from '@squadhub/shared';
 
 /**
@@ -49,8 +53,22 @@ function PreviewRow({ task, listId, onOpen }: { task: Task; listId: string; onOp
   const done = isTaskCompleted(task);
   const due = dueMeta(task);
   const pri = task.priority && task.priority !== 'none' ? PRIORITY_META[task.priority] : null;
+  // Same completion gate as every other checkbox surface (subtask/checklist
+  // block + no-assignee prompt) instead of a direct status write.
+  const gate = useCompletionGate({
+    onComplete: (taskId, assigneeIds) => {
+      const payload: Record<string, unknown> = { id: taskId, status: 'done' };
+      if (assigneeIds) {
+        payload.assignee_ids = assigneeIds;
+        if (listId) payload.list_id = listId;
+      }
+      updateTask.mutate(payload as any);
+    },
+  });
+  const currentUser = useAuthStore((s) => s.user);
 
   return (
+    <>
     <button
       type="button"
       onClick={() => onOpen(task)}
@@ -62,7 +80,11 @@ function PreviewRow({ task, listId, onOpen }: { task: Task; listId: string; onOp
         aria-label={done ? 'Mark as not done' : 'Mark as done'}
         onClick={(e) => {
           e.stopPropagation();
-          updateTask.mutate({ id: task.id, status: done ? 'todo' : 'done' });
+          if (done) {
+            updateTask.mutate({ id: task.id, status: 'todo' });
+            return;
+          }
+          void gate.requestComplete(task, e);
         }}
         className={`grid h-[16px] w-[16px] shrink-0 place-items-center rounded-[5px] border transition ${
           done
@@ -89,6 +111,35 @@ function PreviewRow({ task, listId, onOpen }: { task: Task; listId: string; onOp
         </span>
       )}
     </button>
+    {gate.incomplete && (
+      <IncompleteItemsDialog
+        anchorRect={gate.incomplete.rect}
+        openSubtasks={gate.incomplete.subtasks}
+        openChecklistItems={gate.incomplete.checklist}
+        onViewTask={() => { gate.closeIncomplete(); onOpen(task); }}
+        onClose={gate.closeIncomplete}
+      />
+    )}
+    {gate.noAssignee && (
+      <NoAssigneeCompleteDialog
+        anchorRect={gate.noAssignee.rect}
+        canAssignToMe={!!currentUser?.id}
+        onAssignToMe={() => gate.assignToMe(task.id, currentUser?.id)}
+        onAssignOther={gate.moveToAssignOther}
+        onCompleteAnyway={() => gate.completeAnyway(task.id)}
+        onClose={gate.closeNoAssignee}
+      />
+    )}
+    {gate.assignAnchor && (
+      <AssigneePicker
+        taskId={task.id}
+        currentAssigneeIds={[]}
+        anchorRect={gate.assignAnchor.rect}
+        onChange={(ids) => gate.completeWithAssignees(task.id, ids)}
+        onClose={gate.closeAssign}
+      />
+    )}
+    </>
   );
 }
 
