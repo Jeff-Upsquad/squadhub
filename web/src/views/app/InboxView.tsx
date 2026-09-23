@@ -666,7 +666,14 @@ export default function InboxView({
           </button>
         )}
         {current ? (
-          renderDetail(current, (jump?: ChatJump) => openSource(current, jump))
+          renderDetail(
+            current,
+            (jump?: ChatJump) => openSource(current, jump),
+            // Pin the selection so replying (which marks the conversation
+            // read) keeps this thread on screen instead of falling through
+            // to shown[0] — the next notification.
+            () => setActiveId(current.id),
+          )
         ) : (
           <div className="ib-empty" style={{ padding: 32 }}>
             Pick a notification to see the thread.
@@ -677,7 +684,7 @@ export default function InboxView({
   );
 }
 
-function renderDetail(n: Notification, onOpen: (jump?: ChatJump) => void) {
+function renderDetail(n: Notification, onOpen: (jump?: ChatJump) => void, onStay?: () => void) {
   if (n.type === 'sop_flag' || n.type === 'sop_strike') {
     return (
       <div className="th-pane" style={{ justifyContent: 'center', padding: 28, color: 'var(--sh-ink-3)', fontSize: 13, textAlign: 'center' }}>
@@ -686,13 +693,14 @@ function renderDetail(n: Notification, onOpen: (jump?: ChatJump) => void) {
     );
   }
   if (n.reference_type === 'task' && n.metadata?.task_id) {
-    return <InboxTaskDetail taskId={n.metadata.task_id as string} notificationId={n.id} onOpen={onOpen} />;
+    return <InboxTaskDetail taskId={n.metadata.task_id as string} notificationId={n.id} onOpen={onOpen} onStay={onStay} />;
   }
   if (n.reference_type === 'message' && (n.metadata?.message_id || n.reference_id)) {
     return (
       <InboxMessageDetail
         messageId={(n.metadata?.message_id as string) || n.reference_id}
         onOpen={onOpen}
+        onStay={onStay}
       />
     );
   }

@@ -37,10 +37,12 @@ export default function InboxTaskDetail({
   taskId,
   notificationId,
   onOpen,
+  onStay,
 }: {
   taskId: string;
   notificationId?: string;
   onOpen: () => void;
+  onStay?: () => void;
 }) {
   const queryClient = useQueryClient();
   const { data: task, isLoading } = useTask(taskId);
@@ -75,6 +77,9 @@ export default function InboxTaskDetail({
 
   const handleSend = () => {
     if (!text.trim()) return;
+    // Pin the inbox selection so commenting (which marks the notification
+    // read) keeps this task on screen instead of advancing to the next one.
+    onStay?.();
     addComment.mutate(
       { content: text.trim(), mentions },
       { onSuccess: () => { setText(''); setMentions([]); markNotificationRead(); } },

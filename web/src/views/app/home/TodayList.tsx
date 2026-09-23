@@ -1,11 +1,16 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { Task } from '@squadhub/shared';
 import { useMyTasks, useUpdateTask } from '../../../hooks/useTasks';
+import { useCompletionGate } from '../../../hooks/useCompletionGate';
+import { useAuthStore } from '../../../stores/authStore';
 import { useMyTimeEntries } from '../../../hooks/useTaskTimeEntries';
 import { useParallelTimers } from '../../../hooks/useParallelTimers';
 import { usePMStore, todayKey, effectiveFocusBucket, type FocusBucket } from '../../../stores/pmStore';
 import { avatarColor, initialOf, formatTaskDates } from '../pm/taskHelpers';
+import AssigneePicker from '../pm/AssigneePicker';
+import IncompleteItemsDialog from '../pm/IncompleteItemsDialog';
+import NoAssigneeCompleteDialog from '../pm/NoAssigneeCompleteDialog';
 import { formatTracked, toLocalDateKey } from '../../../lib/formatDuration';
 import { groupTasks, isFutureDay, isTaskFocused, collapseGroupedTasks, isGroupedRow, GROUP_BY_OPTIONS } from '../../../lib/taskGrouping';
 import GroupedTaskRow from './GroupedTaskRow';
@@ -662,17 +667,37 @@ function TodayRow({ task: t, onOpen, secondsToday = 0 }: { task: Task; onOpen: (
     return st === 'done' || st === 'closed' || st === 'cancelled';
   }).length;
 
-  const onToggleDone = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    const next = isDone ? 'todo' : 'done';
+  // Completion writes go through the shared gate so checking off here runs
+  // the same subtask/checklist + no-assignee prompts as the list view.
+  const completeTask = useCallback((taskId: string, assigneeIds?: string[]) => {
     // markFading both celebrates this row and keeps it rendered (via the parent's
     // useRetainFading) through the slide, even after the completion refetch drops
     // the now-done task from the my-tasks list.
-    if (!isDone) markFading(t.id, status ?? '');
+    markFading(taskId, status ?? '');
+    const payload: Record<string, unknown> = { id: taskId, status: 'done' };
+    if (assigneeIds) {
+      payload.assignee_ids = assigneeIds;
+      if (t.list_id) payload.list_id = t.list_id;
+    }
     updateTask.mutate(
-      { id: t.id, status: next } as any,
+      payload as any,
       { onError: () => { unmarkFading(t.id); setIsHidden(false); } },
     );
+  }, [markFading, status, t.id, t.list_id, unmarkFading, updateTask]);
+  const gate = useCompletionGate({ onComplete: completeTask });
+  const currentUser = useAuthStore((s) => s.user);
+
+  const onToggleDone = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    // Re-opening a completed task: flip straight back, no prompt.
+    if (isDone) {
+      updateTask.mutate(
+        { id: t.id, status: 'todo' } as any,
+        { onError: () => { setIsHidden(false); } },
+      );
+      return;
+    }
+    void gate.requestComplete(t, e);
   };
 
   const onRowTransitionEnd = (e: React.TransitionEvent<HTMLDivElement>) => {
@@ -844,6 +869,39 @@ function TodayRow({ task: t, onOpen, secondsToday = 0 }: { task: Task; onOpen: (
         ))}
       </div>
     )}
+    {/* Portaled to <body> so the .hm-card's overflow-hidden (and any
+        transformed ancestor) can't clip these fixed-position popups. */}
+    {gate.incomplete && createPortal(
+      <IncompleteItemsDialog
+        anchorRect={gate.incomplete.rect}
+        openSubtasks={gate.incomplete.subtasks}
+        openChecklistItems={gate.incomplete.checklist}
+        onViewTask={() => { gate.closeIncomplete(); onOpen(t.id); }}
+        onClose={gate.closeIncomplete}
+      />,
+      document.body,
+    )}
+    {gate.noAssignee && createPortal(
+      <NoAssigneeCompleteDialog
+        anchorRect={gate.noAssignee.rect}
+        canAssignToMe={!!currentUser?.id}
+        onAssignToMe={() => gate.assignToMe(t.id, currentUser?.id)}
+        onAssignOther={gate.moveToAssignOther}
+        onCompleteAnyway={() => gate.completeAnyway(t.id)}
+        onClose={gate.closeNoAssignee}
+      />,
+      document.body,
+    )}
+    {gate.assignAnchor && createPortal(
+      <AssigneePicker
+        taskId={t.id}
+        currentAssigneeIds={[]}
+        anchorRect={gate.assignAnchor.rect}
+        onChange={(ids) => gate.completeWithAssignees(t.id, ids)}
+        onClose={gate.closeAssign}
+      />,
+      document.body,
+    )}
     </>
   );
 }
@@ -857,42 +915,89 @@ function HomeSubtaskRow({ sub: s, onOpen }: { sub: Task; onOpen: (id: string) =>
   const isDone = status === 'done' || status === 'closed' || status === 'cancelled';
   const when = formatTaskDates(s);
   const assignee = s.assignees?.[0];
+  const completeTask = useCallback((taskId: string, assigneeIds?: string[]) => {
+    const payload: Record<string, unknown> = { id: taskId, status: 'done' };
+    if (assigneeIds) {
+      payload.assignee_ids = assigneeIds;
+      if (s.list_id) payload.list_id = s.list_id;
+    }
+    updateTask.mutate(payload as any);
+  }, [s.id, s.list_id, updateTask]);
+  const gate = useCompletionGate({ onComplete: completeTask });
+  const currentUser = useAuthStore((st) => st.user);
   return (
-    <div
-      className="hm-subtask"
-      data-done={isDone || undefined}
-      onClick={() => onOpen(s.id)}
-      role="button"
-      tabIndex={0}
-      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen(s.id); } }}
-    >
+    <>
       <div
-        className="checkbox"
+        className="hm-subtask"
         data-done={isDone || undefined}
+        onClick={() => onOpen(s.id)}
         role="button"
-        aria-label={isDone ? 'Mark incomplete' : 'Mark complete'}
-        onClick={(e) => {
-          e.stopPropagation();
-          updateTask.mutate({ id: s.id, status: isDone ? 'todo' : 'done' } as any);
-        }}
-      />
-      <span className="t">{s.title}</span>
-      {when.text && (
-        <span className="hm-when" data-overdue={when.overdue || undefined}>
-          {when.text}
-        </span>
-      )}
-      {assignee ? (
+        tabIndex={0}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen(s.id); } }}
+      >
         <div
-          className="hm-ava"
-          style={{ background: avatarColor(assignee.id || assignee.email) }}
-          title={assignee.display_name || assignee.email}
-        >
-          {initialOf(assignee.display_name || assignee.email)}
-        </div>
-      ) : (
-        <div className="hm-ava" data-empty="true" title="Unassigned">–</div>
+          className="checkbox"
+          data-done={isDone || undefined}
+          role="button"
+          aria-label={isDone ? 'Mark incomplete' : 'Mark complete'}
+          onClick={(e) => {
+            e.stopPropagation();
+            if (isDone) {
+              updateTask.mutate({ id: s.id, status: 'todo' } as any);
+              return;
+            }
+            void gate.requestComplete(s, e);
+          }}
+        />
+        <span className="t">{s.title}</span>
+        {when.text && (
+          <span className="hm-when" data-overdue={when.overdue || undefined}>
+            {when.text}
+          </span>
+        )}
+        {assignee ? (
+          <div
+            className="hm-ava"
+            style={{ background: avatarColor(assignee.id || assignee.email) }}
+            title={assignee.display_name || assignee.email}
+          >
+            {initialOf(assignee.display_name || assignee.email)}
+          </div>
+        ) : (
+          <div className="hm-ava" data-empty="true" title="Unassigned">–</div>
+        )}
+      </div>
+      {gate.incomplete && createPortal(
+        <IncompleteItemsDialog
+          anchorRect={gate.incomplete.rect}
+          openSubtasks={gate.incomplete.subtasks}
+          openChecklistItems={gate.incomplete.checklist}
+          onViewTask={() => { gate.closeIncomplete(); onOpen(s.id); }}
+          onClose={gate.closeIncomplete}
+        />,
+        document.body,
       )}
-    </div>
+      {gate.noAssignee && createPortal(
+        <NoAssigneeCompleteDialog
+          anchorRect={gate.noAssignee.rect}
+          canAssignToMe={!!currentUser?.id}
+          onAssignToMe={() => gate.assignToMe(s.id, currentUser?.id)}
+          onAssignOther={gate.moveToAssignOther}
+          onCompleteAnyway={() => gate.completeAnyway(s.id)}
+          onClose={gate.closeNoAssignee}
+        />,
+        document.body,
+      )}
+      {gate.assignAnchor && createPortal(
+        <AssigneePicker
+          taskId={s.id}
+          currentAssigneeIds={[]}
+          anchorRect={gate.assignAnchor.rect}
+          onChange={(ids) => gate.completeWithAssignees(s.id, ids)}
+          onClose={gate.closeAssign}
+        />,
+        document.body,
+      )}
+    </>
   );
 }

@@ -13,10 +13,19 @@ import { getWorkspaceIdForTask } from './labels';
 //   list_link_added / list_link_removed                              -> {id, name}
 //   moved                                                            -> {id, name}
 //   subtask_added / subtask_removed                                  -> {id, title}
+//   subtask_completed / subtask_reopened (logged on the PARENT feed) -> {id, title}
 //   attachment_added / attachment_removed                            -> {name}
 //   focus_set / focus_cleared                                        -> (no values)
 //   snooze_set (ISO string) / snooze_cleared                         -> new_value / (none)
 //   reviewed / unreviewed / comment_deleted / created               -> (no values)
+//   checklist_added                                                  -> {id, title}
+//   checklist_renamed                                                -> old {id, title} / new {id, title}
+//   checklist_removed                                                -> {id, title} (old_value)
+//   checklist_item_added                                             -> {id, content, checklist}
+//   checklist_item_completed / checklist_item_reopened               -> {id, content}
+//   checklist_item_renamed                                           -> old {id, content} / new {id, content}
+//   checklist_item_updated (assignee/due change)                     -> {id, content}
+//   checklist_item_removed                                           -> {id, content} (old_value)
 //
 // time_estimate is intentionally NOT logged here — it has its own audit table
 // (task_estimate_changes, migration 134) which the read endpoint folds into the

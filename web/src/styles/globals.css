@@ -2601,7 +2601,10 @@ body.sb-resizing { user-select: none; -webkit-user-select: none; cursor: col-res
 /* Assignee picker popover */
 .ap-panel {
   position: fixed;
-  z-index: 60;
+  /* 105: above slide-over panels (z-90) and their overlays (z-100), below
+     toasts (z-110). Home rows portal this from inside transformed/clipped
+     panel containers where a lower z would paint it behind the panel. */
+  z-index: 105;
   max-height: 360px;
   display: flex;
   flex-direction: column;
@@ -4026,6 +4029,68 @@ body.sb-resizing { user-select: none; -webkit-user-select: none; cursor: col-res
   box-shadow: 0 12px 30px -6px rgba(0,0,0,0.42), 0 3px 8px rgba(0,0,0,0.2);
 }
 .lv-newtask-fab:active { transform: scale(0.96); }
+
+/* ── Global quick-create FAB — small 36px circle pinned bottom-right above
+   every desktop screen. Deliberately compact so it stays out of the way. ── */
+.sh-quickcreate-wrap {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  z-index: 50;
+}
+.sh-quickcreate-fab {
+  display: grid;
+  place-items: center;
+  height: 36px;
+  width: 36px;
+  background: var(--sh-ink);
+  color: var(--surface);
+  border: none;
+  border-radius: 999px;
+  cursor: pointer;
+  opacity: 0.85;
+  box-shadow: 0 6px 18px -6px rgba(0,0,0,0.4), 0 2px 6px rgba(0,0,0,0.16);
+  transition: opacity 0.12s, transform 0.08s, box-shadow 0.12s;
+}
+.sh-quickcreate-fab:hover {
+  opacity: 1;
+  box-shadow: 0 10px 24px -6px rgba(0,0,0,0.45), 0 2px 6px rgba(0,0,0,0.18);
+}
+.sh-quickcreate-fab:active { transform: scale(0.94); }
+.sh-quickcreate-plus { transition: transform 0.14s ease; }
+.sh-quickcreate-plus.is-open { transform: rotate(45deg); }
+.sh-quickcreate-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+}
+.sh-quickcreate-menu {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  right: 0;
+  z-index: 2;
+  width: 208px;
+  overflow: hidden;
+  border-radius: 12px;
+  border: 1px solid var(--sh-hair);
+  background: var(--surface);
+  box-shadow: 0 12px 30px -6px rgba(0,0,0,0.3), 0 3px 8px rgba(0,0,0,0.14);
+}
+.sh-quickcreate-item {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  text-align: left;
+  font-size: 13px;
+  color: var(--sh-ink);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+}
+.sh-quickcreate-item + .sh-quickcreate-item { border-top: 1px solid var(--sh-hair); }
+.sh-quickcreate-item:hover { background: var(--sh-hair-3); }
 
 /* ── Row 2: Tabs (38px high, align-items flex-end) ── */
 .lv-tabs-row {

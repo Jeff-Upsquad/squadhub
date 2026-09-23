@@ -4,6 +4,7 @@ import { supabaseAdmin } from '../../supabase';
 import { requireAuth } from '../../middleware/auth';
 import { requireUserType } from '../../middleware/userType';
 import { checkResourceAccess, meetsAccessLevel } from '../../middleware/permissions';
+import { logTaskActivity } from '../../utils/taskActivity';
 import { PARTNER_USER_TYPES } from '@squadhub/shared';
 
 const router = Router();
@@ -125,6 +126,12 @@ router.post('/tasks/:taskId/checklists', async (req: Request, res: Response) => 
       return;
     }
 
+    // Activity: checklist creation surfaces in the task's Activity feed.
+    await logTaskActivity(taskId, req.userId!, [{
+      event_type: 'checklist_added',
+      new_value: { id: (data as any).id, title: (data as any).title ?? null },
+    }]);
+
     res.status(201).json({ success: true, data: { ...data, items: [] } });
   } catch (err) {
     if (err instanceof z.ZodError) {
@@ -159,6 +166,10 @@ router.put('/checklists/:id', async (req: Request, res: Response) => {
       return;
     }
 
+    // Snapshot the prior title so a rename can be logged with both sides.
+    const { data: prior } = await supabaseAdmin
+      .from('task_checklists').select('title').eq('id', id).maybeSingle();
+
     const { data, error } = await supabaseAdmin
       .from('task_checklists')
       .update(body)
@@ -169,6 +180,15 @@ router.put('/checklists/:id', async (req: Request, res: Response) => {
     if (error) {
       res.status(500).json({ success: false, error: error.message });
       return;
+    }
+
+    // Activity: title renames only — pure position moves are drag-reorder noise.
+    if (body.title !== undefined && body.title !== (prior as any)?.title) {
+      await logTaskActivity(taskId, req.userId!, [{
+        event_type: 'checklist_renamed',
+        old_value: { id, title: (prior as any)?.title ?? null },
+        new_value: { id, title: (data as any).title ?? null },
+      }]);
     }
 
     res.json({ success: true, data });
@@ -198,11 +218,20 @@ router.delete('/checklists/:id', async (req: Request, res: Response) => {
       return;
     }
 
+    // Snapshot the title before the row is gone so the feed can name it.
+    const { data: doomed } = await supabaseAdmin
+      .from('task_checklists').select('title').eq('id', id).maybeSingle();
+
     const { error } = await supabaseAdmin.from('task_checklists').delete().eq('id', id);
     if (error) {
       res.status(500).json({ success: false, error: error.message });
       return;
     }
+
+    await logTaskActivity(taskId, req.userId!, [{
+      event_type: 'checklist_removed',
+      old_value: { id, title: (doomed as any)?.title ?? null },
+    }]);
     res.json({ success: true });
   } catch (err) {
     console.error('Delete checklist error:', err);
@@ -260,6 +289,18 @@ router.post('/checklists/:id/items', async (req: Request, res: Response) => {
       return;
     }
 
+    // Activity: item creation surfaces in the task's Activity feed.
+    const { data: parentChecklist } = await supabaseAdmin
+      .from('task_checklists').select('title').eq('id', checklistId).maybeSingle();
+    await logTaskActivity(taskId, req.userId!, [{
+      event_type: 'checklist_item_added',
+      new_value: {
+        id: (data as any).id,
+        content: (data as any).content ?? null,
+        checklist: (parentChecklist as any)?.title ?? null,
+      },
+    }]);
+
     res.status(201).json({ success: true, data });
   } catch (err) {
     if (err instanceof z.ZodError) {
@@ -313,6 +354,13 @@ router.put('/checklist-items/:id', async (req: Request, res: Response) => {
       }
     }
 
+    // Snapshot the prior row so each kind of change gets its own feed event.
+    const { data: priorItem } = await supabaseAdmin
+      .from('task_checklist_items')
+      .select('content, is_done, assigned_to, due_date')
+      .eq('id', id)
+      .maybeSingle();
+
     const { data, error } = await supabaseAdmin
       .from('task_checklist_items')
       .update(patch)
@@ -324,6 +372,29 @@ router.put('/checklist-items/:id', async (req: Request, res: Response) => {
       res.status(500).json({ success: false, error: error.message });
       return;
     }
+
+    // Activity: one event per kind of change (a single write can both rename
+    // and check an item). Pure position moves are drag-reorder noise — skipped.
+    const p: any = priorItem || {};
+    const itemEvents: { event_type: string; old_value?: unknown; new_value?: unknown }[] = [];
+    const snap = { id, content: (data as any).content ?? null };
+    if (body.is_done !== undefined && !!body.is_done !== !!p.is_done) {
+      itemEvents.push(body.is_done
+        ? { event_type: 'checklist_item_completed', new_value: snap }
+        : { event_type: 'checklist_item_reopened', new_value: snap });
+    }
+    if (body.content !== undefined && body.content !== p.content) {
+      itemEvents.push({
+        event_type: 'checklist_item_renamed',
+        old_value: { id, content: p.content ?? null },
+        new_value: snap,
+      });
+    }
+    if ((body.assigned_to !== undefined && (body.assigned_to ?? null) !== (p.assigned_to ?? null))
+      || (body.due_date !== undefined && (body.due_date ?? null) !== (p.due_date ?? null))) {
+      itemEvents.push({ event_type: 'checklist_item_updated', new_value: snap });
+    }
+    if (itemEvents.length) await logTaskActivity(taskId, req.userId!, itemEvents);
 
     res.json({ success: true, data });
   } catch (err) {
@@ -357,11 +428,20 @@ router.delete('/checklist-items/:id', async (req: Request, res: Response) => {
       return;
     }
 
+    // Snapshot the content before the row is gone so the feed can name it.
+    const { data: doomed } = await supabaseAdmin
+      .from('task_checklist_items').select('content').eq('id', id).maybeSingle();
+
     const { error } = await supabaseAdmin.from('task_checklist_items').delete().eq('id', id);
     if (error) {
       res.status(500).json({ success: false, error: error.message });
       return;
     }
+
+    await logTaskActivity(taskId, req.userId!, [{
+      event_type: 'checklist_item_removed',
+      old_value: { id, content: (doomed as any)?.content ?? null },
+    }]);
     res.json({ success: true });
   } catch (err) {
     console.error('Delete checklist item error:', err);

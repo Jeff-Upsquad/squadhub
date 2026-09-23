@@ -14,10 +14,10 @@ When the user invokes `CM`, `PD`, `CMPD`, or `CU` (case-insensitive, with or wit
 |---|---|---|
 | **CM** | [cm.md](cm.md) | Validate and commit on a feature branch. No push, PR, or deployment. |
 | **PD** | [pd.md](pd.md) | Sync `main` after a merged PR; deploy only when the PR touched deployable code. |
-| **CMPD** | [cmpd.md](cmpd.md) | Complete code pipeline: branch → PR → Greptile review → merge → PD. Never publishes a desktop release. |
+| **CMPD** | [cmpd.md](cmpd.md) | Complete code pipeline: branch → PR → merge → PD. Never publishes a desktop release. |
 | **CU** | [cu.md](cu.md) | Safely clean a merged worktree/branch and temporary files. |
 
-The critical boundary is deliberate: `CM`, `PD`, and `CMPD` can move source code, but only a tagged `desktop-app-v*` push or manual dispatch of `desktop-app-release.yml` may publish a desktop release. `main` only moves via reviewed PR merges (Greptile reviews every change) — direct commits/pushes to `main` are not allowed in this pipeline.
+The critical boundary is deliberate: `CM`, `PD`, and `CMPD` can move source code, but only a tagged `desktop-app-v*` push or manual dispatch of `desktop-app-release.yml` may publish a desktop release. `main` only moves via PR merges — direct commits/pushes to `main` are not allowed in this pipeline. (Automated Greptile review is paused as of 2026-09-23; see [cmpd.md](cmpd.md) for how to restore it.)
 
 If a workflow exposes a recurring failure or a safer method, update its SOP. Never silently weaken its validation, branch-safety, or deployment checks.
 

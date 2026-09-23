@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useQuery } from '@tanstack/react-query';
 import api from '../services/api';
 import { usePMStore, type ListGroupBy } from '../stores/pmStore';
@@ -6,6 +7,7 @@ import { useAuthStore } from '../stores/authStore';
 import { useTabsStore } from '../stores/tabsStore';
 import { buildHomeSnapshot } from '../lib/tabSnapshots';
 import { usePersonalList, useTasks, useUpdateTask, groupTasksByStatus } from '../hooks/useTasks';
+import { useCompletionGate } from '../hooks/useCompletionGate';
 import { useListViews } from '../hooks/useListViews';
 import {
   LIST_GROUP_BY_OPTIONS,
@@ -25,6 +27,9 @@ import { EMPTY_FILTER, filterTasks, type TaskFilterState } from '../lib/filters'
 import { PRIORITY_META } from '../views/app/pm/PriorityPicker';
 import { formatTaskDates } from '../views/app/pm/taskHelpers';
 import { useIsMobile } from '../hooks/useIsMobile';
+import AssigneePicker from '../views/app/pm/AssigneePicker';
+import IncompleteItemsDialog from '../views/app/pm/IncompleteItemsDialog';
+import NoAssigneeCompleteDialog from '../views/app/pm/NoAssigneeCompleteDialog';
 import type { SpaceStatus, Task } from '@squadhub/shared';
 
 /**
@@ -44,13 +49,43 @@ function dueMeta(task: Task): { text: string; overdue: boolean } | null {
   return { text: display.text, overdue: display.overdue };
 }
 
-function PreviewRow({ task, listId, onOpen }: { task: Task; listId: string; onOpen: (t: Task) => void }) {
+function PreviewRow({ task, listId, onOpen, onGateOpenChange }: {
+  task: Task;
+  listId: string;
+  onOpen: (t: Task) => void;
+  /** Told when this row has a portaled gate popup on screen. */
+  onGateOpenChange: (open: boolean) => void;
+}) {
   const updateTask = useUpdateTask(listId);
   const done = isTaskCompleted(task);
   const due = dueMeta(task);
   const pri = task.priority && task.priority !== 'none' ? PRIORITY_META[task.priority] : null;
+  // Same completion gate as every other checkbox surface (subtask/checklist
+  // block + no-assignee prompt) instead of a direct status write.
+  const gate = useCompletionGate({
+    onComplete: (taskId, assigneeIds) => {
+      const payload: Record<string, unknown> = { id: taskId, status: 'done' };
+      if (assigneeIds) {
+        payload.assignee_ids = assigneeIds;
+        if (listId) payload.list_id = listId;
+      }
+      updateTask.mutate(payload as any);
+    },
+  });
+  const currentUser = useAuthStore((s) => s.user);
+
+  // The gate popups below are portaled out of this panel, so the panel stops
+  // being the hovered element the moment one covers the cursor. Tell the panel
+  // a popup is up so it can hold its hover-close open until the user decides.
+  const gateOpen = !!(gate.incomplete || gate.noAssignee || gate.assignAnchor);
+  useEffect(() => {
+    if (!gateOpen) return;
+    onGateOpenChange(true);
+    return () => onGateOpenChange(false);
+  }, [gateOpen, onGateOpenChange]);
 
   return (
+    <>
     <button
       type="button"
       onClick={() => onOpen(task)}
@@ -62,7 +97,11 @@ function PreviewRow({ task, listId, onOpen }: { task: Task; listId: string; onOp
         aria-label={done ? 'Mark as not done' : 'Mark as done'}
         onClick={(e) => {
           e.stopPropagation();
-          updateTask.mutate({ id: task.id, status: done ? 'todo' : 'done' });
+          if (done) {
+            updateTask.mutate({ id: task.id, status: 'todo' });
+            return;
+          }
+          void gate.requestComplete(task, e);
         }}
         className={`grid h-[16px] w-[16px] shrink-0 place-items-center rounded-[5px] border transition ${
           done
@@ -89,6 +128,40 @@ function PreviewRow({ task, listId, onOpen }: { task: Task; listId: string; onOp
         </span>
       )}
     </button>
+    {/* Portaled to <body> so no transformed / overflow-hidden ancestor
+        between the row and the viewport can contain or clip these popups. */}
+    {gate.incomplete && createPortal(
+      <IncompleteItemsDialog
+        anchorRect={gate.incomplete.rect}
+        openSubtasks={gate.incomplete.subtasks}
+        openChecklistItems={gate.incomplete.checklist}
+        onViewTask={() => { gate.closeIncomplete(); onOpen(task); }}
+        onClose={gate.closeIncomplete}
+      />,
+      document.body,
+    )}
+    {gate.noAssignee && createPortal(
+      <NoAssigneeCompleteDialog
+        anchorRect={gate.noAssignee.rect}
+        canAssignToMe={!!currentUser?.id}
+        onAssignToMe={() => gate.assignToMe(task.id, currentUser?.id)}
+        onAssignOther={gate.moveToAssignOther}
+        onCompleteAnyway={() => gate.completeAnyway(task.id)}
+        onClose={gate.closeNoAssignee}
+      />,
+      document.body,
+    )}
+    {gate.assignAnchor && createPortal(
+      <AssigneePicker
+        taskId={task.id}
+        currentAssigneeIds={[]}
+        anchorRect={gate.assignAnchor.rect}
+        onChange={(ids) => gate.completeWithAssignees(task.id, ids)}
+        onClose={gate.closeAssign}
+      />,
+      document.body,
+    )}
+    </>
   );
 }
 
@@ -129,6 +202,23 @@ export default function TasksPreviewPanel({
   const focusTodayScope = usePMStore((s) => s.focusTodayScope);
   const currentUserId = useAuthStore((s) => s.user?.id);
   const [completedOpen, setCompletedOpen] = useState(false);
+
+  // Hover-close guard for portaled gate popups (see PreviewRow). A popup that
+  // paints over this panel makes the browser fire pointerleave here, which
+  // would arm the 260ms close timer and yank the popup away mid-decision.
+  const openGateCount = useRef(0);
+  const pointerInside = useRef(false);
+  const [gatePopupOpen, setGatePopupOpen] = useState(false);
+  const handleGateOpenChange = useCallback((open: boolean) => {
+    openGateCount.current = Math.max(0, openGateCount.current + (open ? 1 : -1));
+    const any = openGateCount.current > 0;
+    setGatePopupOpen(any);
+    // Opening cancels a close already armed; the last one closing re-arms it
+    // only if the pointer really left (a pointerenter fires and cancels this
+    // again when removing the popup puts the panel back under the cursor).
+    if (any) onHoverEnter?.();
+    else if (!pointerInside.current) onHoverLeave?.();
+  }, [onHoverEnter, onHoverLeave]);
   const tz = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone, []);
 
   // Close on Escape
@@ -233,7 +323,7 @@ export default function TasksPreviewPanel({
     return (
       <>
         {shown.map((t) => (
-          <PreviewRow key={t.id} task={t} listId={listId!} onOpen={openTask} />
+          <PreviewRow key={t.id} task={t} listId={listId!} onOpen={openTask} onGateOpenChange={handleGateOpenChange} />
         ))}
         {rows.length > shown.length && (
           <button
@@ -255,8 +345,8 @@ export default function TasksPreviewPanel({
       <div
         className="inbox-slider-panel sh-view fixed left-2 right-2 top-14 z-50 flex max-h-[calc(100dvh-72px)] flex-col overflow-hidden rounded-[14px] border border-[var(--sh-hair)] bg-[var(--surface)] md:left-[76px] md:right-auto md:top-3 md:max-h-[calc(100dvh-24px)] md:w-[520px]"
         style={{ boxShadow: '0 18px 50px rgba(10, 10, 10, 0.16), 0 2px 8px rgba(10, 10, 10, 0.06)' }}
-        onPointerEnter={onHoverEnter}
-        onPointerLeave={onHoverLeave}
+        onPointerEnter={() => { pointerInside.current = true; onHoverEnter?.(); }}
+        onPointerLeave={() => { pointerInside.current = false; if (!gatePopupOpen) onHoverLeave?.(); }}
       >
         {/* Header */}
         <div className="flex items-center gap-2.5 px-5 pb-3 pt-4">

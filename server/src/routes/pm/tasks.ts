@@ -1461,7 +1461,7 @@ router.put('/tasks/:id', async (req: Request, res: Response) => {
     // activity feed (task_activity, migration 147). One lightweight read.
     const { data: prior } = await supabaseAdmin
       .from('tasks')
-      .select('time_estimate, list_id, title, description, status, priority, due_date, work_date, start_date, task_type_id, assignee_ids, recurrence, metadata')
+      .select('time_estimate, list_id, title, description, status, priority, due_date, work_date, start_date, task_type_id, assignee_ids, recurrence, metadata, parent_task_id')
       .eq('id', id)
       .single();
     const priorEstimate: number | null = (prior as any)?.time_estimate ?? null;
@@ -1649,6 +1649,30 @@ router.put('/tasks/:id', async (req: Request, res: Response) => {
       }
 
       await logTaskActivity(id, req.userId!, events);
+
+      // Subtask status transitions also surface on the surviving PARENT's feed
+      // (the mirror of subtask_added/subtask_removed): checking off a subtask
+      // from the parent's panel would otherwise leave no trace there. Only the
+      // done-ness transition is logged — the subtask's own feed keeps the full
+      // field-level history.
+      if (body.status !== undefined && p.parent_task_id && body.status !== p.status) {
+        const doneNames = await getSpaceDoneStatusNames(listId);
+        const isDoneStatus = (st: string | null | undefined): boolean => {
+          if (!st) return false;
+          if (st === 'done' || st === 'closed') return true;
+          const cat = getTaskStatusCategory(st);
+          if (cat === 'done' || cat === 'closed') return true;
+          return doneNames.has(st);
+        };
+        const doneNow = isDoneStatus(body.status);
+        const doneBefore = isDoneStatus(p.status);
+        if (doneNow !== doneBefore) {
+          await logTaskActivity(p.parent_task_id, req.userId!, [{
+            event_type: doneNow ? 'subtask_completed' : 'subtask_reopened',
+            new_value: { id, title: (data as any)?.title ?? p.title ?? null },
+          }]);
+        }
+      }
     } catch (activityErr) {
       console.error('Activity diff logging failed:', activityErr);
     }
