@@ -1,12 +1,17 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { Task } from '@squadhub/shared';
 import { usePMStore } from '../../../stores/pmStore';
+import { useAuthStore } from '../../../stores/authStore';
 import { useUpdateTask } from '../../../hooks/useTasks';
+import { useCompletionGate } from '../../../hooks/useCompletionGate';
 import { useParallelTimers } from '../../../hooks/useParallelTimers';
 import { computeSnoozeTargets } from '../../../hooks/useDayPlanner';
 import { useIsMobile } from '../../../hooks/useIsMobile';
 import { formatTaskDates } from '../pm/taskHelpers';
+import AssigneePicker from '../pm/AssigneePicker';
+import IncompleteItemsDialog from '../pm/IncompleteItemsDialog';
+import NoAssigneeCompleteDialog from '../pm/NoAssigneeCompleteDialog';
 
 function hashHue(input: string): number {
   let h = 0;
@@ -65,14 +70,31 @@ export default function DashboardTaskRow({ task }: { task: Task }) {
     setPeekTask(task.id);
   };
 
-  const onToggleDone = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    const next = isDone ? 'todo' : 'done';
-    if (!isDone) setIsFadingOut(true);
+  // Completion writes go through the shared gate so checking off here runs
+  // the same subtask/checklist + no-assignee prompts as the list view.
+  const completeTask = useCallback((taskId: string, assigneeIds?: string[]) => {
+    setIsFadingOut(true);
+    const payload: Record<string, unknown> = { id: taskId, status: 'done' };
+    if (assigneeIds) {
+      payload.assignee_ids = assigneeIds;
+      if (task.list_id) payload.list_id = task.list_id;
+    }
     updateTask.mutate(
-      { id: task.id, status: next } as any,
+      payload as any,
       { onError: () => { setIsFadingOut(false); setIsHidden(false); } },
     );
+  }, [task.id, task.list_id, updateTask]);
+  const gate = useCompletionGate({ onComplete: completeTask });
+  const currentUser = useAuthStore((s) => s.user);
+
+  const onToggleDone = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    // Re-opening a completed task: flip straight back, no prompt.
+    if (isDone) {
+      updateTask.mutate({ id: task.id, status: 'todo' } as any);
+      return;
+    }
+    void gate.requestComplete(task, e);
   };
 
   const onRowTransitionEnd = (e: React.TransitionEvent<HTMLDivElement>) => {
@@ -83,24 +105,54 @@ export default function DashboardTaskRow({ task }: { task: Task }) {
   if (isHidden) return null;
 
   return (
-    <DashboardTaskRowInner
-      task={task}
-      isDone={isDone}
-      displayDone={displayDone}
-      firstAssignee={firstAssignee}
-      color={color}
-      label={label}
-      priorityLabel={priorityLabel}
-      isSubtask={isSubtask}
-      parentTitle={parentTitle}
-      whenText={whenText}
-      isOverdue={isOverdue}
-      taskPath={taskPath}
-      onOpen={onOpen}
-      onToggleDone={onToggleDone}
-      onRowTransitionEnd={onRowTransitionEnd}
-      isFadingOut={isFadingOut}
-    />
+    <>
+      <DashboardTaskRowInner
+        task={task}
+        isDone={isDone}
+        displayDone={displayDone}
+        firstAssignee={firstAssignee}
+        color={color}
+        label={label}
+        priorityLabel={priorityLabel}
+        isSubtask={isSubtask}
+        parentTitle={parentTitle}
+        whenText={whenText}
+        isOverdue={isOverdue}
+        taskPath={taskPath}
+        onOpen={onOpen}
+        onToggleDone={onToggleDone}
+        onRowTransitionEnd={onRowTransitionEnd}
+        isFadingOut={isFadingOut}
+      />
+      {gate.incomplete && (
+        <IncompleteItemsDialog
+          anchorRect={gate.incomplete.rect}
+          openSubtasks={gate.incomplete.subtasks}
+          openChecklistItems={gate.incomplete.checklist}
+          onViewTask={() => { gate.closeIncomplete(); onOpen(); }}
+          onClose={gate.closeIncomplete}
+        />
+      )}
+      {gate.noAssignee && (
+        <NoAssigneeCompleteDialog
+          anchorRect={gate.noAssignee.rect}
+          canAssignToMe={!!currentUser?.id}
+          onAssignToMe={() => gate.assignToMe(task.id, currentUser?.id)}
+          onAssignOther={gate.moveToAssignOther}
+          onCompleteAnyway={() => gate.completeAnyway(task.id)}
+          onClose={gate.closeNoAssignee}
+        />
+      )}
+      {gate.assignAnchor && (
+        <AssigneePicker
+          taskId={task.id}
+          currentAssigneeIds={[]}
+          anchorRect={gate.assignAnchor.rect}
+          onChange={(ids) => gate.completeWithAssignees(task.id, ids)}
+          onClose={gate.closeAssign}
+        />
+      )}
+    </>
   );
 }
 
