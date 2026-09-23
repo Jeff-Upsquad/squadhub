@@ -869,16 +869,19 @@ function TodayRow({ task: t, onOpen, secondsToday = 0 }: { task: Task; onOpen: (
         ))}
       </div>
     )}
-    {gate.incomplete && (
+    {/* Portaled to <body> so the .hm-card's overflow-hidden (and any
+        transformed ancestor) can't clip these fixed-position popups. */}
+    {gate.incomplete && createPortal(
       <IncompleteItemsDialog
         anchorRect={gate.incomplete.rect}
         openSubtasks={gate.incomplete.subtasks}
         openChecklistItems={gate.incomplete.checklist}
         onViewTask={() => { gate.closeIncomplete(); onOpen(t.id); }}
         onClose={gate.closeIncomplete}
-      />
+      />,
+      document.body,
     )}
-    {gate.noAssignee && (
+    {gate.noAssignee && createPortal(
       <NoAssigneeCompleteDialog
         anchorRect={gate.noAssignee.rect}
         canAssignToMe={!!currentUser?.id}
@@ -886,16 +889,18 @@ function TodayRow({ task: t, onOpen, secondsToday = 0 }: { task: Task; onOpen: (
         onAssignOther={gate.moveToAssignOther}
         onCompleteAnyway={() => gate.completeAnyway(t.id)}
         onClose={gate.closeNoAssignee}
-      />
+      />,
+      document.body,
     )}
-    {gate.assignAnchor && (
+    {gate.assignAnchor && createPortal(
       <AssigneePicker
         taskId={t.id}
         currentAssigneeIds={[]}
         anchorRect={gate.assignAnchor.rect}
         onChange={(ids) => gate.completeWithAssignees(t.id, ids)}
         onClose={gate.closeAssign}
-      />
+      />,
+      document.body,
     )}
     </>
   );
@@ -962,16 +967,17 @@ function HomeSubtaskRow({ sub: s, onOpen }: { sub: Task; onOpen: (id: string) =>
           <div className="hm-ava" data-empty="true" title="Unassigned">–</div>
         )}
       </div>
-      {gate.incomplete && (
+      {gate.incomplete && createPortal(
         <IncompleteItemsDialog
           anchorRect={gate.incomplete.rect}
           openSubtasks={gate.incomplete.subtasks}
           openChecklistItems={gate.incomplete.checklist}
           onViewTask={() => { gate.closeIncomplete(); onOpen(s.id); }}
           onClose={gate.closeIncomplete}
-        />
+        />,
+        document.body,
       )}
-      {gate.noAssignee && (
+      {gate.noAssignee && createPortal(
         <NoAssigneeCompleteDialog
           anchorRect={gate.noAssignee.rect}
           canAssignToMe={!!currentUser?.id}
@@ -979,16 +985,18 @@ function HomeSubtaskRow({ sub: s, onOpen }: { sub: Task; onOpen: (id: string) =>
           onAssignOther={gate.moveToAssignOther}
           onCompleteAnyway={() => gate.completeAnyway(s.id)}
           onClose={gate.closeNoAssignee}
-        />
+        />,
+        document.body,
       )}
-      {gate.assignAnchor && (
+      {gate.assignAnchor && createPortal(
         <AssigneePicker
           taskId={s.id}
           currentAssigneeIds={[]}
           anchorRect={gate.assignAnchor.rect}
           onChange={(ids) => gate.completeWithAssignees(s.id, ids)}
           onClose={gate.closeAssign}
-        />
+        />,
+        document.body,
       )}
     </>
   );

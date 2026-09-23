@@ -2601,7 +2601,10 @@ body.sb-resizing { user-select: none; -webkit-user-select: none; cursor: col-res
 /* Assignee picker popover */
 .ap-panel {
   position: fixed;
-  z-index: 60;
+  /* 105: above slide-over panels (z-90) and their overlays (z-100), below
+     toasts (z-110). Home rows portal this from inside transformed/clipped
+     panel containers where a lower z would paint it behind the panel. */
+  z-index: 105;
   max-height: 360px;
   display: flex;
   flex-direction: column;
