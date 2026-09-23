@@ -74,7 +74,7 @@ These meanings are intentionally distinct:
 
 - `CM` validates and commits on a feature branch; it does not push, open PRs, or deploy.
 - `PD` syncs `main` after a merged PR and deploys only when relevant.
-- `CMPD` runs the full code pipeline — branch, PR, Greptile review, merge — but never publishes a desktop app release.
+- `CMPD` runs the full code pipeline — branch, PR, merge — but never publishes a desktop app release. (Greptile review is paused as of 2026-09-23.)
 - `CU` performs safe post-merge cleanup and requires confirmation before deleting a worktree or branch.
 
 The authoritative SOPs live in `workflows/`. If a workflow is improved, update the corresponding file so the behavior remains durable across sessions.
@@ -86,7 +86,7 @@ GitHub Actions now provides:
 - `.github/workflows/ci.yml` — shared-import checks, server type-check, and full monorepo builds on pushes to `main` and pull requests.
 - `.github/workflows/desktop-app-release.yml` — manual/tag-triggered build of the desktop app (macOS + Windows) and draft GitHub release.
 
-Source-code movement must go through `CMPD` (branch → PR → Greptile review → merge). Never commit+push source directly to `main` — that bypasses review.
+Source-code movement must go through `CMPD` (branch → PR → merge). Never commit+push source directly to `main` — that bypasses the PR gate.
 
 - **"push"** → retired as a direct-to-main shortcut. Use `CMPD`.
 - **"deploy"** → requires the code to already be on `origin/main` via a merged, reviewed PR, then `bash tools/deploy.sh`.
