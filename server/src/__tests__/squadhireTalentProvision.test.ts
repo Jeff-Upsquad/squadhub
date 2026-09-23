@@ -43,9 +43,31 @@ function installDb(state: TestState) {
   mocks.from.mockImplementation((table: string) => {
     const filters: Record<string, unknown> = {};
     let inserted: Record<string, any> | null = null;
+    let updated: Record<string, any> | null = null;
     const builder: any = {
       select: vi.fn(() => builder),
       limit: vi.fn(() => builder),
+      is: vi.fn((column: string, value: unknown) => {
+        filters[column] = value;
+        return builder;
+      }),
+      update: vi.fn((value: Record<string, any>) => {
+        updated = value;
+        return builder;
+      }),
+      // Awaiting a non-terminal chain (update().eq().is().select()) resolves to a
+      // PostgREST-shaped result rather than the builder itself. The write lands
+      // here, once the chain's filters are known: an `.is(col, null)` filter —
+      // which is how the unlock stays one-way — matches no already-stamped row.
+      then: (resolve: (value: { data: unknown; error: null }) => unknown) => {
+        if (!updated) return resolve({ data: [], error: null });
+        const guarded = Object.keys(filters).find((k) => filters[k] === null);
+        const blocked = !!guarded && state.user?.[guarded] != null;
+        if (table === 'users' && state.user && !blocked) {
+          state.user = { ...state.user, ...updated };
+        }
+        return resolve({ data: blocked ? [] : [{ id: state.user?.id ?? 'row-1' }], error: null });
+      },
       ilike: vi.fn((column: string, value: unknown) => {
         filters[column] = value;
         return builder;
@@ -121,6 +143,45 @@ describe('assignment-time SquadHire talent provisioning', () => {
       talentUserId: 'talent-1',
       squadhubUserId: 'partner-1',
     });
+  });
+
+  it('unlocks Work for a talent who signed in to Discover before being assigned', async () => {
+    const state: TestState = {
+      user: {
+        id: 'partner-1',
+        email: identity.email,
+        user_type: 'partner',
+        status: 'active',
+        work_unlocked_at: null,
+      },
+      member: { id: 'member-1', user_id: 'partner-1' },
+    };
+    installDb(state);
+
+    const result = await ensureSquadhireTalentProvisioned(identity, { strictAccessSync: true });
+
+    expect(state.user?.work_unlocked_at).toBeTruthy();
+    expect(result.user.work_unlocked_at).toBeTruthy();
+  });
+
+  it('leaves an already-unlocked partner\'s unlock date alone', async () => {
+    const firstWork = '2026-01-02T03:04:05.000Z';
+    const state: TestState = {
+      user: {
+        id: 'partner-1',
+        email: identity.email,
+        user_type: 'partner',
+        status: 'active',
+        work_unlocked_at: firstWork,
+      },
+      member: { id: 'member-1', user_id: 'partner-1' },
+    };
+    installDb(state);
+
+    const result = await ensureSquadhireTalentProvisioned(identity, { strictAccessSync: true });
+
+    expect(state.user?.work_unlocked_at).toBe(firstWork);
+    expect(result.user.work_unlocked_at).toBe(firstWork);
   });
 
   it('reuses an existing partner and repairs missing workspace membership', async () => {

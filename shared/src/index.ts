@@ -20,6 +20,28 @@ export type UserType = 'internal' | 'client' | 'client_staff' | 'partner' | 'par
 // hardcode 'partner' in role checks, so adding sub-roles in future is trivial.
 export const PARTNER_USER_TYPES: readonly UserType[] = ['partner', 'partner_employee'] as const;
 
+/**
+ * Is this account's Work surface locked?
+ *
+ * SquadHire talents can sign in to the Partner app before they have any work,
+ * so Discover can bring them their first opportunity. Until a card is assigned
+ * to them the Work side of the app (spaces, tasks, chat, inbox) has nothing in
+ * it and is shown locked.
+ *
+ * Fails open on purpose: only an explicit `work_locked` / `work_unlocked_at:
+ * null` from the server locks anyone. A payload that simply doesn't carry the
+ * field (an older server, a partial user join) must never lock a partner who is
+ * actually working.
+ */
+export function isWorkLocked(
+  user: Pick<User, 'user_type' | 'work_unlocked_at' | 'work_locked'> | null | undefined,
+): boolean {
+  if (!user) return false;
+  if (!PARTNER_USER_TYPES.includes(user.user_type)) return false;
+  if (typeof user.work_locked === 'boolean') return user.work_locked;
+  return user.work_unlocked_at === null;
+}
+
 export interface User {
   id: string;
   email: string;
@@ -29,6 +51,15 @@ export interface User {
   status: 'active' | 'pending' | 'rejected' | 'banned' | 'suspended';
   user_type: UserType;
   created_at: string;
+  /**
+   * When this account gained the Work side of SquadHub. `null` means Work is
+   * locked — a SquadHire talent who signed in before their first assignment.
+   * `undefined` means the endpoint didn't select it; never treat that as locked
+   * (see isWorkLocked).
+   */
+  work_unlocked_at?: string | null;
+  /** Server-computed twin of the above: true only for a locked partner. */
+  work_locked?: boolean;
   // Optional workspace-scoped joins (only present on specific endpoints).
   workspace_role?: 'super_admin' | 'admin' | 'member' | 'guest' | null;
   custom_role?: { id: string; name: string; color: string } | null;

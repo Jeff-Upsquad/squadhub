@@ -5,8 +5,10 @@ import api from '../services/api';
 const ADMIN_APP_URL = process.env.NEXT_PUBLIC_ADMIN_URL || (process.env.NODE_ENV === 'production' ? '/admin' : 'http://localhost:3001');
 import { useWorkspaceStore, type ChatKind } from '../stores/workspaceStore';
 import { useAuthStore } from '../stores/authStore';
+import { useWorkUnlockWatch } from '../hooks/useWorkUnlockWatch';
 import { usePMStore } from '../stores/pmStore';
 import { loadViewPreferences } from '../stores/viewPreferencesSync';
+import { isWorkLocked } from '@squadhub/shared';
 import type { Workspace, Channel } from '@squadhub/shared';
 import { connectSocket, disconnectSocket, getSocket } from '../services/socket';
 import { usePresenceStore } from '../stores/presenceStore';
@@ -53,6 +55,7 @@ import TimeSheetPanel from '../components/TimeSheetPanel';
 import ClientDashboard from '../views/app/client/ClientDashboard';
 import PartnerCashBook from '../views/app/partner/PartnerCashBook';
 import PartnerOpportunities from '../views/app/partner/PartnerOpportunities';
+import PartnerWorkLockedPage from '../views/app/partner/PartnerWorkLockedPage';
 import ClientCashBook from '../views/app/client/ClientCashBook';
 import ClientSubscriptionCards from '../views/app/client/ClientSubscriptionCards';
 import ClientJobCards from '../views/app/client/ClientJobCards';
@@ -325,6 +328,11 @@ export default function MainLayout() {
   }, [tabs, activeTabId]);
   const userType = useUserType();
   const isPartner = useIsPartner();
+  // Partner with no work yet: Discover is theirs, Work is locked until their
+  // first assignment (server: utils/workAccess.ts).
+  const workLocked = isWorkLocked(user);
+  // Poll the profile while locked so an assignment opens Work without a re-login.
+  useWorkUnlockWatch(workLocked);
   // SquadNotes is a gated mini app — the Documents rail icon only shows for
   // granted users (admins are granted via Access Control, like Check-Ins).
   const hasNotes = useHasMiniApp('squad-notes');
@@ -1119,6 +1127,25 @@ export default function MainLayout() {
     );
   }
 
+  // A pre-work partner whose workspace membership didn't land (it's best-effort
+  // at sign-in) would otherwise hit the "workspace is being set up" wall below
+  // and never reach Discover, which is the only thing they came for.
+  if (workLocked && (!workspacesRes || workspaces.length === 0)) {
+    return (
+      <>
+        <PartnerWorkLockedPage
+          user={user ?? null}
+          channels={channels}
+          dms={dmConversations}
+          supportChannelId={supportChannelId}
+          supportUnread={supportUnread}
+          onLogout={logout}
+        />
+        <ToastContainer />
+      </>
+    );
+  }
+
   // No workspaces
   if (!workspacesRes || workspaces.length === 0) {
     return (
@@ -1475,6 +1502,27 @@ export default function MainLayout() {
             setHomeView={(v) => { setActiveSection('home'); setHomeView(v); }}
           />
         )}
+      </>
+    );
+  }
+
+  // ---- Pre-work partner (Discover only) ----------------------------------
+  // A talent who signed in before their first assignment has no work at all,
+  // and the desktop chrome below is entirely work: rail, module sidebar, tab
+  // strip. Swap the whole thing for the locked page + Discover feed. (The phone
+  // shell above handles this itself, with its Work | Discover switcher.)
+  if (workLocked) {
+    return (
+      <>
+        <PartnerWorkLockedPage
+          user={user ?? null}
+          channels={channels}
+          dms={dmConversations}
+          supportChannelId={supportChannelId}
+          supportUnread={supportUnread}
+          onLogout={logout}
+        />
+        <ToastContainer />
       </>
     );
   }

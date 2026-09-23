@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import { requireAuth } from '../middleware/auth';
+import { requireWorkUnlocked } from '../middleware/workAccess';
 import { requirePermission } from '../middleware/permissions';
 import { supabaseAdmin } from '../supabase';
 import { canActorDm, listDmContacts, loadDmActor } from '../utils/dmAccess';
@@ -60,7 +61,7 @@ router.get('/', requireAuth, async (req: Request, res: Response) => {
 });
 
 // GET /dms/contacts — people the current user is allowed to start a DM with
-router.get('/contacts', requireAuth, requirePermission('can_send_dms'), async (req: Request, res: Response) => {
+router.get('/contacts', requireAuth, requireWorkUnlocked, requirePermission('can_send_dms'), async (req: Request, res: Response) => {
   try {
     const workspaceId = req.query.workspace_id as string;
     if (!workspaceId) {
@@ -78,7 +79,7 @@ router.get('/contacts', requireAuth, requirePermission('can_send_dms'), async (r
 });
 
 // POST /dms — create or find existing DM conversation (requires can_send_dms)
-router.post('/', requireAuth, requirePermission('can_send_dms'), async (req: Request, res: Response) => {
+router.post('/', requireAuth, requireWorkUnlocked, requirePermission('can_send_dms'), async (req: Request, res: Response) => {
   try {
     const body = createDmSchema.parse(req.body);
     const others = [...new Set(body.participant_ids)].filter((id) => id !== req.userId);
