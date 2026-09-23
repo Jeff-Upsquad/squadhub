@@ -1,6 +1,6 @@
 'use client';
 
-import { Fragment, useEffect, useState, type ReactNode } from 'react';
+import { Fragment, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import api from '@/services/api';
 import { showToast } from '@/components/Toast';
@@ -913,6 +913,135 @@ function UtilizationBadge({ pct }: { pct: number | null }) {
   return <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${tone}`}>{pct}%</span>;
 }
 
+// ------------------------------------------------------------
+// Payout workflow status.
+//
+// Stored in `partner_payment_statuses` — the same rows SquadBooks writes and the
+// partner mini app reads — so marking a payout paid here is immediately true
+// everywhere. Before that store existed this module had no status at all and
+// the mini app showed every month as "pending".
+//
+// `hold_reason` is INTERNAL. The mini app collapses `on_hold` to "pending" and
+// never receives the text, so staff can be candid here.
+// ------------------------------------------------------------
+const PAYMENT_STATUSES = ['not_processed', 'processing', 'paid', 'on_hold'] as const;
+type PaymentStatus = (typeof PAYMENT_STATUSES)[number];
+
+const PAYMENT_STATUS_LABEL: Record<PaymentStatus, string> = {
+  not_processed: 'Not processed',
+  processing: 'Processing',
+  paid: 'Paid',
+  on_hold: 'On hold',
+};
+
+const PAYMENT_STATUS_TONE: Record<PaymentStatus, string> = {
+  not_processed: 'border-slate-200 bg-slate-50 text-slate-600',
+  processing: 'border-sky-200 bg-sky-50 text-sky-700',
+  paid: 'border-emerald-200 bg-emerald-50 text-emerald-700',
+  on_hold: 'border-amber-200 bg-amber-50 text-amber-700',
+};
+
+interface PaymentStatusRecord {
+  month: string;
+  recipient_type: 'talent' | 'partner';
+  recipient_id: string;
+  status: PaymentStatus;
+  hold_reason: string | null;
+  updated_source: 'hub' | 'squadbooks';
+  updated_at: string | null;
+}
+
+function PaymentStatusCell({
+  record,
+  disabled,
+  onSave,
+}: {
+  record: PaymentStatusRecord | undefined;
+  disabled: boolean;
+  onSave: (status: PaymentStatus, holdReason: string | null) => void;
+}) {
+  // No row stored yet = nothing has been done with this payout.
+  const status: PaymentStatus = record?.status ?? 'not_processed';
+  // Non-null while the hold reason is being typed (null = editor closed).
+  const [holdDraft, setHoldDraft] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const commitHold = () => {
+    const reason = (holdDraft ?? '').trim();
+    if (!reason) {
+      setError('Add a reason');
+      return;
+    }
+    setError(null);
+    setHoldDraft(null);
+    onSave('on_hold', reason);
+  };
+
+  return (
+    // The row opens a detail drawer on click; keep those clicks out of here.
+    <div className="space-y-1" onClick={(e) => e.stopPropagation()}>
+      <select
+        value={status}
+        disabled={disabled}
+        onChange={(e) => {
+          const next = e.target.value as PaymentStatus;
+          // A hold is worthless without a reason, so open the editor and save
+          // only once one is supplied.
+          if (next === 'on_hold') {
+            setHoldDraft(record?.hold_reason ?? '');
+            return;
+          }
+          setHoldDraft(null);
+          setError(null);
+          onSave(next, null);
+        }}
+        className={`rounded-full border px-2 py-0.5 text-[11px] font-medium outline-none disabled:opacity-60 ${PAYMENT_STATUS_TONE[status]}`}
+      >
+        {PAYMENT_STATUSES.map((s) => (
+          <option key={s} value={s}>
+            {PAYMENT_STATUS_LABEL[s]}
+          </option>
+        ))}
+      </select>
+
+      {holdDraft !== null ? (
+        <div className="flex items-center gap-1">
+          <input
+            autoFocus
+            value={holdDraft}
+            onChange={(e) => setHoldDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') commitHold();
+              if (e.key === 'Escape') {
+                setHoldDraft(null);
+                setError(null);
+              }
+            }}
+            placeholder="Reason (internal)"
+            className="w-36 rounded border border-divider bg-surface px-1.5 py-0.5 text-[11px] outline-none focus:border-slate-400"
+          />
+          <button onClick={commitHold} className="text-[11px] font-medium text-indigo-600 hover:underline">
+            Save
+          </button>
+        </div>
+      ) : (
+        status === 'on_hold' &&
+        record?.hold_reason && (
+          <button
+            onClick={() => setHoldDraft(record.hold_reason ?? '')}
+            title="Internal only — partners never see this"
+            className="block max-w-[10rem] truncate text-left text-[11px] text-foreground-dim hover:text-foreground"
+          >
+            {record.hold_reason}
+          </button>
+        )
+      )}
+
+      {error && <p className="text-[11px] text-red-600">{error}</p>}
+    </div>
+  );
+}
+
 function ByUserView({ month, onPreviewPartner }: { month: string; onPreviewPartner?: (recipientId: string) => void }) {
   const [statusFilter, setStatusFilter] = useState<Status>('active');
   const [search, setSearch] = useState('');
@@ -928,6 +1057,35 @@ function ByUserView({ month, onPreviewPartner }: { month: string; onPreviewPartn
         .then((r) => r.data),
   });
   const users: UserRow[] = res?.data?.users || [];
+
+  // Payout statuses for the month, merged onto the rows by recipient. Kept as a
+  // separate query so changing a status doesn't refetch the whole payout table.
+  const queryClient = useQueryClient();
+  const { data: statusRes } = useQuery({
+    queryKey: ['admin-partner-payment-statuses', month],
+    queryFn: () =>
+      api.get('/admin/subscription-assignments/statuses', { params: { month } }).then((r) => r.data),
+  });
+  const statusByRecipient = useMemo(() => {
+    const map = new Map<string, PaymentStatusRecord>();
+    for (const s of (statusRes?.data?.statuses || []) as PaymentStatusRecord[]) {
+      map.set(`${s.recipient_type}:${s.recipient_id}`, s);
+    }
+    return map;
+  }, [statusRes]);
+
+  const saveStatus = useMutation({
+    mutationFn: (vars: {
+      recipient_type: 'talent' | 'partner';
+      recipient_id: string;
+      status: PaymentStatus;
+      hold_reason: string | null;
+    }) => api.post('/admin/subscription-assignments/statuses', { month, ...vars }).then((r) => r.data),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: ['admin-partner-payment-statuses', month] }),
+    onError: (err: any) =>
+      showToast(err?.response?.data?.error || 'Could not save the payment status', 'error'),
+  });
 
   // Overall totals across every user in the current list (the payout to make
   // this month, plus committed/available capacity).
@@ -997,6 +1155,7 @@ function ByUserView({ month, onPreviewPartner }: { month: string; onPreviewPartn
                 <th className="px-4 py-2.5">Committed hrs/wk</th>
                 <th className="px-4 py-2.5">Available hrs/wk</th>
                 <th className="px-4 py-2.5">Utilization</th>
+                <th className="px-4 py-2.5">Payment status</th>
                 <th className="px-4 py-2.5"></th>
               </tr>
             </thead>
@@ -1058,6 +1217,20 @@ function ByUserView({ month, onPreviewPartner }: { month: string; onPreviewPartn
                   </td>
                   <td className="px-4 py-2.5">
                     <UtilizationBadge pct={u.utilization_pct} />
+                  </td>
+                  <td className="px-4 py-2.5">
+                    <PaymentStatusCell
+                      record={statusByRecipient.get(`${u.recipient_type}:${u.recipient_id}`)}
+                      disabled={saveStatus.isPending}
+                      onSave={(status, hold_reason) =>
+                        saveStatus.mutate({
+                          recipient_type: u.recipient_type,
+                          recipient_id: u.recipient_id,
+                          status,
+                          hold_reason,
+                        })
+                      }
+                    />
                   </td>
                   <td className="px-4 py-2.5 text-right">
                     <span className="text-xs font-medium text-indigo-600">Open →</span>

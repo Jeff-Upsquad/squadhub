@@ -2,6 +2,16 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { timingSafeEqual } from 'crypto';
 import { supabaseAdmin } from '../supabase';
 import { config } from '../config';
+import {
+  listAssignmentTerms,
+  listUserPayments,
+  getUserPaymentDetail,
+} from '../services/partnerPayments';
+import {
+  listPaymentStatuses,
+  upsertPaymentStatus,
+  isPaymentStatus,
+} from '../services/partnerPaymentStatus';
 
 /**
  * Server-to-server integration API consumed by the sibling SquadBooks app
@@ -11,8 +21,19 @@ import { config } from '../config';
  * session is involved, so this lives outside requireAuth/requireAdmin and does
  * its own constant-time key check. Returns 503 when the key is unset.
  *
- * Exposes ONLY the customer-facing subscription catalog (names + per-country
- * customer prices). Partner pricing / margins are deliberately NOT included.
+ * Exposes:
+ *   - the customer-facing subscription catalog (names + per-country customer
+ *     prices) and client lookup;
+ *   - the Partner Payments read API + payout status store.
+ *
+ * The Partner Payments endpoints exist so SquadBooks renders figures computed
+ * HERE, by services/partnerPayments.ts, rather than by the hand-ported copy of
+ * the math it used to carry (which drifted between manual syncs). SquadBooks
+ * must not recompute any of these numbers itself.
+ *
+ * Note the asymmetry with the catalog endpoints above: those deliberately
+ * withhold partner pricing / margins, but Partner Payments is a back-office
+ * module and partner prices ARE its subject, so they are returned in full.
  */
 const router = Router();
 
@@ -216,6 +237,114 @@ router.get('/lookup-client', async (req: Request, res: Response) => {
   } catch (err) {
     console.error('SquadBooks lookup-client integration error:', err);
     res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// ============================================================
+// Partner Payments — the same service the SquadHub admin module and the partner
+// mini app call, so all three surfaces show identical figures.
+// ============================================================
+
+// GET /integrations/squadbooks/partner-payments/terms?month=&status=&search=
+router.get('/partner-payments/terms', async (req: Request, res: Response) => {
+  try {
+    const result = await listAssignmentTerms({
+      status: (req.query.status as string) === 'all' ? 'all' : 'active',
+      search: req.query.search as string | undefined,
+      // SquadBooks is always month-scoped; fall back to the current month so the
+      // endpoint never silently returns the legacy unenriched shape.
+      month: typeof req.query.month === 'string' && req.query.month
+        ? req.query.month
+        : new Date().toISOString().slice(0, 7),
+    });
+    // Wrapped (rather than a bare array) so the resolved month travels with the
+    // rows — SquadBooks echoes it back in its own UI.
+    res.json({ success: true, data: { month: result.month, terms: result.data } });
+  } catch (err: any) {
+    console.error('SquadBooks partner-payments terms error:', err);
+    res.status(500).json({ success: false, error: err?.message || 'Internal server error' });
+  }
+});
+
+// GET /integrations/squadbooks/partner-payments/users?month=&status=&search=
+router.get('/partner-payments/users', async (req: Request, res: Response) => {
+  try {
+    const data = await listUserPayments({
+      status: req.query.status as string | undefined,
+      search: req.query.search as string | undefined,
+      month: req.query.month,
+    });
+    res.json({ success: true, data });
+  } catch (err: any) {
+    console.error('SquadBooks partner-payments users error:', err);
+    res.status(500).json({ success: false, error: err?.message || 'Internal server error' });
+  }
+});
+
+// GET /integrations/squadbooks/partner-payments/statuses?month=YYYY-MM
+router.get('/partner-payments/statuses', async (req: Request, res: Response) => {
+  try {
+    const month = String(req.query.month || '');
+    if (!/^\d{4}-\d{2}$/.test(month)) {
+      res.status(400).json({ success: false, error: 'month must be YYYY-MM' });
+      return;
+    }
+    const map = await listPaymentStatuses(month);
+    res.json({ success: true, data: { month, statuses: [...map.values()] } });
+  } catch (err: any) {
+    console.error('SquadBooks partner-payments statuses error:', err);
+    res.status(500).json({ success: false, error: err?.message || 'Internal server error' });
+  }
+});
+
+// POST /integrations/squadbooks/partner-payments/statuses
+// SquadBooks user ids live in a different database, so `updated_by` stays null;
+// `updated_source` records that the change came from there.
+router.post('/partner-payments/statuses', async (req: Request, res: Response) => {
+  try {
+    const body = req.body ?? {};
+    if (!isPaymentStatus(body.status)) {
+      res.status(400).json({ success: false, error: 'Invalid status' });
+      return;
+    }
+    if (body.recipient_type !== 'talent' && body.recipient_type !== 'partner') {
+      res.status(400).json({ success: false, error: 'Invalid recipient type' });
+      return;
+    }
+    const record = await upsertPaymentStatus({
+      month: String(body.month || ''),
+      recipientType: body.recipient_type,
+      recipientId: String(body.recipient_id || ''),
+      status: body.status,
+      holdReason: body.hold_reason ?? null,
+      source: 'squadbooks',
+      updatedBy: null,
+    });
+    res.json({ success: true, data: record });
+  } catch (err: any) {
+    console.error('SquadBooks partner-payments status upsert error:', err);
+    res.status(400).json({ success: false, error: err?.message || 'Internal server error' });
+  }
+});
+
+// GET /integrations/squadbooks/partner-payments/users/:recipientType/:recipientId?month=
+// Declared last so it can't shadow the fixed sub-paths above.
+router.get('/partner-payments/users/:recipientType/:recipientId', async (req: Request, res: Response) => {
+  try {
+    const recipientType = req.params.recipientType as 'talent' | 'partner';
+    if (recipientType !== 'talent' && recipientType !== 'partner') {
+      res.status(400).json({ success: false, error: 'Invalid recipient type' });
+      return;
+    }
+    const data = await getUserPaymentDetail({
+      recipientType,
+      recipientId: req.params.recipientId as string,
+      month: req.query.month,
+    });
+    res.json({ success: true, data });
+  } catch (err: any) {
+    console.error('SquadBooks partner-payments user detail error:', err);
+    res.status(500).json({ success: false, error: err?.message || 'Internal server error' });
   }
 });
 

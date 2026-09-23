@@ -3,15 +3,26 @@ import { z } from 'zod';
 import { requireAuth } from '../middleware/auth';
 import { requireAdmin } from '../middleware/admin';
 import { supabaseAdmin } from '../supabase';
-import { prorateMonthly, activeDaysInMonth } from '../utils/assignmentBilling';
-import { fetchTalentAvailability } from '../utils/squadhireTalent';
-import { loadCardBilling, resolveTermBilling, type CardBilling } from '../utils/cardBilling';
-import { loadCardHoursCompletions } from '../utils/cardHoursCompletion';
+import {
+  listAssignmentTerms,
+  listUserPayments,
+  getUserPaymentDetail,
+} from '../services/partnerPayments';
+import {
+  listPaymentStatuses,
+  upsertPaymentStatus,
+  isPaymentStatus,
+} from '../services/partnerPaymentStatus';
 
-// Admin module: view + manage subscription assignment terms. Rows are created /
-// closed automatically by the finalize-selection / unassign flow (see
-// subscription-cards-admin-select.ts). Here the admin can list them and edit the
-// work start / end dates (assigned / unassigned timestamps stay read-only audit).
+// Admin module ("Partner Payments"): view + manage subscription assignment
+// terms. Rows are created / closed automatically by the finalize-selection /
+// unassign flow (see subscription-cards-admin-select.ts). Here the admin can
+// list them, edit the work start / end dates (assigned / unassigned timestamps
+// stay read-only audit), and set each payout's workflow status.
+//
+// All the payout MATH lives in services/partnerPayments.ts, shared with the
+// partner mini app and with SquadBooks (via routes/squadbooks-integration.ts),
+// so the three surfaces cannot disagree. This file is only routing + auth.
 
 const router = Router();
 router.use(requireAuth);
@@ -25,121 +36,112 @@ router.use(requireAdmin);
 // card·talent (pause/resume, plan change) into a single row.
 router.get('/', async (req: Request, res: Response) => {
   try {
-    const status = (req.query.status as string) || 'all';
-    const search = ((req.query.search as string) || '').trim();
-    const monthRaw = req.query.month;
-    const monthScoped = typeof monthRaw === 'string' && /^\d{4}-\d{2}$/.test(monthRaw);
-    const { year, month } = parseMonth(monthRaw);
-    const todayIso = new Date().toISOString().slice(0, 10);
-
-    let query = supabaseAdmin
-      .from('subscription_assignment_terms')
-      .select('*')
-      .order('assigned_date', { ascending: false });
-
-    // When month-scoped, filter by month activity below and read status=active as
-    // "status column = active" (matches the By-user view); otherwise filter here.
-    if (!monthScoped && (status === 'active' || status === 'ended')) {
-      query = query.eq('status', status);
-    }
-    if (search) {
-      const safe = search.replace(/[%,]/g, ' ');
-      query = query.or(
-        `recipient_name.ilike.%${safe}%,business_name.ilike.%${safe}%,subscription_name.ilike.%${safe}%`,
-      );
-    }
-
-    const { data, error } = await query;
-    if (error) { res.status(500).json({ success: false, error: error.message }); return; }
-    const rows = (data || []) as AssignmentTermRow[];
-
-    // Attach the card lifecycle so the view can badge paused / cancelled
-    // engagements (billing already reflects them via the ended terms).
-    const cardIds = [...new Set(rows.map((t) => t.card_id).filter(Boolean))];
-    const cardById = new Map<
-      string,
-      { state: string; paused_at: string | null; cancelled_at: string | null; linked_folder_id: string | null }
-    >();
-    if (cardIds.length) {
-      const { data: cards } = await supabaseAdmin
-        .from('subscription_cards')
-        .select('id, state, paused_at, cancelled_at, linked_folder_id')
-        .in('id', cardIds);
-      (cards || []).forEach((c: any) =>
-        cardById.set(c.id, {
-          state: c.state,
-          paused_at: c.paused_at ?? null,
-          cancelled_at: c.cancelled_at ?? null,
-          linked_folder_id: c.linked_folder_id ?? null,
-        }),
-      );
-    }
-    const lifecycle = (t: AssignmentTermRow) => ({
-      card_state: cardById.get(t.card_id)?.state ?? null,
-      card_paused_at: cardById.get(t.card_id)?.paused_at ?? null,
-      card_cancelled_at: cardById.get(t.card_id)?.cancelled_at ?? null,
+    const result = await listAssignmentTerms({
+      status: req.query.status as string | undefined,
+      search: req.query.search as string | undefined,
+      month: req.query.month,
     });
-
-    if (!monthScoped) {
-      res.json({ success: true, data: rows.map((t) => ({ ...t, ...lifecycle(t) })) });
+    if (result.month) {
+      res.json({ success: true, data: result.data, month: result.month });
       return;
     }
-
-    const billing = await loadCardBilling(cardIds);
-    // Per-card hours completion (plan target vs. tracked+elapsed actual → signed
-    // additional hours + payment) for the scoped month. Attached identically to
-    // every term of a card; the client folds it once per card row.
-    const folderByCard = new Map<string, string | null>(
-      cardIds.map((id) => [id, cardById.get(id)?.linked_folder_id ?? null]),
-    );
-    const completions = await loadCardHoursCompletions(
-      completionInput(cardIds, folderByCard, billing),
-      year,
-      month,
-    );
-    const enriched = rows
-      .map((t) => {
-        const b = resolveTermBilling(t, billing.get(t.card_id));
-        const comp = completions.get(t.card_id);
-        const start = t.work_start_date ?? t.assigned_date;
-        const end = t.work_end_date ?? t.unassigned_date ?? null;
-        const activeDays = activeDaysInMonth(start, end, year, month, todayIso);
-        const monthPayment = b ? prorateMonthly(b.partner_price, start, end, year, month, todayIso) : 0;
-        return {
-          ...t,
-          ...lifecycle(t),
-          start_date: start ? start.slice(0, 10) : null,
-          stop_date: end ? end.slice(0, 10) : null,
-          month_active_days: activeDays,
-          month_payment: monthPayment,
-          partner_price: b?.partner_price ?? null,
-          currency: b?.currency ?? 'INR',
-          missing_partner_price: b?.missing_partner_price ?? true,
-          committed_hours: {
-            daily: b?.daily_hours ?? null,
-            weekly: b?.weekly_hours ?? null,
-            monthly: b?.monthly_hours ?? null,
-          },
-          // Monthly hours completion (per card; identical on every term of the
-          // card, so the client adds it once per folded row). month_payment above
-          // stays the prorated base — additional_payment is added on top.
-          additional_hours: comp?.additional_hours ?? 0,
-          additional_payment: comp?.additional_partner_payment ?? 0,
-          actual_hours: comp?.actual_hours ?? 0,
-          target_hours_this_month: comp?.target_monthly_hours ?? 0,
-          plan_name: b?.plan_name ?? null,
-          // Plan band + tier frozen on the term, so a multi-period breakdown can
-          // name what each slice was on (e.g. "Basic" then "Plus" after a change).
-          plan_label: b?.plan_snapshot?.plan?.plan ?? null,
-          plan_tier: b?.plan_snapshot?.plan?.tier ?? null,
-        };
-      })
-      .filter((t) => t.month_active_days > 0)
-      .filter((t) => (status === 'active' ? t.status === 'active' : true));
-
-    res.json({ success: true, data: enriched, month: `${year}-${String(month).padStart(2, '0')}` });
+    res.json({ success: true, data: result.data });
   } catch (err: any) {
     console.error('[subscription-assignments] list error', err);
+    res.status(500).json({ success: false, error: err?.message || 'Internal server error' });
+  }
+});
+
+// ------------------------------------------------------------
+// Payout workflow status (shared store — see services/partnerPaymentStatus.ts).
+// Declared before /:id so "statuses" isn't swallowed by the term-id route.
+// ------------------------------------------------------------
+
+// GET /admin/subscription-assignments/statuses?month=YYYY-MM
+router.get('/statuses', async (req: Request, res: Response) => {
+  try {
+    const month = String(req.query.month || '');
+    if (!/^\d{4}-\d{2}$/.test(month)) {
+      res.status(400).json({ success: false, error: 'month must be YYYY-MM' });
+      return;
+    }
+    const map = await listPaymentStatuses(month);
+    res.json({ success: true, data: { month, statuses: [...map.values()] } });
+  } catch (err: any) {
+    console.error('[subscription-assignments] statuses list error', err);
+    res.status(500).json({ success: false, error: err?.message || 'Internal server error' });
+  }
+});
+
+const statusSchema = z
+  .object({
+    month: z.string().regex(/^\d{4}-\d{2}$/, 'month must be YYYY-MM'),
+    recipient_type: z.enum(['talent', 'partner']),
+    recipient_id: z.string().min(1),
+    status: z.string().refine(isPaymentStatus, 'Invalid status'),
+    hold_reason: z.string().nullable().optional(),
+  })
+  .strict();
+
+// POST /admin/subscription-assignments/statuses — set one payout's status.
+router.post('/statuses', async (req: Request, res: Response) => {
+  try {
+    const body = statusSchema.parse(req.body);
+    const record = await upsertPaymentStatus({
+      month: body.month,
+      recipientType: body.recipient_type,
+      recipientId: body.recipient_id,
+      status: body.status as any,
+      holdReason: body.hold_reason ?? null,
+      source: 'hub',
+      updatedBy: req.userId ?? null,
+    });
+    res.json({ success: true, data: record });
+  } catch (err: any) {
+    if (err instanceof z.ZodError) {
+      res.status(400).json({ success: false, error: err.errors[0].message });
+      return;
+    }
+    console.error('[subscription-assignments] status upsert error', err);
+    res.status(400).json({ success: false, error: err?.message || 'Internal server error' });
+  }
+});
+
+// GET /admin/subscription-assignments/users?month=YYYY-MM&status=active|all&search=
+// One row per recipient with the selected month's payment (per currency),
+// committed weekly hours, and (talent) self-declared available hours.
+router.get('/users', async (req: Request, res: Response) => {
+  try {
+    const data = await listUserPayments({
+      status: req.query.status as string | undefined,
+      search: req.query.search as string | undefined,
+      month: req.query.month,
+    });
+    res.json({ success: true, data });
+  } catch (err: any) {
+    console.error('[subscription-assignments] users list error', err);
+    res.status(500).json({ success: false, error: err?.message || 'Internal server error' });
+  }
+});
+
+// GET /admin/subscription-assignments/users/:recipientType/:recipientId?month=YYYY-MM
+// Per-card breakdown for one recipient: start/stop, partner price, prorated
+// month payment, committed hours, plus the talent's available-hours summary.
+router.get('/users/:recipientType/:recipientId', async (req: Request, res: Response) => {
+  try {
+    const recipientType = req.params.recipientType as 'talent' | 'partner';
+    if (recipientType !== 'talent' && recipientType !== 'partner') {
+      res.status(400).json({ success: false, error: 'Invalid recipient type' });
+      return;
+    }
+    const data = await getUserPaymentDetail({
+      recipientType,
+      recipientId: req.params.recipientId as string,
+      month: req.query.month,
+    });
+    res.json({ success: true, data });
+  } catch (err: any) {
+    console.error('[subscription-assignments] user detail error', err);
     res.status(500).json({ success: false, error: err?.message || 'Internal server error' });
   }
 });
@@ -185,374 +187,6 @@ router.patch('/:id', async (req: Request, res: Response) => {
       return;
     }
     console.error('[subscription-assignments] update error', err);
-    res.status(500).json({ success: false, error: err?.message || 'Internal server error' });
-  }
-});
-
-// ============================================================
-// Per-user view: group assignment terms by recipient, with the monthly
-// payment owed (partner price prorated by active days) and an hours insight
-// (committed hours from the card vs. the talent's self-declared availability).
-// ============================================================
-
-type AssignmentTermRow = {
-  id: string;
-  card_id: string;
-  recipient_type: 'talent' | 'partner';
-  recipient_id: string;
-  recipient_name: string | null;
-  business_name: string | null;
-  subscription_name: string | null;
-  assigned_date: string;
-  unassigned_date: string | null;
-  work_start_date: string | null;
-  work_end_date: string | null;
-  status: 'active' | 'ended';
-  // Term-level frozen billing (migration 152). Null on legacy terms → fall back
-  // to the card's live plan_snapshot via resolveTermBilling().
-  plan_snapshot: any | null;
-  partner_price: number | null;
-  subscription_price: number | null;
-  currency: string | null;
-};
-
-function parseMonth(raw: unknown): { year: number; month: number; key: string } {
-  const s = typeof raw === 'string' && /^\d{4}-\d{2}$/.test(raw) ? raw : null;
-  const now = new Date();
-  const year = s ? Number(s.slice(0, 4)) : now.getUTCFullYear();
-  const month = s ? Number(s.slice(5, 7)) : now.getUTCMonth() + 1;
-  return { year, month, key: `${year}-${String(month).padStart(2, '0')}` };
-}
-
-function recipientKey(t: { recipient_type: string; recipient_id: string }) {
-  return `${t.recipient_type}:${t.recipient_id}`;
-}
-
-/** Map card_id -> linked_folder_id (the linked space) for hours-completion. */
-async function fetchLinkedFolders(cardIds: string[]): Promise<Map<string, string | null>> {
-  const out = new Map<string, string | null>();
-  if (!cardIds.length) return out;
-  const { data } = await supabaseAdmin
-    .from('subscription_cards')
-    .select('id, linked_folder_id')
-    .in('id', cardIds);
-  (data || []).forEach((c: any) => out.set(c.id, c.linked_folder_id ?? null));
-  return out;
-}
-
-/** Build the loadCardHoursCompletions input, dropping cards with no resolved billing. */
-function completionInput(
-  cardIds: string[],
-  folderByCard: Map<string, string | null>,
-  billing: Map<string, CardBilling>,
-): { cardId: string; linkedFolderId: string | null; billing: CardBilling }[] {
-  return cardIds
-    .map((id) => ({ cardId: id, linkedFolderId: folderByCard.get(id) ?? null, billing: billing.get(id) }))
-    .filter((c): c is { cardId: string; linkedFolderId: string | null; billing: CardBilling } => !!c.billing);
-}
-
-// GET /admin/subscription-assignments/users?month=YYYY-MM&status=active|all&search=
-// One row per recipient with the selected month's payment (per currency),
-// committed weekly hours, and (talent) self-declared available hours.
-router.get('/users', async (req: Request, res: Response) => {
-  try {
-    const status = (req.query.status as string) || 'active';
-    const search = ((req.query.search as string) || '').trim();
-    const { year, month } = parseMonth(req.query.month);
-    const todayIso = new Date().toISOString().slice(0, 10);
-
-    let query = supabaseAdmin.from('subscription_assignment_terms').select('*');
-    if (search) {
-      const safe = search.replace(/[%,]/g, ' ');
-      query = query.or(
-        `recipient_name.ilike.%${safe}%,business_name.ilike.%${safe}%,subscription_name.ilike.%${safe}%`,
-      );
-    }
-    const { data, error } = await query;
-    if (error) { res.status(500).json({ success: false, error: error.message }); return; }
-    const terms = (data || []) as AssignmentTermRow[];
-
-    const cardIds = [...new Set(terms.map((t) => t.card_id))];
-    const billing = await loadCardBilling(cardIds);
-    const folderByCard = await fetchLinkedFolders(cardIds);
-    const completions = await loadCardHoursCompletions(
-      completionInput(cardIds, folderByCard, billing),
-      year,
-      month,
-    );
-
-    type Group = {
-      recipient_type: 'talent' | 'partner';
-      recipient_id: string;
-      recipient_name: string | null;
-      card_count: number;
-      active_card_count: number;
-      committed_weekly_hours: number;
-      payments: Map<string, number>; // currency -> prorated base + additional
-      base_payments: Map<string, number>; // currency -> prorated base only
-      additional_payment: number; // signed total of shortfall deductions (one-sided)
-      missing_pricing: boolean;
-      additional_hours: number; // net signed hours delta (once per card)
-    };
-    const groups = new Map<string, Group>();
-    // Cards already counted toward a recipient's weekly commitment (dedupe
-    // across multiple same-month terms on one card — pause/resume, plan change).
-    const countedWeeklyCards = new Map<string, Set<string>>();
-    // Additional hours + payment count once per CARD (folder-level completion),
-    // not per term — a same-month pause/resume must not double the delta.
-    const countedAdditionalCards = new Map<string, Set<string>>();
-
-    for (const t of terms) {
-      const start = t.work_start_date ?? t.assigned_date;
-      const end = t.work_end_date ?? t.unassigned_date ?? null;
-      const activeDays = activeDaysInMonth(start, end, year, month, todayIso);
-      // Scope to the selected month: skip terms with no active days in it, so a
-      // recipient's row reflects only the subscriptions they were serving that
-      // month (a term that started or ended in another month adds nothing).
-      if (activeDays <= 0) continue;
-
-      const key = recipientKey(t);
-      let g = groups.get(key);
-      if (!g) {
-        g = {
-          recipient_type: t.recipient_type,
-          recipient_id: t.recipient_id,
-          recipient_name: t.recipient_name,
-          card_count: 0,
-          active_card_count: 0,
-          committed_weekly_hours: 0,
-          payments: new Map(),
-          base_payments: new Map(),
-          additional_payment: 0,
-          missing_pricing: false,
-          additional_hours: 0,
-        };
-        groups.set(key, g);
-      }
-      g.card_count += 1;
-      if (t.status === 'active') g.active_card_count += 1;
-      if (!g.recipient_name && t.recipient_name) g.recipient_name = t.recipient_name;
-
-      const b = resolveTermBilling(t, billing.get(t.card_id));
-      // Weekly commitment counts once per CARD, not per term — a same-month
-      // pause+resume (or plan change) yields multiple terms on one card and
-      // would otherwise double the recipient's committed hours/utilization.
-      if (b?.weekly_hours != null && !countedWeeklyCards.get(key)?.has(t.card_id)) {
-        g.committed_weekly_hours += b.weekly_hours;
-        if (!countedWeeklyCards.has(key)) countedWeeklyCards.set(key, new Set());
-        countedWeeklyCards.get(key)!.add(t.card_id);
-      }
-      if (b) {
-        if (b.missing_partner_price) g.missing_pricing = true;
-        const pay = prorateMonthly(b.partner_price, start, end, year, month, todayIso);
-        if (pay > 0) {
-          const cur = b.currency || 'INR';
-          g.payments.set(cur, (g.payments.get(cur) || 0) + pay);
-          g.base_payments.set(cur, (g.base_payments.get(cur) || 0) + pay);
-        }
-      }
-      // Additional hours + payment: once per card, folded into the card's own
-      // currency bucket so the recipient's total reflects base + overage/shortfall.
-      const comp = completions.get(t.card_id);
-      if (comp && !countedAdditionalCards.get(key)?.has(t.card_id)) {
-        if (!countedAdditionalCards.has(key)) countedAdditionalCards.set(key, new Set());
-        countedAdditionalCards.get(key)!.add(t.card_id);
-        g.additional_hours += comp.additional_hours;
-        if (comp.additional_partner_payment !== 0) {
-          const cur = b?.currency || 'INR';
-          g.payments.set(cur, (g.payments.get(cur) || 0) + comp.additional_partner_payment);
-          g.additional_payment += comp.additional_partner_payment;
-        }
-      }
-    }
-
-    let list = [...groups.values()];
-    if (status === 'active') list = list.filter((g) => g.active_card_count > 0);
-
-    // Self-declared availability for talent recipients (graceful if SquadHire is down).
-    const talentIds = list
-      .filter((g) => g.recipient_type === 'talent')
-      .map((g) => g.recipient_id);
-    const availability = await fetchTalentAvailability(talentIds);
-
-    const rows = list
-      .map((g) => {
-        const avail = g.recipient_type === 'talent' ? availability.get(g.recipient_id) : undefined;
-        const available_weekly_hours =
-          g.recipient_type === 'talent' ? avail?.weekly_hours ?? null : null;
-        return {
-          recipient_type: g.recipient_type,
-          recipient_id: g.recipient_id,
-          recipient_name: g.recipient_name,
-          card_count: g.card_count,
-          active_card_count: g.active_card_count,
-          committed_weekly_hours: Math.round(g.committed_weekly_hours * 100) / 100,
-          available_weekly_hours,
-          utilization_pct:
-            available_weekly_hours && available_weekly_hours > 0
-              ? Math.round((g.committed_weekly_hours / available_weekly_hours) * 100)
-              : null,
-          payments: [...g.payments.entries()].map(([currency, amount]) => ({ currency, amount })),
-          base_payments: [...g.base_payments.entries()].map(([currency, amount]) => ({ currency, amount })),
-          additional_payment: g.additional_payment,
-          missing_pricing: g.missing_pricing,
-          additional_hours: Math.round(g.additional_hours * 100) / 100,
-        };
-      })
-      .sort((a, b) => {
-        const ap = a.payments.reduce((s, p) => s + p.amount, 0);
-        const bp = b.payments.reduce((s, p) => s + p.amount, 0);
-        return bp - ap;
-      });
-
-    res.json({ success: true, data: { month: `${year}-${String(month).padStart(2, '0')}`, users: rows } });
-  } catch (err: any) {
-    console.error('[subscription-assignments] users list error', err);
-    res.status(500).json({ success: false, error: err?.message || 'Internal server error' });
-  }
-});
-
-// GET /admin/subscription-assignments/users/:recipientType/:recipientId?month=YYYY-MM
-// Per-card breakdown for one recipient: start/stop, partner price, prorated
-// month payment, committed hours, plus the talent's available-hours summary.
-router.get('/users/:recipientType/:recipientId', async (req: Request, res: Response) => {
-  try {
-    const recipientType = req.params.recipientType as 'talent' | 'partner';
-    const recipientId = req.params.recipientId as string;
-    if (recipientType !== 'talent' && recipientType !== 'partner') {
-      res.status(400).json({ success: false, error: 'Invalid recipient type' });
-      return;
-    }
-    const { year, month } = parseMonth(req.query.month);
-    const todayIso = new Date().toISOString().slice(0, 10);
-
-    const { data, error } = await supabaseAdmin
-      .from('subscription_assignment_terms')
-      .select('*')
-      .eq('recipient_type', recipientType)
-      .eq('recipient_id', recipientId)
-      .order('assigned_date', { ascending: false });
-    if (error) { res.status(500).json({ success: false, error: error.message }); return; }
-    const terms = (data || []) as AssignmentTermRow[];
-
-    const cardIds = [...new Set(terms.map((t) => t.card_id))];
-    const billing = await loadCardBilling(cardIds);
-    const folderByCard = await fetchLinkedFolders(cardIds);
-    const completions = await loadCardHoursCompletions(
-      completionInput(cardIds, folderByCard, billing),
-      year,
-      month,
-    );
-
-    const paymentByCurrency = new Map<string, number>();
-    let committedWeekly = 0;
-    let totalAdditionalHours = 0;
-    // Weekly commitment counts once per CARD (multiple same-month terms on one
-    // card — pause/resume, plan change — must not double the figure).
-    const weeklyCounted = new Set<string>();
-    // Additional hours + payment likewise count once per card.
-    const additionalCounted = new Set<string>();
-
-    const cards = terms.map((t) => {
-      const b = resolveTermBilling(t, billing.get(t.card_id));
-      const start = t.work_start_date ?? t.assigned_date;
-      const end = t.work_end_date ?? t.unassigned_date ?? null;
-      const activeDays = activeDaysInMonth(start, end, year, month, todayIso);
-      const monthPayment = b ? prorateMonthly(b.partner_price, start, end, year, month, todayIso) : 0;
-      if (monthPayment > 0) {
-        const cur = b?.currency || 'INR';
-        paymentByCurrency.set(cur, (paymentByCurrency.get(cur) || 0) + monthPayment);
-      }
-      if (activeDays > 0 && b?.weekly_hours != null && !weeklyCounted.has(t.card_id)) {
-        committedWeekly += b.weekly_hours;
-        weeklyCounted.add(t.card_id);
-      }
-      const comp = completions.get(t.card_id);
-      if (activeDays > 0 && comp && !additionalCounted.has(t.card_id)) {
-        additionalCounted.add(t.card_id);
-        totalAdditionalHours += comp.additional_hours;
-        if (comp.additional_partner_payment !== 0) {
-          const cur = b?.currency || 'INR';
-          paymentByCurrency.set(cur, (paymentByCurrency.get(cur) || 0) + comp.additional_partner_payment);
-        }
-      }
-      return {
-        term_id: t.id,
-        card_id: t.card_id,
-        business_name: t.business_name,
-        subscription_name: t.subscription_name,
-        status: t.status,
-        start_date: start ? start.slice(0, 10) : null,
-        stop_date: end ? end.slice(0, 10) : null,
-        assigned_date: t.assigned_date,
-        unassigned_date: t.unassigned_date,
-        work_start_date: t.work_start_date,
-        work_end_date: t.work_end_date,
-        partner_price: b?.partner_price ?? null,
-        currency: b?.currency ?? 'INR',
-        missing_partner_price: b?.missing_partner_price ?? true,
-        month_active_days: activeDays,
-        month_payment: monthPayment,
-        committed_hours: {
-          daily: b?.daily_hours ?? null,
-          weekly: b?.weekly_hours ?? null,
-          monthly: b?.monthly_hours ?? null,
-        },
-        // Monthly hours completion for this card (month_payment stays the base;
-        // additional_payment is the signed overage/shortfall added on top).
-        additional_hours: comp?.additional_hours ?? 0,
-        additional_payment: comp?.additional_partner_payment ?? 0,
-        actual_hours: comp?.actual_hours ?? 0,
-        target_hours_this_month: comp?.target_monthly_hours ?? 0,
-        plan_name: b?.plan_name ?? null,
-        // Plan band + tier frozen on the term, so a multi-period breakdown can
-        // name what each slice was on (e.g. "Basic" then "Plus" after a change).
-        plan_label: b?.plan_snapshot?.plan?.plan ?? null,
-        plan_tier: b?.plan_snapshot?.plan?.tier ?? null,
-      };
-    })
-      // Scope the breakdown to the selected month: drop terms with no active
-      // days in it (they'd render as a "0 days / — pay" row — pure noise). The
-      // totals above already exclude them, so this only trims the display list.
-      .filter((c) => c.month_active_days > 0);
-
-    // Talent's self-declared available hours (graceful if SquadHire is down).
-    let availableWeekly: number | null = null;
-    let availableStatus: 'ok' | 'unavailable' | 'not_applicable' = 'not_applicable';
-    if (recipientType === 'talent') {
-      const availability = await fetchTalentAvailability([recipientId]);
-      const a = availability.get(recipientId);
-      if (a) {
-        availableWeekly = a.weekly_hours;
-        availableStatus = 'ok';
-      } else {
-        availableStatus = 'unavailable';
-      }
-    }
-
-    res.json({
-      success: true,
-      data: {
-        recipient_type: recipientType,
-        recipient_id: recipientId,
-        recipient_name: terms[0]?.recipient_name ?? null,
-        month: `${year}-${String(month).padStart(2, '0')}`,
-        cards,
-        totals: {
-          month_payments: [...paymentByCurrency.entries()].map(([currency, amount]) => ({ currency, amount })),
-          additional_hours: Math.round(totalAdditionalHours * 100) / 100,
-          committed_weekly_hours: Math.round(committedWeekly * 100) / 100,
-          available_weekly_hours: availableWeekly,
-          available_hours_status: availableStatus,
-          utilization_pct:
-            availableWeekly && availableWeekly > 0
-              ? Math.round((committedWeekly / availableWeekly) * 100)
-              : null,
-        },
-      },
-    });
-  } catch (err: any) {
-    console.error('[subscription-assignments] user detail error', err);
     res.status(500).json({ success: false, error: err?.message || 'Internal server error' });
   }
 });
