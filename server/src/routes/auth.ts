@@ -18,6 +18,7 @@ import * as passwordReset from '../services/passwordReset';
 import type { UserType } from '@squadhub/shared';
 import { propagateIdentityNames } from '../utils/propagateIdentityNames';
 import { mobileAppForUserType } from '../utils/mobileAppAccess';
+import { resolveWorkAccess } from '../utils/workAccess';
 
 const router = Router();
 
@@ -285,7 +286,7 @@ router.post('/login', async (req: Request, res: Response) => {
     res.json({
       success: true,
       data: {
-        user: profile || {
+        user: (await resolveWorkAccess(profile)) || {
           id: data.user.id,
           email: data.user.email,
           display_name: data.user.user_metadata?.display_name || 'User',

@@ -4,6 +4,7 @@ import { requireAuth } from '../middleware/auth';
 import { supabaseAdmin } from '../supabase';
 import { hydrateCard } from '../utils/subscriptionCards';
 import { propagateUserDisplayName } from '../utils/propagateIdentityNames';
+import { isUserWorkLocked, resolveWorkAccess } from '../utils/workAccess';
 import { getUserSkills } from '../utils/skills';
 
 const router = Router();
@@ -107,6 +108,14 @@ router.get('/search', requireAuth, async (req: Request, res: Response) => {
       return;
     }
 
+    // Every other work surface is membership-scoped, so a pre-work partner sees
+    // nothing in it. This one isn't: unscoped, it answers with the whole roster.
+    // Keep it closed until they have work (see utils/workAccess).
+    if (await isUserWorkLocked(req.userId!)) {
+      res.json({ success: true, data: [] });
+      return;
+    }
+
     let query = supabaseAdmin
       .from('users')
       .select('id, display_name, avatar_url, user_type, email')
@@ -172,7 +181,9 @@ router.get('/me', requireAuth, async (req: Request, res: Response) => {
       return;
     }
 
-    res.json({ success: true, data });
+    // work_locked tells the apps whether to show the Work surface or the
+    // Discover-only lock (see utils/workAccess).
+    res.json({ success: true, data: await resolveWorkAccess(data) });
   } catch (err) {
     console.error('Get user error:', err);
     res.status(500).json({ success: false, error: 'Internal server error' });

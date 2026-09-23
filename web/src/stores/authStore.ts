@@ -8,6 +8,8 @@ interface AuthState {
   refreshToken: string | null;
   isAuthenticated: boolean;
   setAuth: (user: User, accessToken: string, refreshToken: string) => void;
+  /** Replace the cached profile in place (same session) — see useWorkUnlockWatch. */
+  setUser: (user: User) => void;
   updateTokens: (accessToken: string, refreshToken: string) => void;
   logout: () => void;
 }
@@ -22,6 +24,8 @@ export const useAuthStore = create<AuthState>()(
 
       setAuth: (user, accessToken, refreshToken) =>
         set({ user, accessToken, refreshToken, isAuthenticated: true }),
+
+      setUser: (user) => set({ user }),
 
       updateTokens: (accessToken, refreshToken) =>
         set({ accessToken, refreshToken }),

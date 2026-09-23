@@ -13,6 +13,10 @@
  * the normal invitation wiring — then the caller retries the sign-in, which is
  * what actually authenticates them.
  *
+ * Talents reach the same seeding step from the other direction and without an
+ * invitation: see provisionPreWorkTalentPartner, which creates the Discover-only
+ * partner account a pre-work SquadHire talent signs in with.
+ *
  * This is a one-time seed, not a sync: afterwards the SquadHub account is
  * ordinary and independent, and a password change on either side does not
  * affect the other.
@@ -43,6 +47,7 @@ import {
   INVITATION_COLUMNS,
   type PendingInvitation,
 } from './applyInvitation';
+import { provisionPreWorkTalentPartner } from './squadhireTalentSelfSignIn';
 import type { UserType } from '@squadhub/shared';
 
 const CLIENT_USER_TYPES = new Set(['client', 'client_staff']);
@@ -90,7 +95,13 @@ export async function seedSquadhireClientLogin(input: {
       .eq('status', 'pending')
       .maybeSingle<PendingInvitation & { expires_at: string }>();
 
-    if (!invitation) return false;
+    // No invitation is no longer the end of the line: a SquadHire talent with
+    // no work yet has nothing raised on our side, and the Partner app is where
+    // they go to find their first job. SquadHire vouches for the password; the
+    // account they get is Discover-only until a card is assigned.
+    if (!invitation) {
+      return await provisionPreWorkTalentPartner({ email, password: input.password });
+    }
 
     const userType = (invitation.user_type || 'client') as UserType;
     if (!SEEDABLE_USER_TYPES.has(userType)) return false;

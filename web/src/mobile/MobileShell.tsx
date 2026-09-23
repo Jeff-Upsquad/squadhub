@@ -23,6 +23,7 @@
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { isWorkLocked } from '@squadhub/shared';
 import type { Channel, DmConversation, Favorite, SubscriptionCardRecipient, User } from '@squadhub/shared';
 import type { ActiveSection, HomeView } from '../layouts/MainLayout';
 import { launchApp, type AppDef } from '../config/apps';
@@ -33,6 +34,7 @@ import MobilePartnerHome from './MobilePartnerHome';
 import MobileChat from './MobileChat';
 import MobileDiscover from './MobileDiscover';
 import MobileMore, { MobileSettings, type MoreTarget } from './MobileMore';
+import MobileWorkLocked from './MobileWorkLocked';
 import MobileCreateSheet from './MobileCreateSheet';
 import MobileTour, { hasSeenMobileTour } from './MobileTour';
 import { MAvatar, MIcon, MRow } from './MobileKit';
@@ -107,14 +109,26 @@ export default function MobileShell({
   // its established four-tab navigation.
   const isClient = useIsClient();
   const isPartner = useIsPartner();
+  // A talent who signed in before their first project: Discover is theirs,
+  // Work is shown locked until an assignment opens it (server: workAccess.ts).
+  const workLocked = isWorkLocked(user);
   // Top-level Work | Discover switcher — mirrors Yubo's Swipe / Near you pill.
   // Work = current SquadHub shell; Discover = full Squad Hire talent app (Profiles frontend)
   // embedded with its own bottom nav (TalentBottomNav). Persisted so a refresh keeps the surface.
   const [surface, setSurface] = useState<'work' | 'discover'>(() => {
     if (typeof window === 'undefined') return 'work';
+    if (workLocked) return 'discover';
     try { return (localStorage.getItem('msh-surface') as 'work' | 'discover') || 'work'; } catch { return 'work'; }
   });
   useEffect(() => { try { localStorage.setItem('msh-surface', surface); } catch {} }, [surface]);
+  // `user` arrives a beat after the first render, so the lock can turn on after
+  // the initializer already picked Work. Land them on Discover when it does.
+  const lockLanded = useRef(false);
+  useEffect(() => {
+    if (!workLocked || lockLanded.current) return;
+    lockLanded.current = true;
+    setSurface('discover');
+  }, [workLocked]);
   // Work tabs deliberately exclude Discover — Discover now lives as its own surface with the talent app's bottom nav.
   const tabs = BUSINESS_TABS;
   const { data: discoverPendingData } = useQuery({
@@ -348,6 +362,15 @@ export default function MobileShell({
               onClick={() => setSurface('work')}
             >
               Work
+              {workLocked && (
+                <svg aria-hidden width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2}>
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M16 11V8a4 4 0 10-8 0v3m-1 0h10a2 2 0 012 2v6a2 2 0 01-2 2H7a2 2 0 01-2-2v-6a2 2 0 012-2z"
+                  />
+                </svg>
+              )}
             </button>
             <button
               type="button"
@@ -363,7 +386,11 @@ export default function MobileShell({
         </div>
       )}
 
-      {isPartner && surface === 'discover' ? (
+      {isPartner && workLocked && surface === 'work' ? (
+        <div className="msh-sheet" data-flush="true" style={{ background: '#fff' }}>
+          <MobileWorkLocked onExplore={() => setSurface('discover')} />
+        </div>
+      ) : isPartner && surface === 'discover' ? (
         <div className="msh-sheet" data-flush="true" style={{ background: '#F5F5F6' }}>
           <TalentShell
             channels={channels}

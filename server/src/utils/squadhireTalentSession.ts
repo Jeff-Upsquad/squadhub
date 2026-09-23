@@ -30,6 +30,7 @@ import type { SquadhireSsoSession } from './squadhireSsoShared';
 import { getDefaultRoleIdForUserType } from './defaultRole';
 import type { SquadhireTalentSsoIdentity } from './squadhireTalentSso';
 import { syncTalentActivatedClientSpaces } from './activatedClientSpaces';
+import { unlockPartnerWork } from './workAccess';
 
 /** The only account types a SquadHire talent may sign in as. */
 const PARTNER_USER_TYPES = new Set(['partner', 'partner_employee']);
@@ -63,7 +64,7 @@ async function resolveRoleId(categorySlug: string | null): Promise<string | null
 }
 
 /** Ensure the partner is a member of the main workspace. Existing roles win. */
-async function ensurePartnerWorkspaceMembership(
+export async function ensurePartnerWorkspaceMembership(
   userId: string,
   categorySlug: string | null,
 ): Promise<void> {
@@ -237,6 +238,14 @@ export async function ensureSquadhireTalentProvisioned(
     user = profile;
     created = true;
   }
+
+  // Both callers of this function are entitlement-backed — the assignment
+  // callback checks the local card, and SquadHire only mints an SSO code for a
+  // talent with a live assigned card — so arriving here IS the first work that
+  // opens the Work surface for a talent who signed in to Discover beforehand.
+  await unlockPartnerWork(String(user.id), 'squadhire assignment');
+  (user as Record<string, unknown>).work_unlocked_at =
+    (user.work_unlocked_at as string | null) || new Date().toISOString();
 
   const syncAccess = syncTalentActivatedClientSpaces({
     talentUserId: identity.talent_user_id,
