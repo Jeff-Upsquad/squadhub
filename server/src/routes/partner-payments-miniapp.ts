@@ -5,10 +5,22 @@ import { supabaseAdmin } from '../supabase';
 import { prorateMonthly, activeDaysInMonth } from '../utils/assignmentBilling';
 import { loadCardBilling, resolveTermBilling, type CardBilling } from '../utils/cardBilling';
 import { loadCardHoursCompletions } from '../utils/cardHoursCompletion';
+import {
+  listPaymentStatusesForRecipient,
+  toPartnerFacingStatus,
+  type PartnerFacingStatus,
+} from '../services/partnerPaymentStatus';
 
 // Partner Payments mini app. Partner-facing view of subscription assignment
 // terms: assigned clients (work dates), the month's prorated payout and a
 // derived monthly payouts series with commission status.
+//
+// Payout status comes from the shared `partner_payment_statuses` store (the
+// same rows the admin module and SquadBooks write), mapped through
+// toPartnerFacingStatus(): `on_hold` reads as "pending" here and the internal
+// hold_reason is never sent to this surface. Until that store existed, this
+// route reported a hardcoded "pending" for every month, so partners saw
+// "pending" against payouts that had already been marked paid.
 //
 // Scoping: partner callers always see only their own rows
 // (recipient_id = req.userId — in this context talent and partner assignments
@@ -231,6 +243,8 @@ router.get('/month', async (req: Request, res: Response) => {
       })
       .filter((c) => c.month_active_days > 0);
 
+    // No payout status here: the UI reads the whole series from /history, so
+    // adding it would be a second query per call for a field nothing consumes.
     res.json({
       success: true,
       data: {
@@ -250,10 +264,9 @@ router.get('/month', async (req: Request, res: Response) => {
 });
 
 // GET /partner-payments/history?months=12&recipient_id=
-// Monthly payout series for the last N months (default 12). Commission status
-// is pending by default: nothing is auto-marked paid because no payment
-// record exists upstream yet. Months flip to paid only once real
-// paid-tracking lands.
+// Monthly payout series for the last N months (default 12), each carrying the
+// month's real payout status from the shared store (partner-facing vocabulary
+// only — see toPartnerFacingStatus).
 router.get('/history', async (req: Request, res: Response) => {
   try {
     const scope = await resolveScope(req);
@@ -268,6 +281,12 @@ router.get('/history', async (req: Request, res: Response) => {
     const terms = await fetchTerms(recipientId);
     const cardIds = [...new Set(terms.map((t) => t.card_id))];
     const billing = await loadCardBilling(cardIds);
+    // Terms for one recipient share a recipient_type in practice; take it from
+    // the ledger rather than guessing, since it keys the status rows.
+    const statuses = await listPaymentStatusesForRecipient(
+      terms[0]?.recipient_type ?? 'talent',
+      recipientId,
+    );
 
     const months: { year: number; month: number; key: string }[] = [];
     for (let i = count - 1; i >= 0; i--) {
@@ -328,13 +347,14 @@ router.get('/history', async (req: Request, res: Response) => {
       }
 
       const nextMonth = shiftMonthKey(key, 1);
+      const stored = statuses.get(key);
+      const commissionStatus: PartnerFacingStatus = toPartnerFacingStatus(stored?.status);
       return {
         month: key,
         payments: [...totals.entries()].map(([currency, amount]) => ({ currency, amount })),
-        // Pending by default — see route comment. post_date stays null until
-        // a month is actually marked paid.
-        commission_status: 'pending' as const,
-        post_date: null,
+        commission_status: commissionStatus,
+        // Only a real "paid" carries a date; anything else is still outstanding.
+        post_date: commissionStatus === 'paid' ? stored?.updated_at ?? null : null,
         expected_post_date: `${nextMonth}-01`,
         committed_weekly_hours: Math.round(committedWeekly * 100) / 100,
         lines,

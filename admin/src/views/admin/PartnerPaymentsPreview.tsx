@@ -56,7 +56,7 @@ type MonthData = {
 type PayoutRow = {
   month: string;
   payments: Payment[];
-  commission_status: 'paid' | 'pending';
+  commission_status: 'paid' | 'processing' | 'pending';
   post_date: string | null;
   expected_post_date: string;
   committed_weekly_hours: number;
@@ -104,11 +104,25 @@ function fmtDate(d: string | null) {
   return new Date(`${d}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
-function CommissionChip({ status }: { status: 'paid' | 'pending' }) {
+/**
+ * Payout status as the partner is allowed to see it.
+ *
+ * The server stores a richer internal status (including `on_hold` and a staff
+ * reason) in `partner_payment_statuses`; it collapses a hold to `pending` and
+ * never sends the reason to this surface, so there is nothing to hide here.
+ */
+function CommissionChip({ status }: { status: 'paid' | 'processing' | 'pending' }) {
   if (status === 'paid') {
     return (
       <span className="inline-flex rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
         Paid
+      </span>
+    );
+  }
+  if (status === 'processing') {
+    return (
+      <span className="inline-flex rounded-full bg-sky-100 px-2 py-0.5 text-[10px] font-semibold text-sky-700">
+        Processing
       </span>
     );
   }
