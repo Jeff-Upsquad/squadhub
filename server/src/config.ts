@@ -38,8 +38,10 @@ export const config = {
   cashbookDownloadUrl: process.env.CASHBOOK_DOWNLOAD_URL || '',
 
   // Partner App Versioning
-  partnerAppMinVersion: process.env.PARTNER_APP_MIN_VERSION || '1.0.0',
-  partnerAppDownloadUrl: process.env.PARTNER_APP_DOWNLOAD_URL || '',
+  // The legacy RN/Expo app ended at 1.1.0. Keep the migration metadata on
+  // the native 2.x line and point users at the canonical download page.
+  partnerAppMinVersion: process.env.PARTNER_APP_MIN_VERSION || '2.0.0',
+  partnerAppDownloadUrl: process.env.PARTNER_APP_DOWNLOAD_URL || 'https://squadhub.in/partner-app',
 
   // SquadHire (Profiles) integration — all optional; when unset the outbound
   // webhook logs a no-op and the inbound callback endpoint returns 503, so
