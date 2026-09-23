@@ -55,6 +55,7 @@ import FocusStarButton from '../../../components/pm/FocusStarButton';
 import EstimatePopover from '../../../components/pm/EstimatePopover';
 import LogTimePopover from '../../../components/pm/LogTimePopover';
 import { formatDuration } from '../../../lib/timeDuration';
+import AddEntrySplitButton from './AddEntrySplitButton';
 
 function formatTracked(seconds: number | null | undefined): string {
   if (!seconds) return '';
@@ -457,6 +458,10 @@ export default function TaskDetailPanel({
   const [newItemDrafts, setNewItemDrafts] = useState<Record<string, string>>({});
   const [newChecklistTitle, setNewChecklistTitle] = useState<string | null>(null);
   const [newSubtaskTitle, setNewSubtaskTitle] = useState<string | null>(null);
+  const [newSubtaskSectionTitle, setNewSubtaskSectionTitle] = useState<string | null>(null);
+  const [newSubtaskSectionId, setNewSubtaskSectionId] = useState<string | null>(null);
+  const [checklistFocusId, setChecklistFocusId] = useState<string | null>(null);
+  const checklistInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
   const [mounted, setMounted] = useState(false);
   const [mainCelebrating, setMainCelebrating] = useState(false);
   const [celebratingSubtaskId, setCelebratingSubtaskId] = useState<string | null>(null);
@@ -477,6 +482,18 @@ export default function TaskDetailPanel({
     const id = window.setTimeout(() => setMounted(true), 0);
     return () => window.clearTimeout(id);
   }, [effectiveTaskId]);
+
+  useEffect(() => {
+    if (!checklistFocusId) return undefined;
+    const id = window.requestAnimationFrame(() => {
+      const input = checklistInputRefs.current[checklistFocusId];
+      if (input) {
+        input.focus();
+        setChecklistFocusId(null);
+      }
+    });
+    return () => window.cancelAnimationFrame(id);
+  }, [checklistFocusId, checklists]);
 
   useEffect(() => {
     if (!effectiveTaskId) return undefined;
@@ -807,12 +824,23 @@ export default function TaskDetailPanel({
     const tempId = `temp-${Date.now()}`;
     qc.setQueryData(['task', task.id], (prev: any) => {
       if (!prev) return prev;
-      const nextSubtasks = [...(prev.subtasks || []), { id: tempId, title: val, status: 'todo', _optimistic: true }];
+      const nextSubtasks = [...(prev.subtasks || []), {
+        id: tempId,
+        title: val,
+        status: 'todo',
+        metadata: newSubtaskSectionId ? { subtask_section_id: newSubtaskSectionId } : {},
+        _optimistic: true,
+      }];
       return { ...prev, subtasks: nextSubtasks };
     });
     setNewSubtaskTitle(keepInputOpen ? '' : null);
     createTask.mutate(
-      { title: val, parent_task_id: task.id, list_id: task.list_id },
+      {
+        title: val,
+        parent_task_id: task.id,
+        list_id: task.list_id,
+        ...(newSubtaskSectionId ? { metadata: { subtask_section_id: newSubtaskSectionId } } : {}),
+      },
       {
         onError: () => {
           qc.setQueryData(['task', task.id], (prev: any) => {
@@ -822,6 +850,52 @@ export default function TaskDetailPanel({
         },
       }
     );
+  };
+
+  const addSubtaskSection = (rawTitle: string) => {
+    if (!task) return;
+    const title = rawTitle.trim();
+    if (!title) {
+      setNewSubtaskSectionTitle(null);
+      return;
+    }
+    const id = `subtask-section-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const current = Array.isArray(task.metadata?.subtask_sections)
+      ? task.metadata.subtask_sections.filter((section): section is { id: string; title: string } => (
+          !!section && typeof section === 'object'
+          && typeof (section as { id?: unknown }).id === 'string'
+          && typeof (section as { title?: unknown }).title === 'string'
+        ))
+      : [];
+    updateTask.mutate({
+      id: task.id,
+      metadata: { ...(task.metadata || {}), subtask_sections: [...current, { id, title }] },
+    });
+    setNewSubtaskSectionTitle(null);
+    setNewSubtaskSectionId(id);
+    setNewSubtaskTitle('');
+  };
+
+  const startSubtask = () => {
+    const rawSections = task?.metadata?.subtask_sections;
+    const lastSection = Array.isArray(rawSections) ? rawSections.at(-1) : null;
+    setNewSubtaskSectionId(
+      lastSection && typeof lastSection === 'object' && typeof (lastSection as { id?: unknown }).id === 'string'
+        ? (lastSection as { id: string }).id
+        : null,
+    );
+    setNewSubtaskTitle('');
+  };
+
+  const startChecklistItem = () => {
+    const existing = checklists?.at(-1);
+    if (existing) {
+      setChecklistFocusId(existing.id);
+      return;
+    }
+    createChecklist.mutate('Checklist', {
+      onSuccess: (created) => setChecklistFocusId(created.id),
+    });
   };
 
   const handleCopyLink = async () => {
@@ -883,10 +957,67 @@ export default function TaskDetailPanel({
   const nonAudioAttachments = attachmentsData.filter((a) => !a.mime_type?.startsWith('audio/'));
   const attachmentCount = nonAudioAttachments.length;
   const subtasks = task?.subtasks || [];
+  const subtaskSections = Array.isArray(task?.metadata?.subtask_sections)
+    ? task.metadata.subtask_sections.filter((section): section is { id: string; title: string } => (
+        !!section && typeof section === 'object'
+        && typeof (section as { id?: unknown }).id === 'string'
+        && typeof (section as { title?: unknown }).title === 'string'
+      ))
+    : [];
+  const subtaskSectionIds = new Set(subtaskSections.map((section) => section.id));
   const subtaskDone = subtasks.filter((s: any) => s.status === 'done' || s.status === 'closed' || s.status === 'cancelled').length;
   const checklistItems = (checklists || []).flatMap((c) => c.items || []);
   const progressTotal = subtasks.length + checklistItems.length;
   const progressDone = subtaskDone + checklistItems.filter((i) => i.is_done).length;
+
+  const renderSubtaskRow = (st: any) => {
+    const stDone = st.status === 'done' || st.status === 'closed' || st.status === 'cancelled';
+    const stPerson = st.assignees?.[0];
+    return (
+      <button
+        key={st.id}
+        type="button"
+        className="td-subtask-row"
+        data-done={stDone ? 'true' : 'false'}
+        onClick={() => setActiveTask(st.id)}
+      >
+        <span
+          role="button"
+          tabIndex={0}
+          onClick={(e) => {
+            e.stopPropagation();
+            void handleSubtaskToggle(st, e);
+          }}
+          className="td-checkbox shrink-0"
+          data-done={(stDone || celebratingSubtaskId === st.id) ? 'true' : 'false'}
+          data-celebrating={celebratingSubtaskId === st.id ? 'true' : 'false'}
+          aria-label="Toggle subtask"
+        />
+        <span className="title">{st.title}</span>
+        {st.display_number != null && (
+          <span className="td-subtask-code">SQ-{String(st.display_number).padStart(3, '0')}</span>
+        )}
+        <span className="td-subtask-mini">
+          {st.due_date ? (
+            <span>{new Date(st.due_date).toLocaleDateString([], { month: 'short', day: 'numeric' })}</span>
+          ) : (
+            <span style={{ color: 'var(--sh-ink-4)' }}>—</span>
+          )}
+        </span>
+        {stPerson ? (
+          <span
+            className="td-ava-xs"
+            style={{ background: avatarColor(stPerson.id || stPerson.email), width: 18, height: 18, fontSize: 9 }}
+            title={stPerson.display_name || stPerson.email}
+          >
+            {initialOf(stPerson.display_name || stPerson.email)}
+          </span>
+        ) : (
+          <span className="td-ava-xs" style={{ background: 'var(--surface-alt)', border: '1px dashed var(--sh-hair-2)', width: 18, height: 18 }} aria-hidden />
+        )}
+      </button>
+    );
+  };
 
   // Real change history from the server (field changes, assignees, labels,
   // comments, attachments, move, creation…), already merged + sorted newest-first.
@@ -2061,69 +2192,53 @@ export default function TaskDetailPanel({
                   <span className="td-section-count-strong">{subtaskDone}/{subtasks.length}</span>
                 )}
                 {canEdit && (
-                  <button
-                    type="button"
-                    className="td-section-add-strong"
-                    onClick={() => setNewSubtaskTitle(newSubtaskTitle === null ? '' : newSubtaskTitle)}
-                    disabled={newSubtaskTitle !== null}
-                  >
-                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
-                      <path d="M12 5v14M5 12h14" />
-                    </svg>
-                    Add subtask
-                  </button>
+                  <AddEntrySplitButton
+                    label="Add subtask"
+                    sectionLabel="Create subtask section"
+                    onAdd={startSubtask}
+                    onAddSection={() => {
+                      setNewSubtaskTitle(null);
+                      setNewSubtaskSectionTitle('');
+                    }}
+                    disabled={newSubtaskTitle !== null || newSubtaskSectionTitle !== null}
+                  />
                 )}
               </div>
               {(subtasks.length > 0 || canEdit) && (
                 <div className="td-subtask-list">
-                  {subtasks.map((st: any) => {
-                    const stDone = st.status === 'done' || st.status === 'closed' || st.status === 'cancelled';
-                    const stPerson = st.assignees?.[0];
-                    return (
-                      <button
-                        key={st.id}
-                        type="button"
-                        className="td-subtask-row"
-                        data-done={stDone ? 'true' : 'false'}
-                        onClick={() => setActiveTask(st.id)}
-                      >
-                        <span
-                          role="button"
-                          tabIndex={0}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            void handleSubtaskToggle(st, e);
-                          }}
-                          className="td-checkbox shrink-0"
-                          data-done={(stDone || celebratingSubtaskId === st.id) ? 'true' : 'false'}
-                          data-celebrating={celebratingSubtaskId === st.id ? 'true' : 'false'}
-                          aria-label="Toggle subtask"
-                        />
-                        <span className="title">{st.title}</span>
-                        {st.display_number != null && (
-                          <span className="td-subtask-code">SQ-{String(st.display_number).padStart(3, '0')}</span>
-                        )}
-                        <span className="td-subtask-mini">
-                          {st.due_date ? (
-                            <span>{new Date(st.due_date).toLocaleDateString([], { month: 'short', day: 'numeric' })}</span>
-                          ) : (
-                            <span style={{ color: 'var(--sh-ink-4)' }}>—</span>
-                          )}
-                        </span>
-                        {stPerson ? (
-                          <span
-                            className="td-ava-xs"
-                            style={{ background: avatarColor(stPerson.id || stPerson.email), width: 18, height: 18, fontSize: 9 }}
-                            title={stPerson.display_name || stPerson.email}
-                          >
-                            {initialOf(stPerson.display_name || stPerson.email)}
-                          </span>
-                        ) : (
-                          <span className="td-ava-xs" style={{ background: 'var(--surface-alt)', border: '1px dashed var(--sh-hair-2)', width: 18, height: 18 }} aria-hidden />
-                        )}
-                      </button>
-                    );
-                  })}
+                  {subtasks
+                    .filter((st: any) => !subtaskSectionIds.has(st.metadata?.subtask_section_id))
+                    .map(renderSubtaskRow)}
+                  {subtaskSections.map((section) => (
+                    <div key={section.id} style={{ display: 'contents' }}>
+                      <div className="td-subtask-section">{section.title}</div>
+                      {subtasks
+                        .filter((st: any) => st.metadata?.subtask_section_id === section.id)
+                        .map(renderSubtaskRow)}
+                    </div>
+                  ))}
+                  {canEdit && newSubtaskSectionTitle !== null && (
+                    <input
+                      autoFocus
+                      value={newSubtaskSectionTitle}
+                      onChange={(e) => setNewSubtaskSectionTitle(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          e.currentTarget.blur();
+                        } else if (e.key === 'Escape') {
+                          e.currentTarget.dataset.cancel = 'true';
+                          e.currentTarget.blur();
+                        }
+                      }}
+                      onBlur={(e) => {
+                        if (e.currentTarget.dataset.cancel === 'true') setNewSubtaskSectionTitle(null);
+                        else addSubtaskSection(newSubtaskSectionTitle);
+                      }}
+                      placeholder="Section name, Enter to create"
+                      className="td-section-name-input"
+                    />
+                  )}
                   {canEdit && newSubtaskTitle !== null ? (
                     <input
                       autoFocus
@@ -2147,7 +2262,7 @@ export default function TaskDetailPanel({
                     <button
                       type="button"
                       className="td-subtask-add-row"
-                      onClick={() => setNewSubtaskTitle('')}
+                      onClick={startSubtask}
                     >
                       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
                         <path d="M12 5v14M5 12h14" />
@@ -2170,7 +2285,13 @@ export default function TaskDetailPanel({
                   return <span className="muted">· {done}/{allItems.length}</span>;
                 })()}
                 {canEdit && newChecklistTitle === null && (
-                  <button className="action" onClick={() => setNewChecklistTitle('')}>+ New list</button>
+                  <AddEntrySplitButton
+                    label="Add checklist"
+                    sectionLabel="Create checklist section"
+                    onAdd={startChecklistItem}
+                    onAddSection={() => setNewChecklistTitle('')}
+                    compact
+                  />
                 )}
               </div>
               {canEdit && newChecklistTitle !== null && (
@@ -2181,13 +2302,23 @@ export default function TaskDetailPanel({
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') {
                       const t = newChecklistTitle.trim();
-                      if (t) createChecklist.mutate(t, { onSuccess: () => setNewChecklistTitle(null) });
+                      if (t) createChecklist.mutate(t, {
+                        onSuccess: (created) => {
+                          setNewChecklistTitle(null);
+                          setChecklistFocusId(created.id);
+                        },
+                      });
                       else setNewChecklistTitle(null);
                     } else if (e.key === 'Escape') setNewChecklistTitle(null);
                   }}
                   onBlur={() => {
                     const t = newChecklistTitle.trim();
-                    if (t) createChecklist.mutate(t, { onSuccess: () => setNewChecklistTitle(null) });
+                    if (t) createChecklist.mutate(t, {
+                      onSuccess: (created) => {
+                        setNewChecklistTitle(null);
+                        setChecklistFocusId(created.id);
+                      },
+                    });
                     else setNewChecklistTitle(null);
                   }}
                   placeholder="Checklist name, Enter to create"
@@ -2247,6 +2378,7 @@ export default function TaskDetailPanel({
                         </ul>
                         {canEdit && (
                           <input
+                            ref={(node) => { checklistInputRefs.current[cl.id] = node; }}
                             placeholder="+ Add item"
                             value={newItemDrafts[cl.id] || ''}
                             onChange={(e) => setNewItemDrafts((prev) => ({ ...prev, [cl.id]: e.target.value }))}

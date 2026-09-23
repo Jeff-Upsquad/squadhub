@@ -193,7 +193,7 @@ export async function hydrateSubtasks<T extends { id: string }>(
   const ids = tasks.map(t => t.id);
   const { data: children } = await supabaseAdmin
     .from('tasks')
-    .select('id, title, status, priority, due_date, work_date, parent_task_id, assignee_ids, created_at')
+    .select('id, title, status, priority, due_date, work_date, parent_task_id, assignee_ids, metadata, created_at')
     .in('parent_task_id', ids)
     .order('created_at', { ascending: true });
   const hydratedChildren = await hydrateAssignees(children || []);
@@ -1218,7 +1218,7 @@ router.get('/tasks/:id', async (req: Request, res: Response) => {
     // Fetch subtasks (direct children)
     const { data: subtasks } = await supabaseAdmin
       .from('tasks')
-      .select('id, title, status, priority, due_date, assignee_ids, created_at')
+      .select('id, title, status, priority, due_date, assignee_ids, metadata, created_at')
       .eq('parent_task_id', id)
       .order('created_at', { ascending: true });
 
