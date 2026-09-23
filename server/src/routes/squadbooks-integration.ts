@@ -12,6 +12,7 @@ import {
   upsertPaymentStatus,
   isPaymentStatus,
 } from '../services/partnerPaymentStatus';
+import { computeGrossProfit, type Granularity } from '../utils/grossProfitPeriod';
 
 /**
  * Server-to-server integration API consumed by the sibling SquadBooks app
@@ -24,12 +25,16 @@ import {
  * Exposes:
  *   - the customer-facing subscription catalog (names + per-country customer
  *     prices) and client lookup;
- *   - the Partner Payments read API + payout status store.
+ *   - the Partner Payments read API + payout status store;
+ *   - the Gross Profit read API.
  *
- * The Partner Payments endpoints exist so SquadBooks renders figures computed
- * HERE, by services/partnerPayments.ts, rather than by the hand-ported copy of
- * the math it used to carry (which drifted between manual syncs). SquadBooks
- * must not recompute any of these numbers itself.
+ * The Partner Payments and Gross Profit endpoints exist so SquadBooks renders
+ * figures computed HERE — by services/partnerPayments.ts and
+ * utils/grossProfitPeriod.ts — rather than by the hand-ported copies of the
+ * math it used to carry. Those copies drifted: SquadBooks' Gross Profit was
+ * still bucketing by each card's own currency after this side was changed to
+ * force INR, so the two apps could group the same client differently.
+ * SquadBooks must not recompute any of these numbers itself.
  *
  * Note the asymmetry with the catalog endpoints above: those deliberately
  * withhold partner pricing / margins, but Partner Payments is a back-office
@@ -344,6 +349,34 @@ router.get('/partner-payments/users/:recipientType/:recipientId', async (req: Re
     res.json({ success: true, data });
   } catch (err: any) {
     console.error('SquadBooks partner-payments user detail error:', err);
+    res.status(500).json({ success: false, error: err?.message || 'Internal server error' });
+  }
+});
+
+// ============================================================
+// Gross Profit — same util the admin module's /admin/gross-profit/clients uses.
+// ============================================================
+
+const GP_GRANULARITIES: Granularity[] = ['month', 'quarter', 'year'];
+
+// GET /integrations/squadbooks/gross-profit/clients?granularity=&anchor=&currency=&subscription=
+router.get('/gross-profit/clients', async (req: Request, res: Response) => {
+  try {
+    const granularity = GP_GRANULARITIES.includes(req.query.granularity as Granularity)
+      ? (req.query.granularity as Granularity)
+      : 'month';
+    const anchor = typeof req.query.anchor === 'string' ? req.query.anchor : undefined;
+    const currency =
+      typeof req.query.currency === 'string' && req.query.currency ? req.query.currency : null;
+    const subscription =
+      typeof req.query.subscription === 'string' && req.query.subscription
+        ? req.query.subscription
+        : null;
+
+    const data = await computeGrossProfit({ granularity, anchor, currency, subscription });
+    res.json({ success: true, data });
+  } catch (err: any) {
+    console.error('SquadBooks gross-profit error:', err);
     res.status(500).json({ success: false, error: err?.message || 'Internal server error' });
   }
 });
