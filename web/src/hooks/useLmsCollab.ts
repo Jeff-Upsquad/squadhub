@@ -107,6 +107,38 @@ export function useEditorMutations(draftItemId: string) {
     mutationFn: (id: string) => api.delete(`/lms/collab/lessons/${id}`),
     onSuccess: invalidate,
   });
+  // Move a page/lesson: optionally re-parent it, then write the new sibling
+  // order. The cache is updated optimistically so the tree doesn't snap back
+  // while the two requests land.
+  const moveLesson = useMutation({
+    mutationFn: async ({ id, parentId, parentChanged, orderedIds }: { id: string; parentId: string | null; parentChanged: boolean; orderedIds: string[] }) => {
+      if (parentChanged) await api.patch(`/lms/collab/lessons/${id}`, { parent_lesson_id: parentId });
+      await api.put(`/lms/collab/items/${draftItemId}/lessons/reorder`, {
+        items: orderedIds.map((lessonId, position) => ({ id: lessonId, position })),
+      });
+    },
+    onMutate: async ({ id, parentId, orderedIds }) => {
+      const key = ['lms-collab-full', draftItemId];
+      await qc.cancelQueries({ queryKey: key });
+      const prev = qc.getQueryData<FullItem>(key);
+      if (prev) {
+        const pos = new Map(orderedIds.map((lessonId, i) => [lessonId, i]));
+        qc.setQueryData<FullItem>(key, {
+          ...prev,
+          lessons: prev.lessons
+            .map((l) => ({
+              ...l,
+              parent_lesson_id: l.id === id ? parentId : l.parent_lesson_id,
+              position: pos.get(l.id) ?? l.position,
+            }))
+            .sort((a, b) => a.position - b.position) as FullItem['lessons'],
+        });
+      }
+      return { prev };
+    },
+    onError: (_err, _vars, ctx) => { if (ctx?.prev) qc.setQueryData(['lms-collab-full', draftItemId], ctx.prev); },
+    onSettled: invalidate,
+  });
   // Replace a page's "hidden from" set (roles/users). Overrides come back in
   // the next /full, so just invalidate.
   const setLessonAccess = useMutation({
@@ -140,7 +172,7 @@ export function useEditorMutations(draftItemId: string) {
       api.put(`/lms/collab/blocks/${id}/videos`, { videos }),
     onSuccess: invalidate,
   });
-  return { patchItem, publish, unpublish, addLesson, patchLesson, deleteLesson, setLessonAccess, addBlock, patchBlock, deleteBlock, reorderBlocks, setBlockVideos };
+  return { patchItem, publish, unpublish, addLesson, patchLesson, deleteLesson, moveLesson, setLessonAccess, addBlock, patchBlock, deleteBlock, reorderBlocks, setBlockVideos };
 }
 
 // Read-only share list for an item (who has access, and at what level).
