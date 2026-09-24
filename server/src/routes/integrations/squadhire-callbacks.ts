@@ -90,6 +90,19 @@ const groupMeetNoticeSchema = z
   })
   .strict();
 
+// One-off SquadHire notice for a talent (application approved / rejected).
+// Addressed by email because the talent may not hold a SquadHub account yet —
+// unknown emails are skipped, not errors.
+const talentNoticeSchema = z
+  .object({
+    kind: z.enum(['application_approved', 'application_rejected']),
+    title: z.string().min(1).max(200),
+    body: z.string().max(1000).optional().default(''),
+    route: z.string().max(200).optional().default('/notifications'),
+    emails: z.array(z.string().email()).min(1).max(50),
+  })
+  .strict();
+
 // Assignment-time partner provisioning. The signed caller supplies identity,
 // but the local assigned card is the entitlement: a valid signature alone can
 // never create a partner who is not actually assigned on this SquadHub card.
@@ -675,6 +688,51 @@ router.post(
         return;
       }
       console.error('[squadhire-callback talent/group-meet-notice] error:', err);
+      res.status(500).json({ success: false, error: err?.message || 'Internal server error' });
+    }
+  },
+);
+
+router.post(
+  '/talent/notice',
+  verifySquadhireCallbackSecret,
+  async (req: Request, res: Response) => {
+    try {
+      const body = talentNoticeSchema.parse(req.body);
+      const emails = [...new Set(body.emails.map((e) => e.trim().toLowerCase()).filter(Boolean))];
+      const { data: users, error: userError } = await supabaseAdmin
+        .from('users')
+        .select('id, email')
+        .in('email', emails);
+      if (userError) {
+        res.status(500).json({ success: false, error: userError.message });
+        return;
+      }
+      const rows = (users ?? []).map((u) => ({
+        user_id: u.id as string,
+        type: body.kind,
+        // 'announcement' → the partner app opens the inline detail on tap.
+        reference_type: 'announcement',
+        title: body.title,
+        body: body.body || null,
+        metadata: { route: body.route, notification_kind: body.kind },
+      }));
+      if (rows.length === 0) {
+        res.json({ success: true, data: { inserted: 0 } });
+        return;
+      }
+      const { error: insertError } = await supabaseAdmin.from('notifications').insert(rows);
+      if (insertError) {
+        res.status(500).json({ success: false, error: insertError.message });
+        return;
+      }
+      res.json({ success: true, data: { inserted: rows.length } });
+    } catch (err: any) {
+      if (err instanceof z.ZodError) {
+        res.status(400).json({ success: false, error: err.errors[0].message });
+        return;
+      }
+      console.error('[squadhire-callback talent/notice] error:', err);
       res.status(500).json({ success: false, error: err?.message || 'Internal server error' });
     }
   },
