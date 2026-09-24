@@ -2,21 +2,24 @@ import type { Metadata, Viewport } from 'next';
 import { Plus_Jakarta_Sans, Inter } from 'next/font/google';
 import '../styles/globals.css';
 import '../styles/mobile.css';
+import '../styles/typography.css';
 import Providers from './providers';
 
 // Same faces as admin — Requirement Cards (and other shared admin modules)
 // use `font-[family-name:var(--font-jakarta)]`. Without next/font those
 // variables never resolve to a loaded face and headings fall back to Times.
+// SquadHub Design System type: Jakarta = headings (200–800), Inter = body
+// / UI / numbers (100–900). Full weight + italic ranges; see typography.css.
 const jakarta = Plus_Jakarta_Sans({
-  subsets: ['latin'],
-  weight: ['400', '500', '600', '700', '800'],
+  subsets: ['latin', 'latin-ext'],
+  style: ['normal', 'italic'],
   variable: '--font-jakarta',
   display: 'swap',
 });
 
 const inter = Inter({
-  subsets: ['latin'],
-  weight: ['400', '500', '600', '700'],
+  subsets: ['latin', 'latin-ext'],
+  style: ['normal', 'italic'],
   variable: '--font-inter',
   display: 'swap',
 });
@@ -55,7 +58,7 @@ export default function RootLayout({
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link
-          href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400..800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap"
+          href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&family=Plus+Jakarta+Sans:ital,wght@0,200..800;1,200..800&display=swap"
           rel="stylesheet"
         />
         {/* Anti-flicker: apply dark class before first paint */}

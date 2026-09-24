@@ -1,0 +1,99 @@
+/* ════════════════════════════════════════════════════════════════════
+   SquadHub typography — mirrors typography.css in the SquadHub Design
+   System (claude.ai/design). Two faces only:
+     • Plus Jakarta Sans — headings (h1–h6, .t-display-*, .t-h*)
+     • Inter            — body, UI, labels, numbers
+   Add .t-inter to a heading (or any ancestor) to set it in Inter at the
+   same size with tighter tracking.
+
+   Loaded after globals.css (see app/layout.tsx). Heading defaults sit in
+   @layer base so Tailwind utilities and existing component rules still
+   win — only otherwise-unstyled h1–h6 pick them up.
+   ════════════════════════════════════════════════════════════════════ */
+
+:root {
+  --font-heading: 'Plus Jakarta Sans', 'Inter', system-ui, -apple-system, sans-serif;
+  --font-text:    'Inter', system-ui, -apple-system, sans-serif;
+
+  /* size / line-height / weight / tracking (Jakarta · Inter) */
+  --t-display-2xl-size: 64px;  --t-display-2xl-lh: 1.05; --t-display-2xl-w: 800; --t-display-2xl-tr: -0.035em; --t-display-2xl-tr-i: -0.05em;
+  --t-display-xl-size:  52px;  --t-display-xl-lh:  1.08; --t-display-xl-w:  800; --t-display-xl-tr:  -0.03em;  --t-display-xl-tr-i:  -0.048em;
+  --t-h1-size: 40px; --t-h1-lh: 1.1;  --t-h1-w: 700; --t-h1-tr: -0.03em;   --t-h1-tr-i: -0.045em;
+  --t-h2-size: 32px; --t-h2-lh: 1.15; --t-h2-w: 700; --t-h2-tr: -0.025em;  --t-h2-tr-i: -0.045em;
+  --t-h3-size: 24px; --t-h3-lh: 1.2;  --t-h3-w: 700; --t-h3-tr: -0.02em;   --t-h3-tr-i: -0.04em;
+  --t-h4-size: 20px; --t-h4-lh: 1.25; --t-h4-w: 700; --t-h4-tr: -0.015em;  --t-h4-tr-i: -0.04em;
+  --t-h5-size: 17px; --t-h5-lh: 1.3;  --t-h5-w: 600; --t-h5-tr: -0.01em;   --t-h5-tr-i: -0.025em;
+  --t-h6-size: 15px; --t-h6-lh: 1.35; --t-h6-w: 600; --t-h6-tr: -0.005em;  --t-h6-tr-i: -0.015em;
+
+  --t-body-lg-size: 16px;   --t-body-lg-lh: 1.55;
+  --t-body-size:    14px;   --t-body-lh:    1.5;
+  --t-body-md-size: 13.5px; --t-body-md-lh: 1.45;
+  --t-body-sm-size: 12.5px; --t-body-sm-lh: 1.45;
+  --t-caption-size: 11.5px; --t-caption-lh: 1.35;
+  --t-micro-size:   9.5px;  --t-micro-lh:   1.2;
+  --t-body-tr: -0.012em;
+  --t-stat-size: 28px;
+}
+
+/* ── Plain heading tags: family, weight, tracking ────────────────── */
+@layer base {
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-heading);
+    font-weight: 700;
+    letter-spacing: -0.02em;
+  }
+  h5, h6 { font-weight: 600; letter-spacing: -0.01em; }
+  .t-inter h1, .t-inter h2, .t-inter h3, .t-inter h4, .t-inter h5, .t-inter h6,
+  h1.t-inter, h2.t-inter, h3.t-inter, h4.t-inter, h5.t-inter, h6.t-inter {
+    font-family: var(--font-text);
+    letter-spacing: -0.035em;
+  }
+}
+
+/* ── Heading classes ─────────────────────────────────────────────── */
+.t-display-2xl, .t-display-xl, .t-h1, .t-h2, .t-h3, .t-h4, .t-h5, .t-h6 {
+  font-family: var(--font-heading);
+  margin: 0;
+}
+.t-display-2xl { font-size: var(--t-display-2xl-size); line-height: var(--t-display-2xl-lh); font-weight: var(--t-display-2xl-w); letter-spacing: var(--t-display-2xl-tr); }
+.t-display-xl  { font-size: var(--t-display-xl-size);  line-height: var(--t-display-xl-lh);  font-weight: var(--t-display-xl-w);  letter-spacing: var(--t-display-xl-tr); }
+.t-h1 { font-size: var(--t-h1-size); line-height: var(--t-h1-lh); font-weight: var(--t-h1-w); letter-spacing: var(--t-h1-tr); }
+.t-h2 { font-size: var(--t-h2-size); line-height: var(--t-h2-lh); font-weight: var(--t-h2-w); letter-spacing: var(--t-h2-tr); }
+.t-h3 { font-size: var(--t-h3-size); line-height: var(--t-h3-lh); font-weight: var(--t-h3-w); letter-spacing: var(--t-h3-tr); }
+.t-h4 { font-size: var(--t-h4-size); line-height: var(--t-h4-lh); font-weight: var(--t-h4-w); letter-spacing: var(--t-h4-tr); }
+.t-h5 { font-size: var(--t-h5-size); line-height: var(--t-h5-lh); font-weight: var(--t-h5-w); letter-spacing: var(--t-h5-tr); }
+.t-h6 { font-size: var(--t-h6-size); line-height: var(--t-h6-lh); font-weight: var(--t-h6-w); letter-spacing: var(--t-h6-tr); }
+
+/* Inter variant — same sizes, tighter tracking */
+.t-inter .t-display-2xl, .t-display-2xl.t-inter { font-family: var(--font-text); letter-spacing: var(--t-display-2xl-tr-i); }
+.t-inter .t-display-xl,  .t-display-xl.t-inter  { font-family: var(--font-text); letter-spacing: var(--t-display-xl-tr-i); }
+.t-inter .t-h1, .t-h1.t-inter { font-family: var(--font-text); letter-spacing: var(--t-h1-tr-i); }
+.t-inter .t-h2, .t-h2.t-inter { font-family: var(--font-text); letter-spacing: var(--t-h2-tr-i); }
+.t-inter .t-h3, .t-h3.t-inter { font-family: var(--font-text); letter-spacing: var(--t-h3-tr-i); }
+.t-inter .t-h4, .t-h4.t-inter { font-family: var(--font-text); letter-spacing: var(--t-h4-tr-i); }
+.t-inter .t-h5, .t-h5.t-inter { font-family: var(--font-text); letter-spacing: var(--t-h5-tr-i); }
+.t-inter .t-h6, .t-h6.t-inter { font-family: var(--font-text); letter-spacing: var(--t-h6-tr-i); }
+
+/* ── Body scale (Inter) ──────────────────────────────────────────── */
+.t-lead, .t-body-lg, .t-body, .t-body-md, .t-body-sm, .t-caption, .t-micro {
+  font-family: var(--font-text);
+  letter-spacing: var(--t-body-tr);
+}
+.t-lead, .t-body-lg { font-size: var(--t-body-lg-size); line-height: var(--t-body-lg-lh); font-weight: 400; }
+.t-body    { font-size: var(--t-body-size);    line-height: var(--t-body-lh);    font-weight: 400; }
+.t-body-md { font-size: var(--t-body-md-size); line-height: var(--t-body-md-lh); font-weight: 400; }
+.t-body-sm { font-size: var(--t-body-sm-size); line-height: var(--t-body-sm-lh); font-weight: 400; }
+.t-caption { font-size: var(--t-caption-size); line-height: var(--t-caption-lh); font-weight: 600; letter-spacing: -0.01em; }
+.t-micro   { font-size: var(--t-micro-size);   line-height: var(--t-micro-lh);   font-weight: 600; letter-spacing: 0; }
+
+/* ── Numbers (Inter tabular) ─────────────────────────────────────── */
+.t-stat {
+  font-family: var(--font-text);
+  font-size: var(--t-stat-size);
+  line-height: 1;
+  font-weight: 700;
+  letter-spacing: -0.05em;
+  font-variant-numeric: tabular-nums;
+}
+.t-num,
+.font-mono { font-variant-numeric: tabular-nums; }
