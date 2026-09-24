@@ -4,6 +4,8 @@
 
 Sync an already merged `main` and deploy to production only when the merged change touched deployable code. PD never publishes a desktop app release. Code reaches `origin/main` exclusively through merged PRs; PD does not push feature work.
 
+> **Auto-deploy:** merged PRs now deploy themselves via `.github/workflows/deploy.yml` once CI passes on `main` (see [deploy.md](deploy.md#automatic-deploy-github-actions)). PD's job is then to confirm that run succeeded — check the **Deploy** workflow run for the merge commit — and only fall back to `bash tools/deploy.sh` below if it failed, was blocked by the migrations gate, or the secrets aren't configured.
+
 ## Steps
 
 1. Confirm the primary checkout is on `main`:

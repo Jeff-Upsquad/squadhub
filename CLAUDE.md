@@ -84,6 +84,7 @@ The authoritative SOPs live in `workflows/`. If a workflow is improved, update t
 GitHub Actions now provides:
 
 - `.github/workflows/ci.yml` — shared-import checks, server type-check, and full monorepo builds on pushes to `main` and pull requests.
+- `.github/workflows/deploy.yml` — auto-deploys production (runs `tools/deploy.sh`) after CI passes on `main`; stops if unapplied `supabase/migrations/` are in the range. See `workflows/deploy.md`.
 - `.github/workflows/desktop-app-release.yml` — manual/tag-triggered build of the desktop app (macOS + Windows) and draft GitHub release.
 
 Source-code movement must go through `CMPD` (branch → PR → merge). Never commit+push source directly to `main` — that bypasses the PR gate.
