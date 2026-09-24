@@ -1,9 +1,63 @@
 import { Router, Request, Response } from 'express';
 import fs from 'fs';
 import path from 'path';
+import { z } from 'zod';
 import { config } from '../config';
+import { rateLimit } from '../utils/rateLimit';
 
 const router = Router();
+
+const iosWaitlistSchema = z.object({
+  email: z.string().trim().email().max(320),
+  phone: z.string().trim().regex(/^[+()\d\s-]{10,25}$/),
+}).strict();
+
+router.post(
+  '/ios-waitlist',
+  rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 5,
+    // Caddy appends the actual visitor as the last forwarded hop. This API
+    // runs behind Caddy, while req.ip alone is its Docker gateway address.
+    keyFn: (req) => req.header('x-forwarded-for')?.split(',').at(-1)?.trim() || req.ip || 'unknown',
+  }),
+  async (req: Request, res: Response) => {
+    const parsed = iosWaitlistSchema.safeParse(req.body);
+    if (!parsed.success || parsed.data.phone.replace(/\D/g, '').length < 10 || parsed.data.phone.replace(/\D/g, '').length > 15) {
+      res.status(400).json({ success: false, error: 'Enter a valid email and phone number.' });
+      return;
+    }
+    if (!config.squadhireWebhookUrl || !config.squadhireWebhookSecret) {
+      res.status(503).json({ success: false, error: 'Waitlist is temporarily unavailable. Please try again later.' });
+      return;
+    }
+
+    try {
+      const url = new URL(config.squadhireWebhookUrl);
+      url.pathname = '/api/integrations/squadhub/partner-ios-waitlist';
+      url.search = '';
+      const upstream = await fetch(url.toString(), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-SquadHub-Signature': config.squadhireWebhookSecret,
+        },
+        body: JSON.stringify(parsed.data),
+        signal: AbortSignal.timeout(10_000),
+      });
+      if (!upstream.ok) {
+        console.error('[partner-app/ios-waitlist] SquadHire responded', upstream.status);
+        res.status(503).json({ success: false, error: 'Waitlist is temporarily unavailable. Please try again later.' });
+        return;
+      }
+      // Do not expose whether a given email/phone pair exists in SquadHire.
+      res.json({ success: true });
+    } catch (err) {
+      console.error('[partner-app/ios-waitlist] SquadHire request failed:', (err as Error).message);
+      res.status(503).json({ success: false, error: 'Waitlist is temporarily unavailable. Please try again later.' });
+    }
+  },
+);
 
 // Public — no auth required (visited by partners before they have an account)
 router.get('/app-config', (_req: Request, res: Response) => {

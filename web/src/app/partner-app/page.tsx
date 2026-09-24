@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { usePathname } from 'next/navigation';
 
 // Release manifest served by each app's /version endpoint — the same source of
@@ -87,6 +87,32 @@ export default function AppDownloadLanding() {
   const [manifest, setManifest] = useState<Manifest | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [waitlistOpen, setWaitlistOpen] = useState(false);
+  const [waitlistEmail, setWaitlistEmail] = useState('');
+  const [waitlistPhone, setWaitlistPhone] = useState('');
+  const [waitlistStatus, setWaitlistStatus] = useState<'idle' | 'submitting' | 'success' | 'error'>('idle');
+  const [waitlistError, setWaitlistError] = useState('');
+
+  async function submitWaitlist(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setWaitlistStatus('submitting');
+    setWaitlistError('');
+    try {
+      const response = await fetch('/partner-app/ios-waitlist', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: waitlistEmail, phone: waitlistPhone }),
+      });
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({}));
+        throw new Error(body.error || 'Could not join the waitlist. Please try again.');
+      }
+      setWaitlistStatus('success');
+    } catch (err) {
+      setWaitlistError((err as Error).message);
+      setWaitlistStatus('error');
+    }
+  }
 
   useEffect(() => {
     fetch(versionEndpoint)
@@ -190,6 +216,78 @@ export default function AppDownloadLanding() {
               </div>
             )}
           </div>
+
+          {!isInternal && (
+            <section className="up-card mb-8 p-6 sm:p-8">
+              <div className="up-mono mb-2 text-[10px] text-[#525252]">iPhone / iOS</div>
+              <h2 className="up-heading text-[20px] font-bold tracking-[-0.02em] text-[#0A0A0A]">
+                Join the iOS waiting list
+              </h2>
+              <p className="mt-2 text-[14px] leading-relaxed text-[#525252]">
+                Use the email and phone number registered with your SquadHire account. No SquadHub sign-up is needed.
+              </p>
+
+              {waitlistStatus === 'success' ? (
+                <p role="status" className="mt-5 rounded-xl bg-[#F5F5F2] p-4 text-[14px] leading-relaxed text-[#0A0A0A]">
+                  Thanks. If those details match your SquadHire account, you&apos;re on the list. We&apos;ll email you when the iOS app is ready.
+                </p>
+              ) : !waitlistOpen ? (
+                <button
+                  type="button"
+                  onClick={() => setWaitlistOpen(true)}
+                  className="up-btn-secondary mt-5 inline-flex rounded-full px-5 py-2.5 text-[13px] font-semibold"
+                >
+                  Join iOS waiting list
+                </button>
+              ) : (
+                <form onSubmit={submitWaitlist} className="mt-5 space-y-4">
+                  <div>
+                    <label htmlFor="ios-waitlist-email" className="mb-1.5 block text-[13px] font-semibold text-[#0A0A0A]">
+                      SquadHire email
+                    </label>
+                    <input
+                      id="ios-waitlist-email"
+                      type="email"
+                      required
+                      maxLength={320}
+                      autoComplete="email"
+                      value={waitlistEmail}
+                      onChange={(event) => setWaitlistEmail(event.target.value)}
+                      className="w-full rounded-xl border border-[rgba(0,0,0,0.18)] bg-white px-4 py-3 text-[14px] text-[#0A0A0A] outline-none focus:border-[#0A0A0A]"
+                      placeholder="you@example.com"
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="ios-waitlist-phone" className="mb-1.5 block text-[13px] font-semibold text-[#0A0A0A]">
+                      SquadHire phone number
+                    </label>
+                    <input
+                      id="ios-waitlist-phone"
+                      type="tel"
+                      required
+                      minLength={10}
+                      maxLength={25}
+                      autoComplete="tel"
+                      value={waitlistPhone}
+                      onChange={(event) => setWaitlistPhone(event.target.value)}
+                      className="w-full rounded-xl border border-[rgba(0,0,0,0.18)] bg-white px-4 py-3 text-[14px] text-[#0A0A0A] outline-none focus:border-[#0A0A0A]"
+                      placeholder="+91 98765 43210"
+                    />
+                  </div>
+                  {waitlistStatus === 'error' && (
+                    <p role="alert" className="text-[13px] text-red-700">{waitlistError}</p>
+                  )}
+                  <button
+                    type="submit"
+                    disabled={waitlistStatus === 'submitting'}
+                    className="up-btn inline-flex rounded-full px-6 py-3 text-[13px] font-semibold disabled:opacity-60"
+                  >
+                    {waitlistStatus === 'submitting' ? 'Joining…' : 'Join waiting list'}
+                  </button>
+                </form>
+              )}
+            </section>
+          )}
 
           {/* What's new */}
           {hasDownload && manifest!.release_notes && (
