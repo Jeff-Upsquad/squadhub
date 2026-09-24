@@ -120,9 +120,13 @@
   --color-green: #007A5A;
 
   /* Font families */
-  --font-display: 'Inter', system-ui, -apple-system, sans-serif;
+  /* Typography — SquadHub Design System (2 faces only):
+     Plus Jakarta Sans = headings, Inter = body / UI / numbers.
+     Mono is retired: font-mono resolves to Inter (tabular-nums below). */
+  --font-display: 'Plus Jakarta Sans', 'Inter', system-ui, -apple-system, sans-serif;
   --font-body:    'Inter', system-ui, -apple-system, sans-serif;
-  --font-mono:    'Inter', sans-serif;
+  --font-sans:    'Inter', system-ui, -apple-system, sans-serif;
+  --font-mono:    'Inter', system-ui, sans-serif;
   --font-serif:   'Plus Jakarta Sans', 'Inter', sans-serif;
 }
 
@@ -541,7 +545,7 @@ body {
   .sh-rail-timer .rt-ring[data-running="true"] .rt-ping { animation: none; opacity: 0; }
 }
 
-.sh-view .briefing h2 { font-family: 'Plus Jakarta Sans', 'Inter', sans-serif; font-size: 26px; line-height: 1.22; margin: 10px 0 14px; max-width: 58ch; color: var(--sh-ink); letter-spacing: -0.005em; font-weight: 400; }
+.sh-view .briefing h2 { font-family: 'Plus Jakarta Sans', 'Inter', sans-serif; font-size: 26px; line-height: 1.22; margin: 10px 0 14px; max-width: 58ch; color: var(--sh-ink); letter-spacing: -0.02em; font-weight: 700; }
 .sh-view .briefing h2 mark { background: linear-gradient(transparent 62%, var(--sh-ink) 62%, var(--sh-ink) 96%, transparent 96%); color: inherit; padding: 0 2px; }
 .sh-view .briefing .chips { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 12px; }
 .sh-view .chip { font-size: 11.5px; padding: 3px 9px; border-radius: 999px; background: var(--sh-hair-3); color: var(--sh-ink-2); border: 1px solid var(--sh-hair); cursor: pointer; }
@@ -889,7 +893,7 @@ body.sb-resizing { user-select: none; -webkit-user-select: none; cursor: col-res
 .sh-view.day-planner-view { display: grid; grid-template-columns: 420px 1fr; height: 100%; }
 .sh-view .dp-list { border-right: 1px solid var(--sh-hair); overflow-y: auto; background: var(--surface); }
 .sh-view .dp-list-head { display: flex; align-items: center; justify-content: space-between; padding: 14px 18px; border-bottom: 1px solid var(--sh-hair); position: sticky; top: 0; background: var(--surface); z-index: 2; }
-.sh-view .dp-list-head h2 { font-family: 'Plus Jakarta Sans', 'Inter', sans-serif; font-size: 22px; font-weight: 400; letter-spacing: -0.01em; margin: 0; color: var(--sh-ink); }
+.sh-view .dp-list-head h2 { font-family: 'Plus Jakarta Sans', 'Inter', sans-serif; font-size: 22px; font-weight: 700; letter-spacing: -0.02em; margin: 0; color: var(--sh-ink); }
 .sh-view .dp-list-head .sub { font-size: 11.5px; color: var(--sh-ink-4); margin-top: 2px; font-family: 'Inter', sans-serif; text-transform: uppercase; letter-spacing: 0.08em; }
 .sh-view .dp-empty { padding: 32px 18px; text-align: center; color: var(--sh-ink-4); font-size: 13px; }
 
@@ -954,7 +958,7 @@ body.sb-resizing { user-select: none; -webkit-user-select: none; cursor: col-res
 .sh-view .td-cal-embed { display: flex; flex-direction: column; }
 .sh-view .td-cal-embed > .dp-calendar { flex: 1; min-height: 0; }
 .sh-view .dp-cal-head { display: flex; align-items: center; justify-content: space-between; padding: 14px 22px; border-bottom: 1px solid var(--sh-hair); position: sticky; top: 0; background: var(--surface); z-index: 4; gap: 16px; }
-.sh-view .dp-cal-head h2 { font-family: 'Plus Jakarta Sans', 'Inter', sans-serif; font-size: 22px; font-weight: 400; letter-spacing: -0.01em; margin: 0 0 0 10px; color: var(--sh-ink); white-space: nowrap; }
+.sh-view .dp-cal-head h2 { font-family: 'Plus Jakarta Sans', 'Inter', sans-serif; font-size: 22px; font-weight: 700; letter-spacing: -0.02em; margin: 0 0 0 10px; color: var(--sh-ink); white-space: nowrap; }
 .sh-view .dp-cal-nav { display: flex; align-items: center; gap: 4px; min-width: 0; }
 .sh-view .dp-cal-nav .nav-btn { width: 26px; height: 26px; display: grid; place-items: center; border: 1px solid var(--sh-hair); border-radius: 7px; background: var(--surface); color: var(--sh-ink-3); cursor: pointer; }
 .sh-view .dp-cal-nav .nav-btn:hover { background: var(--sh-hair-3); color: var(--sh-ink); border-color: var(--sh-hair-2); }
@@ -1033,7 +1037,7 @@ body.sb-resizing { user-select: none; -webkit-user-select: none; cursor: col-res
 /* ---- Left palette ---- */
 .cal-palette { border-right: 1px solid var(--sh-hair); overflow-y: auto; background: var(--surface); display: flex; flex-direction: column; }
 .cal-palette-head { padding: 14px 16px 12px; border-bottom: 1px solid var(--sh-hair); position: sticky; top: 0; background: var(--surface); z-index: 2; }
-.cal-palette-head h2 { font-family: 'Plus Jakarta Sans', 'Inter', sans-serif; font-size: 21px; font-weight: 400; letter-spacing: -0.01em; margin: 0; color: var(--sh-ink); }
+.cal-palette-head h2 { font-family: 'Plus Jakarta Sans', 'Inter', sans-serif; font-size: 21px; font-weight: 700; letter-spacing: -0.02em; margin: 0; color: var(--sh-ink); }
 .cal-palette-head .sub { font-size: 11px; color: var(--sh-ink-4); margin-top: 2px; font-family: 'Inter', sans-serif; text-transform: uppercase; letter-spacing: 0.08em; }
 .cal-seg { display: inline-flex; margin-top: 11px; border: 1px solid var(--sh-hair); border-radius: 8px; padding: 2px; background: var(--sh-hair-3); gap: 2px; }
 .cal-seg button { border: none; background: transparent; color: var(--sh-ink-3); font-size: 11.5px; font-weight: 500; padding: 4px 10px; border-radius: 6px; cursor: pointer; transition: background .12s, color .12s; }
@@ -1079,7 +1083,7 @@ body.sb-resizing { user-select: none; -webkit-user-select: none; cursor: col-res
 .cal-today-btn { height: 28px; padding: 0 11px; margin-left: 2px; border: 1px solid var(--sh-hair); border-radius: 7px; background: var(--surface); color: var(--sh-ink-2); font-size: 12px; font-weight: 500; cursor: pointer; }
 .cal-today-btn:hover { background: var(--sh-hair-3); color: var(--sh-ink); }
 .cal-head-title { min-width: 0; }
-.cal-head-title h2 { font-family: 'Plus Jakarta Sans', 'Inter', sans-serif; font-size: 21px; font-weight: 400; letter-spacing: -0.01em; margin: 0; color: var(--sh-ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cal-head-title h2 { font-family: 'Plus Jakarta Sans', 'Inter', sans-serif; font-size: 21px; font-weight: 700; letter-spacing: -0.02em; margin: 0; color: var(--sh-ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .cal-head-sub { font-size: 11px; color: var(--sh-ink-4); font-family: 'Inter', sans-serif; text-transform: uppercase; letter-spacing: 0.06em; }
 .cal-head-tools { display: inline-flex; align-items: center; gap: 8px; flex-shrink: 0; }
 .cal-modes { display: inline-flex; border: 1px solid var(--sh-hair); border-radius: 8px; padding: 2px; background: var(--sh-hair-3); gap: 2px; flex-shrink: 0; }
@@ -1198,7 +1202,7 @@ body.sb-resizing { user-select: none; -webkit-user-select: none; cursor: col-res
 .sh-view .tasks-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; padding-bottom: 18px; border-bottom: 1px solid var(--sh-hair); margin-bottom: 18px; }
 .sh-view .tasks-head > div:first-child { flex: 1; min-width: 0; }
 .sh-view .tasks-head > div:last-child { flex: none; display: flex; gap: 6px; }
-.sh-view .tasks-head h1 { font-family: 'Plus Jakarta Sans', 'Inter', sans-serif; font-size: 40px; margin: 0; letter-spacing: -0.01em; font-weight: 400; }
+.sh-view .tasks-head h1 { font-family: 'Plus Jakarta Sans', 'Inter', sans-serif; font-size: 40px; margin: 0; letter-spacing: -0.03em; font-weight: 700; }
 .sh-view .tasks-head .sub { color: var(--sh-ink-3); margin-top: 6px; }
 .sh-view .tasks-filters { display: flex; gap: 4px; margin-bottom: 16px; }
 .sh-view .task-table { border: 1px solid var(--sh-hair); border-radius: 14px; overflow: hidden; background: var(--surface); }
@@ -4880,7 +4884,7 @@ textarea.td-about.td-desc-edit {
   border-radius: 999px;
 }
 .td-submeta-id {
-  font-family: ui-monospace, 'SF Mono', monospace;
+  font-family: 'Inter', system-ui, sans-serif; font-variant-numeric: tabular-nums;
   font-size: 11px;
   letter-spacing: 0.02em;
   color: var(--sq-gray-500);
@@ -9992,15 +9996,15 @@ html[data-theme="noir"] .inbox-slider-panel {
    card on the warm canvas; inside it, grey rounded wells instead of
    bordered boxes, a black primary pill, and sentence-case section heads.
 
-   Type: one face — Plus Jakarta Sans for the title, headings, labels,
-   values and body alike. Behaviour untouched.
+   Type: Plus Jakarta Sans for the title and headings, Inter for labels,
+   values and body (SquadHub Design System). Behaviour untouched.
    ════════════════════════════════════════════════════════════════════ */
 .td-panel,
 .td-panel-luma,
 .td-panel-luma.apple.td-shell {
   --td-font-sans: 'Plus Jakarta Sans', 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;
-  --td-font-body: 'Plus Jakarta Sans', 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;
-  --td-font-mono: 'Plus Jakarta Sans', 'Inter', ui-sans-serif, system-ui, sans-serif;
+  --td-font-body: 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --td-font-mono: 'Inter', ui-sans-serif, system-ui, sans-serif;
   --td-well:       #f5f4f2;
   --td-well-2:     #edecea;
   --td-line:       rgba(0,0,0,.055);
