@@ -1860,12 +1860,16 @@ export default function MainLayout() {
           to let its own chapter/page nav take over. */}
       {currentWorkspace && !(activeSection === 'learning' && learningActiveItemId) && (
         <div
-          className={`sh-mod-side flex shrink-0 flex-col overflow-hidden relative z-[2] my-3 rounded-[22px] ${
-            resizingSidebar ? '' : 'transition-[width] duration-200 ease-in-out'
-          } ${sidebarOpen ? '' : 'w-0'}`}
+          className={`sh-mod-side sh-mod-side-animated flex shrink-0 flex-col overflow-hidden relative z-[2] my-3 rounded-[22px] ${
+            resizingSidebar ? 'sh-mod-side-resizing' : ''
+          }`}
           style={{ boxShadow: 'var(--sh-sidebar-drop)', width: sidebarOpen ? sidebarWidth : 0 }}
+          aria-hidden={!sidebarOpen}
+          inert={!sidebarOpen}
         >
-          {renderModuleSidebar(activeSection, homeView)}
+          <div className="sh-mod-side-content flex h-full shrink-0 flex-col" style={{ width: sidebarWidth }}>
+            {renderModuleSidebar(activeSection, homeView)}
+          </div>
           {sidebarOpen && !isMobile && (
             <div
               className="sb-resize"
@@ -1882,11 +1886,12 @@ export default function MainLayout() {
           )}
         </div>
       )}
-      {!sidebarOpen && (
+      <div className="sh-sidebar-open-slot hidden md:block self-start mt-5 shrink-0" data-open={!sidebarOpen} aria-hidden={sidebarOpen}>
         <button
           type="button"
           onClick={() => setSidebarOpen(true)}
-          className="hidden md:grid self-start mt-5 ml-1 h-8 w-7 place-items-center rounded-[10px] bg-[var(--surface)] text-[var(--sh-ink-3)] hover:text-[var(--sh-ink)] shadow-[inset_1px_1px_1px_0_rgba(255,255,255,.9)]"
+          tabIndex={sidebarOpen ? -1 : 0}
+          className="grid h-8 w-7 place-items-center rounded-[10px] bg-[var(--surface)] text-[var(--sh-ink-3)] hover:text-[var(--sh-ink)] shadow-[inset_1px_1px_1px_0_rgba(255,255,255,.9)]"
           title="Open sidebar"
           aria-label="Open sidebar"
         >
@@ -1894,7 +1899,7 @@ export default function MainLayout() {
             <path d="M9 6l6 6-6 6" />
           </svg>
         </button>
-      )}
+      </div>
       </aside>
 
       {/* Main content area */}
