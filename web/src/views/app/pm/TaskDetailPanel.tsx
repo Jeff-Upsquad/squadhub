@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { useQueryClient, useQuery } from '@tanstack/react-query';
 import { usePMStore } from '../../../stores/pmStore';
 import { sourceFromComment, useConvertToTaskStore } from '../../../stores/convertToTaskStore';
+import { useDeepLinkStore } from '../../../lib/deepLinks';
 import { useTask, useUpdateTask, useDeleteTask, useTaskComments, useAddComment, useCreateTask, useTaskLists, useAddTaskToLists, useRemoveTaskFromList, useTaskActivity } from '../../../hooks/useTasks';
 import { useFocusTask } from '../../../hooks/useDayPlanner';
 import { isTaskFocused } from '../../../lib/taskGrouping';
@@ -335,6 +336,22 @@ export default function TaskDetailPanel({
   const isFocused = task ? isTaskFocused(task) : false;
   const { data: comments } = useTaskComments(effectiveTaskId);
   const openConvertToTask = useConvertToTaskStore((s) => s.open);
+  // "Open comment" deep link: once this task's comments load, scroll to the
+  // target and keep it highlighted until another task/comment is opened.
+  const pendingCommentId = useDeepLinkStore((s) => s.pendingCommentId);
+  const [highlightCommentId, setHighlightCommentId] = useState<string | null>(null);
+  // Declared first so, when a cached task opens with the target, the reset
+  // runs before the effect below sets the new highlight.
+  useEffect(() => { setHighlightCommentId(null); }, [effectiveTaskId]);
+  useEffect(() => {
+    if (!pendingCommentId || !comments?.some((c) => c.id === pendingCommentId)) return;
+    const id = pendingCommentId;
+    useDeepLinkStore.getState().setPendingComment(null);
+    setHighlightCommentId(id);
+    requestAnimationFrame(() => {
+      document.querySelector(`[data-comment-id="${id}"]`)?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    });
+  }, [pendingCommentId, comments]);
   const { data: taskTypes } = useTaskTypes();
   const { data: checklists } = useChecklists(effectiveTaskId);
   const updateTask = useUpdateTask(listId);
@@ -2469,7 +2486,11 @@ export default function TaskDetailPanel({
               {comments && comments.length > 0 ? (
                 <div className="flex flex-col gap-3 mt-3">
                   {comments.map((c) => (
-                    <div key={c.id} className="td-comment flex gap-3">
+                    <div
+                      key={c.id}
+                      data-comment-id={c.id}
+                      className={`td-comment flex gap-3${highlightCommentId === c.id ? ' is-linked' : ''}`}
+                    >
                       <span
                         className="td-ava-sm shrink-0"
                         style={{ background: avatarColor(c.user?.id || c.user?.email), borderRadius: '50%', width: 26, height: 26, fontSize: 10 }}

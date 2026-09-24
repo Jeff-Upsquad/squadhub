@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import type { Message, TaskComment } from '@squadhub/shared';
+import { commentLink, messageLink } from '../lib/deepLinks';
 
 // "Convert to task" — turns a chat message, a whole thread, or a task comment
 // into a prefilled TaskCreatePanel. Callers build a ConvertSource with one of
@@ -84,12 +85,27 @@ function quoteLine(m: Message): string {
   return `${who} · ${formatWhen(m.created_at)}\n${messageBody(m)}`;
 }
 
+// Deep link back to a chat message (null for a message with no conversation).
+function linkToMessage(m: Message, parentId: string | null): string | null {
+  const conversationId = m.channel_id || m.dm_conversation_id;
+  if (!conversationId) return null;
+  return messageLink({ conversationId, kind: m.channel_id ? 'channel' : 'dm', messageId: m.id, parentId });
+}
+
+function withLink(text: string, label: string, url: string | null): string {
+  return url ? `${text}\n${label}: ${url}` : text;
+}
+
 export function sourceFromMessage(message: Message, contextLabel?: string): ConvertSource {
   const where = contextLabel ? ` in ${contextLabel}` : '';
   return {
     kind: 'message',
     title: titleFromText(message.content || '', messageTitleFallback(message)),
-    description: `${messageBody(message)}\n\n— From chat${where}: ${message.sender?.display_name || 'Someone'}, ${formatWhen(message.created_at)}`,
+    description: withLink(
+      `${messageBody(message)}\n\n— From chat${where}: ${message.sender?.display_name || 'Someone'}, ${formatWhen(message.created_at)}`,
+      'Open message',
+      linkToMessage(message, message.parent_message_id ?? null),
+    ),
   };
 }
 
@@ -101,7 +117,12 @@ export function sourceFromThread(root: Message, replies: Message[], contextLabel
   return {
     kind: 'thread',
     title: titleFromText(root.content || '', messageTitleFallback(root)),
-    description: `${transcript}\n\n— From a chat thread${where} (${count} ${count === 1 ? 'reply' : 'replies'})`,
+    description: withLink(
+      `${transcript}\n\n— From a chat thread${where} (${count} ${count === 1 ? 'reply' : 'replies'})`,
+      'Open thread',
+      // parentId = the root's own id opens the thread panel on it.
+      linkToMessage(root, root.id),
+    ),
   };
 }
 
@@ -114,7 +135,11 @@ export function sourceFromComment(
   return {
     kind: 'comment',
     title: titleFromText(comment.content || '', `Follow up on “${parentTask.title}”`),
-    description: `${comment.content}\n\n— From a comment by ${who} on “${parentTask.title}”, ${formatWhen(comment.created_at)}`,
+    description: withLink(
+      `${comment.content}\n\n— From a comment by ${who} on “${parentTask.title}”, ${formatWhen(comment.created_at)}`,
+      'Open comment',
+      commentLink(comment.task_id, comment.id),
+    ),
     spaceId: spaceId ?? null,
     listId: parentTask.list_id,
   };

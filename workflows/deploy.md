@@ -12,7 +12,17 @@ Deploy SquadHub to the Hostinger VPS running Docker Compose. The stack is: Caddy
 2. Commit and push to `origin/main`
 3. If there are DB migrations in `supabase/migrations/`, run them in the [Supabase SQL Editor](https://supabase.com/dashboard) **before** deploying code
 
-## Deploy
+## Automatic deploy (GitHub Actions)
+
+`.github/workflows/deploy.yml` runs `bash tools/deploy.sh` on a GitHub runner after **CI passes on `main`** — i.e. every merged PR deploys itself; nobody needs to pull or deploy from a Mac.
+
+- **Migrations gate:** before deploying it diffs the VPS's current commit against `main`. If new files appear under `supabase/migrations/`, the run fails without deploying. Apply the migration to production (see Pre-Deploy), then open Actions → **Deploy** → **Run workflow** and tick *migrations_applied*.
+- **Manual deploy / re-run:** Actions → **Deploy** → **Run workflow**.
+- **Secrets:** `VPS_SSH_KEY` (a deploy-only private key; its public half is in the VPS root `authorized_keys`) and `VPS_KNOWN_HOSTS` (`ssh-keyscan -t ed25519 72.61.245.97` output). Without them the run fails at "Configure SSH".
+- **Serialized:** the `deploy-production` concurrency group plus the VPS flock mean runs never overlap; a hand-run `deploy.sh` still queues safely against an Actions run.
+- The R2 CORS auto-apply step in `deploy.sh` needs local credentials and is non-fatal; if `tools/set-r2-cors.ts` changes, apply it by hand.
+
+## Deploy (by hand)
 
 Run the deploy script from the repo root:
 

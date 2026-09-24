@@ -1,6 +1,7 @@
 import React from 'react';
 import { URL_PATTERN, splitTrailingPunct, toHref } from './urlPattern';
 import { openExternalUrl } from './openExternal';
+import { dispatchDeepLink, isInAppDeepLink } from './deepLinks';
 
 const URL_RE = new RegExp(URL_PATTERN, 'gi');
 
@@ -23,7 +24,9 @@ export function linkifyText(text: string): React.ReactNode {
         onClick={(e) => {
           e.preventDefault();
           e.stopPropagation();
-          openExternalUrl(href);
+          // Links to a SquadHub message/thread/comment navigate in place.
+          if (isInAppDeepLink(href)) dispatchDeepLink(href);
+          else openExternalUrl(href);
         }}
         className="underline text-[var(--sh-accent)] hover:opacity-80"
       >
