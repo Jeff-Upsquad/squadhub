@@ -5916,6 +5916,14 @@ button.td-bcrumb:hover .name { color: var(--sh-ink); }
 .td-comment-convert:focus-visible { opacity: 1; }
 .td-comment-convert:hover { color: var(--sh-ink); background: var(--sh-bg-hover, var(--sh-bg-soft)); }
 @media (hover: none) { .td-comment-convert { opacity: 1; } }
+/* Comment reached via an "Open comment" link. */
+.td-comment.is-linked {
+  margin: -6px -8px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--sh-accent) 10%, transparent);
+  box-shadow: inset 2px 0 0 var(--sh-accent);
+}
 
 /* Activity disclosure */
 .td-activity-toggle {

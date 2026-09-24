@@ -22,6 +22,7 @@ import ChatSearch from '../views/app/chat/ChatSearch';
 import CreateChannelModal from '../views/app/chat/CreateChannelModal';
 import GlobalCreateTaskModal from '../views/app/pm/GlobalCreateTaskModal';
 import ConvertToTaskModal from '../views/app/pm/ConvertToTaskModal';
+import { DEEP_LINK_EVENT, useDeepLinkStore } from '../lib/deepLinks';
 import type { SavedDraft } from '../stores/draftTaskStore';
 import ToastContainer from '../components/Toast';
 import { useWorkBlockNotifier } from '../hooks/useWorkBlockNotifier';
@@ -849,23 +850,49 @@ export default function MainLayout() {
     window.__pendingInboxNotificationId = notificationId;
   };
 
-  // Deep link handler — desktop companion / browser notification clicks
+  // Deep link handler — desktop companion / browser notification clicks, plus
+  // in-app links (e.g. a converted task's "Open original" link), which arrive
+  // via DEEP_LINK_EVENT instead of a page load.
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const openTask = params.get('open_task');
-    const openChannel = params.get('open_channel');
-    const openInbox = params.get('open_inbox');
-    if (openInbox) {
-      openInboxNotification(openInbox);
-      window.history.replaceState({}, '', window.location.pathname);
-    } else if (openTask) {
-      usePMStore.getState().setActiveTask(openTask);
-      window.history.replaceState({}, '', window.location.pathname);
-    } else if (openChannel) {
-      setActiveChannel(openChannel);
-      setHomeView('chat');
+    const handle = (params: URLSearchParams) => {
+      const openTask = params.get('open_task');
+      const openChannel = params.get('open_channel');
+      const openInbox = params.get('open_inbox');
+      const openMessage = params.get('open_message');
+      const conv = params.get('conv');
+      if (openInbox) {
+        openInboxNotification(openInbox);
+      } else if (openMessage && conv) {
+        const kind: ChatKind = params.get('kind') === 'dm' ? 'dm' : 'channel';
+        setActiveSection('home');
+        setActiveChannel(conv, kind);
+        setHomeView('chat');
+        useWorkspaceStore.getState().requestMessageJump({
+          conversationId: conv,
+          kind,
+          messageId: openMessage,
+          parentId: params.get('parent'),
+        });
+      } else if (openTask) {
+        useDeepLinkStore.getState().setPendingComment(params.get('comment'));
+        usePMStore.getState().setActiveTask(openTask);
+      } else if (openChannel) {
+        setActiveChannel(openChannel);
+        setHomeView('chat');
+      } else {
+        return false;
+      }
+      return true;
+    };
+    if (handle(new URLSearchParams(window.location.search))) {
       window.history.replaceState({}, '', window.location.pathname);
     }
+    const onDeepLink = (e: Event) => {
+      const href = (e as CustomEvent<{ href: string }>).detail?.href;
+      if (href) handle(new URL(href, window.location.origin).searchParams);
+    };
+    window.addEventListener(DEEP_LINK_EVENT, onDeepLink);
+    return () => window.removeEventListener(DEEP_LINK_EVENT, onDeepLink);
   }, [setActiveChannel]);
 
   useEffect(() => {
