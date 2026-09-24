@@ -146,6 +146,16 @@ export interface CreateTaskPayload {
   priority?: TaskPriority;
   work_date?: string | null;
   assignee_ids?: string[];
+  time_estimate?: number;
+  start_timer?: boolean;
+}
+
+/** Record a manual time entry. Durations are seconds; estimates are minutes. */
+export function logTaskTime(taskId: string, durationSeconds: number, startedAt: string): Promise<{ id: string }> {
+  return apiJson<{ id: string }>(`/pm/tasks/${taskId}/time-entries`, {
+    method: 'POST',
+    body: JSON.stringify({ started_at: startedAt, duration_seconds: durationSeconds, source: 'manual' }),
+  });
 }
 
 /** GET /pm/labels?list_id=xxx — labels visible for a list's workspace (draft mode). */

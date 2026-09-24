@@ -227,9 +227,10 @@ body.qa-window {
 
 .qa-scroll {
   height: 100vh;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
   background: transparent;
-  padding: 10px 10px 0;
+  padding: 10px;
 }
 
 .qa {
@@ -554,6 +555,38 @@ body.qa-window {
   border: 1px solid var(--border);
   border-radius: 10px;
   overflow: hidden;
+}
+
+.qa-duration-menu {
+  padding: 10px 12px;
+}
+
+.qa-duration-label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.qa-duration-input {
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 7px 9px;
+}
+
+.qa-duration-input[aria-invalid="true"] {
+  border-color: var(--danger);
+}
+
+.qa-duration-hint,
+.qa-duration-readback {
+  margin-top: 7px;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.qa-duration-readback {
+  color: var(--text);
 }
 
 .qa-search {

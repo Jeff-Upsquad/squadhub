@@ -42,6 +42,8 @@ const createSchema = z.object({
   task_type_id: z.string().uuid().nullable().optional(),
   parent_task_id: z.string().uuid().nullable().optional(),
   assignee_ids: z.array(z.string().uuid()).optional(),
+  time_estimate: z.number().int().min(0).nullable().optional(),
+  start_timer: z.boolean().optional(),
   metadata: z.record(z.string(), z.any()).optional(),
   recurrence: recurrenceSchema.nullable().optional(),
   // Client platform that created the task (web|mobile_web|desktop_app|companion|
@@ -1396,6 +1398,81 @@ router.get('/tasks/:id', async (req: Request, res: Response) => {
   }
 });
 
+// A companion-created timer starts at task creation. Until Squadra opens, the
+// marker lives on the task so its original start survives app/browser restarts.
+// Claiming removes it exactly once; the web app then owns the running timer in
+// its existing persisted PM store and logs it through the normal time API.
+router.get('/companion-timers', async (req: Request, res: Response) => {
+  try {
+    const { data, error } = await supabaseAdmin
+      .from('tasks')
+      .select('id, title, list_id, time_tracked, metadata')
+      .eq('created_by', req.userId!)
+      .contains('metadata', { companion_timer_pending: true })
+      .order('created_at', { ascending: true })
+      .limit(20);
+    if (error) throw error;
+    res.json({ success: true, data: (data || []).map((task: any) => ({
+      id: task.id,
+      title: task.title,
+      list_id: task.list_id,
+      time_tracked: task.time_tracked || 0,
+      started_at: task.metadata?.companion_timer_started_at,
+    })).filter((task: any) => typeof task.started_at === 'string') });
+  } catch (err) {
+    console.error('Get companion timers error:', err);
+    res.status(500).json({ success: false, error: 'Could not load companion timers' });
+  }
+});
+
+router.post('/tasks/:id/companion-timer/claim', async (req: Request, res: Response) => {
+  try {
+    const { data: task, error } = await supabaseAdmin
+      .from('tasks')
+      .select('id, title, list_id, time_tracked, metadata')
+      .eq('id', req.params.id as string)
+      .eq('created_by', req.userId!)
+      .maybeSingle();
+    if (error) throw error;
+    const metadata = (task as any)?.metadata || {};
+    const startedAt = metadata.companion_timer_started_at;
+    if (!task || !metadata.companion_timer_pending || typeof startedAt !== 'string') {
+      res.status(409).json({ success: false, error: 'This timer has already been picked up' });
+      return;
+    }
+    const level = await checkResourceAccess(req.userId!, 'list', (task as any).list_id);
+    if (!level || !meetsAccessLevel(level, 'member')) {
+      res.status(403).json({ success: false, error: 'Member access required to track time' });
+      return;
+    }
+    const nextMetadata = { ...metadata };
+    delete nextMetadata.companion_timer_pending;
+    delete nextMetadata.companion_timer_started_at;
+    const { data: claimed, error: claimError } = await supabaseAdmin
+      .from('tasks')
+      .update({ metadata: nextMetadata })
+      .eq('id', task.id)
+      .contains('metadata', { companion_timer_pending: true, companion_timer_started_at: startedAt })
+      .select('id')
+      .maybeSingle();
+    if (claimError) throw claimError;
+    if (!claimed) {
+      res.status(409).json({ success: false, error: 'This timer has already been picked up' });
+      return;
+    }
+    res.json({ success: true, data: {
+      id: task.id,
+      title: task.title,
+      list_id: task.list_id,
+      time_tracked: (task as any).time_tracked || 0,
+      started_at: startedAt,
+    } });
+  } catch (err) {
+    console.error('Claim companion timer error:', err);
+    res.status(500).json({ success: false, error: 'Could not start the task timer' });
+  }
+});
+
 // POST /pm/tasks — requires member access on the list
 router.post('/tasks', async (req: Request, res: Response) => {
   try {
@@ -1491,13 +1568,16 @@ router.post('/tasks', async (req: Request, res: Response) => {
       description: body.description || null,
       status: body.status || defaultStatus,
       priority: body.priority || 'none',
+      time_estimate: body.time_estimate ?? null,
       due_date: body.due_date || null,
       work_date: body.work_date || null,
       start_date: body.start_date || null,
       task_type_id: resolvedTypeId,
       parent_task_id: body.parent_task_id || null,
       assignee_ids: mergedAssigneeIds,
-      metadata: body.metadata || {},
+      metadata: body.start_timer
+        ? { ...(body.metadata || {}), companion_timer_pending: true, companion_timer_started_at: new Date().toISOString() }
+        : body.metadata || {},
       created_by: req.userId!,
       created_via: resolveClientSource(req, { explicit: (body as any).client_source }),
     };
