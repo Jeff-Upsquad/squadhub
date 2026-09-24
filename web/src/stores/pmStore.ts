@@ -220,6 +220,7 @@ interface PMState {
   markFading: (taskId: string, prevStatus: string) => void;
   unmarkFading: (taskId: string) => void;
   startParallelTimer: (taskId: string, taskTitle: string, listId: string, baseTracked: number) => { shares: TimerShare[] } | null;
+  adoptCompanionTimer: (taskId: string, taskTitle: string, listId: string, baseTracked: number, startedAt: number) => { shares: TimerShare[] } | null;
   stopParallelTimer: (taskId: string) => { stopped: TimerState; shares: TimerShare[] } | null;
   setPendingTimerStart: (pending: PendingTimerStart | null) => void;
   setScopeFilters: (scopeKey: string, next: TaskFilterState) => void;
@@ -398,6 +399,24 @@ export const usePMStore = create<PMState>()(
         set({
           timers: [...timers, { taskId, taskTitle, listId, startedAt: now, baseTracked }],
           timerSegmentStart: now,
+        });
+        return { shares };
+      },
+      adoptCompanionTimer: (taskId, taskTitle, listId, baseTracked, startedAt) => {
+        const { timers, timerSegmentStart } = get();
+        if (timers.some((t) => t.taskId === taskId) || timers.length >= MAX_PARALLEL_TIMERS) return null;
+        const now = Date.now();
+        const start = Math.min(now, startedAt);
+        const shares = closeSegmentShares(timers, timerSegmentStart, now);
+        // When another web timer was already running, close its segment and
+        // record the companion's time before the handoff separately. From this
+        // point forward the existing parallel-timer split applies.
+        if (timers.length && now - start >= 1000) {
+          shares.push({ taskId, listId, startedAt: start, seconds: Math.floor((now - start) / 1000) });
+        }
+        set({
+          timers: [...timers, { taskId, taskTitle, listId, startedAt: start, baseTracked }],
+          timerSegmentStart: timers.length ? now : start,
         });
         return { shares };
       },

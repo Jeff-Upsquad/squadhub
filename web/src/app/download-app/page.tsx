@@ -87,7 +87,7 @@ const DESKTOP_FEATURES = [
 const COMPANION_FEATURES = [
   {
     label: 'Quick-add tasks',
-    body: 'Press ⌘⇧T from any app to capture a task — list, assignee, priority and date — without switching windows.',
+    body: 'Press ⌘⇧T from any app to capture a task, start its timer, log time and set an estimate — without switching windows.',
     icon: (
       <>
         <rect x="3" y="3" width="18" height="18" rx="4" />

@@ -13,6 +13,7 @@ import {
   fetchLabelsForList,
   attachTaskLabel,
   updateTaskStatus,
+  logTaskTime,
   type AssignableUser,
   type ListLite,
   type TaskPriority,
@@ -21,13 +22,14 @@ import {
 } from './services/api';
 import { login } from './services/auth';
 import { getRecentLists, pushRecentList, type RecentList } from './services/recents';
+import { formatDuration, parseDuration } from './timeDuration';
 
 // Cached across summons of the (persistent) quickadd window so we only resolve
 // the personal list / list tree once per app run.
 let cachedPersonal: { id: string; name: string } | null = null;
 
 type Phase = 'idle' | 'saving' | 'done' | 'error';
-type MenuKey = 'list' | 'assignee' | 'priority' | 'date' | 'labels' | null;
+type MenuKey = 'list' | 'assignee' | 'priority' | 'date' | 'labels' | 'logged' | 'estimate' | null;
 type SelectedList = { id: string; name: string };
 
 // A file the user has dropped onto the panel, queued to upload once the task
@@ -156,10 +158,14 @@ export default function QuickAdd() {
   const [selectedLabels, setSelectedLabels] = useState<TaskTag[]>([]);
   // Mark the task being created as completed on add.
   const [completeOnCreate, setCompleteOnCreate] = useState(false);
+  const [startTimerOnCreate, setStartTimerOnCreate] = useState(false);
+  const [loggedInput, setLoggedInput] = useState('');
+  const [estimateInput, setEstimateInput] = useState('');
 
   // Once the task is created we keep its id so a retry (e.g. after an attachment
   // upload fails) re-uses it instead of creating a duplicate task.
   const createdTaskRef = useRef<{ id: string } | null>(null);
+  const loggedTimeAppliedRef = useRef(false);
   // dragenter/dragleave fire per-child; count depth so we only clear the drop
   // highlight when the cursor truly leaves the panel.
   const dragDepthRef = useRef(0);
@@ -205,6 +211,10 @@ export default function QuickAdd() {
     setSelectedLabels([]);
     setLabelQuery('');
     setCompleteOnCreate(false);
+    setStartTimerOnCreate(false);
+    setLoggedInput('');
+    setEstimateInput('');
+    loggedTimeAppliedRef.current = false;
     setLoginError('');
     const self = useAuthStore.getState().userId;
     setAssigneeIds(self ? [self] : []);
@@ -356,6 +366,15 @@ export default function QuickAdd() {
       return;
     }
 
+    const loggedMinutes = loggedInput.trim() ? parseDuration(loggedInput) : null;
+    const estimateMinutes = estimateInput.trim() ? parseDuration(estimateInput) : null;
+    if ((loggedInput.trim() && (!loggedMinutes || loggedMinutes < 0))
+      || (estimateInput.trim() && (!estimateMinutes || estimateMinutes < 0))) {
+      setPhase('error');
+      setError('Enter a positive duration, such as 1h 20m or 1 hour 20 minutes.');
+      return;
+    }
+
     let list = selectedList;
     if (!list) {
       try {
@@ -385,6 +404,8 @@ export default function QuickAdd() {
           priority: priority === 'none' ? undefined : priority,
           work_date: workDate || undefined,
           assignee_ids: assigneeIds.length ? assigneeIds : undefined,
+          time_estimate: estimateMinutes ?? undefined,
+          start_timer: startTimerOnCreate,
         });
         createdTaskRef.current = task;
         if (focused) {
@@ -412,6 +433,14 @@ export default function QuickAdd() {
         if (!cachedPersonal || list.id !== cachedPersonal.id) {
           void pushRecentList({ id: list.id, name: list.name });
         }
+      }
+
+      // A successful time entry is never sent twice if a later step fails and
+      // the user retries the same already-created task.
+      if (loggedMinutes && !loggedTimeAppliedRef.current) {
+        const seconds = loggedMinutes * 60;
+        await logTaskTime(task.id, seconds, new Date(Date.now() - seconds * 1000).toISOString());
+        loggedTimeAppliedRef.current = true;
       }
 
       // Hand dropped files to the background uploader and close right away —
@@ -577,6 +606,8 @@ export default function QuickAdd() {
   }
 
   const selectedPriority = PRIORITIES.find((p) => p.value === priority)!;
+  const loggedMinutes = loggedInput.trim() ? parseDuration(loggedInput) : null;
+  const estimateMinutes = estimateInput.trim() ? parseDuration(estimateInput) : null;
   const assigneeLabel =
     assigneeIds.length === 0
       ? 'Assignee'
@@ -774,11 +805,38 @@ export default function QuickAdd() {
         <button
           type="button"
           className={`qa-pill${completeOnCreate ? ' active' : ' muted'}`}
-          onClick={() => setCompleteOnCreate((v) => !v)}
+          onClick={() => {
+            setCompleteOnCreate((v) => !v);
+            setStartTimerOnCreate(false);
+          }}
           title="Create this task already completed"
         >
           <span aria-hidden>✓</span>
           <span className="qa-pill-label">{completeOnCreate ? 'Complete on add' : 'Mark complete'}</span>
+        </button>
+
+        <button
+          type="button"
+          className={`qa-pill${startTimerOnCreate ? ' active' : ' muted'}`}
+          onClick={() => {
+            setStartTimerOnCreate((v) => !v);
+            setCompleteOnCreate(false);
+          }}
+          aria-pressed={startTimerOnCreate}
+          title="Start tracking as soon as this task is added"
+        >
+          <span aria-hidden>◷</span>
+          <span className="qa-pill-label">{startTimerOnCreate ? 'Start timer on add' : 'Start timer'}</span>
+        </button>
+
+        <button type="button" className={`qa-pill${loggedInput.trim() ? ' active' : ' muted'}`} onClick={() => toggleMenu('logged')}>
+          <span aria-hidden>◴</span>
+          <span className="qa-pill-label">{loggedMinutes && loggedMinutes > 0 ? `Logged ${formatDuration(loggedMinutes)}` : 'Time logged'}</span>
+        </button>
+
+        <button type="button" className={`qa-pill${estimateInput.trim() ? ' active' : ' muted'}`} onClick={() => toggleMenu('estimate')}>
+          <span aria-hidden>◷</span>
+          <span className="qa-pill-label">{estimateMinutes && estimateMinutes > 0 ? `Estimate ${formatDuration(estimateMinutes)}` : 'Estimate'}</span>
         </button>
       </div>
 
@@ -814,6 +872,39 @@ export default function QuickAdd() {
 
       {/* Inline menus (one at a time; they push content down so nothing clips) */}
       {openMenu === 'list' && <ListPicker onPick={pickList} />}
+
+      {(openMenu === 'logged' || openMenu === 'estimate') && (
+        <div className="qa-menu qa-duration-menu">
+          <label className="qa-duration-label" htmlFor="qa-duration-input">
+            {openMenu === 'logged' ? 'Time already logged' : 'Time estimate'}
+          </label>
+          <input
+            id="qa-duration-input"
+            className="qa-search qa-duration-input"
+            value={openMenu === 'logged' ? loggedInput : estimateInput}
+            onChange={(e) => {
+              if (openMenu === 'logged') setLoggedInput(e.target.value);
+              else setEstimateInput(e.target.value);
+              if (phase === 'error') { setPhase('idle'); setError(''); }
+            }}
+            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); setOpenMenu(null); } }}
+            placeholder="1 hour 20 minutes"
+            aria-invalid={!!(openMenu === 'logged' ? loggedInput.trim() && !loggedMinutes : estimateInput.trim() && !estimateMinutes)}
+            autoFocus
+          />
+          <div className="qa-duration-hint">
+            {openMenu === 'logged'
+              ? 'Adds a time entry when you create the task.'
+              : '1d = 8h · 1w = 5d'}
+            {' · '}Try 1h 20m or 1:20.
+          </div>
+          <div className="qa-duration-readback">
+            {openMenu === 'logged'
+              ? loggedInput.trim() && (loggedMinutes && loggedMinutes > 0 ? formatDuration(loggedMinutes) : 'Enter a positive duration')
+              : estimateInput.trim() && (estimateMinutes && estimateMinutes > 0 ? formatDuration(estimateMinutes) : 'Enter a positive duration')}
+          </div>
+        </div>
+      )}
 
       {openMenu === 'priority' && (
         <div className="qa-menu">
