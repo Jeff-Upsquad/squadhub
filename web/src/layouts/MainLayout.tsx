@@ -21,6 +21,7 @@ import { useSupportOverview } from '../hooks/useSupport';
 import ChatSearch from '../views/app/chat/ChatSearch';
 import CreateChannelModal from '../views/app/chat/CreateChannelModal';
 import GlobalCreateTaskModal from '../views/app/pm/GlobalCreateTaskModal';
+import ConvertToTaskModal from '../views/app/pm/ConvertToTaskModal';
 import type { SavedDraft } from '../stores/draftTaskStore';
 import ToastContainer from '../components/Toast';
 import { useWorkBlockNotifier } from '../hooks/useWorkBlockNotifier';
@@ -1972,6 +1973,9 @@ export default function MainLayout() {
           inListContext={activeSection === 'home' && homeView === 'tasks'}
         />
       )}
+
+      {/* Convert a chat message / thread / task comment into a task */}
+      <ConvertToTaskModal />
 
       {/* Meeting creation slide-over — opened from anywhere via the store */}
       <GlobalMeetingPanel />

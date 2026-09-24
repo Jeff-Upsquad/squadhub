@@ -4,6 +4,8 @@ import { useQueryClient } from '@tanstack/react-query';
 import type { CrmActivityMeta, Message, Reaction } from '@squadhub/shared';
 import api from '../../../services/api';
 import { useAuthStore } from '../../../stores/authStore';
+import { useWorkspaceStore } from '../../../stores/workspaceStore';
+import { sourceFromMessage, useConvertToTaskStore } from '../../../stores/convertToTaskStore';
 import EmojiPicker from './EmojiPicker';
 import ImageLightbox from './ImageLightbox';
 import LinkUnfurlCard from './LinkUnfurlCard';
@@ -458,6 +460,7 @@ function MessageActionMenu({
   onDelete,
   onHistory,
   onReport,
+  onConvertToTask,
   onClose,
   anchor,
 }: {
@@ -468,12 +471,13 @@ function MessageActionMenu({
   onDelete: () => void;
   onHistory: () => void;
   onReport: () => void;
+  onConvertToTask: () => void;
   onClose: () => void;
   anchor: { top: number; bottom: number; left: number; right: number } | null;
 }) {
   const menuStyle = useMemo<React.CSSProperties>(() => {
     if (!anchor || typeof window === 'undefined') return { visibility: 'hidden' };
-    const estimatedH = 128; // up to 3 menu items + vertical padding
+    const estimatedH = 200; // up to 5 menu items + divider + vertical padding
     const spaceBelow = window.innerHeight - anchor.bottom;
     const spaceAbove = anchor.top;
     const openUpward = spaceBelow < estimatedH && spaceAbove > spaceBelow;
@@ -501,6 +505,9 @@ function MessageActionMenu({
         onClick={(e) => e.stopPropagation()}
         role="menu"
       >
+        <button type="button" className="sqc-msg__menu-item" onClick={onConvertToTask} role="menuitem">
+          Convert to task
+        </button>
         {canEdit && (
           <button type="button" className="sqc-msg__menu-item" onClick={onEdit} role="menuitem">
             Edit
@@ -934,6 +941,14 @@ function ChatMessageBubble({ message, onOpenThread, inThread, grouped, threadMet
   };
 
   const isAdmin = useAuthStore((s) => s.user?.is_admin) ?? false;
+  const openConvertToTask = useConvertToTaskStore((s) => s.open);
+  const convertContextLabel = useWorkspaceStore((s) => {
+    if (message.channel_id) {
+      const ch = s.channels.find((c) => c.id === message.channel_id);
+      return ch ? `#${ch.name}` : undefined;
+    }
+    return message.dm_conversation_id ? 'a DM' : undefined;
+  });
   const editedAt = (message as Message & { edited_at?: string | null }).edited_at ?? null;
 
   const [menuOpen, setMenuOpen] = useState(false);
@@ -1071,6 +1086,10 @@ function ChatMessageBubble({ message, onOpenThread, inThread, grouped, threadMet
           onReport={() => {
             setMenuOpen(false);
             setShowReport(true);
+          }}
+          onConvertToTask={() => {
+            setMenuOpen(false);
+            openConvertToTask(sourceFromMessage(message, convertContextLabel));
           }}
           onClose={() => setMenuOpen(false)}
           anchor={menuAnchor}

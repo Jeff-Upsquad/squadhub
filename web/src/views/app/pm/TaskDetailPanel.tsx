@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useRef, useCallback, type ReactNode } fro
 import { createPortal } from 'react-dom';
 import { useQueryClient, useQuery } from '@tanstack/react-query';
 import { usePMStore } from '../../../stores/pmStore';
+import { sourceFromComment, useConvertToTaskStore } from '../../../stores/convertToTaskStore';
 import { useTask, useUpdateTask, useDeleteTask, useTaskComments, useAddComment, useCreateTask, useTaskLists, useAddTaskToLists, useRemoveTaskFromList, useTaskActivity } from '../../../hooks/useTasks';
 import { useFocusTask } from '../../../hooks/useDayPlanner';
 import { isTaskFocused } from '../../../lib/taskGrouping';
@@ -333,6 +334,7 @@ export default function TaskDetailPanel({
   const { data: task, isLoading } = useTask(effectiveTaskId);
   const isFocused = task ? isTaskFocused(task) : false;
   const { data: comments } = useTaskComments(effectiveTaskId);
+  const openConvertToTask = useConvertToTaskStore((s) => s.open);
   const { data: taskTypes } = useTaskTypes();
   const { data: checklists } = useChecklists(effectiveTaskId);
   const updateTask = useUpdateTask(listId);
@@ -2480,6 +2482,14 @@ export default function TaskDetailPanel({
                           <span className="text-[11px] text-[color:var(--sh-ink-4)] font-medium">
                             {new Date(c.created_at).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false })}
                           </span>
+                          <button
+                            type="button"
+                            className="td-comment-convert ml-auto"
+                            onClick={() => openConvertToTask(sourceFromComment(c, task!, spaceId))}
+                            title="Create a new task from this comment"
+                          >
+                            Convert to task
+                          </button>
                         </div>
                         <div className="text-[13px] leading-[1.55] text-[color:var(--sh-ink-2)] mt-0.5 whitespace-pre-wrap">{c.content}</div>
                       </div>

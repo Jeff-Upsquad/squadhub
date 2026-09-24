@@ -8,6 +8,7 @@ import MessageComposer, { type MessageComposerHandle } from './MessageComposer';
 import { usePanelFileDrop } from '../pm/usePanelFileDrop';
 import { useWorkspaceStore, type ChatKind } from '../../../stores/workspaceStore';
 import { useAuthStore } from '../../../stores/authStore';
+import { sourceFromThread, useConvertToTaskStore } from '../../../stores/convertToTaskStore';
 import TypingIndicator, { useTypingUsers } from './TypingIndicator';
 
 interface Props {
@@ -180,6 +181,7 @@ export default function ThreadPanel({ parentId, channelId, kind, onClose, embedd
 
   const root: Message | null = threadRes?.data?.root || null;
   const replies: Message[] = threadRes?.data?.replies || [];
+  const openConvertToTask = useConvertToTaskStore((s) => s.open);
 
   // Drag a file anywhere over the thread panel to stage it on the reply composer
   // (mirrors the main ChatPanel behaviour).
@@ -268,6 +270,17 @@ export default function ThreadPanel({ parentId, channelId, kind, onClose, embedd
             <span className="truncate text-[13px] text-foreground-muted">{contextLabel}</span>
           )}
         </div>
+        <div className="flex shrink-0 items-center gap-1">
+        {root && (
+          <button
+            type="button"
+            onClick={() => openConvertToTask(sourceFromThread(root, replies, contextLabel || undefined))}
+            className="rounded-[6px] px-2 py-1 text-[12.5px] font-semibold text-foreground-muted hover:bg-surface-alt hover:text-foreground"
+            title="Create a task from this thread (message + all replies)"
+          >
+            Convert to task
+          </button>
+        )}
         {onClose && (
           <button
             onClick={onClose}
@@ -279,6 +292,7 @@ export default function ThreadPanel({ parentId, channelId, kind, onClose, embedd
             </svg>
           </button>
         )}
+        </div>
       </div>
 
       {/* Scroll area: parent message + divider + replies */}
