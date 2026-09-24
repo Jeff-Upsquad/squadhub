@@ -374,6 +374,24 @@ body {
   --foreground: #f3f4f4;
 }
 
+/* Keep the sidebar's contents at their full width while its outer edge slides.
+   The content is clipped by the outer card instead of reflowing on every frame. */
+.sh-mod-side-animated,
+.sh-sidebar-open-slot {
+  transition: width 1s cubic-bezier(.075, .82, .165, 1), margin-left 1s cubic-bezier(.075, .82, .165, 1);
+}
+.sh-mod-side-resizing { transition: none; }
+.sh-sidebar-open-slot { width: 0; margin-left: 0; overflow: hidden; }
+.sh-sidebar-open-slot[data-open='true'] { width: 28px; margin-left: 4px; }
+.sh-sidebar-open-slot > button { opacity: 0; transition: opacity 180ms ease; }
+.sh-sidebar-open-slot[data-open='true'] > button { opacity: 1; transition-delay: 180ms; }
+
+@media (prefers-reduced-motion: reduce) {
+  .sh-mod-side-animated,
+  .sh-sidebar-open-slot,
+  .sh-sidebar-open-slot > button { transition-duration: 0.01ms; transition-delay: 0ms; }
+}
+
 /* Sidebar brand mark — same CoolDock squircle as the rail's, in ink */
 .sb-brand {
   display: grid; place-items: end center;
