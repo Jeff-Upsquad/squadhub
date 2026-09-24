@@ -53,6 +53,32 @@ export default function LmsEditor({ draftItemId, isClone, onExit, onSubmitted }:
   const activeLesson = lessons.find((l) => l.id === activeLessonId) || lessons[0];
   const reviewState = item.review_state || 'none';
 
+  // Drag-and-drop move: place `dragId` before/after `targetId` (same level as
+  // the target) or `inside` it (appended as its last sub-page).
+  function moveLesson(dragId: string, targetId: string, where: DropWhere) {
+    if (dragId === targetId) return;
+    const drag = lessons.find((l) => l.id === dragId);
+    const target = lessons.find((l) => l.id === targetId);
+    if (!drag || !target) return;
+    const parentId = where === 'inside' ? target.id : (target.parent_lesson_id ?? null);
+    // A page can't be moved under itself or one of its own sub-pages.
+    for (let cur: string | null = parentId; cur; cur = lessons.find((l) => l.id === cur)?.parent_lesson_id ?? null) {
+      if (cur === dragId) return;
+    }
+    const siblings = lessons
+      .filter((l) => (l.parent_lesson_id ?? null) === parentId && l.id !== dragId)
+      .sort((a, b) => a.position - b.position)
+      .map((l) => l.id);
+    if (where === 'inside') siblings.push(dragId);
+    else siblings.splice(siblings.indexOf(targetId) + (where === 'after' ? 1 : 0), 0, dragId);
+    m.moveLesson.mutate({
+      id: dragId,
+      parentId,
+      parentChanged: (drag.parent_lesson_id ?? null) !== parentId,
+      orderedIds: siblings,
+    });
+  }
+
   async function onSubmit() {
     await submit.mutateAsync(draftItemId);
     onSubmitted();
@@ -188,6 +214,7 @@ export default function LmsEditor({ draftItemId, isClone, onExit, onSubmitted }:
             <ul>
               {lessons.map((l, i) => (
                 <li key={l.id}>
+                <DraggableRow id={l.id} allowInside={false} onDrop={moveLesson}>
                   <button
                     onClick={() => setActiveLessonId(l.id)}
                     className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[12.5px] ${
@@ -198,6 +225,7 @@ export default function LmsEditor({ draftItemId, isClone, onExit, onSubmitted }:
                     <span className={`flex-1 truncate ${l.is_active === false ? 'opacity-60' : ''}`}>{l.title}</span>
                     {l.is_active === false && <span className="shrink-0 rounded bg-amber-100 px-1 text-[9px] font-semibold text-amber-700">Draft</span>}
                   </button>
+                </DraggableRow>
                 </li>
               ))}
             </ul>
@@ -208,7 +236,7 @@ export default function LmsEditor({ draftItemId, isClone, onExit, onSubmitted }:
         {isSop && (
           <aside className="hidden min-h-0 overflow-y-auto border-r border-[var(--sh-hair)] bg-[var(--sidebar)] p-2 lg:block">
             <div className="flex items-center justify-between px-2 py-1.5">
-              <span className="text-[10.5px] font-semibold uppercase tracking-wider text-[var(--sh-ink-3)]">Pages</span>
+              <span className="text-[10.5px] font-semibold uppercase tracking-wider text-[var(--sh-ink-3)]" title="Drag pages to reorder or nest them">Pages</span>
               <button
                 onClick={() => m.addLesson.mutate({ title: 'Untitled' }, { onSuccess: (r: any) => setActiveLessonId(r?.data?.data?.id ?? null) })}
                 className="text-[16px] leading-none text-[var(--sh-ink-3)] hover:text-[var(--sh-ink)]" title="Add top-level page">+</button>
@@ -217,6 +245,7 @@ export default function LmsEditor({ draftItemId, isClone, onExit, onSubmitted }:
               lessons={lessons}
               activeId={activeLessonId}
               onPick={setActiveLessonId}
+              onMove={moveLesson}
               onAddSub={(parentId) => m.addLesson.mutate({ title: 'Untitled', parent_lesson_id: parentId }, { onSuccess: (r: any) => setActiveLessonId(r?.data?.data?.id ?? null) })}
             />
           </aside>
@@ -795,12 +824,17 @@ function buildEditorTree(lessons: any[]): ETreeNode[] {
   return roots;
 }
 
-function EditorTree({ lessons, activeId, onPick, onAddSub }: {
-  lessons: any[]; activeId: string | null; onPick: (id: string) => void; onAddSub: (parentId: string) => void;
+function EditorTree({ lessons, activeId, onPick, onMove, onAddSub }: {
+  lessons: any[]; activeId: string | null; onPick: (id: string) => void;
+  onMove: (dragId: string, targetId: string, where: DropWhere) => void; onAddSub: (parentId: string) => void;
 }) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const tree = useMemo(() => buildEditorTree(lessons), [lessons]);
   const toggle = (id: string) => setExpanded((p) => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  const handleDrop = (dragId: string, targetId: string, where: DropWhere) => {
+    if (where === 'inside') setExpanded((p) => new Set([...p, targetId]));
+    onMove(dragId, targetId, where);
+  };
   const render = (nodes: ETreeNode[], depth: number): React.ReactNode => (
     <ul>
       {nodes.map((n) => {
@@ -809,18 +843,21 @@ function EditorTree({ lessons, activeId, onPick, onAddSub }: {
         const active = activeId === n.lesson.id;
         return (
           <li key={n.lesson.id}>
-            <div className={`group flex items-center gap-1 rounded-md pr-1 ${active ? 'bg-[var(--sh-hair-3)]' : 'hover:bg-[var(--sh-hair-3)]'}`} style={{ paddingLeft: `${depth * 14}px` }}>
-              <button onClick={() => has && toggle(n.lesson.id)} className={`grid h-5 w-5 shrink-0 place-items-center text-[var(--sh-ink-3)] ${has ? '' : 'invisible'}`}>
-                <svg className={`h-3 w-3 transition-transform ${open ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" strokeWidth={2.4} viewBox="0 0 24 24"><path d="M9 6l6 6-6 6" /></svg>
-              </button>
-              <button onClick={() => onPick(n.lesson.id)} className="flex min-w-0 flex-1 items-center gap-1.5 py-[5px] text-left">
-                <span className="text-[12px] leading-none">{n.lesson.icon || '📄'}</span>
-                <span className={`truncate text-[12.5px] ${active ? 'font-medium text-[var(--sh-ink)]' : 'text-[var(--sh-ink-2)]'} ${n.lesson.is_active === false ? 'opacity-60' : ''}`}>{n.lesson.title}</span>
-                {n.lesson.is_active === false && <span className="shrink-0 rounded bg-amber-100 px-1 text-[9px] font-semibold text-amber-700">Draft</span>}
-              </button>
-              <button onClick={() => { onAddSub(n.lesson.id); setExpanded((p) => new Set([...p, n.lesson.id])); }}
-                className="shrink-0 rounded px-1 text-[14px] leading-none text-[var(--sh-ink-3)] opacity-0 transition group-hover:opacity-100 hover:text-[var(--sh-ink)]" title="Add sub-page">+</button>
-            </div>
+            <DraggableRow id={n.lesson.id} allowInside onDrop={handleDrop}>
+              <div className={`group flex items-center gap-1 rounded-md pr-1 ${active ? 'bg-[var(--sh-hair-3)]' : 'hover:bg-[var(--sh-hair-3)]'}`} style={{ paddingLeft: `${depth * 14}px` }}>
+                <button onClick={() => has && toggle(n.lesson.id)} className={`grid h-5 w-5 shrink-0 place-items-center text-[var(--sh-ink-3)] ${has ? '' : 'invisible'}`}>
+                  <svg className={`h-3 w-3 transition-transform ${open ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" strokeWidth={2.4} viewBox="0 0 24 24"><path d="M9 6l6 6-6 6" /></svg>
+                </button>
+                <button onClick={() => onPick(n.lesson.id)} className="flex min-w-0 flex-1 items-center gap-1.5 py-[5px] text-left">
+                  <span className="text-[12px] leading-none">{n.lesson.icon || '📄'}</span>
+                  <span className={`truncate text-[12.5px] ${active ? 'font-medium text-[var(--sh-ink)]' : 'text-[var(--sh-ink-2)]'} ${n.lesson.is_active === false ? 'opacity-60' : ''}`}>{n.lesson.title}</span>
+                  {n.lesson.is_active === false && <span className="shrink-0 rounded bg-amber-100 px-1 text-[9px] font-semibold text-amber-700">Draft</span>}
+                </button>
+                <span className="shrink-0 cursor-grab px-0.5 text-[11px] leading-none text-[var(--sh-ink-3)] opacity-0 transition group-hover:opacity-100" title="Drag to reorder">⠿</span>
+                <button onClick={() => { onAddSub(n.lesson.id); setExpanded((p) => new Set([...p, n.lesson.id])); }}
+                  className="shrink-0 rounded px-1 text-[14px] leading-none text-[var(--sh-ink-3)] opacity-0 transition group-hover:opacity-100 hover:text-[var(--sh-ink)]" title="Add sub-page">+</button>
+              </div>
+            </DraggableRow>
             {has && open && render(n.children, depth + 1)}
           </li>
         );
@@ -828,6 +865,53 @@ function EditorTree({ lessons, activeId, onPick, onAddSub }: {
     </ul>
   );
   return <>{render(tree, 0)}</>;
+}
+
+/* ---- Drag-and-drop row: drop in the top/bottom edge = before/after, the
+   middle = nest inside (tree only). Native HTML5 DnD, no extra dependency. ---- */
+type DropWhere = 'before' | 'after' | 'inside';
+const DRAG_MIME = 'application/x-lms-lesson';
+
+function DraggableRow({ id, allowInside, onDrop, children }: {
+  id: string; allowInside: boolean; onDrop: (dragId: string, targetId: string, where: DropWhere) => void; children: React.ReactNode;
+}) {
+  const [hover, setHover] = useState<DropWhere | null>(null);
+  const [dragging, setDragging] = useState(false);
+  const whereFor = (e: React.DragEvent<HTMLDivElement>): DropWhere => {
+    const r = e.currentTarget.getBoundingClientRect();
+    const y = (e.clientY - r.top) / r.height;
+    if (!allowInside) return y < 0.5 ? 'before' : 'after';
+    return y < 0.3 ? 'before' : y > 0.7 ? 'after' : 'inside';
+  };
+  return (
+    <div
+      draggable
+      onDragStart={(e) => { e.dataTransfer.setData(DRAG_MIME, id); e.dataTransfer.effectAllowed = 'move'; setDragging(true); }}
+      onDragEnd={() => setDragging(false)}
+      onDragOver={(e) => {
+        if (!e.dataTransfer.types.includes(DRAG_MIME)) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        const w = whereFor(e);
+        if (w !== hover) setHover(w);
+      }}
+      onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setHover(null); }}
+      onDrop={(e) => {
+        const dragId = e.dataTransfer.getData(DRAG_MIME);
+        const w = whereFor(e);
+        setHover(null);
+        if (!dragId) return;
+        e.preventDefault();
+        e.stopPropagation();
+        onDrop(dragId, id, w);
+      }}
+      className={`relative rounded-md ${dragging ? 'opacity-40' : ''} ${hover === 'inside' ? 'ring-2 ring-inset ring-[var(--sh-ink-3)]' : ''}`}
+    >
+      {hover === 'before' && <span className="pointer-events-none absolute inset-x-1 -top-px h-0.5 rounded bg-[var(--sh-ink)]" />}
+      {children}
+      {hover === 'after' && <span className="pointer-events-none absolute inset-x-1 -bottom-px h-0.5 rounded bg-[var(--sh-ink)]" />}
+    </div>
+  );
 }
 
 /* ---- Editable Tiptap (mirrors the read-only TextBlock styling) ---- */
