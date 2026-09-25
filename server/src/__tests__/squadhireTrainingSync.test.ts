@@ -104,4 +104,37 @@ describe('syncContentToSquadhire', () => {
     await flushAndAdvance(10_000);
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
+
+  it('sends knowledge items to the knowledge endpoint with their categories', async () => {
+    tableRows.lms_items = [
+      {
+        id: 'item-4',
+        kind: 'post',
+        track: 'knowledge',
+        title: 'When do I get paid?',
+        status: 'published',
+        squadhire_audience: false,
+        knowledge_categories: ['general'],
+      },
+    ];
+    tableRows.lms_lessons = [];
+    syncContentToSquadhire('item-4');
+    await flushAndAdvance(10_000);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, { body: string }];
+    expect(url).toBe('https://squadhire.example.com/api/integrations/squadhub/knowledge/sync');
+    const body = JSON.parse(init.body);
+    expect(body).toMatchObject({ id: 'item-4', visible: true, knowledge_categories: ['general'] });
+    expect(body.track).toBeUndefined();
+  });
+
+  it('withdraws an unpublished knowledge item', async () => {
+    tableRows.lms_items = [
+      { id: 'item-5', kind: 'post', track: 'knowledge', title: 'Old answer', status: 'draft', knowledge_categories: ['tech'] },
+    ];
+    syncContentToSquadhire('item-5');
+    await flushAndAdvance(10_000);
+    const body = JSON.parse((fetchMock.mock.calls[0] as unknown as [string, { body: string }])[1].body);
+    expect(body).toMatchObject({ id: 'item-5', visible: false, pages: [] });
+  });
 });

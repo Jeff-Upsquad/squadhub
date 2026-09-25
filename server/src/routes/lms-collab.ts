@@ -8,7 +8,7 @@ import { cloneItemForReview, notifyLms } from '../services/lmsAuthoring';
 import { createSend, listSendsForItem, recipientsForSend, type SendScope, type Principal } from '../services/lmsTaskSends';
 import { userTypeShareUuidToKey } from '../utils/lmsShares';
 import { loadBlockVideos, withBlockVideos } from '../services/lmsBlockVideos';
-import { syncContentToSquadhire, syncItemToSquadhire } from '../services/squadhireTraining';
+import { syncContentToSquadhire, syncItemToSquadhire, isSquadhireSynced } from '../services/squadhireTraining';
 
 // ============================================================
 // Collaborative (non-admin) LMS authoring + comments, gated by per-item
@@ -620,7 +620,7 @@ router.post('/items/:id/publish', async (req: Request, res: Response) => {
     if ((data as any).kind === 'post') {
       await supabaseAdmin.from('lms_lessons').update({ is_active: true }).eq('item_id', itemId);
     }
-    if ((data as any).squadhire_audience) syncItemToSquadhire(itemId);
+    if (isSquadhireSynced(data as any)) syncItemToSquadhire(itemId);
     res.json({ success: true, data });
   } catch (err) {
     console.error('Collab publish error:', err);
@@ -642,7 +642,7 @@ router.post('/items/:id/unpublish', async (req: Request, res: Response) => {
       .from('lms_items').update({ status: 'draft', updated_at: new Date().toISOString() }).eq('id', itemId).select().single();
     if (error) { res.status(500).json({ success: false, error: error.message }); return; }
     // Withdraw it from SquadHire too — unpublished here means unpublished there.
-    if ((data as any).squadhire_audience) syncItemToSquadhire(itemId);
+    if (isSquadhireSynced(data as any)) syncItemToSquadhire(itemId);
     res.json({ success: true, data });
   } catch (err) {
     console.error('Collab unpublish error:', err);

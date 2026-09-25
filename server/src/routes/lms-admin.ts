@@ -25,7 +25,13 @@ import {
 import { LMS_SHARE_USER_TYPES } from '@squadhub/shared';
 import type { UserType } from '@squadhub/shared';
 import { loadBlockVideos, withBlockVideos } from '../services/lmsBlockVideos';
-import { syncContentToSquadhire, syncItemToSquadhire } from '../services/squadhireTraining';
+import {
+  fetchKnowledgeCategories,
+  isSquadhireSynced,
+  retractKnowledgeFromSquadhire,
+  syncContentToSquadhire,
+  syncItemToSquadhire,
+} from '../services/squadhireTraining';
 
 const router = Router();
 router.use(requireAuth);
@@ -249,9 +255,12 @@ router.get('/items', async (req: Request, res: Response) => {
   }
 });
 
+const knowledgeCategoriesSchema = z.array(z.string().min(1).max(100)).max(50);
+
 const itemCreateSchema = z.object({
   kind: z.enum(['post', 'course']),
-  track: z.enum(['learning', 'sop']).optional(),
+  track: z.enum(['learning', 'sop', 'knowledge']).optional(),
+  knowledge_categories: knowledgeCategoriesSchema.optional(),
   title: z.string().min(1).max(200),
   slug: z.string().optional(),
   summary: z.string().max(2000).nullable().optional(),
@@ -270,6 +279,7 @@ router.post('/items', async (req: Request, res: Response) => {
       .insert({
         kind: body.kind,
         track: body.track ?? 'learning',
+        knowledge_categories: body.track === 'knowledge' ? body.knowledge_categories ?? [] : [],
         title: body.title,
         slug,
         summary: body.summary ?? null,
@@ -493,6 +503,7 @@ const itemUpdateSchema = z.object({
   summary: z.string().max(2000).nullable().optional(),
   cover_image_url: z.string().nullable().optional(),
   category_id: z.string().uuid().nullable().optional(),
+  knowledge_categories: knowledgeCategoriesSchema.optional(),
 });
 
 router.patch('/items/:id', async (req: Request, res: Response) => {
@@ -504,6 +515,7 @@ router.patch('/items/:id', async (req: Request, res: Response) => {
     if (body.summary !== undefined) patch.summary = body.summary;
     if (body.cover_image_url !== undefined) patch.cover_image_url = body.cover_image_url;
     if (body.category_id !== undefined) patch.category_id = body.category_id;
+    if (body.knowledge_categories !== undefined) patch.knowledge_categories = body.knowledge_categories;
 
     const { data, error } = await supabaseAdmin
       .from('lms_items')
@@ -517,6 +529,11 @@ router.patch('/items/:id', async (req: Request, res: Response) => {
       return;
     }
 
+    // A live knowledge item's title/summary/categories feed Squad Bot directly.
+    if ((data as any).track === 'knowledge' && (data as any).status === 'published') {
+      syncItemToSquadhire(req.params.id as string);
+    }
+
     res.json({ success: true, data });
   } catch (err) {
     if (err instanceof z.ZodError) {
@@ -528,12 +545,27 @@ router.patch('/items/:id', async (req: Request, res: Response) => {
 });
 
 router.delete('/items/:id', async (req: Request, res: Response) => {
+  const { data: doomed } = await supabaseAdmin.from('lms_items').select('track').eq('id', req.params.id).maybeSingle();
   const { error } = await supabaseAdmin.from('lms_items').delete().eq('id', req.params.id);
   if (error) {
     res.status(500).json({ success: false, error: error.message });
     return;
   }
+  // Take a deleted knowledge item out of Squad Bot's Knowledge Center too.
+  if ((doomed as any)?.track === 'knowledge') retractKnowledgeFromSquadhire(req.params.id as string);
   res.json({ success: true });
+});
+
+// GET /admin/lms/knowledge-categories — the Knowledge Center categories
+// (General, Tech & App Help, every active SquadHire talent category), live
+// from SquadHire so a new talent category shows up with no change here.
+router.get('/knowledge-categories', async (_req: Request, res: Response) => {
+  try {
+    res.json({ success: true, data: await fetchKnowledgeCategories() });
+  } catch (err: any) {
+    console.error('Knowledge categories error:', err?.message ?? err);
+    res.status(502).json({ success: false, error: 'Could not load categories from SquadHire' });
+  }
 });
 
 // ------------------------------------------------------------
@@ -685,7 +717,7 @@ router.post('/items/:id/publish', async (req: Request, res: Response) => {
     );
 
     // Push content to SquadHire talents, like the collab publish path does.
-    if ((updated as any).squadhire_audience) syncItemToSquadhire(itemId);
+    if (isSquadhireSynced(updated as any)) syncItemToSquadhire(itemId);
 
     res.json({ success: true, data: { ...updated, assignment_count: userIds.length } });
   } catch (err) {
@@ -707,7 +739,7 @@ router.post('/items/:id/unpublish', async (req: Request, res: Response) => {
     return;
   }
   // Withdraw it from SquadHire too — unpublished here means unpublished there.
-  if ((data as any).squadhire_audience) syncItemToSquadhire(req.params.id as string);
+  if (isSquadhireSynced(data as any)) syncItemToSquadhire(req.params.id as string);
   res.json({ success: true, data });
 });
 

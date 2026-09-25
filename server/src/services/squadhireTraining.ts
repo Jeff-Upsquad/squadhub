@@ -22,13 +22,26 @@ import { supabaseAdmin } from '../supabase';
 
 const REQUEST_TIMEOUT_MS = 15_000;
 const SYNC_PATH = '/api/integrations/squadhub/training/sync';
+// Knowledge-track items (Squad Bot's Knowledge Center) go to their own
+// endpoint so they never land in the talent Training Program.
+const KNOWLEDGE_SYNC_PATH = '/api/integrations/squadhub/knowledge/sync';
+const KNOWLEDGE_CATEGORIES_PATH = '/api/integrations/squadhub/knowledge/categories';
 
-function squadhireUrl(): string | null {
+function squadhireUrl(path: string = SYNC_PATH): string | null {
   if (!config.squadhireWebhookUrl || !config.squadhireWebhookSecret) return null;
   const url = new URL(config.squadhireWebhookUrl);
-  url.pathname = SYNC_PATH;
+  url.pathname = path;
   url.search = '';
   return url.toString();
+}
+
+/**
+ * Does this item go to SquadHire? Training items opt in with the
+ * squadhire_audience flag; every knowledge-track item goes (it's what Squad
+ * Bot answers from).
+ */
+export function isSquadhireSynced(item: { squadhire_audience?: boolean | null; track?: string | null } | null | undefined): boolean {
+  return item?.squadhire_audience === true || item?.track === 'knowledge';
 }
 
 /** Fire a sync without making the caller wait or fail on it. */
@@ -61,10 +74,10 @@ export function syncContentToSquadhire(itemId: string | null): void {
     try {
       const { data } = await supabaseAdmin
         .from('lms_items')
-        .select('squadhire_audience')
+        .select('squadhire_audience, track')
         .eq('id', itemId)
         .maybeSingle();
-      if ((data as any)?.squadhire_audience !== true) {
+      if (!isSquadhireSynced(data as any)) {
         queuedSyncs.delete(itemId);
         return;
       }
@@ -80,31 +93,48 @@ export function syncContentToSquadhire(itemId: string | null): void {
 }
 
 export async function deliver(itemId: string): Promise<void> {
-  const endpoint = squadhireUrl();
-  if (!endpoint) return; // integration not configured in this environment
+  if (!squadhireUrl()) return; // integration not configured in this environment
 
   const { data: item } = await supabaseAdmin
     .from('lms_items')
-    .select('id, kind, track, title, summary, icon, cover_image_url, status, squadhire_audience')
+    .select('id, kind, track, title, summary, icon, cover_image_url, status, squadhire_audience, knowledge_categories')
     .eq('id', itemId)
     .maybeSingle();
   if (!item) return;
 
-  // Not (or no longer) talent-facing. Still tell SquadHire, so an item that
-  // had the flag removed disappears for talents instead of lingering.
-  const visible = item.squadhire_audience === true && item.status === 'published';
-
-  const payload = {
-    id: item.id,
-    kind: item.kind,
-    track: item.track,
-    title: item.title,
-    summary: item.summary ?? null,
-    icon: item.icon ?? null,
-    cover_image_url: item.cover_image_url ?? null,
-    visible,
-    pages: visible ? await loadPages(itemId) : [],
-  };
+  let endpoint: string;
+  let payload: Record<string, unknown>;
+  if (item.track === 'knowledge') {
+    // Knowledge: every published item is live for Squad Bot; unpublishing
+    // takes it back out.
+    const visible = item.status === 'published';
+    endpoint = squadhireUrl(KNOWLEDGE_SYNC_PATH)!;
+    payload = {
+      id: item.id,
+      title: item.title,
+      summary: item.summary ?? null,
+      icon: item.icon ?? null,
+      knowledge_categories: item.knowledge_categories ?? [],
+      visible,
+      pages: visible ? await loadPages(itemId) : [],
+    };
+  } else {
+    // Not (or no longer) talent-facing. Still tell SquadHire, so an item that
+    // had the flag removed disappears for talents instead of lingering.
+    const visible = item.squadhire_audience === true && item.status === 'published';
+    endpoint = squadhireUrl()!;
+    payload = {
+      id: item.id,
+      kind: item.kind,
+      track: item.track,
+      title: item.title,
+      summary: item.summary ?? null,
+      icon: item.icon ?? null,
+      cover_image_url: item.cover_image_url ?? null,
+      visible,
+      pages: visible ? await loadPages(itemId) : [],
+    };
+  }
 
   try {
     const res = await fetch(endpoint, {
@@ -133,6 +163,40 @@ export async function deliver(itemId: string): Promise<void> {
       .eq('id', itemId);
     throw err;
   }
+}
+
+/**
+ * Tell SquadHire a knowledge item is gone. Called after a delete, when the row
+ * (and its track) no longer exists for deliver() to read. Best-effort.
+ */
+export function retractKnowledgeFromSquadhire(itemId: string): void {
+  const endpoint = squadhireUrl(KNOWLEDGE_SYNC_PATH);
+  if (!endpoint) return;
+  void fetch(endpoint, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-SquadHub-Signature': config.squadhireWebhookSecret as string,
+    },
+    body: JSON.stringify({ id: itemId, title: 'Deleted', knowledge_categories: [], visible: false, pages: [] }),
+    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+  }).catch((err) => console.error('[squadhire-knowledge] retract failed:', err?.message ?? err));
+}
+
+/**
+ * Knowledge Center categories, live from SquadHire: General, Tech & App Help
+ * and every active talent category. Empty when the integration isn't set up.
+ */
+export async function fetchKnowledgeCategories(): Promise<Array<{ key: string; label: string; kind: 'fixed' | 'talent' }>> {
+  const endpoint = squadhireUrl(KNOWLEDGE_CATEGORIES_PATH);
+  if (!endpoint) return [];
+  const res = await fetch(endpoint, {
+    headers: { 'X-SquadHub-Signature': config.squadhireWebhookSecret as string },
+    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+  });
+  if (!res.ok) throw new Error(`SquadHire responded ${res.status}`);
+  const body = (await res.json()) as { categories?: Array<{ key: string; label: string; kind: 'fixed' | 'talent' }> };
+  return body.categories ?? [];
 }
 
 /**
