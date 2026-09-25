@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../services/api';
-import type { LmsItem, LmsLesson, LmsCategory, UserType } from '@squadhub/shared';
+import type { LmsItem, LmsLesson, LmsCategory, UserType, KnowledgeCategoryOption } from '@squadhub/shared';
 import BlockList from '../../components/lms/BlockList';
 import AudiencePicker from '../../components/lms/AudiencePicker';
 import MediaUploader from '../../components/lms/MediaUploader';
@@ -58,6 +58,15 @@ export default function AdminLmsItemEditor({ itemId }: Props) {
     queryFn: () => api.get('/admin/lms/categories').then((r) => r.data),
   });
   const categories: LmsCategory[] = catRes?.data || [];
+
+  // Knowledge items are tagged with Squad Bot categories, served live by SquadHire.
+  const { data: kcRes, isError: kcError } = useQuery({
+    queryKey: ['knowledge-categories'],
+    queryFn: () => api.get('/admin/lms/knowledge-categories').then((r) => r.data),
+    enabled: item?.track === 'knowledge',
+    staleTime: 5 * 60_000,
+  });
+  const knowledgeCategories: KnowledgeCategoryOption[] = kcRes?.data || [];
 
   useEffect(() => {
     if (!activeLessonId && item?.lessons?.length) {
@@ -132,6 +141,10 @@ export default function AdminLmsItemEditor({ itemId }: Props) {
   const activeLesson = item.lessons.find((l) => l.id === activeLessonId) || item.lessons[0];
   const isCourse = item.kind === 'course';
   const isSop = item.track === 'sop';
+  const isKnowledge = item.track === 'knowledge';
+  // SOPs and knowledge are reference content: no learner audience needed.
+  const isReference = isSop || isKnowledge;
+  const hasKnowledgeCategories = (item.knowledge_categories?.length ?? 0) > 0;
   const lessonAudTypes: UserType[] = (activeLesson?.audience_types as UserType[]) || [];
   const lessonAudUsers: string[] = activeLesson?.audience_user_ids || [];
   const lessonRestricted = lessonAudTypes.length > 0 || lessonAudUsers.length > 0;
@@ -149,7 +162,7 @@ export default function AdminLmsItemEditor({ itemId }: Props) {
   const hasTitle = !!item.title?.trim();
   // SOPs are reference docs — who sees them is driven purely by Share (roles &
   // people), not the learner Audience, so they never require an audience.
-  const readyToPublish = hasContent && hasTitle && (isSop || hasAudience);
+  const readyToPublish = hasContent && hasTitle && (isReference || hasAudience) && (!isKnowledge || hasKnowledgeCategories);
 
   const checklist = [
     { ok: hasTitle, label: 'Has a title' },
@@ -157,21 +170,23 @@ export default function AdminLmsItemEditor({ itemId }: Props) {
       ok: hasContent,
       label: isCourse ? 'At least one active lesson with content' : 'At least one content block',
     },
-    ...(isSop ? [] : [{ ok: hasAudience, label: 'Audience selected', hint: 'Empty audience = nobody can see it' }]),
+    ...(isReference ? [] : [{ ok: hasAudience, label: 'Audience selected', hint: 'Empty audience = nobody can see it' }]),
+    ...(isKnowledge ? [{ ok: hasKnowledgeCategories, label: 'Squad Bot categories chosen', hint: 'Which talents Squad Bot uses this for' }] : []),
   ];
 
   function onPublish() {
     if (!readyToPublish) {
       const missing: string[] = [];
       if (!hasContent) missing.push('• It has no content yet.');
-      if (!isSop && !hasAudience) missing.push('• No audience is selected — nobody will see it.');
+      if (!isReference && !hasAudience) missing.push('• No audience is selected — nobody will see it.');
+      if (isKnowledge && !hasKnowledgeCategories) missing.push('• No Squad Bot category — the bot won\'t know which talents it applies to.');
       if (!confirm(`This isn't fully ready:\n\n${missing.join('\n')}\n\nPublish anyway?`)) return;
     }
     setPublishBusy(true);
     publish.mutate(undefined, { onSettled: () => setPublishBusy(false) });
   }
 
-  const kindLabel = isSop ? 'Guide' : isCourse ? 'Course' : 'Post';
+  const kindLabel = isKnowledge ? 'Knowledge item' : isSop ? 'Guide' : isCourse ? 'Course' : 'Post';
 
   return (
     <div>
@@ -193,8 +208,8 @@ export default function AdminLmsItemEditor({ itemId }: Props) {
             <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-foreground-dim opacity-0 transition group-hover:opacity-100 group-focus-within:opacity-0">✎</span>
           </div>
           <StatusBadge status={item.status} />
-          <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ${isSop ? 'bg-indigo-50 text-indigo-700' : 'bg-amber-50 text-amber-700'}`}>
-            {isSop ? 'SOP / Guide' : item.kind}
+          <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ${isKnowledge ? 'bg-emerald-50 text-emerald-700' : isSop ? 'bg-indigo-50 text-indigo-700' : 'bg-amber-50 text-amber-700'}`}>
+            {isKnowledge ? 'Knowledge' : isSop ? 'SOP / Guide' : item.kind}
           </span>
 
           <div className="ml-auto flex flex-wrap items-center gap-2">
@@ -218,7 +233,7 @@ export default function AdminLmsItemEditor({ itemId }: Props) {
             >
               View roster ({item.assignment_count ?? 0})
             </Link>
-            {item.status === 'published' && !isSop && (
+            {item.status === 'published' && !isReference && (
               <button
                 onClick={() => resync.mutate()}
                 className="rounded-lg border border-divider bg-surface px-3 py-2 text-sm text-foreground-muted hover:bg-surface-alt"
@@ -302,7 +317,20 @@ export default function AdminLmsItemEditor({ itemId }: Props) {
             </Field>
           </Section>
 
-          {isSop ? (
+          {isKnowledge ? (
+            <Section
+              title="Squad Bot categories"
+              hint="Which talents Squad Bot uses this for. Published knowledge goes to SquadHire's Knowledge Center."
+            >
+              <KnowledgeCategoryPicker
+                options={knowledgeCategories}
+                failed={kcError}
+                value={item.knowledge_categories || []}
+                onChange={(next) => patchItem.mutate({ knowledge_categories: next })}
+              />
+              <KnowledgeSyncStatus item={item} />
+            </Section>
+          ) : isSop ? (
             <Section title="Access" hint="Who can see and edit this guide.">
               <p className="text-[12.5px] leading-relaxed text-foreground-muted">
                 Access is managed with <span className="font-medium text-foreground">Share</span> — grant
@@ -597,6 +625,63 @@ function ReadinessCard({
         </p>
       )}
     </div>
+  );
+}
+
+function KnowledgeCategoryPicker({
+  options,
+  failed,
+  value,
+  onChange,
+}: {
+  options: KnowledgeCategoryOption[];
+  failed: boolean;
+  value: string[];
+  onChange: (next: string[]) => void;
+}) {
+  if (failed) return <p className="text-[12px] text-red-600">Couldn't load categories from SquadHire.</p>;
+  if (!options.length) return <p className="text-[12px] text-foreground-dim">Loading categories…</p>;
+  const toggle = (key: string) =>
+    onChange(value.includes(key) ? value.filter((k) => k !== key) : [...value, key]);
+  const group = (kind: 'fixed' | 'talent', label: string) => (
+    <div>
+      <p className="mb-1 text-[11px] font-medium uppercase tracking-wider text-foreground-dim">{label}</p>
+      <div className="space-y-1">
+        {options.filter((o) => o.kind === kind).map((o) => (
+          <label key={o.key} className="flex cursor-pointer items-center gap-2 text-sm text-foreground">
+            <input
+              type="checkbox"
+              checked={value.includes(o.key)}
+              onChange={() => toggle(o.key)}
+              className="h-4 w-4 rounded border-divider-strong accent-[#0F172B]"
+            />
+            {o.label}
+          </label>
+        ))}
+      </div>
+    </div>
+  );
+  return (
+    <div className="space-y-3">
+      {group('fixed', 'Everyone')}
+      {group('talent', 'Talent category')}
+    </div>
+  );
+}
+
+function KnowledgeSyncStatus({ item }: { item: LmsItem }) {
+  if (item.status !== 'published') {
+    return <p className="text-[11.5px] text-foreground-dim">Squad Bot starts using this once you publish.</p>;
+  }
+  if (item.squadhire_last_error) {
+    return <p className="text-[11.5px] text-red-600">Last sync to SquadHire failed: {item.squadhire_last_error}</p>;
+  }
+  return (
+    <p className="text-[11.5px] text-emerald-700">
+      {item.squadhire_synced_at
+        ? `Live in SquadHire · synced ${new Date(item.squadhire_synced_at).toLocaleString('en-GB', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })}`
+        : 'Sending to SquadHire…'}
+    </p>
   );
 }
 

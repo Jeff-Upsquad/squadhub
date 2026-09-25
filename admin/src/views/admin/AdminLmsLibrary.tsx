@@ -152,6 +152,7 @@ export default function AdminLmsLibrary() {
         <FilterChip active={!trackFilter} onClick={() => setTrackFilter('')} label="All tracks" />
         <FilterChip active={trackFilter === 'learning'} onClick={() => setTrackFilter('learning')} label="Learning" />
         <FilterChip active={trackFilter === 'sop'} onClick={() => setTrackFilter('sop')} label="Systems & Processes" />
+        <FilterChip active={trackFilter === 'knowledge'} onClick={() => setTrackFilter('knowledge')} label="Knowledge" />
         <span className="mx-1 h-4 w-px bg-well" />
         <FilterChip active={!kindFilter} onClick={() => setKindFilter('')} label="All kinds" />
         <FilterChip active={kindFilter === 'post'} onClick={() => setKindFilter('post')} label="Posts" />
@@ -232,6 +233,11 @@ export default function AdminLmsLibrary() {
                         {item.track === 'sop' && (
                           <span className="rounded-full bg-indigo-50 px-1.5 py-px text-[10px] font-medium uppercase tracking-wide text-indigo-700">
                             SOP
+                          </span>
+                        )}
+                        {item.track === 'knowledge' && (
+                          <span className="rounded-full bg-emerald-50 px-1.5 py-px text-[10px] font-medium uppercase tracking-wide text-emerald-700">
+                            Knowledge
                           </span>
                         )}
                       </div>
@@ -519,6 +525,7 @@ const CONTENT_TYPES: {
   { key: 'post', kind: 'post', track: 'learning', icon: '📄', title: 'Post', desc: 'A single self-contained update or article.', placeholder: 'e.g. Q3 product update' },
   { key: 'course', kind: 'course', track: 'learning', icon: '📚', title: 'Course', desc: 'A multi-lesson journey learners work through.', placeholder: 'e.g. Onboarding 101' },
   { key: 'sop', kind: 'post', track: 'sop', icon: '🧭', title: 'SOP / Guide', desc: 'A how-to under Systems & Procedures.', placeholder: 'e.g. How to submit an expense' },
+  { key: 'knowledge', kind: 'post', track: 'knowledge', icon: '🤖', title: 'Knowledge', desc: 'A Q&A or guide Squad Bot uses to answer talents.', placeholder: 'e.g. When do I get paid?' },
 ];
 
 function NewContentModal({
@@ -546,7 +553,7 @@ function NewContentModal({
         <h2 className="text-lg font-bold text-foreground">Create new content</h2>
         <p className="mt-1 text-[13px] text-foreground-muted">Pick a type to get started — you can fill in the details next.</p>
 
-        <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-3">
+        <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2">
           {CONTENT_TYPES.map((t) => {
             const active = t.key === typeKey;
             return (

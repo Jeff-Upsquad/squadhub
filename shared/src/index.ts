@@ -3104,8 +3104,16 @@ export type LmsItemStatus = 'draft' | 'published' | 'archived';
 export type LmsAssignmentStatus = 'not_started' | 'in_progress' | 'completed';
 // Orthogonal to `kind`: 'learning' is the default course/post catalog;
 // 'sop' surfaces the item under the "Systems & Processes" section and hides
-// the course-style progress chrome (see migration 118).
-export type LmsTrack = 'learning' | 'sop';
+// the course-style progress chrome (see migration 118). 'knowledge' items are
+// Squad Bot's reference Q&As and guides, pushed to SquadHire on publish.
+export type LmsTrack = 'learning' | 'sop' | 'knowledge';
+
+/** A Knowledge Center category, as served live by SquadHire. */
+export interface KnowledgeCategoryOption {
+  key: string;
+  label: string;
+  kind: 'fixed' | 'talent';
+}
 export type LmsBlockType =
   | 'text'
   | 'image'
@@ -3146,6 +3154,8 @@ export interface LmsItem {
   squadhire_audience?: boolean;
   squadhire_synced_at?: string | null;
   squadhire_last_error?: string | null;
+  // Knowledge track only: 'general' | 'tech' | SquadHire talent category slugs.
+  knowledge_categories?: string[];
   // Contributor "submit for review" flow (migration 165). When origin_item_id
   // is set this item is a draft CLONE proposing changes to that live item.
   origin_item_id?: string | null;
