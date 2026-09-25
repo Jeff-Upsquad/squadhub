@@ -9,6 +9,7 @@ import { endActiveAssignmentTermsForCard } from '../../utils/assignmentTerms';
 import { lockAcceptedBidPrice } from '../../utils/lockAcceptedBidPrice';
 import { ensureSquadhireTalentProvisioned } from '../../utils/squadhireTalentSession';
 import { SquadhireSsoError } from '../../utils/squadhireSsoShared';
+import { createApprovedKnowledge } from '../../services/knowledgeFromSquadhire';
 
 /**
  * Inbound callbacks from SquadHire.
@@ -863,5 +864,29 @@ router.post(
     }
   },
 );
+
+// POST /integrations/squadhire/knowledge — Squad Bot's learning loop. An admin
+// approved a Q&A drafted from a handed-off talent chat; save it as a published
+// Knowledge item (synced back to SquadHire straight away).
+const approvedKnowledgeSchema = z.object({
+  question: z.string().trim().min(3).max(200),
+  answer: z.string().trim().min(1).max(8000),
+  categories: z.array(z.string().min(1).max(100)).min(1).max(50),
+});
+
+router.post('/knowledge', verifySquadhireCallbackSecret, async (req: Request, res: Response) => {
+  try {
+    const body = approvedKnowledgeSchema.parse(req.body);
+    const id = await createApprovedKnowledge(body);
+    res.status(201).json({ success: true, data: { id } });
+  } catch (err: any) {
+    if (err instanceof z.ZodError) {
+      res.status(400).json({ success: false, error: err.errors[0]?.message ?? 'Invalid knowledge' });
+      return;
+    }
+    console.error('[squadhire-callback knowledge] error:', err);
+    res.status(500).json({ success: false, error: err?.message || 'Internal server error' });
+  }
+});
 
 export default router;
