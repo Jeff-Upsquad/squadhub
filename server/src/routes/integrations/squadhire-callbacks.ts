@@ -103,6 +103,37 @@ const talentNoticeSchema = z
   })
   .strict();
 
+// Every SquadHire talent push (opportunities, shortlist/selection, job stages,
+// chatroom messages, broadcasts) mirrored so the partner app's Discover
+// surface gets it — SquadHire's own FCM only reaches the retired talent app.
+// `type` is SquadHire's push type, kept verbatim because the partner app
+// routes on it. Group Meet has its own endpoint above.
+const TALENT_PUSH_TYPES = [
+  'new_card', 'selected', 'shortlisted', 'cancelled', 'unassigned', 'assignment_offer',
+  'job_new_card', 'job_stage', 'job_interview', 'job_interview_confirm',
+  'job_interview_start', 'job_offer', 'job_hired', 'broadcast',
+] as const;
+
+const talentPushNoticeSchema = z
+  .object({
+    type: z.enum(TALENT_PUSH_TYPES),
+    title: z.string().min(1).max(200),
+    body: z.string().max(1000).optional().default(''),
+    route: z.string().max(300).optional().default('/talent/notifications'),
+    card_id: z.string().uuid().nullable().optional(),
+    card_type: z.string().max(40).nullable().optional(),
+    // 'shortlist' | 'selection' make the partner app show its full-screen
+    // confirm/decline alert; needs the talent's recipient_id to act on.
+    notification_kind: z.enum(['shortlist', 'selection']).nullable().optional(),
+    business_name: z.string().max(200).nullable().optional(),
+    card_title: z.string().max(200).nullable().optional(),
+    talents: z.array(z.object({
+      email: z.string().email(),
+      recipient_id: z.string().uuid().nullable().optional(),
+    })).min(1).max(200),
+  })
+  .strict();
+
 // Assignment-time partner provisioning. The signed caller supplies identity,
 // but the local assigned card is the entitlement: a valid signature alone can
 // never create a partner who is not actually assigned on this SquadHub card.
@@ -711,6 +742,9 @@ router.post(
       const rows = (users ?? []).map((u) => ({
         user_id: u.id as string,
         type: body.kind,
+        // reference_id is NOT NULL and an announcement has no entity of its
+        // own — the tap opens the row by its notification id.
+        reference_id: u.id as string,
         // 'announcement' → the partner app opens the inline detail on tap.
         reference_type: 'announcement',
         title: body.title,
@@ -733,6 +767,73 @@ router.post(
         return;
       }
       console.error('[squadhire-callback talent/notice] error:', err);
+      res.status(500).json({ success: false, error: err?.message || 'Internal server error' });
+    }
+  },
+);
+
+// Mirror a SquadHire talent push into the inbox; the notifications poller then
+// FCMs it to the partner app (sendPartnerPush). Emails without a SquadHub
+// account are skipped — most talents never sign in to the partner app.
+router.post(
+  '/talent/push-notice',
+  verifySquadhireCallbackSecret,
+  async (req: Request, res: Response) => {
+    try {
+      const body = talentPushNoticeSchema.parse(req.body);
+      const recipientByEmail = new Map<string, string | null>();
+      for (const t of body.talents) {
+        const email = t.email.trim().toLowerCase();
+        if (email && !recipientByEmail.has(email)) recipientByEmail.set(email, t.recipient_id ?? null);
+      }
+      const { data: users, error: userError } = await supabaseAdmin
+        .from('users')
+        .select('id, email')
+        .in('email', [...recipientByEmail.keys()]);
+      if (userError) {
+        res.status(500).json({ success: false, error: userError.message });
+        return;
+      }
+      const rows = (users ?? []).map((u) => {
+        const userId = u.id as string;
+        const recipientId = recipientByEmail.get(String(u.email || '').toLowerCase()) ?? null;
+        // The confirm/decline alert acts on a recipient; without one the push
+        // degrades to a plain "open this opportunity" notification.
+        const kind = recipientId ? body.notification_kind ?? null : null;
+        return {
+          user_id: userId,
+          type: body.type,
+          reference_type: kind ?? 'opportunity',
+          reference_id: recipientId ?? body.card_id ?? userId,
+          title: body.title,
+          body: body.body || null,
+          metadata: {
+            route: body.route,
+            card_id: body.card_id ?? null,
+            card_type: body.card_type ?? null,
+            notification_kind: kind,
+            business_name: body.business_name ?? null,
+            card_title: body.card_title ?? null,
+            source: 'squadhire',
+          },
+        };
+      });
+      if (rows.length === 0) {
+        res.json({ success: true, data: { inserted: 0 } });
+        return;
+      }
+      const { error: insertError } = await supabaseAdmin.from('notifications').insert(rows);
+      if (insertError) {
+        res.status(500).json({ success: false, error: insertError.message });
+        return;
+      }
+      res.json({ success: true, data: { inserted: rows.length } });
+    } catch (err: any) {
+      if (err instanceof z.ZodError) {
+        res.status(400).json({ success: false, error: err.errors[0].message });
+        return;
+      }
+      console.error('[squadhire-callback talent/push-notice] error:', err);
       res.status(500).json({ success: false, error: err?.message || 'Internal server error' });
     }
   },

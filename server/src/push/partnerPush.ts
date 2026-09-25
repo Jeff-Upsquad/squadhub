@@ -61,6 +61,7 @@ export async function sendPartnerPush(notification: PartnerNotification): Promis
     route: asStr(meta.route),
     link_url: asStr(meta.link_url),
     meeting_id: asStr(meta.meeting_id),
+    card_id: asStr(meta.card_id),
     action_required: asStr(meta.action_required),
   };
 
