@@ -79,6 +79,20 @@ function formatPlanDate(iso: string | null | undefined): string {
   return d.toLocaleDateString([], { month: 'short', day: 'numeric' });
 }
 
+/** "Just now" / "5m ago" / "3h ago" / "Yesterday" / "Sep 24" for comment stamps. */
+function formatCommentTime(iso: string): string {
+  const d = new Date(iso);
+  const mins = Math.floor((Date.now() - d.getTime()) / 60000);
+  if (mins < 1) return 'Just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const yesterday = new Date();
+  yesterday.setDate(yesterday.getDate() - 1);
+  if (d.toDateString() === yesterday.toDateString()) return 'Yesterday';
+  return d.toLocaleDateString([], { month: 'short', day: 'numeric', ...(d.getFullYear() !== new Date().getFullYear() ? { year: 'numeric' } : {}) });
+}
+
 function formatCreatedAt(iso: string): string {
   const d = new Date(iso);
   if (isNaN(d.getTime())) return '';
@@ -449,11 +463,43 @@ export default function TaskDetailPanel({
   // Activity is fetched only once its (collapsed-by-default) section is opened.
   const { data: activityFeed } = useTaskActivity(effectiveTaskId, showActivity);
   const [commentFocus, setCommentFocus] = useState(false);
+  // Comment composer toolbar: @ inserts a mention trigger, the clip attaches
+  // files to the task, the mic starts the voice-note recorder below.
+  const commentFieldRef = useRef<HTMLDivElement | null>(null);
+  const commentFileRef = useRef<HTMLInputElement | null>(null);
+  const voiceStartRef = useRef<(() => void) | null>(null);
+  const insertMention = () => {
+    const el = commentFieldRef.current?.querySelector('textarea, input') as HTMLTextAreaElement | HTMLInputElement | null;
+    if (!el) return;
+    el.focus();
+    const needsSpace = el.value.length > 0 && !/\s$/.test(el.value.slice(0, el.selectionStart ?? el.value.length));
+    // execCommand keeps React's onChange + the picker's @-detection in the loop.
+    document.execCommand('insertText', false, needsSpace ? ' @' : '@');
+  };
   const [estimateAnchor, setEstimateAnchor] = useState<DOMRect | null>(null);
   const [logTimeAnchor, setLogTimeAnchor] = useState<DOMRect | null>(null);
   const [timerElapsed, setTimerElapsed] = useState(0);
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
   const [movePickerOpen, setMovePickerOpen] = useState(false);
+  // Desktop collapsibles — the Details card and each body section.
+  const [detailsCollapsed, setDetailsCollapsed] = useState(false);
+  const [collapsedSecs, setCollapsedSecs] = useState<Record<string, boolean>>({});
+  const toggleSec = (key: string) => setCollapsedSecs((prev) => ({ ...prev, [key]: !prev[key] }));
+  const secOpen = (key: string) => isMobile || !collapsedSecs[key];
+  const secToggle = (key: string, title: string) => (
+    <button
+      type="button"
+      className="td-sec-toggle"
+      data-open={secOpen(key) ? 'true' : undefined}
+      aria-expanded={secOpen(key)}
+      onClick={() => toggleSec(key)}
+    >
+      <svg className="chev" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+        <path d="m6 9 6 6 6-6" />
+      </svg>
+      <span className="title">{title}</span>
+    </button>
+  );
   const [addPickerOpen, setAddPickerOpen] = useState(false);
   const [statusMenuOpen, setStatusMenuOpen] = useState(false);
   const [priorityMenuOpen, setPriorityMenuOpen] = useState(false);
@@ -1059,7 +1105,7 @@ export default function TaskDetailPanel({
       <aside
         onClick={(e) => e.stopPropagation()}
         {...(canEdit && task ? panelHandlers : {})}
-        className="td-panel td-panel-luma apple td-shell absolute flex flex-col"
+        className={`td-panel td-panel-luma apple td-shell absolute flex flex-col${isMobile ? '' : ' td-compact'}`}
         data-peek={isPeek ? 'true' : undefined}
         data-mobile={isMobile ? 'true' : undefined}
         style={{
@@ -1193,6 +1239,7 @@ export default function TaskDetailPanel({
               <path d="M13 17l5-5-5-5M6 17l5-5-5-5" />
             </svg>
           </button>
+          <span className="td-head-divider" aria-hidden />
           {spaceName && (() => {
             // Clickable breadcrumb — each segment navigates the underlying view
             // to that space / folder / list (see goToSpace/goToFolder/goToList).
@@ -1206,7 +1253,7 @@ export default function TaskDetailPanel({
                 </button>
                 {folderName && (
                   <>
-                    <span className="sep">›</span>
+                    <svg className="sep" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="m9 6 6 6-6 6" /></svg>
                     <button type="button" className="td-bcrumb-part" onClick={goToFolder} title={`Go to ${folderName}`}>
                       <span className="name">{folderName}</span>
                     </button>
@@ -1214,53 +1261,68 @@ export default function TaskDetailPanel({
                 )}
                 {listName && (
                   <>
-                    <span className="sep">›</span>
-                    <button type="button" className="td-bcrumb-part" onClick={goToList} title={`Go to ${listName}`}>
+                    <svg className="sep" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="m9 6 6 6-6 6" /></svg>
+                    <button type="button" className="td-bcrumb-part td-bcrumb-list" onClick={goToList} title={`Go to ${listName}`}>
                       <span className="name">{listName}</span>
                     </button>
                   </>
                 )}
               </span>
             );
-            // For editors, wrap the breadcrumb in the list picker so the "Move to
-            // another list" action (now in the ⋯ menu) can anchor its dropdown
-            // here. The picker is opened via movePickerOpen, not by the crumb.
-            return workspaceId && canEdit ? (
-              <ListPickerCombobox
-                workspaceId={workspaceId}
-                selectedListId={listId}
-                selectedListName={listName ?? null}
-                initialSpaceId={spaceId ?? null}
-                open={movePickerOpen}
-                onOpenChange={setMovePickerOpen}
-                onChange={(newListId) => {
-                  if (task && newListId !== listId) {
-                    updateTask.mutate({ id: task.id, list_id: newListId });
-                  }
-                }}
-                renderTrigger={() => crumb}
-              />
-            ) : crumb;
+            if (!(workspaceId && canEdit)) return crumb;
+            // Editors get two actions right after the path: "+" links the task
+            // into another list (multi-homing), the arrow moves it. Both pickers
+            // are also reachable from the ⋯ menu and anchor on these buttons.
+            return (
+              <span className="td-path">
+                {crumb}
+                <span className="td-path-seg">
+                <ListPickerCombobox
+                  workspaceId={workspaceId}
+                  selectedListId={null}
+                  selectedListName={null}
+                  initialSpaceId={spaceId ?? null}
+                  open={addPickerOpen}
+                  onOpenChange={setAddPickerOpen}
+                  onChange={(newListId) => {
+                    if (!task) return;
+                    if (newListId === listId) return; // already its primary list
+                    if (secondaryLists.some((p) => p.list_id === newListId)) return; // already added
+                    addToLists.mutate([newListId]);
+                  }}
+                  renderTrigger={({ toggle }) => (
+                    <button type="button" className="td-path-btn" onClick={toggle} title="Add to another list" aria-label="Add to another list">
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden>
+                        <path d="M12 5v14M5 12h14" />
+                      </svg>
+                    </button>
+                  )}
+                />
+                <ListPickerCombobox
+                  workspaceId={workspaceId}
+                  selectedListId={listId}
+                  selectedListName={listName ?? null}
+                  initialSpaceId={spaceId ?? null}
+                  open={movePickerOpen}
+                  onOpenChange={setMovePickerOpen}
+                  onChange={(newListId) => {
+                    if (task && newListId !== listId) {
+                      updateTask.mutate({ id: task.id, list_id: newListId });
+                    }
+                  }}
+                  renderTrigger={({ toggle }) => (
+                    <button type="button" className="td-path-btn" onClick={toggle} title="Move to another list" aria-label="Move to another list">
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                        <path d="M13 4H6.5A2.5 2.5 0 004 6.5v11A2.5 2.5 0 006.5 20H13" />
+                        <path d="M9.5 12H20M16.5 8.5 20 12l-3.5 3.5" />
+                      </svg>
+                    </button>
+                  )}
+                />
+                </span>
+              </span>
+            );
           })()}
-          {/* Invisible anchor for the "Add to list" picker (opened from the ⋯
-              menu). Multi-homing: each pick links the task into another list. */}
-          {workspaceId && canEdit && (
-            <ListPickerCombobox
-              workspaceId={workspaceId}
-              selectedListId={null}
-              selectedListName={null}
-              initialSpaceId={spaceId ?? null}
-              open={addPickerOpen}
-              onOpenChange={setAddPickerOpen}
-              onChange={(newListId) => {
-                if (!task) return;
-                if (newListId === listId) return; // already its primary list
-                if (secondaryLists.some((p) => p.list_id === newListId)) return; // already added
-                addToLists.mutate([newListId]);
-              }}
-              renderTrigger={() => <span aria-hidden className="block h-0 w-0" />}
-            />
-          )}
           <div className="flex-1" />
           {task && (
             <FocusStarButton
@@ -1659,7 +1721,71 @@ export default function TaskDetailPanel({
                 </>
               )}
 
-              {/* Assignee bar — full-width row */}
+              {/* Assignee — desktop: property row with a person chip and a
+                  dashed "+" (both open the picker, which also unassigns). */}
+              {!isMobile ? (
+                <div className="td-assignee-row">
+                  <span className="k">{META_ICONS.Assignee}Assignee</span>
+                  <div className="v">
+                    {assignees.length > 0 ? (
+                      <button
+                        type="button"
+                        className="td-assignee-chip"
+                        disabled={!canEdit}
+                        onClick={(e) => {
+                          setAssigneeAnchorRect((e.currentTarget as HTMLElement).getBoundingClientRect());
+                          setAssigneePickerOpen(v => !v);
+                        }}
+                      >
+                        <span className="avs">
+                          {assignees.slice(0, 3).map((u) => (
+                            <span
+                              key={u.id}
+                              className="av"
+                              style={{ background: avatarColor(u.id || u.email) }}
+                              title={u.display_name || u.email}
+                            >
+                              {initialOf(u.display_name || u.email)}
+                            </span>
+                          ))}
+                        </span>
+                        <span className="name">
+                          {assignees.length === 1
+                            ? (assignees[0].display_name || assignees[0].email)
+                            : `${assignees.length} assignees`}
+                        </span>
+                      </button>
+                    ) : (
+                      <span className="td-assignee-none">Unassigned</span>
+                    )}
+                    {canEdit && (
+                      <button
+                        type="button"
+                        className="td-assignee-add"
+                        title={assignees.length > 0 ? 'Change assignees' : 'Assign someone'}
+                        aria-label={assignees.length > 0 ? 'Change assignees' : 'Assign someone'}
+                        onClick={(e) => {
+                          setAssigneeAnchorRect((e.currentTarget as HTMLElement).getBoundingClientRect());
+                          setAssigneePickerOpen(v => !v);
+                        }}
+                      >
+                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden>
+                          <path d="M12 5v14M5 12h14" />
+                        </svg>
+                      </button>
+                    )}
+                    {canEdit && assignees.length === 0 && currentUser?.id && (
+                      <button
+                        type="button"
+                        className="td-assignee-me"
+                        onClick={() => updateTask.mutate({ id: task.id, assignee_ids: [currentUser.id] })}
+                      >
+                        Assign to me
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ) : (
               <div
                 className="td-assignee-bar td-focus w-full text-left"
                 role={canEdit ? 'button' : undefined}
@@ -1670,7 +1796,7 @@ export default function TaskDetailPanel({
                 } : undefined}
                 style={canEdit ? undefined : { cursor: 'default' }}
               >
-                <span className="label">Assignee</span>
+                <span className="label"><span className="td-assignee-ico" aria-hidden>{META_ICONS.Assignee}</span>Assignee</span>
                 <span className="value">
                   {assignees.length > 0 ? (
                     <>
@@ -1741,9 +1867,24 @@ export default function TaskDetailPanel({
                   )
                 )}
               </div>
+              )}
 
-              {/* Details — 2-column property grid (with head bar) */}
-              <div className="td-settings-card">
+              {/* Details — 2-column property grid (with head bar). Desktop: a
+                  bordered card whose "Details" head collapses it. */}
+              <div className="td-settings-card" data-collapsed={!isMobile && detailsCollapsed ? 'true' : undefined}>
+                {!isMobile && (
+                  <button
+                    type="button"
+                    className="td-details-toggle"
+                    onClick={() => setDetailsCollapsed((v) => !v)}
+                    aria-expanded={!detailsCollapsed}
+                  >
+                    <span className="label">Details</span>
+                    <svg className="chev" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                      <path d="m6 9 6 6 6-6" />
+                    </svg>
+                  </button>
+                )}
                 <div className="td-details-head">
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                     <circle cx="12" cy="12" r="9" />
@@ -1751,7 +1892,12 @@ export default function TaskDetailPanel({
                   </svg>
                   <span className="label">Details</span>
                 </div>
-                <div className="td-settings-card" data-twocol="true" style={{ border: 'none', borderRadius: 0, marginBottom: 0 }}>
+                <div
+                  className="td-settings-card"
+                  data-twocol={isMobile ? 'true' : undefined}
+                  data-compact={isMobile ? undefined : 'true'}
+                  style={{ border: 'none', borderRadius: 0, marginBottom: 0 }}
+                >
                 {/* Resource source — mirrored tasks link back to their page/section. */}
                 {(task.source_kind === 'course' || task.source_kind === 'sop' || task.source_kind === 'post') && (
                   <div className="td-settings-row" data-half="false" style={{ gridColumn: '1 / -1', cursor: 'default' }}>
@@ -1903,6 +2049,47 @@ export default function TaskDetailPanel({
                   </span>
                 </div>
 
+                {/* Dates — desktop folds Start + Due into one "Start → Due" row;
+                    each half opens its own picker. Mobile keeps separate rows. */}
+                {!isMobile && (
+                  <div className="td-settings-row td-dates-cell" data-half="true" data-td="dates" style={{ cursor: 'default' }}>
+                    <span className="k">{META_ICONS.StartDate}Dates</span>
+                    <span className="v">
+                      <button
+                        type="button"
+                        className="td-date-half"
+                        data-empty={task.start_date ? undefined : 'true'}
+                        disabled={!canEdit}
+                        onClick={(e) => {
+                          setStartDateAnchor((e.currentTarget as HTMLElement).getBoundingClientRect());
+                          setStartDateOpen(v => !v);
+                        }}
+                        title={task.start_date ? `Start ${formatDueRelative(task.start_date).text}` : (canEdit ? 'Set start date' : undefined)}
+                      >
+                        {META_ICONS.StartDate}
+                        {task.start_date ? formatDueRelative(task.start_date).text.split(' · ')[0] : 'Start'}
+                      </button>
+                      <span className="td-date-arrow" aria-hidden>→</span>
+                      <button
+                        type="button"
+                        className="td-date-half"
+                        data-empty={task.due_date ? undefined : 'true'}
+                        data-overdue={task.due_date && due.accent ? 'true' : undefined}
+                        disabled={!canEdit}
+                        onClick={(e) => {
+                          setDueDateAnchor((e.currentTarget as HTMLElement).getBoundingClientRect());
+                          setDueDateOpen(v => !v);
+                        }}
+                        title={task.due_date ? `Due ${due.text}${due.accent ? ' · Overdue' : ''}` : (canEdit ? 'Set due date' : undefined)}
+                      >
+                        {META_ICONS.Due}
+                        {task.due_date ? due.text.split(' · ')[0] : 'Due'}
+                      </button>
+                    </span>
+                  </div>
+                )}
+
+                {isMobile && (<>
                 {/* Start date */}
                 <div
                   className="td-settings-row td-date-row"
@@ -2005,6 +2192,7 @@ export default function TaskDetailPanel({
                     )}
                   </span>
                 </div>
+                </>)}
 
                 {/* Repeat — template shows its rule; a spawned copy links back
                     to its routine; plain tasks can become routines here. */}
@@ -2197,15 +2385,26 @@ export default function TaskDetailPanel({
 
               <div className="td-section-rule" />
 
-              {/* Subtasks — prominent */}
+              {/* Subtasks — prominent. Desktop: grey tray holds the name row,
+                  the list sits on it as a raised card (same for each section). */}
+              <div className="td-tray" data-sec="subtasks" data-open={secOpen('subtasks') ? 'true' : undefined}>
               <div className="td-section-strong">
-                <svg className="icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                  <rect x="3" y="4" width="7" height="16" rx="1.5" />
-                  <rect x="14" y="4" width="7" height="10" rx="1.5" />
-                </svg>
-                <span className="title">Subtasks</span>
+                {isMobile ? (
+                  <>
+                    <svg className="icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                      <rect x="3" y="4" width="7" height="16" rx="1.5" />
+                      <rect x="14" y="4" width="7" height="10" rx="1.5" />
+                    </svg>
+                    <span className="title">Subtasks</span>
+                  </>
+                ) : secToggle('subtasks', 'Subtasks')}
                 {subtasks.length > 0 && (
                   <span className="td-section-count-strong">{subtaskDone}/{subtasks.length}</span>
+                )}
+                {!isMobile && subtasks.length > 0 && (
+                  <span className="td-sec-bar" aria-hidden>
+                    <span style={{ width: `${(subtaskDone / subtasks.length) * 100}%` }} />
+                  </span>
                 )}
                 {canEdit && (
                   <AddEntrySplitButton
@@ -2220,7 +2419,8 @@ export default function TaskDetailPanel({
                   />
                 )}
               </div>
-              {(subtasks.length > 0 || canEdit) && (
+              <div className="td-tray-card">
+              {secOpen('subtasks') && (subtasks.length > 0 || canEdit) && (
                 <div className="td-subtask-list">
                   {subtasks
                     .filter((st: any) => !subtaskSectionIds.has(st.metadata?.subtask_section_id))
@@ -2289,16 +2489,19 @@ export default function TaskDetailPanel({
                   ) : null}
                 </div>
               )}
+              </div>
+              </div>
 
               <div className="td-section-rule" />
 
               {/* Checklist — secondary */}
+              <div className="td-tray" data-sec="checklist" data-open={secOpen('checklist') ? 'true' : undefined}>
               <div className="td-eyebrow" style={{ margin: '0 0 8px' }}>
-                Checklist
+                {isMobile ? 'Checklist' : secToggle('checklist', 'Checklist')}
                 {checklists && checklists.length > 0 && (() => {
                   const allItems = checklists.flatMap((c) => c.items || []);
                   const done = allItems.filter((i) => i.is_done).length;
-                  return <span className="muted">· {done}/{allItems.length}</span>;
+                  return <span className="muted">{isMobile ? '· ' : ''}{done}/{allItems.length}</span>;
                 })()}
                 {canEdit && newChecklistTitle === null && (
                   <AddEntrySplitButton
@@ -2310,6 +2513,8 @@ export default function TaskDetailPanel({
                   />
                 )}
               </div>
+              <div className="td-tray-card">
+              {secOpen('checklist') && (<>
               {canEdit && newChecklistTitle !== null && (
                 <input
                   autoFocus
@@ -2417,6 +2622,9 @@ export default function TaskDetailPanel({
               ) : !newChecklistTitle ? (
                 <div className="text-[12.5px] text-[color:var(--sh-ink-4)]">No checklists.</div>
               ) : null}
+              </>)}
+              </div>
+              </div>
 
               {isWorkBlock && task && (
                 <>
@@ -2428,23 +2636,98 @@ export default function TaskDetailPanel({
               <div className="td-section-rule" />
 
               {/* Files */}
+              <div className="td-tray" data-sec="files" data-open={secOpen('files') ? 'true' : undefined}>
               <div className="td-eyebrow" style={{ margin: '0 0 8px' }}>
-                Files
-                {attachmentCount > 0 && <span className="muted">· {attachmentCount}</span>}
+                {isMobile ? 'Files' : secToggle('files', 'Files')}
+                {attachmentCount > 0 && <span className="muted">{isMobile ? '· ' : ''}{attachmentCount}</span>}
               </div>
+              <div className="td-tray-card">
               {task && (
-                <div className="td-files-wrap">
+                <div className="td-files-wrap" style={secOpen('files') ? undefined : { display: 'none' }}>
                   <TaskAttachments ref={attachmentsRef} taskId={task.id} canEdit={canEdit} excludeAudio />
                 </div>
               )}
+              </div>
+              </div>
 
               <div className="td-section-rule" />
 
               {/* Comments — always visible */}
+              <div className="td-tray" data-sec="comments" data-open={secOpen('comments') ? 'true' : undefined}>
               <div className="td-eyebrow" style={{ margin: '0 0 10px' }}>
-                Comments
-                {comments && comments.length > 0 && <span className="muted">· {comments.length}</span>}
+                {isMobile ? 'Comments' : secToggle('comments', 'Comments')}
+                {comments && comments.length > 0 && <span className="muted">{isMobile ? '· ' : ''}{comments.length}</span>}
               </div>
+              <div className="td-tray-card">
+              {secOpen('comments') && (<>
+              {!isMobile ? (
+                <>
+                  <div className="td-cmt-composer">
+                    <span className="td-cmt-av" style={{ background: avatarColor(currentUser?.id || currentUser?.email || 'me') }}>
+                      {initialOf(currentUser?.display_name || currentUser?.email || 'You')}
+                    </span>
+                    <div
+                      ref={commentFieldRef}
+                      className="td-cmt-box"
+                      data-focus={commentFocus ? 'true' : undefined}
+                      onFocus={() => setCommentFocus(true)}
+                      onBlur={() => setCommentFocus(false)}
+                    >
+                      <MentionPicker
+                        value={commentText}
+                        mentions={commentMentions}
+                        onChange={(t, m) => { setCommentText(t); setCommentMentions(m); }}
+                        onSubmit={handleAddComment}
+                        multiline
+                        rows={2}
+                        placeholder="Leave a comment… use @ to mention"
+                        className="td-cmt-input"
+                      />
+                      <div className="td-cmt-tools">
+                        <button type="button" className="td-cmt-tool" title="Mention someone" aria-label="Mention someone" onMouseDown={(e) => e.preventDefault()} onClick={insertMention}>
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden><circle cx="12" cy="12" r="3.6" /><path d="M15.6 12v1.4a2.6 2.6 0 005.2 0V12a8.8 8.8 0 10-3.5 7" /></svg>
+                        </button>
+                        {canEdit && (
+                          <>
+                            <button type="button" className="td-cmt-tool" title="Attach file" aria-label="Attach file" onClick={() => commentFileRef.current?.click()}>
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M20 11.5l-7.8 7.8a4.6 4.6 0 01-6.5-6.5l8.2-8.2a3 3 0 014.3 4.3l-8.2 8.2a1.5 1.5 0 01-2.1-2.1l7.5-7.5" /></svg>
+                            </button>
+                            <input
+                              ref={commentFileRef}
+                              type="file"
+                              multiple
+                              hidden
+                              onChange={(e) => {
+                                if (e.target.files?.length) attachmentsRef.current?.addFiles(e.target.files);
+                                e.target.value = '';
+                              }}
+                            />
+                            <button type="button" className="td-cmt-tool" title="Record voice note" aria-label="Record voice note" onClick={() => voiceStartRef.current?.()}>
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5.5 11a6.5 6.5 0 0013 0M12 17.5V21" /></svg>
+                            </button>
+                          </>
+                        )}
+                        <span className="td-cmt-hint">⌘↵ to send</span>
+                        <button
+                          type="button"
+                          className="td-cmt-send"
+                          data-ready={commentText.trim() ? 'true' : undefined}
+                          disabled={!commentText.trim() || addComment.isPending}
+                          onClick={handleAddComment}
+                        >
+                          Send
+                          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M5 12h14M13 6l6 6-6 6" /></svg>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                  {canEdit && task && (
+                    <div className="td-cmt-voice">
+                      <VoiceNoteRecorder taskId={task.id} onUploaded={() => refetchAttachments()} startRef={voiceStartRef} hideIdle />
+                    </div>
+                  )}
+                </>
+              ) : (<>
               <div className="td-comment-box" data-focus={commentFocus ? 'true' : undefined}>
                 <span
                   className="td-ava-sm shrink-0"
@@ -2474,6 +2757,7 @@ export default function TaskDetailPanel({
               {canEdit && task && (
                 <VoiceNoteRecorder taskId={task.id} onUploaded={() => refetchAttachments()} />
               )}
+              </>)}
 
               {audioAttachments.length > 0 && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 10 }}>
@@ -2483,7 +2767,41 @@ export default function TaskDetailPanel({
                 </div>
               )}
 
-              {comments && comments.length > 0 ? (
+              {!isMobile && comments && comments.length > 0 ? (
+                <div className="td-cmt-list">
+                  {comments.map((c) => (
+                    <div
+                      key={c.id}
+                      data-comment-id={c.id}
+                      className={`td-cmt${highlightCommentId === c.id ? ' is-linked' : ''}`}
+                    >
+                      <span className="td-cmt-av sm" style={{ background: avatarColor(c.user?.id || c.user?.email) }}>
+                        {initialOf(c.user?.display_name || c.user?.email)}
+                      </span>
+                      <div className="td-cmt-main">
+                        <div className="td-cmt-meta">
+                          <b>{c.user?.display_name || c.user?.email}</b>
+                          <span
+                            className="time"
+                            title={new Date(c.created_at).toLocaleString([], { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                          >
+                            {formatCommentTime(c.created_at)}
+                          </span>
+                          <button
+                            type="button"
+                            className="td-cmt-act"
+                            onClick={() => openConvertToTask(sourceFromComment(c, task!, spaceId))}
+                            title="Create a new task from this comment"
+                          >
+                            Convert to task
+                          </button>
+                        </div>
+                        <div className="td-cmt-text">{linkifyText(c.content)}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : comments && comments.length > 0 ? (
                 <div className="flex flex-col gap-3 mt-3">
                   {comments.map((c) => (
                     <div
@@ -2520,6 +2838,9 @@ export default function TaskDetailPanel({
               ) : audioAttachments.length === 0 ? (
                 <div className="text-[12.5px] text-[color:var(--sh-ink-4)] mt-3">No comments yet.</div>
               ) : null}
+              </>)}
+              </div>
+              </div>
 
               <div className="td-section-rule" />
 
@@ -3269,7 +3590,14 @@ function AudioAttachmentPlayer({
 
 type VNRState = 'idle' | 'recording' | 'preview' | 'uploading';
 
-function VoiceNoteRecorder({ taskId, onUploaded }: { taskId: string; onUploaded: () => void }) {
+function VoiceNoteRecorder({ taskId, onUploaded, startRef, hideIdle }: {
+  taskId: string;
+  onUploaded: () => void;
+  /** Lets a toolbar mic button start recording (the composer's voice icon). */
+  startRef?: React.MutableRefObject<(() => void) | null>;
+  /** Render nothing while idle — the trigger lives elsewhere. */
+  hideIdle?: boolean;
+}) {
   const [state, setState] = useState<VNRState>('idle');
   const [elapsed, setElapsed] = useState(0);
   const [previewPlaying, setPreviewPlaying] = useState(false);
@@ -3323,6 +3651,7 @@ function VoiceNoteRecorder({ taskId, onUploaded }: { taskId: string; onUploaded:
   };
 
   const stopRecording = () => { mrRef.current?.stop(); };
+  if (startRef) startRef.current = state === 'idle' ? startRecording : null;
 
   const togglePreviewPlay = () => {
     const a = audioRef.current;
@@ -3369,6 +3698,7 @@ function VoiceNoteRecorder({ taskId, onUploaded }: { taskId: string; onUploaded:
   const fmtTime = (s: number) => `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, '0')}`;
 
   if (state === 'idle') {
+    if (hideIdle) return null;
     return (
       <button type="button" onClick={startRecording} className="td-voice-rec-btn" style={{ marginTop: 8 }}>
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
