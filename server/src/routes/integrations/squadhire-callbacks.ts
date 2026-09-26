@@ -10,6 +10,7 @@ import { lockAcceptedBidPrice } from '../../utils/lockAcceptedBidPrice';
 import { ensureSquadhireTalentProvisioned } from '../../utils/squadhireTalentSession';
 import { SquadhireSsoError } from '../../utils/squadhireSsoShared';
 import { createApprovedKnowledge } from '../../services/knowledgeFromSquadhire';
+import { currentPartnerManifest } from '../partner-app';
 
 /**
  * Inbound callbacks from SquadHire.
@@ -885,6 +886,48 @@ router.post('/knowledge', verifySquadhireCallbackSecret, async (req: Request, re
       return;
     }
     console.error('[squadhire-callback knowledge] error:', err);
+    res.status(500).json({ success: false, error: err?.message || 'Internal server error' });
+  }
+});
+
+// Partner app installs, read by SquadHire's sync. SquadHire matches rows to its
+// talents by email; `latest` is the build the in-app updater currently offers.
+router.get('/partner-app/installs', verifySquadhireCallbackSecret, async (_req: Request, res: Response) => {
+  try {
+    const PAGE = 1000;
+    const installs: Record<string, unknown>[] = [];
+    for (let from = 0; ; from += PAGE) {
+      const { data, error } = await supabaseAdmin
+        .from('partner_app_installs')
+        .select('user_id, platform, version_name, version_code, first_seen_at, last_seen_at, users(email)')
+        .order('user_id')
+        .range(from, from + PAGE - 1);
+      if (error) throw new Error(error.message);
+      for (const row of (data ?? []) as any[]) {
+        const email = (row.users?.email as string | undefined)?.trim().toLowerCase();
+        if (!email) continue;
+        installs.push({
+          squadhub_user_id: row.user_id,
+          email,
+          platform: row.platform,
+          version_name: row.version_name,
+          version_code: row.version_code,
+          first_seen_at: row.first_seen_at,
+          last_seen_at: row.last_seen_at,
+        });
+      }
+      if (!data || data.length < PAGE) break;
+    }
+    const manifest = currentPartnerManifest();
+    res.json({
+      success: true,
+      data: {
+        installs,
+        latest: { version_code: manifest.version_code, version_name: manifest.version_name },
+      },
+    });
+  } catch (err: any) {
+    console.error('[squadhire-callback partner-app installs] error:', err);
     res.status(500).json({ success: false, error: err?.message || 'Internal server error' });
   }
 });
