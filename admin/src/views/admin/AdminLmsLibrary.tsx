@@ -1,10 +1,10 @@
 'use client';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../services/api';
-import type { LmsItem, LmsItemStatus, LmsItemKind, LmsTrack, LmsCategory } from '@squadhub/shared';
+import type { LmsItem, LmsItemStatus, LmsItemKind, LmsTrack, LmsCategory, SquadBot } from '@squadhub/shared';
 import ShareModal from '../../components/lms/ShareModal';
 
 const STATUS_COLORS: Record<LmsItemStatus, string> = {
@@ -26,6 +26,15 @@ export default function AdminLmsLibrary() {
   const [statusFilter, setStatusFilter] = useState<LmsItemStatus | ''>('');
   const [categoryFilter, setCategoryFilter] = useState<string>('');
   const [trackFilter, setTrackFilter] = useState<LmsTrack | ''>('');
+  const [botFilter, setBotFilter] = useState<string>('');
+  // Deep links from Squad Bots: /admin/learning?track=knowledge&bot=<id>
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const track = params.get('track');
+    if (track === 'learning' || track === 'sop' || track === 'knowledge') setTrackFilter(track);
+    const bot = params.get('bot');
+    if (bot) setBotFilter(bot);
+  }, []);
   const [showGen, setShowGen] = useState(false);
   const [selectedSpec, setSelectedSpec] = useState('');
   // Bulk "add posts to a course" selection. Only draft posts are selectable —
@@ -40,9 +49,17 @@ export default function AdminLmsLibrary() {
   if (statusFilter) queryParams.set('status', statusFilter);
   if (categoryFilter) queryParams.set('category_id', categoryFilter);
   if (trackFilter) queryParams.set('track', trackFilter);
+  if (trackFilter === 'knowledge' && botFilter) queryParams.set('bot_id', botFilter);
+
+  const { data: botsRes } = useQuery({
+    queryKey: ['squad-bots'],
+    queryFn: () => api.get('/admin/squad-bots').then((r) => r.data.data),
+    staleTime: 60_000,
+  });
+  const bots: SquadBot[] = botsRes?.bots || [];
 
   const { data: itemsRes } = useQuery({
-    queryKey: ['lms-items', kindFilter, statusFilter, categoryFilter, trackFilter],
+    queryKey: ['lms-items', kindFilter, statusFilter, categoryFilter, trackFilter, trackFilter === 'knowledge' ? botFilter : ''],
     queryFn: () => api.get(`/admin/lms/items?${queryParams.toString()}`).then((r) => r.data),
   });
   const items: LmsItem[] = itemsRes?.data || [];
@@ -153,6 +170,17 @@ export default function AdminLmsLibrary() {
         <FilterChip active={trackFilter === 'learning'} onClick={() => setTrackFilter('learning')} label="Learning" />
         <FilterChip active={trackFilter === 'sop'} onClick={() => setTrackFilter('sop')} label="Systems & Processes" />
         <FilterChip active={trackFilter === 'knowledge'} onClick={() => setTrackFilter('knowledge')} label="Knowledge" />
+        {trackFilter === 'knowledge' && bots.length > 0 && (
+          <select
+            value={botFilter}
+            onChange={(e) => setBotFilter(e.target.value)}
+            aria-label="Filter knowledge by bot"
+            className="rounded-full border border-divider bg-surface px-3 py-1 text-[12px] text-foreground-muted focus:border-ink focus:outline-none"
+          >
+            <option value="">All bots</option>
+            {bots.map((b) => <option key={b.id} value={b.id}>{b.internal_name}</option>)}
+          </select>
+        )}
         <span className="mx-1 h-4 w-px bg-well" />
         <FilterChip active={!kindFilter} onClick={() => setKindFilter('')} label="All kinds" />
         <FilterChip active={kindFilter === 'post'} onClick={() => setKindFilter('post')} label="Posts" />
@@ -238,6 +266,11 @@ export default function AdminLmsLibrary() {
                         {item.track === 'knowledge' && (
                           <span className="rounded-full bg-emerald-50 px-1.5 py-px text-[10px] font-medium uppercase tracking-wide text-emerald-700">
                             Knowledge
+                          </span>
+                        )}
+                        {item.track === 'knowledge' && item.bot && (
+                          <span className="rounded-full bg-canvas px-1.5 py-px text-[10px] font-medium text-foreground-muted">
+                            🤖 {item.bot.internal_name}
                           </span>
                         )}
                       </div>
@@ -333,6 +366,8 @@ export default function AdminLmsLibrary() {
           creating={createItem.isPending}
           onCreate={(body) => createItem.mutate(body)}
           onClose={() => !createItem.isPending && setShowNew(false)}
+          bots={bots}
+          initialBotId={botFilter}
         />
       )}
 
@@ -525,26 +560,36 @@ const CONTENT_TYPES: {
   { key: 'post', kind: 'post', track: 'learning', icon: '📄', title: 'Post', desc: 'A single self-contained update or article.', placeholder: 'e.g. Q3 product update' },
   { key: 'course', kind: 'course', track: 'learning', icon: '📚', title: 'Course', desc: 'A multi-lesson journey learners work through.', placeholder: 'e.g. Onboarding 101' },
   { key: 'sop', kind: 'post', track: 'sop', icon: '🧭', title: 'SOP / Guide', desc: 'A how-to under Systems & Procedures.', placeholder: 'e.g. How to submit an expense' },
-  { key: 'knowledge', kind: 'post', track: 'knowledge', icon: '🤖', title: 'Knowledge', desc: 'A Q&A or guide Squad Bot uses to answer talents.', placeholder: 'e.g. When do I get paid?' },
+  { key: 'knowledge', kind: 'post', track: 'knowledge', icon: '🤖', title: 'Knowledge', desc: 'A Q&A or guide a Squad Bot answers from.', placeholder: 'e.g. When do I get paid?' },
 ];
 
 function NewContentModal({
   creating,
   onCreate,
   onClose,
+  bots,
+  initialBotId,
 }: {
   creating: boolean;
-  onCreate: (body: { kind: LmsItemKind; track: LmsTrack; title: string }) => void;
+  onCreate: (body: { kind: LmsItemKind; track: LmsTrack; title: string; bot_id?: string }) => void;
   onClose: () => void;
+  bots: SquadBot[];
+  initialBotId: string;
 }) {
   const [typeKey, setTypeKey] = useState('post');
   const [title, setTitle] = useState('');
+  const [botId, setBotId] = useState(initialBotId || bots[0]?.id || '');
   const type = CONTENT_TYPES.find((t) => t.key === typeKey)!;
   const canCreate = title.trim().length > 0 && !creating;
 
   function submit() {
     if (!canCreate) return;
-    onCreate({ kind: type.kind, track: type.track, title: title.trim() });
+    onCreate({
+      kind: type.kind,
+      track: type.track,
+      title: title.trim(),
+      ...(type.track === 'knowledge' && botId ? { bot_id: botId } : {}),
+    });
   }
 
   return (
@@ -572,6 +617,19 @@ function NewContentModal({
             );
           })}
         </div>
+
+        {type.track === 'knowledge' && bots.length > 0 && (
+          <>
+            <label className="mt-4 block text-[11px] font-medium uppercase tracking-wider text-foreground-dim">For which bot</label>
+            <select
+              value={botId}
+              onChange={(e) => setBotId(e.target.value)}
+              className="mt-1 w-full rounded-md border border-divider bg-surface px-3 py-2 text-sm focus:border-ink focus:outline-none"
+            >
+              {bots.map((b) => <option key={b.id} value={b.id}>{b.internal_name}</option>)}
+            </select>
+          </>
+        )}
 
         <label className="mt-4 block text-[11px] font-medium uppercase tracking-wider text-foreground-dim">Title</label>
         <input

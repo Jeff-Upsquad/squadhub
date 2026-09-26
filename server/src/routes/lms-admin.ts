@@ -32,6 +32,7 @@ import {
   syncContentToSquadhire,
   syncItemToSquadhire,
 } from '../services/squadhireTraining';
+import { HIRING_BOT_SLUG, botIdForSlug, isSquadhireBot } from '../services/squadBots';
 
 const router = Router();
 router.use(requireAuth);
@@ -191,12 +192,14 @@ router.get('/items', async (req: Request, res: Response) => {
     const statusFilter = req.query.status as string | undefined;
     const categoryFilter = req.query.category_id as string | undefined;
     const trackFilter = req.query.track as string | undefined;
+    const botFilter = req.query.bot_id as string | undefined;
 
     let query = supabaseAdmin
       .from('lms_items')
       .select(`
         *,
-        category:lms_categories(id, name, color, slug)
+        category:lms_categories(id, name, color, slug),
+        bot:squad_bots(id, internal_name)
       `)
       // Draft clones (contributor revisions) live only in the Review Queue.
       .is('origin_item_id', null)
@@ -206,6 +209,7 @@ router.get('/items', async (req: Request, res: Response) => {
     if (statusFilter) query = query.eq('status', statusFilter);
     if (categoryFilter) query = query.eq('category_id', categoryFilter);
     if (trackFilter) query = query.eq('track', trackFilter);
+    if (botFilter) query = query.eq('bot_id', botFilter);
 
     const { data, error } = await query;
     if (error) {
@@ -261,6 +265,8 @@ const itemCreateSchema = z.object({
   kind: z.enum(['post', 'course']),
   track: z.enum(['learning', 'sop', 'knowledge']).optional(),
   knowledge_categories: knowledgeCategoriesSchema.optional(),
+  // Knowledge only: which Squad Bot it's for (defaults to the Squad Hiring Bot).
+  bot_id: z.string().uuid().nullable().optional(),
   title: z.string().min(1).max(200),
   slug: z.string().optional(),
   summary: z.string().max(2000).nullable().optional(),
@@ -273,13 +279,15 @@ router.post('/items', async (req: Request, res: Response) => {
     const body = itemCreateSchema.parse(req.body);
     const baseSlug = body.slug ? slugify(body.slug) : slugify(body.title);
     const slug = await ensureUniqueSlug(baseSlug);
+    const isKnowledge = body.track === 'knowledge';
 
     const { data, error } = await supabaseAdmin
       .from('lms_items')
       .insert({
         kind: body.kind,
         track: body.track ?? 'learning',
-        knowledge_categories: body.track === 'knowledge' ? body.knowledge_categories ?? [] : [],
+        knowledge_categories: isKnowledge ? body.knowledge_categories ?? [] : [],
+        bot_id: isKnowledge ? body.bot_id || (await botIdForSlug(HIRING_BOT_SLUG)) : null,
         title: body.title,
         slug,
         summary: body.summary ?? null,
@@ -504,6 +512,7 @@ const itemUpdateSchema = z.object({
   cover_image_url: z.string().nullable().optional(),
   category_id: z.string().uuid().nullable().optional(),
   knowledge_categories: knowledgeCategoriesSchema.optional(),
+  bot_id: z.string().uuid().optional(),
 });
 
 router.patch('/items/:id', async (req: Request, res: Response) => {
@@ -516,6 +525,21 @@ router.patch('/items/:id', async (req: Request, res: Response) => {
     if (body.cover_image_url !== undefined) patch.cover_image_url = body.cover_image_url;
     if (body.category_id !== undefined) patch.category_id = body.category_id;
     if (body.knowledge_categories !== undefined) patch.knowledge_categories = body.knowledge_categories;
+
+    // Moving knowledge to another bot: if it leaves a SquadHire bot, take it
+    // out of SquadHire's Knowledge Center.
+    let leftSquadhire = false;
+    if (body.bot_id !== undefined) {
+      const { data: before } = await supabaseAdmin.from('lms_items').select('track, bot_id').eq('id', req.params.id).maybeSingle();
+      if ((before as any)?.track !== 'knowledge') {
+        res.status(400).json({ success: false, error: 'Only knowledge items belong to a bot' });
+        return;
+      }
+      patch.bot_id = body.bot_id;
+      if ((before as any).bot_id !== body.bot_id) {
+        leftSquadhire = (await isSquadhireBot((before as any).bot_id)) && !(await isSquadhireBot(body.bot_id));
+      }
+    }
 
     const { data, error } = await supabaseAdmin
       .from('lms_items')
@@ -530,7 +554,8 @@ router.patch('/items/:id', async (req: Request, res: Response) => {
     }
 
     // A live knowledge item's title/summary/categories feed Squad Bot directly.
-    if ((data as any).track === 'knowledge' && (data as any).status === 'published') {
+    if (leftSquadhire) retractKnowledgeFromSquadhire(req.params.id as string);
+    else if ((data as any).track === 'knowledge' && (data as any).status === 'published') {
       syncItemToSquadhire(req.params.id as string);
     }
 
@@ -545,14 +570,16 @@ router.patch('/items/:id', async (req: Request, res: Response) => {
 });
 
 router.delete('/items/:id', async (req: Request, res: Response) => {
-  const { data: doomed } = await supabaseAdmin.from('lms_items').select('track').eq('id', req.params.id).maybeSingle();
+  const { data: doomed } = await supabaseAdmin.from('lms_items').select('track, bot_id').eq('id', req.params.id).maybeSingle();
   const { error } = await supabaseAdmin.from('lms_items').delete().eq('id', req.params.id);
   if (error) {
     res.status(500).json({ success: false, error: error.message });
     return;
   }
   // Take a deleted knowledge item out of Squad Bot's Knowledge Center too.
-  if ((doomed as any)?.track === 'knowledge') retractKnowledgeFromSquadhire(req.params.id as string);
+  if ((doomed as any)?.track === 'knowledge' && (await isSquadhireBot((doomed as any).bot_id))) {
+    retractKnowledgeFromSquadhire(req.params.id as string);
+  }
   res.json({ success: true });
 });
 
