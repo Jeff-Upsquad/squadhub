@@ -3108,6 +3108,82 @@ export type LmsAssignmentStatus = 'not_started' | 'in_progress' | 'completed';
 // Squad Bot's reference Q&As and guides, pushed to SquadHire on publish.
 export type LmsTrack = 'learning' | 'sop' | 'knowledge';
 
+// ============================================================
+// Squad Bots — AI bots managed from SquadHub admin
+// ============================================================
+
+// off: does nothing · practice: works but sends nothing · approval: a person
+// approves each reply · live: works on its own.
+export type SquadBotStatus = 'off' | 'practice' | 'approval' | 'live';
+export type SquadBotHomeApp = 'squadhire' | 'squad_crm' | 'other';
+export type AiProviderKind = 'anthropic' | 'openai_compatible';
+
+export interface AiProvider {
+  id: string;
+  slug: string;
+  name: string;
+  kind: AiProviderKind;
+  base_url: string | null;
+  /** Name of the server environment variable holding the key — never the key. */
+  api_key_env: string | null;
+  default_model: string | null;
+  is_enabled: boolean;
+  is_default: boolean;
+  ready: boolean;
+  problem: string | null;
+}
+
+export interface SquadBotAi {
+  provider_name: string | null;
+  model: string | null;
+  uses_default_provider: boolean;
+  problem: string | null;
+}
+
+export interface SquadBot {
+  id: string;
+  slug: string;
+  /** What the team calls it, e.g. "Squad Hiring Bot". */
+  internal_name: string;
+  /** What customers and talents see, e.g. "Squad Bot". */
+  public_name: string;
+  description: string;
+  home_app: SquadBotHomeApp;
+  status: SquadBotStatus;
+  /** status, or 'off' while every bot is paused. */
+  effective_status: SquadBotStatus;
+  provider_id: string | null;
+  model: string | null;
+  instructions: string;
+  max_tokens: number;
+  api_key_prefix: string | null;
+  api_key_created_at: string | null;
+  ai: SquadBotAi;
+  knowledge?: { total: number; published: number };
+  runs_today?: { total: number; failed: number };
+}
+
+export interface SquadBotRun {
+  id: string;
+  source: 'app' | 'admin_test';
+  bot_status: SquadBotStatus;
+  provider_slug: string | null;
+  model: string | null;
+  ok: boolean;
+  error: string | null;
+  input_tokens: number | null;
+  output_tokens: number | null;
+  latency_ms: number | null;
+  created_at: string;
+}
+
+export interface SquadBotDetail extends SquadBot {
+  all_paused: boolean;
+  providers: AiProvider[];
+  knowledge_items: Array<{ id: string; title: string; status: LmsItemStatus; updated_at: string; knowledge_categories: string[] }>;
+  recent_runs: SquadBotRun[];
+}
+
 /** A Knowledge Center category, as served live by SquadHire. */
 export interface KnowledgeCategoryOption {
   key: string;
@@ -3156,6 +3232,9 @@ export interface LmsItem {
   squadhire_last_error?: string | null;
   // Knowledge track only: 'general' | 'tech' | SquadHire talent category slugs.
   knowledge_categories?: string[];
+  // Knowledge track only: the Squad Bot this knowledge is for.
+  bot_id?: string | null;
+  bot?: { id: string; internal_name: string } | null;
   // Contributor "submit for review" flow (migration 165). When origin_item_id
   // is set this item is a draft CLONE proposing changes to that live item.
   origin_item_id?: string | null;

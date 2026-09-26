@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../services/api';
-import type { LmsItem, LmsLesson, LmsCategory, UserType, KnowledgeCategoryOption } from '@squadhub/shared';
+import type { LmsItem, LmsLesson, LmsCategory, UserType, KnowledgeCategoryOption, SquadBot } from '@squadhub/shared';
 import BlockList from '../../components/lms/BlockList';
 import AudiencePicker from '../../components/lms/AudiencePicker';
 import MediaUploader from '../../components/lms/MediaUploader';
@@ -59,11 +59,23 @@ export default function AdminLmsItemEditor({ itemId }: Props) {
   });
   const categories: LmsCategory[] = catRes?.data || [];
 
-  // Knowledge items are tagged with Squad Bot categories, served live by SquadHire.
+  // Knowledge belongs to a Squad Bot.
+  const { data: botsRes } = useQuery({
+    queryKey: ['squad-bots'],
+    queryFn: () => api.get('/admin/squad-bots').then((r) => r.data.data),
+    enabled: item?.track === 'knowledge',
+    staleTime: 60_000,
+  });
+  const bots: SquadBot[] = botsRes?.bots || [];
+  const itemBot = bots.find((b) => b.id === item?.bot_id) ?? null;
+  // Knowledge with no bot predates bots and is the SquadHire hiring bot's.
+  const forSquadhireBot = !item?.bot_id || itemBot?.home_app === 'squadhire';
+
+  // SquadHire bots' knowledge is tagged with talent categories, served live by SquadHire.
   const { data: kcRes, isError: kcError } = useQuery({
     queryKey: ['knowledge-categories'],
     queryFn: () => api.get('/admin/lms/knowledge-categories').then((r) => r.data),
-    enabled: item?.track === 'knowledge',
+    enabled: item?.track === 'knowledge' && forSquadhireBot,
     staleTime: 5 * 60_000,
   });
   const knowledgeCategories: KnowledgeCategoryOption[] = kcRes?.data || [];
@@ -319,16 +331,48 @@ export default function AdminLmsItemEditor({ itemId }: Props) {
 
           {isKnowledge ? (
             <Section
-              title="Squad Bot categories"
-              hint="Which talents Squad Bot uses this for. Published knowledge goes to SquadHire's Knowledge Center."
+              title="Squad Bot"
+              hint={
+                forSquadhireBot
+                  ? 'Which bot answers from this, and for which talents. Published knowledge goes to SquadHire\'s Knowledge Center.'
+                  : 'Which bot answers from this. Its app reads published knowledge from SquadHub.'
+              }
             >
-              <KnowledgeCategoryPicker
-                options={knowledgeCategories}
-                failed={kcError}
-                value={item.knowledge_categories || []}
-                onChange={(next) => patchItem.mutate({ knowledge_categories: next })}
-              />
-              <KnowledgeSyncStatus item={item} />
+              {bots.length > 0 && (
+                <Field label="Bot">
+                  <select
+                    value={item.bot_id ?? ''}
+                    onChange={(e) => {
+                      const next = e.target.value;
+                      if (!next || next === item.bot_id) return;
+                      patchItem.mutate({ bot_id: next });
+                    }}
+                    className="w-full rounded-md border border-divider bg-surface px-3 py-2 text-sm focus:border-ink focus:outline-none"
+                  >
+                    {!item.bot_id && <option value="">Squad Hiring Bot (unassigned)</option>}
+                    {bots.map((b) => (
+                      <option key={b.id} value={b.id}>{b.internal_name}</option>
+                    ))}
+                  </select>
+                </Field>
+              )}
+              {forSquadhireBot ? (
+                <>
+                  <KnowledgeCategoryPicker
+                    options={knowledgeCategories}
+                    failed={kcError}
+                    value={item.knowledge_categories || []}
+                    onChange={(next) => patchItem.mutate({ knowledge_categories: next })}
+                  />
+                  <KnowledgeSyncStatus item={item} />
+                </>
+              ) : (
+                <p className={`text-[11.5px] ${item.status === 'published' ? 'text-emerald-700' : 'text-foreground-dim'}`}>
+                  {item.status === 'published'
+                    ? `Live for ${itemBot?.internal_name ?? 'this bot'}.`
+                    : `${itemBot?.internal_name ?? 'The bot'} starts using this once you publish.`}
+                </p>
+              )}
             </Section>
           ) : isSop ? (
             <Section title="Access" hint="Who can see and edit this guide.">
