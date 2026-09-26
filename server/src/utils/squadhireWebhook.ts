@@ -198,7 +198,7 @@ export async function buildSquadhirePayloadForCard(
   const { data: card } = await supabaseAdmin
     .from('subscription_cards')
     .select(
-      'id, state, distribution, card_type, assignment_details, submission_subscription_id, working_days, brand_name, business_nature, notes, requirement_note, requirement_voice_url, additional_requirements, customer_location, custom_deliverables, disabled_default_deliverable_ids, target_tiers, min_experience_years, target_languages, squadhire_category_ids, published_at, partner_price_override, parent_card_id, brief_group_id, recalled_at, archived_at, paused_at, cancelled_at, source, proposed_price, subscription_price, markup, customer_company, customer_email, customer_phone, customer_name, service_type, plan_name, plan_snapshot, lead_submission_id',
+      'id, state, distribution, card_type, assignment_details, submission_subscription_id, working_days, brand_name, business_nature, notes, requirement_note, requirement_voice_url, additional_requirements, customer_location, custom_deliverables, disabled_default_deliverable_ids, target_tiers, min_experience_years, target_languages, squadhire_category_ids, published_at, partner_price_override, parent_card_id, brief_group_id, recalled_at, archived_at, paused_at, cancelled_at, source, proposed_price, subscription_price, markup, customer_company, customer_email, customer_phone, customer_name, service_type, plan_name, plan_snapshot, lead_submission_id, budget_currency',
     )
     .eq('id', cardId)
     .maybeSingle();
@@ -223,7 +223,7 @@ export async function buildSquadhirePayloadForCard(
     const { data: parent } = await supabaseAdmin
       .from('subscription_cards')
       .select(
-        'id, submission_subscription_id, working_days, brand_name, business_nature, notes, requirement_note, requirement_voice_url, additional_requirements, customer_location, custom_deliverables, disabled_default_deliverable_ids, target_tiers, min_experience_years, target_languages, squadhire_category_ids, proposed_price, subscription_price, markup, partner_price_override',
+        'id, submission_subscription_id, working_days, brand_name, business_nature, notes, requirement_note, requirement_voice_url, additional_requirements, customer_location, custom_deliverables, disabled_default_deliverable_ids, target_tiers, min_experience_years, target_languages, squadhire_category_ids, proposed_price, subscription_price, markup, partner_price_override, budget_currency',
       )
       .eq('id', card.parent_card_id)
       .maybeSingle();
@@ -633,9 +633,11 @@ export async function buildSquadhirePayloadForCard(
   let resolvedCustomerMonthlyPrice: number | null = null;
   let resolvedCurrency: string | null = null;
   const briefBudgetCurrency =
-    typeof (contentSource as any).budget_currency === 'string'
+    typeof (contentSource as any).budget_currency === 'string' && (contentSource as any).budget_currency
       ? (contentSource as any).budget_currency
-      : null;
+      : typeof (card as any).budget_currency === 'string' && (card as any).budget_currency
+        ? (card as any).budget_currency
+        : null;
   // Margin row for this country — used both for listed partner pay and for
   // the bid-floor / percent-ceil rules sent to SquadHire.
   let stagedMarginRow: PlanMarginFields | null = null;
@@ -919,6 +921,12 @@ export async function buildSquadhirePayloadForCard(
   if (resolvedCustomerMonthlyPrice != null && resolvedCurrency) {
     content.customer_monthly_price = resolvedCustomerMonthlyPrice;
     if (content.currency == null) content.currency = resolvedCurrency;
+  }
+  // Unpriced (invite-offers / request-quote) cards resolve no price, so the
+  // blocks above never set a currency and talents fell back to ₹. Send the
+  // currency the business chose on the brief so they quote in it.
+  if (content.currency == null && briefBudgetCurrency) {
+    content.currency = briefBudgetCurrency;
   }
 
   // Bidding rules for SquadHire: keep the same margin across counters, and
