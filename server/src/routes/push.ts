@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { supabaseAdmin } from '../supabase';
 import { config } from '../config';
 import { requireAuth } from '../middleware/auth';
+import { recordPartnerAppSighting } from '../utils/partnerAppInstalls';
 
 // Device push tokens for the native partner app (in.squadhub.partner). Distinct
 // from the Squad Chat tokens (/chat/push) — these drive pushes mirrored from the
@@ -62,6 +63,11 @@ router.post('/register', async (req: Request, res: Response) => {
       res.status(500).json({ success: false, error: error.message });
       return;
     }
+    // Registering a push token means the partner app is installed and signed
+    // in; count it even on builds that predate POST /partner-app/checkin.
+    await recordPartnerAppSighting(req.userId!, { platform: body.platform }).catch((err) =>
+      console.error('[push/register] partner app sighting failed:', (err as Error).message),
+    );
     res.json({ success: true });
   } catch (err) {
     if (err instanceof z.ZodError) {

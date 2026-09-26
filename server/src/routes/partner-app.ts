@@ -4,6 +4,8 @@ import path from 'path';
 import { z } from 'zod';
 import { config } from '../config';
 import { rateLimit } from '../utils/rateLimit';
+import { requireAuth } from '../middleware/auth';
+import { recordPartnerAppSighting } from '../utils/partnerAppInstalls';
 
 const router = Router();
 
@@ -58,6 +60,30 @@ router.post(
     }
   },
 );
+
+const checkinSchema = z.object({
+  version_name: z.string().trim().min(1).max(50),
+  version_code: z.number().int().positive(),
+  platform: z.enum(['ios', 'android']),
+}).strict();
+
+// POST /partner-app/checkin — the native app reports its build on every
+// signed-in launch. Feeds partner_app_installs, which SquadHire reads to tick
+// "Partner app downloaded" on its onboarding boards.
+router.post('/checkin', requireAuth, async (req: Request, res: Response) => {
+  const parsed = checkinSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ success: false, error: parsed.error.errors[0].message });
+    return;
+  }
+  try {
+    await recordPartnerAppSighting(req.userId!, parsed.data);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('[partner-app/checkin] failed:', (err as Error).message);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
 
 // Public — no auth required (visited by partners before they have an account)
 router.get('/app-config', (_req: Request, res: Response) => {
@@ -134,6 +160,11 @@ try {
   });
 } catch {
   /* ignore — falls back to a fresh read on each request */
+}
+
+/** The live release manifest (what the in-app updater offers right now). */
+export function currentPartnerManifest(): VersionManifest {
+  return cached ?? loadManifest();
 }
 
 // GET /partner-app/version — public, no auth. App polls on launch + periodically.
