@@ -404,6 +404,7 @@ function ConnectCard({ bot, onChanged }: { bot: SquadBotDetail; onChanged: () =>
           <p>GET  /integrations/squad-bots/config — status, names, AI, instructions</p>
           <p>GET  /integrations/squad-bots/knowledge — published knowledge</p>
           <p>POST /integrations/squad-bots/reply — {'{ messages: [{role, content}], context? }'}</p>
+          <p>POST /integrations/squad-bots/usage — report an AI call the app made itself</p>
         </div>
         <p className="mt-2">
           Status tells the app what to do: <b>off</b> — nothing (reply returns 423); <b>practice</b> — log the reply, don&apos;t send;

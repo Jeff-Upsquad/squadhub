@@ -21,6 +21,7 @@ import {
  *   GET  /integrations/squad-bots/config     status, names, AI provider/model, instructions
  *   GET  /integrations/squad-bots/knowledge  the bot's published knowledge
  *   POST /integrations/squad-bots/reply      an AI reply through the bot's provider
+ *   POST /integrations/squad-bots/usage      report an AI call the app made itself
  *
  * `status` tells the home app what to do with a reply:
  *   off       → do nothing (reply returns 423 without calling the AI)
@@ -136,6 +137,48 @@ router.post('/reply', async (req: BotRequest, res: Response) => {
   } catch (err: any) {
     res.status(502).json({ success: false, error: err?.message ?? 'The AI provider failed', status });
   }
+});
+
+// POST /integrations/squad-bots/usage — a bot that calls its AI itself (e.g.
+// Squad Hiring Bot, which needs Claude-only tools) reports each call here so
+// SquadHub admin still shows its activity.
+const usageSchema = z.object({
+  ok: z.boolean(),
+  status: z.enum(['off', 'practice', 'approval', 'live']).optional(),
+  provider: z.string().max(100).nullable().optional(),
+  model: z.string().max(200).nullable().optional(),
+  error: z.string().max(500).nullable().optional(),
+  input_tokens: z.number().int().min(0).nullable().optional(),
+  output_tokens: z.number().int().min(0).nullable().optional(),
+  latency_ms: z.number().int().min(0).nullable().optional(),
+});
+
+router.post('/usage', async (req: BotRequest, res: Response) => {
+  const parsed = usageSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ success: false, error: parsed.error.errors[0]?.message ?? 'Invalid usage' });
+    return;
+  }
+  const bot = req.squadBot!;
+  const u = parsed.data;
+  const { error } = await supabaseAdmin.from('squad_bot_runs').insert({
+    bot_id: bot.id,
+    source: 'app',
+    bot_status: u.status ?? effectiveStatus(bot, await allPaused()),
+    provider_slug: u.provider ?? null,
+    model: u.model ?? null,
+    ok: u.ok,
+    error: u.error ?? null,
+    input_tokens: u.input_tokens ?? null,
+    output_tokens: u.output_tokens ?? null,
+    latency_ms: u.latency_ms ?? null,
+  });
+  if (error) {
+    console.error('[squad-bots integration] usage:', error.message);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+    return;
+  }
+  res.json({ success: true });
 });
 
 export default router;
