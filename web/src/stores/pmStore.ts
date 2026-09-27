@@ -142,6 +142,13 @@ interface PMState {
   // user who deliberately re-collapses the section afterward.
   focusBucketCollapsed: Partial<Record<FocusBucket, boolean>>;
   focusBucketAutoOpenedDate: Partial<Record<FocusBucket, string>>;
+  sidebarSectionsExpanded: Record<string, boolean>;
+  expandedSpaces: Record<string, boolean>;
+  expandedFolders: Record<string, boolean>;
+  expandedClients: Record<string, boolean>;
+  favoriteItemsOrder: string[];
+  appFavoritesOrder: string[];
+  sidebarSectionOrder: string[];
   selectedTasks: string[];
   // Map of task IDs currently animating out → their pre-fade raw status string.
   // The snapshot lets grouping functions (groupTasksByStatus, groupByStatus) keep
@@ -234,6 +241,17 @@ interface PMState {
   toggleGroupedExpanded: (containerId: string) => void;
   setFocusBucketCollapsed: (bucket: FocusBucket, collapsed: boolean) => void;
   autoOpenFocusBucket: (bucket: FocusBucket, dateKey: string) => void;
+  toggleSidebarSection: (sectionKey: string) => void;
+  setSidebarSectionExpanded: (sectionKey: string, expanded: boolean) => void;
+  toggleSpaceExpanded: (spaceId: string) => void;
+  setSpaceExpanded: (spaceId: string, expanded: boolean) => void;
+  toggleFolderExpanded: (folderId: string) => void;
+  setFolderExpanded: (folderId: string, expanded: boolean) => void;
+  toggleClientExpanded: (clientId: string) => void;
+  setClientExpanded: (clientId: string, expanded: boolean) => void;
+  setFavoriteItemsOrder: (order: string[]) => void;
+  setAppFavoritesOrder: (order: string[]) => void;
+  setSidebarSectionOrder: (order: string[]) => void;
   setCalendarMode: (value: CalendarMode) => void;
   setCalendarWeekStart: (value: number) => void;
   setLastView: (section: string, homeView: string) => void;
@@ -246,6 +264,30 @@ interface PMState {
   _getServerPayload: () => Record<string, unknown>;
   reset: () => void;
 }
+
+export const DEFAULT_SIDEBAR_SECTIONS: Record<string, boolean> = {
+  unread: true,
+  apps: true,
+  favorites: true,
+  sharedWithMe: true,
+  workspaces: true,
+  spaces: true,
+  channels: true,
+  dms: true,
+  crmChats: true,
+};
+
+export const DEFAULT_SIDEBAR_SECTION_ORDER: string[] = [
+  'unread',
+  'apps',
+  'favorites',
+  'sharedWithMe',
+  'workspaces',
+  'spaces',
+  'channels',
+  'dms',
+  'crmChats',
+];
 
 export const todayKey = (): string => {
   const d = new Date();
@@ -283,6 +325,13 @@ export const usePMStore = create<PMState>()(
       groupedExpanded: {},
       focusBucketCollapsed: {},
       focusBucketAutoOpenedDate: {},
+      sidebarSectionsExpanded: DEFAULT_SIDEBAR_SECTIONS,
+      expandedSpaces: {},
+      expandedFolders: {},
+      expandedClients: {},
+      favoriteItemsOrder: [],
+      appFavoritesOrder: [],
+      sidebarSectionOrder: DEFAULT_SIDEBAR_SECTION_ORDER,
       selectedTasks: [],
       fadingTaskIds: new Map<string, string>(),
       peekTaskId: null,
@@ -330,32 +379,40 @@ export const usePMStore = create<PMState>()(
       },
       setListGroupBy: (g) => { set({ listGroupBy: g }); triggerSave(); },
       setMyTasksOnly: (v) => { set({ myTasksOnly: v }); triggerSave(); },
-      toggleGroupCollapse: (statusId) =>
+      toggleGroupCollapse: (statusId) => {
         set((state) => ({
           collapsedGroups: {
             ...state.collapsedGroups,
             [statusId]: !state.collapsedGroups[statusId],
           },
-        })),
+        }));
+        triggerSave();
+      },
       // Explicitly set a group's collapsed state. Prefer this over
       // toggleGroupCollapse when the caller knows the effective state but the
       // stored value may be undefined (e.g. a group with defaultCollapsed) —
       // flipping `undefined` would make the first click a no-op.
-      setGroupCollapsed: (groupKey, collapsed) =>
+      setGroupCollapsed: (groupKey, collapsed) => {
         set((state) => ({
           collapsedGroups: { ...state.collapsedGroups, [groupKey]: collapsed },
-        })),
-      toggleGroupedExpanded: (containerId) =>
+        }));
+        triggerSave();
+      },
+      toggleGroupedExpanded: (containerId) => {
         set((state) => ({
           groupedExpanded: {
             ...state.groupedExpanded,
             [containerId]: !state.groupedExpanded[containerId],
           },
-        })),
-      setFocusBucketCollapsed: (bucket, collapsed) =>
+        }));
+        triggerSave();
+      },
+      setFocusBucketCollapsed: (bucket, collapsed) => {
         set((state) => ({
           focusBucketCollapsed: { ...state.focusBucketCollapsed, [bucket]: collapsed },
-        })),
+        }));
+        triggerSave();
+      },
       // Mark a bucket's time-of-day threshold as reached for `dateKey` and expand
       // it if collapsed. Stamping the date makes this a once-per-day event, so a
       // user re-collapsing the section afterward isn't overridden on the next tick.
@@ -364,6 +421,90 @@ export const usePMStore = create<PMState>()(
           focusBucketCollapsed: { ...state.focusBucketCollapsed, [bucket]: false },
           focusBucketAutoOpenedDate: { ...state.focusBucketAutoOpenedDate, [bucket]: dateKey },
         })),
+      toggleSidebarSection: (key) => {
+        set((state) => ({
+          sidebarSectionsExpanded: {
+            ...state.sidebarSectionsExpanded,
+            [key]: !(state.sidebarSectionsExpanded[key] ?? true),
+          },
+        }));
+        triggerSave();
+      },
+      setSidebarSectionExpanded: (key, expanded) => {
+        set((state) => ({
+          sidebarSectionsExpanded: {
+            ...state.sidebarSectionsExpanded,
+            [key]: expanded,
+          },
+        }));
+        triggerSave();
+      },
+      toggleSpaceExpanded: (spaceId) => {
+        set((state) => ({
+          expandedSpaces: {
+            ...state.expandedSpaces,
+            [spaceId]: !(state.expandedSpaces[spaceId] ?? false),
+          },
+        }));
+        triggerSave();
+      },
+      setSpaceExpanded: (spaceId, expanded) => {
+        set((state) => ({
+          expandedSpaces: {
+            ...state.expandedSpaces,
+            [spaceId]: expanded,
+          },
+        }));
+        triggerSave();
+      },
+      toggleFolderExpanded: (folderId) => {
+        set((state) => ({
+          expandedFolders: {
+            ...state.expandedFolders,
+            [folderId]: !(state.expandedFolders[folderId] ?? true),
+          },
+        }));
+        triggerSave();
+      },
+      setFolderExpanded: (folderId, expanded) => {
+        set((state) => ({
+          expandedFolders: {
+            ...state.expandedFolders,
+            [folderId]: expanded,
+          },
+        }));
+        triggerSave();
+      },
+      toggleClientExpanded: (clientId) => {
+        set((state) => ({
+          expandedClients: {
+            ...state.expandedClients,
+            [clientId]: !(state.expandedClients[clientId] ?? true),
+          },
+        }));
+        triggerSave();
+      },
+      setClientExpanded: (clientId, expanded) => {
+        set((state) => ({
+          expandedClients: {
+            ...state.expandedClients,
+            [clientId]: expanded,
+          },
+        }));
+        triggerSave();
+      },
+      setFavoriteItemsOrder: (order) => {
+        set({ favoriteItemsOrder: order });
+        triggerSave();
+      },
+      setAppFavoritesOrder: (order) => {
+        set({ appFavoritesOrder: order });
+        triggerSave();
+      },
+      setSidebarSectionOrder: (order) => {
+        set({ sidebarSectionOrder: order });
+        triggerSave();
+      },
       toggleTaskSelection: (taskId) =>
         set((state) => ({
           selectedTasks: state.selectedTasks.includes(taskId)
@@ -594,6 +735,39 @@ export const usePMStore = create<PMState>()(
         if (typeof prefs.focusBucketsRolloverDate === 'string') {
           patch.focusBucketsRolloverDate = prefs.focusBucketsRolloverDate as string;
         }
+        if (prefs.collapsedGroups && typeof prefs.collapsedGroups === 'object') {
+          patch.collapsedGroups = prefs.collapsedGroups as Record<string, boolean>;
+        }
+        if (prefs.groupedExpanded && typeof prefs.groupedExpanded === 'object') {
+          patch.groupedExpanded = prefs.groupedExpanded as Record<string, boolean>;
+        }
+        if (prefs.focusBucketCollapsed && typeof prefs.focusBucketCollapsed === 'object') {
+          patch.focusBucketCollapsed = prefs.focusBucketCollapsed as Partial<Record<FocusBucket, boolean>>;
+        }
+        if (prefs.sidebarSectionsExpanded && typeof prefs.sidebarSectionsExpanded === 'object') {
+          patch.sidebarSectionsExpanded = {
+            ...DEFAULT_SIDEBAR_SECTIONS,
+            ...(prefs.sidebarSectionsExpanded as Record<string, boolean>),
+          };
+        }
+        if (prefs.expandedSpaces && typeof prefs.expandedSpaces === 'object') {
+          patch.expandedSpaces = prefs.expandedSpaces as Record<string, boolean>;
+        }
+        if (prefs.expandedFolders && typeof prefs.expandedFolders === 'object') {
+          patch.expandedFolders = prefs.expandedFolders as Record<string, boolean>;
+        }
+        if (prefs.expandedClients && typeof prefs.expandedClients === 'object') {
+          patch.expandedClients = prefs.expandedClients as Record<string, boolean>;
+        }
+        if (Array.isArray(prefs.favoriteItemsOrder)) {
+          patch.favoriteItemsOrder = prefs.favoriteItemsOrder as string[];
+        }
+        if (Array.isArray(prefs.appFavoritesOrder)) {
+          patch.appFavoritesOrder = prefs.appFavoritesOrder as string[];
+        }
+        if (Array.isArray(prefs.sidebarSectionOrder)) {
+          patch.sidebarSectionOrder = prefs.sidebarSectionOrder as string[];
+        }
         if (Object.keys(patch).length > 0) set(patch);
       },
       _getServerPayload: () => {
@@ -616,9 +790,19 @@ export const usePMStore = create<PMState>()(
           focusBuckets: s.focusBuckets,
           recurringFocusBuckets: s.recurringFocusBuckets,
           focusBucketsRolloverDate: s.focusBucketsRolloverDate,
+          collapsedGroups: s.collapsedGroups,
+          groupedExpanded: s.groupedExpanded,
+          focusBucketCollapsed: s.focusBucketCollapsed,
+          sidebarSectionsExpanded: s.sidebarSectionsExpanded,
+          expandedSpaces: s.expandedSpaces,
+          expandedFolders: s.expandedFolders,
+          expandedClients: s.expandedClients,
+          favoriteItemsOrder: s.favoriteItemsOrder,
+          appFavoritesOrder: s.appFavoritesOrder,
+          sidebarSectionOrder: s.sidebarSectionOrder,
         };
       },
-      reset: () => set({ activeSpaceId: null, activeListId: null, activeFolderId: null, activeSpacePageId: null, activeTaskId: null, activeDesignFolderId: null, activeDashboardTab: null, activeSecondaryCard: null, newTasksOpen: false, newTaskFabVisible: false, homeView: 'hub', contextListId: null, viewMode: 'list', activeViewIdByList: {}, listGroupBy: 'status', myTasksOnly: false, collapsedGroups: {}, groupedExpanded: {}, focusBucketCollapsed: {}, focusBucketAutoOpenedDate: {}, selectedTasks: [], fadingTaskIds: new Map<string, string>(), peekTaskId: null, groupRunPanel: null, timers: [], timerSegmentStart: null, pendingTimerStart: null, filtersByScope: {}, focusedTodayIds: [], focusedTodayDate: todayKey(), focusBuckets: {}, recurringFocusBuckets: {}, focusBucketsRolloverDate: todayKey(), groupByScope: {}, sortByScope: {}, focusTodayScope: {}, secondaryCardGroupBy: {}, todayListGroupBy: 'none', todayListView: 'list', lastActiveSection: 'home', lastHomeView: 'hub' }),
+      reset: () => set({ activeSpaceId: null, activeListId: null, activeFolderId: null, activeSpacePageId: null, activeTaskId: null, activeDesignFolderId: null, activeDashboardTab: null, activeSecondaryCard: null, newTasksOpen: false, newTaskFabVisible: false, homeView: 'hub', contextListId: null, viewMode: 'list', activeViewIdByList: {}, listGroupBy: 'status', myTasksOnly: false, collapsedGroups: {}, groupedExpanded: {}, focusBucketCollapsed: {}, focusBucketAutoOpenedDate: {}, sidebarSectionsExpanded: DEFAULT_SIDEBAR_SECTIONS, expandedSpaces: {}, expandedFolders: {}, expandedClients: {}, favoriteItemsOrder: [], appFavoritesOrder: [], sidebarSectionOrder: DEFAULT_SIDEBAR_SECTION_ORDER, selectedTasks: [], fadingTaskIds: new Map<string, string>(), peekTaskId: null, groupRunPanel: null, timers: [], timerSegmentStart: null, pendingTimerStart: null, filtersByScope: {}, focusedTodayIds: [], focusedTodayDate: todayKey(), focusBuckets: {}, recurringFocusBuckets: {}, focusBucketsRolloverDate: todayKey(), groupByScope: {}, sortByScope: {}, focusTodayScope: {}, secondaryCardGroupBy: {}, todayListGroupBy: 'none', todayListView: 'list', lastActiveSection: 'home', lastHomeView: 'hub' }),
     }),
     {
       name: 'squadhub-pm',
@@ -649,9 +833,17 @@ export const usePMStore = create<PMState>()(
         secondaryCardGroupBy: state.secondaryCardGroupBy,
         todayListGroupBy: state.todayListGroupBy,
         todayListView: state.todayListView,
+        collapsedGroups: state.collapsedGroups,
         groupedExpanded: state.groupedExpanded,
         focusBucketCollapsed: state.focusBucketCollapsed,
         focusBucketAutoOpenedDate: state.focusBucketAutoOpenedDate,
+        sidebarSectionsExpanded: state.sidebarSectionsExpanded,
+        expandedSpaces: state.expandedSpaces,
+        expandedFolders: state.expandedFolders,
+        expandedClients: state.expandedClients,
+        favoriteItemsOrder: state.favoriteItemsOrder,
+        appFavoritesOrder: state.appFavoritesOrder,
+        sidebarSectionOrder: state.sidebarSectionOrder,
         calendarMode: state.calendarMode,
         calendarWeekStart: state.calendarWeekStart,
         lastActiveSection: state.lastActiveSection,
