@@ -26,6 +26,7 @@ import { inputTimeToMinute, type Recurrence } from '../../../utils/workBlockRecu
 import EstimatePopover from '../../../components/pm/EstimatePopover';
 import { formatDuration } from '../../../lib/timeDuration';
 import AddEntrySplitButton from './AddEntrySplitButton';
+import { useIsMobile } from '../../../hooks/useIsMobile';
 
 /* -------------------------------------------------------------------------- */
 /* Helpers (duplicated from TaskDetailPanel — keep in sync if they change)    */
@@ -406,6 +407,27 @@ export default function TaskCreatePanel({
   const focusTask = useFocusTask();
   const filePickerRef = useRef<HTMLInputElement>(null);
   const checklistInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
+  const isMobile = useIsMobile();
+  // Desktop collapsibles — v3 parity with TaskDetailPanel: collapsible Details
+  // card + collapsible tray sections. Mobile keeps the legacy open layout.
+  const [detailsCollapsed, setDetailsCollapsed] = useState(false);
+  const [collapsedSecs, setCollapsedSecs] = useState<Record<string, boolean>>({});
+  const toggleSec = (key: string) => setCollapsedSecs((prev) => ({ ...prev, [key]: !prev[key] }));
+  const secOpen = (key: string) => isMobile || !collapsedSecs[key];
+  const secToggle = (key: string, title: string) => (
+    <button
+      type="button"
+      className="td-sec-toggle"
+      data-open={secOpen(key) ? 'true' : undefined}
+      aria-expanded={secOpen(key)}
+      onClick={() => toggleSec(key)}
+    >
+      <svg className="chev" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+        <path d="m6 9 6 6 6-6" />
+      </svg>
+      <span className="title">{title}</span>
+    </button>
+  );
 
   // Default task type, once the list of types is available.
   useEffect(() => {
@@ -771,15 +793,16 @@ export default function TaskCreatePanel({
         onClick={handleClose}
       />
 
-      {/* Floating drawer */}
+      {/* Floating drawer — td-compact on desktop for v3 parity with TaskDetailPanel */}
       <aside
         onClick={(e) => e.stopPropagation()}
         {...panelHandlers}
-        className="td-panel td-panel-luma apple td-shell absolute flex flex-col"
+        className={`td-panel td-panel-luma apple td-shell absolute flex flex-col${isMobile ? '' : ' td-compact'}`}
+        data-mobile={isMobile ? 'true' : undefined}
         style={{
           background: 'var(--surface)',
           transform: mounted ? 'translateX(0)' : 'translateX(calc(100% + 24px))',
-          transition: 'transform .42s cubic-bezier(0.23, 1, 0.32, 1), opacity .3s ease',
+          transition: isMobile ? 'none' : 'transform .42s cubic-bezier(0.23, 1, 0.32, 1), opacity .3s ease',
           opacity: mounted ? 1 : 0,
         }}
       >
@@ -810,6 +833,7 @@ export default function TaskCreatePanel({
               <path d="M13 17l5-5-5-5M6 17l5-5-5-5" />
             </svg>
           </button>
+          <span className="td-head-divider" aria-hidden />
           {pickable && workspaceId ? (
             <ListPickerCombobox
               workspaceId={workspaceId}
@@ -834,13 +858,13 @@ export default function TaskCreatePanel({
                   <span className="name">{effectiveSpaceName || 'Choose list'}</span>
                   {effectiveFolderName && (
                     <>
-                      <span className="sep">›</span>
+                      <svg className="sep" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="m9 6 6 6-6 6" /></svg>
                       <span className="name">{effectiveFolderName}</span>
                     </>
                   )}
                   {effectiveListName && (
                     <>
-                      <span className="sep">›</span>
+                      <svg className="sep" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="m9 6 6 6-6 6" /></svg>
                       <span className="name">{effectiveListName}</span>
                     </>
                   )}
@@ -859,13 +883,13 @@ export default function TaskCreatePanel({
                 <span className="name">{effectiveSpaceName}</span>
                 {effectiveFolderName && (
                   <>
-                    <span className="sep">›</span>
+                    <svg className="sep" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="m9 6 6 6-6 6" /></svg>
                     <span className="name">{effectiveFolderName}</span>
                   </>
                 )}
                 {effectiveListName && (
                   <>
-                    <span className="sep">›</span>
+                    <svg className="sep" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="m9 6 6 6-6 6" /></svg>
                     <span className="name">{effectiveListName}</span>
                   </>
                 )}
@@ -925,7 +949,7 @@ export default function TaskCreatePanel({
         {/* Scrollable body */}
         <div className="td-scroll flex-1 overflow-y-auto px-6 pt-3 pb-8">
           {/* Title row */}
-          <div className="flex items-start gap-3" style={{ marginBottom: 14 }}>
+          <div className="td-title-row flex items-start gap-3" style={{ marginBottom: 14 }}>
             <span
               className="mt-[6px] td-checkbox-lg shrink-0"
               data-done="false"
@@ -960,7 +984,76 @@ export default function TaskCreatePanel({
             </div>
           )}
 
-          {/* Assignee bar — full-width row */}
+          {/* Assignee — desktop: v3 compact row (chip + dashed "+" + Assign to me).
+              Mobile keeps the legacy full-width bar. */}
+          {!isMobile ? (
+            <div className="td-assignee-row">
+              <span className="k">{META_ICONS.Assignee}Assignee</span>
+              <div className="v">
+                {draft.assignee_ids.length > 0 ? (
+                  <button
+                    type="button"
+                    className="td-assignee-chip"
+                    onClick={(e) => {
+                      if (needsListForAssignee) { showToast('Select a list or folder to add assignee'); return; }
+                      setAssigneeAnchorRect((e.currentTarget as HTMLElement).getBoundingClientRect());
+                      setAssigneePickerOpen(v => !v);
+                    }}
+                  >
+                    <span className="avs">
+                      {draft.assignee_ids.slice(0, 3).map((id) => {
+                        const u = assignableMap.get(id);
+                        return (
+                          <span
+                            key={id}
+                            className="av"
+                            style={{ background: avatarColor(id) }}
+                            title={u?.display_name || u?.email}
+                          >
+                            {initialOf(u?.display_name)}
+                          </span>
+                        );
+                      })}
+                    </span>
+                    <span className="name">
+                      {draft.assignee_ids.length === 1
+                        ? (assignableMap.get(draft.assignee_ids[0])?.display_name || '1 assignee')
+                        : `${draft.assignee_ids.length} assignees`}
+                    </span>
+                  </button>
+                ) : (
+                  <span className="td-assignee-none">{needsListForAssignee ? 'Select a list or folder to add assignee' : 'Unassigned'}</span>
+                )}
+                <button
+                  type="button"
+                  className="td-assignee-add"
+                  title={draft.assignee_ids.length > 0 ? 'Change assignees' : 'Assign someone'}
+                  aria-label={draft.assignee_ids.length > 0 ? 'Change assignees' : 'Assign someone'}
+                  onClick={(e) => {
+                    if (needsListForAssignee) { showToast('Select a list or folder to add assignee'); return; }
+                    setAssigneeAnchorRect((e.currentTarget as HTMLElement).getBoundingClientRect());
+                    setAssigneePickerOpen(v => !v);
+                  }}
+                >
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden>
+                    <path d="M12 5v14M5 12h14" />
+                  </svg>
+                </button>
+                {draft.assignee_ids.length === 0 && currentUser?.id && (
+                  <button
+                    type="button"
+                    className="td-assignee-me"
+                    onClick={() => {
+                      if (needsListForAssignee) { showToast('Select a list or folder to add assignee'); return; }
+                      setDraft((d) => ({ ...d, assignee_ids: [currentUser!.id!] }));
+                    }}
+                  >
+                    Assign to me
+                  </button>
+                )}
+              </div>
+            </div>
+          ) : (
           <div
             className="td-assignee-bar td-focus w-full text-left"
             role="button"
@@ -1042,6 +1135,7 @@ export default function TaskCreatePanel({
               </button>
             )}
           </div>
+          )}
 
           {/* Brief section — only for design / video tasks */}
           {isDesignTask && (
@@ -1116,8 +1210,23 @@ export default function TaskCreatePanel({
             </>
           )}
 
-          {/* Details — 2-column property grid (with head bar) */}
-          <div className="td-settings-card">
+          {/* Details — v3 parity: desktop gets a bordered collapsible card with a
+              compact auto-fit grid (Start → Due folded into one Dates row,
+              Work date first); mobile keeps the legacy 2-column grid. */}
+          <div className="td-settings-card" data-collapsed={!isMobile && detailsCollapsed ? 'true' : undefined}>
+            {!isMobile && (
+              <button
+                type="button"
+                className="td-details-toggle"
+                onClick={() => setDetailsCollapsed((v) => !v)}
+                aria-expanded={!detailsCollapsed}
+              >
+                <span className="label">Details</span>
+                <svg className="chev" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                  <path d="m6 9 6 6 6-6" />
+                </svg>
+              </button>
+            )}
             <div className="td-details-head">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                 <circle cx="12" cy="12" r="9" />
@@ -1125,7 +1234,12 @@ export default function TaskCreatePanel({
               </svg>
               <span className="label">Details</span>
             </div>
-            <div className="td-settings-card" data-twocol="true" style={{ border: 'none', borderRadius: 0, marginBottom: 0 }}>
+            <div
+              className="td-settings-card"
+              data-twocol={isMobile ? 'true' : undefined}
+              data-compact={isMobile ? undefined : 'true'}
+              style={{ border: 'none', borderRadius: 0, marginBottom: 0 }}
+            >
               {/* Status */}
               <div
                 data-td="status" className="td-settings-row"
@@ -1280,6 +1394,45 @@ export default function TaskCreatePanel({
                 </span>
               </div>
 
+              {/* Dates — desktop folds Start + Due into one "Start → Due" row,
+                  each half opening its own picker. Mobile keeps separate rows. */}
+              {!isMobile && (
+                <div className="td-settings-row td-dates-cell" data-half="true" data-td="dates" style={{ cursor: 'default' }}>
+                  <span className="k">{META_ICONS.StartDate}Dates</span>
+                  <span className="v">
+                    <button
+                      type="button"
+                      className="td-date-half"
+                      data-empty={draft.start_date ? undefined : 'true'}
+                      onClick={(e) => {
+                        setStartDateAnchor((e.currentTarget as HTMLElement).getBoundingClientRect());
+                        setStartDateOpen(v => !v);
+                      }}
+                      title={draft.start_date ? `Start ${formatDueRelative(draft.start_date).text}` : 'Set start date'}
+                    >
+                      {META_ICONS.StartDate}
+                      {draft.start_date ? formatDueRelative(draft.start_date).text.split(' · ')[0] : 'Start'}
+                    </button>
+                    <span className="td-date-arrow" aria-hidden>→</span>
+                    <button
+                      type="button"
+                      className="td-date-half"
+                      data-empty={draft.due_date ? undefined : 'true'}
+                      data-overdue={draft.due_date && dueInfo.accent ? 'true' : undefined}
+                      onClick={(e) => {
+                        setDueDateAnchor((e.currentTarget as HTMLElement).getBoundingClientRect());
+                        setDueDateOpen(v => !v);
+                      }}
+                      title={draft.due_date ? `Due ${dueInfo.text}` : 'Set due date'}
+                    >
+                      {META_ICONS.Due}
+                      {draft.due_date ? dueInfo.text.split(' · ')[0] : 'Due'}
+                    </button>
+                  </span>
+                </div>
+              )}
+
+              {isMobile && (<>
               {/* Start date */}
               <div
                 data-td="start" className="td-settings-row td-date-row"
@@ -1361,6 +1514,7 @@ export default function TaskCreatePanel({
                   </button>
                 </span>
               </div>
+              </>)}
 
               {/* Repeat — non-null rule creates this task as a routine */}
               <div
@@ -1570,13 +1724,20 @@ export default function TaskCreatePanel({
 
           <div className="td-section-rule" />
 
-          {/* Subtasks — prominent */}
+          {/* Subtasks — v3 parity: desktop renders a grey tray holding the name
+              row, with the list as a raised card inside. Mobile keeps the
+              legacy prominent section. */}
+          <div className="td-tray" data-sec="subtasks" data-open={secOpen('subtasks') ? 'true' : undefined}>
           <div className="td-section-strong">
-            <svg className="icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-              <rect x="3" y="4" width="7" height="16" rx="1.5" />
-              <rect x="14" y="4" width="7" height="10" rx="1.5" />
-            </svg>
-            <span className="title">Subtasks</span>
+            {isMobile ? (
+              <>
+                <svg className="icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="3" y="4" width="7" height="16" rx="1.5" />
+                  <rect x="14" y="4" width="7" height="10" rx="1.5" />
+                </svg>
+                <span className="title">Subtasks</span>
+              </>
+            ) : secToggle('subtasks', 'Subtasks')}
             {draft.subtasks.length > 0 && (
               <span className="td-section-count-strong">{draft.subtasks.length}</span>
             )}
@@ -1591,6 +1752,8 @@ export default function TaskCreatePanel({
               disabled={newSubtaskTitle !== null || newSubtaskSectionTitle !== null}
             />
           </div>
+          <div className="td-tray-card">
+          {secOpen('subtasks') && (
           <div className="td-subtask-list">
             {draft.subtasks.filter((st) => !st.section_id).map((st) => (
               <div key={st.id} className="td-subtask-row" data-done="false">
@@ -1688,16 +1851,20 @@ export default function TaskCreatePanel({
               </button>
             )}
           </div>
+          )}
+          </div>
+          </div>
 
           <div className="td-section-rule" />
 
-          {/* Checklist */}
+          {/* Checklist — v3 parity: desktop grey tray + raised card. */}
+          <div className="td-tray" data-sec="checklist" data-open={secOpen('checklist') ? 'true' : undefined}>
           <div className="td-eyebrow" style={{ margin: '0 0 8px' }}>
-            Checklist
+            {isMobile ? 'Checklist' : secToggle('checklist', 'Checklist')}
             {draft.checklists.length > 0 && (() => {
               const allItems = draft.checklists.flatMap((c) => c.items);
               const done = allItems.filter((i) => i.is_done).length;
-              return <span className="muted">· {done}/{allItems.length}</span>;
+              return <span className="muted">{isMobile ? '· ' : ''}{done}/{allItems.length}</span>;
             })()}
             {newChecklistTitle === null && (
               <AddEntrySplitButton
@@ -1709,6 +1876,8 @@ export default function TaskCreatePanel({
               />
             )}
           </div>
+          <div className="td-tray-card">
+          {secOpen('checklist') && (<>
           {newChecklistTitle !== null && (
             <input
               autoFocus
@@ -1788,14 +1957,20 @@ export default function TaskCreatePanel({
           ) : !newChecklistTitle ? (
             <div className="text-[12.5px] text-[color:var(--sh-ink-4)]">No checklists.</div>
           ) : null}
+          </>)}
+          </div>
+          </div>
 
           <div className="td-section-rule" />
 
-          {/* Files */}
+          {/* Files — v3 parity: desktop grey tray + raised card. */}
+          <div className="td-tray" data-sec="files" data-open={secOpen('files') ? 'true' : undefined}>
           <div className="td-eyebrow" style={{ margin: '0 0 8px' }}>
-            Files
-            {draft.pendingFiles.length > 0 && <span className="muted">· {draft.pendingFiles.length}</span>}
+            {isMobile ? 'Files' : secToggle('files', 'Files')}
+            {draft.pendingFiles.length > 0 && <span className="muted">{isMobile ? '· ' : ''}{draft.pendingFiles.length}</span>}
           </div>
+          <div className="td-tray-card">
+          {secOpen('files') && (
           <div className="td-files-wrap">
             <div className="flex flex-col gap-2">
               <div
@@ -1854,6 +2029,9 @@ export default function TaskCreatePanel({
                 </div>
               ))}
             </div>
+          </div>
+          )}
+          </div>
           </div>
         </div>
       </aside>
