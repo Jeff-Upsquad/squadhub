@@ -1,8 +1,9 @@
-import { useEffect, useMemo, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { usePMStore } from '../../../stores/pmStore';
 import { useMyTasks, useUpdateTask } from '../../../hooks/useTasks';
 import MultiDayCalendar from '../calendar/MultiDayCalendar';
 import MonthGrid from '../calendar/MonthGrid';
+import DayPlannerDatePopup from './DayPlannerDatePopup';
 import { addDays, addMonths, buildWeekCells, cellKey, dayToWorkDateISO, flattenMyTasks } from '../calendar/calendarUtils';
 
 export type PlannerMode = 'day' | '3day' | 'weekdays' | 'week' | 'month';
@@ -93,6 +94,8 @@ export default function PlannerRangeCalendar({ mode, date, today, onDateChange, 
   // Month cells list tasks by work/due date (not day-plan blocks).
   const { data: myTasks } = useMyTasks();
   const monthTasks = useMemo(() => (mode === 'month' ? flattenMyTasks(myTasks) : []), [mode, myTasks]);
+  // Mini-month date jumper anchored to the header title.
+  const [datePickerOpen, setDatePickerOpen] = useState(false);
 
   const days = useMemo(
     () => (mode === 'month' ? [] : rangeDays(mode, date, weekStartsOn)),
@@ -142,7 +145,19 @@ export default function PlannerRangeCalendar({ mode, date, today, onDateChange, 
       <div className="dp-cal-head">
         <div className="dp-cal-title">
           <h2>
-            {title}
+            <button
+              type="button"
+              className="dp-title-jump"
+              onClick={() => setDatePickerOpen((v) => !v)}
+              aria-haspopup="dialog"
+              aria-expanded={datePickerOpen}
+              title="Jump to date"
+            >
+              {title}
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="m6 9 6 6 6-6" />
+              </svg>
+            </button>
             {inView && (
               <span className="dp-rel" data-today>
                 {mode === 'month' ? 'This month' : mode === '3day' ? 'Includes today' : 'This week'}
@@ -150,6 +165,14 @@ export default function PlannerRangeCalendar({ mode, date, today, onDateChange, 
             )}
           </h2>
           <div className="sub">{sub}</div>
+          {datePickerOpen && (
+            <DayPlannerDatePopup
+              anchorKey={date}
+              today={today}
+              onSelect={onDateChange}
+              onClose={() => setDatePickerOpen(false)}
+            />
+          )}
         </div>
         <div className="dp-cal-tools">
           {toolbar}

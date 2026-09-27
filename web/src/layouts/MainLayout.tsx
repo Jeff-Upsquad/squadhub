@@ -83,6 +83,7 @@ import ClipsView from '../views/app/clips/ClipsView';
 import AppsSidebar from '../views/app/apps/AppsSidebar';
 import NotesSidebar from '../views/app/notes/NotesSidebar';
 import CalendarOuterPalette from '../views/app/calendar/CalendarOuterPalette';
+import CalendarRailPreview from '../views/app/calendar/CalendarRailPreview';
 import { useLearningStore } from '../stores/learningStore';
 import { launchApp, type AppDef } from '../config/apps';
 import { useUserType, useIsPartner } from '../hooks/useUserType';
@@ -516,6 +517,25 @@ export default function MainLayout() {
     setTasksPreviewOpen(false);
   }, [cancelTasksHoverTimers]);
 
+  // Calendar quick-view — same hover-only floating card as inbox/tasks.
+  const [calPreviewOpen, setCalPreviewOpen] = useState(false);
+  const calHoverOpenTimer = useRef<number | null>(null);
+  const calHoverCloseTimer = useRef<number | null>(null);
+
+  const cancelCalHoverTimers = useCallback(() => {
+    if (calHoverOpenTimer.current != null) window.clearTimeout(calHoverOpenTimer.current);
+    if (calHoverCloseTimer.current != null) window.clearTimeout(calHoverCloseTimer.current);
+    calHoverOpenTimer.current = null;
+    calHoverCloseTimer.current = null;
+  }, []);
+
+  const closeCalPreview = useCallback(() => {
+    cancelCalHoverTimers();
+    setCalPreviewOpen(false);
+  }, [cancelCalHoverTimers]);
+
+  useEffect(() => () => cancelCalHoverTimers(), [cancelCalHoverTimers]);
+
   const inboxHoverOpenTimer = useRef<number | null>(null);
   const inboxHoverCloseTimer = useRef<number | null>(null);
 
@@ -539,6 +559,7 @@ export default function MainLayout() {
     inboxHoverOpenTimer.current = window.setTimeout(() => {
       closeRailPreviewNow();
       closeTasksPreview();
+      closeCalPreview();
       setInboxSliderOpen(true);
       inboxHoverOpenTimer.current = null;
     }, 180);
@@ -571,6 +592,7 @@ export default function MainLayout() {
     tasksHoverOpenTimer.current = window.setTimeout(() => {
       closeRailPreviewNow();
       closeInboxFully();
+      closeCalPreview();
       setTasksPreviewOpen(true);
       tasksHoverOpenTimer.current = null;
     }, 180);
@@ -595,10 +617,63 @@ export default function MainLayout() {
 
   useEffect(() => () => cancelTasksHoverTimers(), [cancelTasksHoverTimers]);
 
+  const openCalOnHover = useCallback(() => {
+    if (!window.matchMedia('(hover: hover) and (pointer: fine)').matches) return;
+    if (calHoverCloseTimer.current != null) window.clearTimeout(calHoverCloseTimer.current);
+    calHoverCloseTimer.current = null;
+    if (calHoverOpenTimer.current != null) return;
+    calHoverOpenTimer.current = window.setTimeout(() => {
+      closeRailPreviewNow();
+      closeInboxFully();
+      closeTasksPreview();
+      setCalPreviewOpen(true);
+      calHoverOpenTimer.current = null;
+    }, 180);
+  }, [closeRailPreviewNow, closeInboxFully, closeTasksPreview]);
+
+  const scheduleCalHoverClose = useCallback(() => {
+    if (calHoverOpenTimer.current != null) window.clearTimeout(calHoverOpenTimer.current);
+    calHoverOpenTimer.current = null;
+    if (calHoverCloseTimer.current != null) window.clearTimeout(calHoverCloseTimer.current);
+    calHoverCloseTimer.current = window.setTimeout(() => {
+      setCalPreviewOpen(false);
+      calHoverCloseTimer.current = null;
+    }, 260);
+  }, []);
+
+  const keepCalHoverOpen = useCallback(() => {
+    if (calHoverOpenTimer.current != null) window.clearTimeout(calHoverOpenTimer.current);
+    calHoverOpenTimer.current = null;
+    if (calHoverCloseTimer.current != null) window.clearTimeout(calHoverCloseTimer.current);
+    calHoverCloseTimer.current = null;
+  }, []);
+
+  useEffect(() => () => cancelCalHoverTimers(), [cancelCalHoverTimers]);
+
+  const goToCalSection = useCallback(() => {
+    closeRailPreviewNow();
+    closeInboxFully();
+    closeTasksPreview();
+    closeCalPreview();
+    setMobileDrawerOpen(false);
+    setActiveSection('cal');
+  }, [closeRailPreviewNow, closeInboxFully, closeTasksPreview]);
+
+  const goToPlannerSection = useCallback(() => {
+    closeRailPreviewNow();
+    closeInboxFully();
+    closeTasksPreview();
+    closeCalPreview();
+    setMobileDrawerOpen(false);
+    setActiveSection('home');
+    setHomeView('day-planner');
+  }, [closeRailPreviewNow, closeInboxFully, closeTasksPreview]);
+
   const goToMyTasksSection = useCallback(() => {
     closeRailPreviewNow();
     closeInboxFully();
     closeTasksPreview();
+    closeCalPreview();
     setMobileDrawerOpen(false);
     setActiveSection('home');
     setHomeView('my-tasks');
@@ -608,6 +683,7 @@ export default function MainLayout() {
     closeRailPreviewNow();
     closeInboxFully();
     closeTasksPreview();
+    closeCalPreview();
     setMobileDrawerOpen(false);
     setActiveSection('home');
     setHomeView('inbox');
@@ -1689,11 +1765,11 @@ export default function MainLayout() {
             icon={ICON.cal}
             label="Cal"
             anchorKey="rail.cal"
-            active={activeSection === 'cal'}
-            previewing={railPreview === 'cal'}
-            onPreviewEnter={(event) => openRailPreviewSoon('cal', event)}
-            onPreviewLeave={closeRailPreviewSoon}
-            onClick={() => { closeRailPreviewNow(); setActiveSection('cal'); }}
+            active={activeSection === 'cal' || calPreviewOpen}
+            previewing={calPreviewOpen}
+            onPreviewEnter={openCalOnHover}
+            onPreviewLeave={scheduleCalHoverClose}
+            onClick={goToCalSection}
           />
           <RailBtn
             icon={ICON.apps}
@@ -1966,6 +2042,18 @@ export default function MainLayout() {
           onHoverEnter={keepTasksHoverOpen}
           onHoverLeave={scheduleTasksHoverClose}
           onOpenSection={goToMyTasksSection}
+          pinned={false}
+        />
+      )}
+
+      {/* Calendar quick-view — same floating card as the inbox hover view */}
+      {calPreviewOpen && (
+        <CalendarRailPreview
+          onClose={closeCalPreview}
+          onHoverEnter={keepCalHoverOpen}
+          onHoverLeave={scheduleCalHoverClose}
+          onOpenSection={goToCalSection}
+          onOpenPlanner={goToPlannerSection}
           pinned={false}
         />
       )}

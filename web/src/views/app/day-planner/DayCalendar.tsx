@@ -24,6 +24,7 @@ import {
   DND_TASK_RECURRING_PARENT,
 } from '../calendar/calendarUtils';
 import { useSlotDragCreate, SlotCreatePanel } from './SlotCreate';
+import DayPlannerDatePopup from './DayPlannerDatePopup';
 
 type GroupContainer = { type: 'list' | 'folder' | 'space'; id: string; name: string };
 
@@ -165,6 +166,8 @@ export default function DayCalendar({ date, today, onDateChange, keyboard = fals
     prevActiveTask.current = activeTaskId;
   }, [activeTaskId, qc]);
 
+  // Mini-month date jumper anchored to the day title.
+  const [datePickerOpen, setDatePickerOpen] = useState(false);
   // Snapped minute under the cursor while a palette row is dragged over the
   // grid — drives the "drop here" ghost so the landing time is visible.
   const [dragOverMin, setDragOverMin] = useState<number | null>(null);
@@ -559,7 +562,19 @@ export default function DayCalendar({ date, today, onDateChange, keyboard = fals
       <div className="dp-cal-head">
         <div className="dp-cal-title">
           <h2>
-            {dayTitle}
+            <button
+              type="button"
+              className="dp-title-jump"
+              onClick={() => setDatePickerOpen((v) => !v)}
+              aria-haspopup="dialog"
+              aria-expanded={datePickerOpen}
+              title="Jump to date"
+            >
+              {dayTitle}
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="m6 9 6 6 6-6" />
+              </svg>
+            </button>
             {relLabel && <span className="dp-rel" data-today={isToday || undefined}>{relLabel}</span>}
           </h2>
           <div className="sub">
@@ -572,6 +587,14 @@ export default function DayCalendar({ date, today, onDateChange, keyboard = fals
               </>
             )}
           </div>
+          {datePickerOpen && (
+            <DayPlannerDatePopup
+              anchorKey={date}
+              today={today}
+              onSelect={onDateChange}
+              onClose={() => setDatePickerOpen(false)}
+            />
+          )}
         </div>
         <div className="dp-cal-tools">
           {toolbar}
