@@ -817,7 +817,9 @@ function OnThisPage({ containerRef, scanKey }: { containerRef: React.RefObject<H
     if (!root) return;
     let raf = 0;
     const scan = () => {
-      const nodes = Array.from(root.querySelectorAll('h1, h2, h3')) as HTMLElement[];
+      // Historical headings belong only to the Changes view, never the live outline.
+      const nodes = Array.from(root.querySelectorAll<HTMLElement>('h1, h2, h3'))
+        .filter((node) => !node.closest('[data-document-history]'));
       const next: Heading[] = nodes
         .map((n, i) => {
           const text = (n.textContent || '').trim();
