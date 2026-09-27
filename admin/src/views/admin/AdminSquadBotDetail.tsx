@@ -1,3 +1,4 @@
+import JobsCard from './squad-bots/JobsCard';
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -52,6 +53,7 @@ export default function AdminSquadBotDetail({ botId, onBack }: { botId: string; 
       </div>
 
       <div className="space-y-5">
+        <JobsCard key={bot.id} botId={bot.id} paused={bot.effective_status === 'off'} />
         <IdentityCard bot={bot} onSave={(body) => patch.mutate(body)} saving={patch.isPending} />
         <AiCard bot={bot} onSave={(body) => patch.mutate(body)} saving={patch.isPending} />
         <TryItCard botId={bot.id} onRan={refresh} />
@@ -406,9 +408,11 @@ function ConnectCard({ bot, onChanged }: { bot: SquadBotDetail; onChanged: () =>
         <summary className="cursor-pointer select-none">For developers: API</summary>
         <div className="mt-2 space-y-1 font-[family-name:var(--font-mono)] text-[11.5px]">
           <p>Base: https://api.squadhub.in · Header: Authorization: Bearer &lt;key&gt;</p>
-          <p>GET  /integrations/squad-bots/config — status, names, AI, instructions</p>
+          <p>GET  /integrations/squad-bots/config — status, names, AI, instructions, jobs</p>
           <p>GET  /integrations/squad-bots/knowledge — published knowledge</p>
-          <p>POST /integrations/squad-bots/reply — {'{ messages: [{role, content}], context? }'}</p>
+          <p>POST /integrations/squad-bots/reply — {'{ messages: [{role, content}], context?, job_id?, target? }'}</p>
+          <p>POST /integrations/squad-bots/jobs/:jobId/check — check the target before each action</p>
+          <p>POST /integrations/squad-bots/activity — report a job outcome, note and source link</p>
           <p>POST /integrations/squad-bots/usage — report an AI call the app made itself</p>
         </div>
         <p className="mt-2">

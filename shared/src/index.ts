@@ -4802,3 +4802,32 @@ export interface SkillGrant {
 
 /** The caller's effective level per skill (null = not held). */
 export type MySkills = Partial<Record<SkillKey, string | null>>;
+
+export interface SquadBotJob {
+  id: string;
+  bot_id: string;
+  name: string;
+  kind: 'conversation' | 'action';
+  instructions: string;
+  audience: 'any' | 'candidates' | 'customers';
+  person_ids: string[];
+  pipeline_id: string | null;
+  stage_id: string | null;
+  enabled: boolean;
+}
+export interface SquadBotActivity {
+  id: string;
+  job_id: string;
+  job_name: string;
+  outcome: 'completed' | 'failed' | 'skipped' | 'drafted';
+  note: string;
+  target_url: string | null;
+  created_at: string;
+}
+export interface SquadBotActivityReport {
+  start: string;
+  end: string;
+  total: number;
+  activity: SquadBotActivity[];
+  summary: Array<{ job_id: string; completed: number; failed: number; skipped: number; drafted: number }>;
+}
