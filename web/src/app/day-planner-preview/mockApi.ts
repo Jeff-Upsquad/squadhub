@@ -90,10 +90,17 @@ const scheduled: MockTask[] = [
   task('Inbox zero', { status: 'closed', time_estimate: 30, space: SPACES.ops, list: LISTS.admin }),
   task('Pair on release checklist', { time_estimate: 30, space: SPACES.growth, list: LISTS.launch }),
 ];
+// Later this month — only surfaced by the Month view (via work/due dates).
+const upcomingTasks: MockTask[] = [
+  task('Quarterly roadmap review', { priority: 'high', work_date: iso(2), time_estimate: 90, space: SPACES.product, list: LISTS.web }),
+  task('Renew design tool licences', { due_date: iso(4), space: SPACES.ops, list: LISTS.admin }),
+  task('Launch retro with the squad', { work_date: iso(8), time_estimate: 60, space: SPACES.growth, list: LISTS.launch }),
+  task('Payroll sign-off', { priority: 'urgent', due_date: iso(-6), space: SPACES.ops, list: LISTS.admin }),
+];
 const allDayTask = task('Q4 launch day', { priority: 'high', space: SPACES.growth, list: LISTS.launch });
 
 const allTasks = new Map<string, MockTask>(
-  [...plannerTasks, ...unscheduledTasks, ...scheduled, allDayTask].map((t) => [t.id, t]),
+  [...plannerTasks, ...unscheduledTasks, ...scheduled, ...upcomingTasks, allDayTask].map((t) => [t.id, t]),
 );
 
 function embed(t: MockTask) {
@@ -155,6 +162,9 @@ const adapter: AxiosAdapter = async (config) => {
     return ok(config, {
       day_planner: plannerTasks.filter(live),
       unscheduled: unscheduledTasks.filter(live),
+      // The Month view flattens these buckets and places tasks by date, so
+      // one bucket holding every dated task is enough here.
+      upcoming: [...allTasks.values()].filter((t) => live(t) && (t.work_date || t.due_date)),
     });
   }
   if (path === '/pm/day-plans') {

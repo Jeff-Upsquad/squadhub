@@ -1064,15 +1064,23 @@ body.sb-resizing { user-select: none; -webkit-user-select: none; cursor: col-res
 .sh-view .dp-rel { flex: none; height: 22px; padding: 0 8px; display: inline-flex; align-items: center; border-radius: 7px; background: var(--sh-hair-3); font: 600 11.5px var(--font-text); letter-spacing: 0; color: var(--sh-ink-2); }
 .sh-view .dp-rel[data-today] { background: color-mix(in oklch, #DC2626 12%, var(--surface)); color: #DC2626; }
 .sh-view .dp-cal-tools { display: flex; align-items: center; gap: 12px; flex: none; }
-.sh-view .dp-cal-meta { display: flex; align-items: center; gap: 6px; }
-.sh-view .dp-cal-meta .chip { height: 26px; padding: 0 9px; display: inline-flex; align-items: center; gap: 4px; border-radius: 8px; border: 1px solid var(--sh-hair); font-size: 12px; font-weight: 500; color: var(--sh-ink-3); white-space: nowrap; font-variant-numeric: tabular-nums; }
-.sh-view .dp-cal-meta .chip b { font-weight: 700; color: var(--sh-ink); }
 .sh-view .dp-seg { display: inline-flex; align-items: center; gap: 1px; padding: 2px; border-radius: 10px; background: var(--sh-hair-3); box-shadow: inset 0 0 0 1px var(--sh-hair); }
 .sh-view .dp-seg .nav-btn { width: 28px; height: 28px; display: grid; place-items: center; border: 0; border-radius: 8px; background: transparent; color: var(--sh-ink-2); cursor: pointer; transition: background .12s, color .12s, box-shadow .12s; }
 .sh-view .dp-seg .nav-btn:hover { background: var(--surface); color: var(--sh-ink); box-shadow: 0 1px 2px rgba(0,0,0,.08); }
 .sh-view .dp-seg .nav-today { height: 28px; padding: 0 12px; border: 0; border-radius: 8px; background: transparent; font: 600 12.5px var(--font-text); color: var(--sh-ink-2); cursor: pointer; transition: background .12s, color .12s, box-shadow .12s; }
 .sh-view .dp-seg .nav-today:hover:not(:disabled) { background: var(--surface); color: var(--sh-ink); box-shadow: 0 1px 2px rgba(0,0,0,.08); }
 .sh-view .dp-seg .nav-today[data-active] { background: var(--surface); color: var(--sh-ink); box-shadow: 0 1px 2px rgba(0,0,0,.08); cursor: default; }
+
+/* View switcher (Day / 3 Day / Weekdays / Week / Month) */
+.sh-view .dp-modes > button { height: 28px; padding: 0 10px; border: 0; border-radius: 8px; background: transparent; font: 600 12.5px var(--font-text); color: var(--sh-ink-3); white-space: nowrap; cursor: pointer; transition: background .12s, color .12s, box-shadow .12s; }
+.sh-view .dp-modes > button:hover { color: var(--sh-ink); }
+.sh-view .dp-modes > button[data-active] { background: var(--surface); color: var(--sh-ink); box-shadow: 0 1px 2px rgba(0,0,0,.08); }
+
+/* Range views (3 Day / Weekdays / Week / Month): the planner header over the
+   Calendar app's grids, which own their scrolling. */
+.sh-view .dp-calendar.dp-range { display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
+.sh-view .dp-range .dp-cal-head { position: relative; flex: none; }
+.sh-view .dp-range-body { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
 
 /* All-day strip: sticky second bar. Date-only tasks land here as chips;
    drag one onto the hour grid to give it a time. */
@@ -1140,9 +1148,11 @@ body.sb-resizing { user-select: none; -webkit-user-select: none; cursor: col-res
 .sh-view .dp-now::before { content: ''; position: absolute; left: -5px; top: -6px; width: 10px; height: 10px; border-radius: 50%; background: #DC2626; box-shadow: 0 0 0 2px var(--surface); }
 .sh-view .dp-now-chip { position: absolute; right: calc(100% + 8px); top: -10px; padding: 2px 6px; border-radius: 6px; background: #DC2626; color: #fff; font: 700 10.5px var(--font-text); font-variant-numeric: tabular-nums; white-space: nowrap; }
 
-@media (max-width: 1100px) {
+@media (max-width: 1280px) {
   .sh-view.day-planner-view { grid-template-columns: 340px minmax(0, 1fr); }
-  .sh-view .dp-cal-meta { display: none; }
+  .sh-view .dp-cal-head { padding: 0 14px 0 18px; }
+  .sh-view .dp-cal-title .sub { display: none; }
+  .sh-view .dp-modes > button { padding: 0 8px; }
 }
 
 /* ============================ Calendar app ============================ */

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { getTaskStatusCategory } from '@squadhub/shared';
 import { usePMStore, focusBucketForMinute } from '../../../stores/pmStore';
@@ -37,6 +37,8 @@ interface Props {
   // ←/→ step a day, T jumps to today. Only the standalone planner opts in —
   // the Home embed shares the page with other keyboard-driven lists.
   keyboard?: boolean;
+  // Extra header controls (the planner's Day/Week/Month switcher).
+  toolbar?: ReactNode;
 }
 
 function addDays(dateStr: string, n: number): string {
@@ -129,7 +131,7 @@ function dateFieldLabel(f?: 'work' | 'due' | 'start'): string {
   return 'Work';
 }
 
-export default function DayCalendar({ date, today, onDateChange, keyboard = false }: Props) {
+export default function DayCalendar({ date, today, onDateChange, keyboard = false, toolbar }: Props) {
   const { data: plans = [], isLoading } = useDayPlans(date);
   const schedule = useScheduleTaskOnDay();
   const unschedule = useUnscheduleTask();
@@ -489,22 +491,19 @@ export default function DayCalendar({ date, today, onDateChange, keyboard = fals
             {dayTitle}
             {relLabel && <span className="dp-rel" data-today={isToday || undefined}>{relLabel}</span>}
           </h2>
-          <div className="sub">{weekLabel}</div>
-        </div>
-        <div className="dp-cal-tools">
-          <div className="dp-cal-meta" aria-live="polite">
-            {isLoading ? (
-              <span className="chip">Loading…</span>
-            ) : (
+          <div className="sub">
+            {weekLabel}
+            {isLoading ? ' · Loading…' : (
               <>
-                <span className="chip">
-                  <b>{timedPlans.length}</b> {timedPlans.length === 1 ? 'block' : 'blocks'}
-                </span>
-                {plannedMin > 0 && <span className="chip"><b>{fmtDur(plannedMin)}</b> planned</span>}
-                {allDayPlans.length > 0 && <span className="chip"><b>{allDayPlans.length}</b> all-day</span>}
+                {' · '}{timedPlans.length} {timedPlans.length === 1 ? 'block' : 'blocks'}
+                {plannedMin > 0 && ` · ${fmtDur(plannedMin)} planned`}
+                {allDayPlans.length > 0 && ` · ${allDayPlans.length} all-day`}
               </>
             )}
           </div>
+        </div>
+        <div className="dp-cal-tools">
+          {toolbar}
           <div className="dp-seg" role="group" aria-label="Change day">
             <button
               type="button"
