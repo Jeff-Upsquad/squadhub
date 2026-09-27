@@ -17,12 +17,22 @@ export default function ManageMembersModal({
   resourceId,
   resourceName,
   onClose,
+  internalOnly = false,
 }: {
   resourceType: ResourceType;
   resourceId: string;
   resourceName: string;
   onClose: () => void;
+  internalOnly?: boolean;
 }) {
+  const isBotChannel = useWorkspaceStore(s => resourceType === 'channel' && !!s.channels.find(c => c.id === resourceId)?.squad_bot_id);
+  const onlyInternal = internalOnly || isBotChannel;
+  const levels = onlyInternal ? [
+    { value: 'viewer', label: 'View only', description: 'Read questions and discussion' },
+    { value: 'commenter', label: 'Commenter', description: 'Reply and guide the bot' },
+    { value: 'member', label: 'Member', description: 'Reply and guide the bot' },
+    { value: 'manager', label: 'Channel admin', description: 'Guide the bot and invite teammates' },
+  ] : ACCESS_LEVELS;
   const workspace = useWorkspaceStore((s) => s.currentWorkspace);
   const { data: members, isLoading } = useMemberships(resourceType, resourceId);
   const addMember = useAddMember(resourceType, resourceId);
@@ -32,7 +42,7 @@ export default function ManageMembersModal({
   const [showInvite, setShowInvite] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
-  const [inviteLevel, setInviteLevel] = useState<AccessLevel>('viewer');
+  const [inviteLevel, setInviteLevel] = useState<AccessLevel>(onlyInternal ? 'member' : 'viewer');
   const [error, setError] = useState('');
 
   // Fetch workspace members for invite search
@@ -48,6 +58,7 @@ export default function ManageMembersModal({
   const existingUserIds = new Set((members || []).map((m) => m.user_id));
   const availableMembers = (wsMembers || [])
     .filter((wm: any) => !existingUserIds.has(wm.user_id))
+    .filter((wm: any) => !onlyInternal || (wm.user?.user_type === 'internal' && !['banned', 'suspended'].includes(wm.user?.status)))
     .filter((wm: any) => {
       if (!searchQuery) return true;
       const q = searchQuery.toLowerCase();
@@ -137,9 +148,9 @@ export default function ManageMembersModal({
                 onChange={(e) => setInviteLevel(e.target.value as AccessLevel)}
                 className="w-full rounded-md border border-[#CAD5E2] bg-white px-3 py-1.5 text-sm text-[#0F172B] outline-none focus:border-[#2962FF]"
               >
-                {ACCESS_LEVELS.map((al) => (
+                {levels.map((al) => (
                   <option key={al.value} value={al.value}>
-                    {al.label} — {al.description}
+                    {onlyInternal && al.value === 'manager' ? 'Channel admin' : al.label} — {al.description}
                   </option>
                 ))}
               </select>
@@ -184,8 +195,8 @@ export default function ManageMembersModal({
                 }
                 className="rounded-md border border-[#CAD5E2] bg-white px-2 py-1 text-xs text-[#0F172B] outline-none focus:border-[#2962FF]"
               >
-                {ACCESS_LEVELS.map((al) => (
-                  <option key={al.value} value={al.value}>{al.label}</option>
+                {levels.map((al) => (
+                  <option key={al.value} value={al.value}>{onlyInternal && al.value === 'manager' ? 'Channel admin' : al.label}</option>
                 ))}
               </select>
               <button

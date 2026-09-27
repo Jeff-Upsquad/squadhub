@@ -76,7 +76,7 @@ router.get('/:id/members', requireAuth, async (req: Request, res: Response) => {
     const wsId = req.params.id;
     const { data, error } = await supabaseAdmin
       .from('workspace_members')
-      .select('*, users(id, email, display_name, avatar_url, created_at)')
+      .select('*, users(id, email, display_name, avatar_url, created_at, user_type, status)')
       .eq('workspace_id', wsId)
       .order('id');
 
@@ -142,7 +142,7 @@ router.post('/:id/members', requireAuth, async (req: Request, res: Response) => 
         user_id: user.id,
         role: role || 'member',
       })
-      .select('*, users(id, email, display_name, avatar_url, created_at)')
+      .select('*, users(id, email, display_name, avatar_url, created_at, user_type, status)')
       .single();
 
     if (error) {

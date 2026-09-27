@@ -41,6 +41,7 @@ const nextConfig = {
       // "Sign in with SquadHub" SSO: the /launch/squadhire bridge posts here.
       { source: '/sso/:path*', destination: `${API_URL}/sso/:path*` },
       { source: '/workspaces/:path*', destination: `${API_URL}/workspaces/:path*` },
+      { source: '/bot-channels/:path*', destination: `${API_URL}/bot-channels/:path*` },
       { source: '/channels/:path*', destination: `${API_URL}/channels/:path*` },
       { source: '/support/:path*', destination: `${API_URL}/support/:path*` },
       { source: '/messages/:path*', destination: `${API_URL}/messages/:path*` },

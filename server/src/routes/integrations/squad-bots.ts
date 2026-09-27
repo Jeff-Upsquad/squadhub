@@ -2,6 +2,7 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { supabaseAdmin } from '../../supabase';
 import { activitySchema, jobBlockReason, listJobs, targetSchema } from '../../services/squadBotJobs';
+import doubtsRouter from './squad-bot-doubts';
 import { loadPages } from '../../services/squadhireTraining';
 import {
   allPaused,
@@ -52,6 +53,7 @@ async function requireBotKey(req: BotRequest, res: Response, next: NextFunction)
 }
 
 router.use(requireBotKey);
+router.use(doubtsRouter);
 
 router.get('/config', async (req: BotRequest, res: Response) => {
   try {

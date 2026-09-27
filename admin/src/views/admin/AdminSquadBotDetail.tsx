@@ -1,3 +1,4 @@
+import BotChannelCard from './squad-bots/BotChannelCard';
 import JobsCard from './squad-bots/JobsCard';
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
@@ -53,6 +54,7 @@ export default function AdminSquadBotDetail({ botId, onBack }: { botId: string; 
       </div>
 
       <div className="space-y-5">
+        <BotChannelCard key={`channel-${bot.id}`} botId={bot.id} />
         <JobsCard key={bot.id} botId={bot.id} paused={bot.effective_status === 'off'} />
         <IdentityCard bot={bot} onSave={(body) => patch.mutate(body)} saving={patch.isPending} />
         <AiCard bot={bot} onSave={(body) => patch.mutate(body)} saving={patch.isPending} />

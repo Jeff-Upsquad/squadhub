@@ -4,6 +4,8 @@ import { requireAuth } from '../middleware/auth';
 import { checkResourceAccess, meetsAccessLevel, isWorkspaceAdmin } from '../middleware/permissions';
 import { supabaseAdmin } from '../supabase';
 
+import { eligibleBotChannelMember } from '../services/squadBotChannels';
+
 const router = Router();
 router.use(requireAuth);
 
@@ -132,6 +134,10 @@ router.post('/', async (req: Request, res: Response) => {
         res.status(403).json({ success: false, error: 'Manager access required to invite members' });
         return;
       }
+    }
+
+    if (body.resource_type === 'channel' && !await eligibleBotChannelMember(body.resource_id, body.user_id)) {
+      res.status(400).json({ error: 'Bot channels accept active internal users from this workspace only' }); return;
     }
 
     const { data, error } = await supabaseAdmin

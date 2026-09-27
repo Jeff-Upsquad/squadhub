@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
+import BotQuestions from './BotQuestions';
 import api from '../../../services/api';
 import { connectSocket, subscribeToChannelRoom } from '../../../services/socket';
 import type { Message } from '@squadhub/shared';
@@ -154,6 +155,7 @@ export default function ChatPanel({
   soloGuard?: boolean;
   active?: boolean;
 }) {
+  const botChannel = useWorkspaceStore(s => kind === 'channel' ? s.channels.find(c => c.id === channelId && c.squad_bot_id) : undefined);
   const queryClient = useQueryClient();
   const activeThreadParentId = useWorkspaceStore((s) => s.activeThreadParentId);
   const setActiveThread = useWorkspaceStore((s) => s.setActiveThread);
@@ -598,6 +600,7 @@ export default function ChatPanel({
             <div className="sqc-drop-overlay__label">Drop a file to attach</div>
           </div>
         )}
+        {botChannel && <div className="max-h-[55%] shrink-0 overflow-y-auto"><BotQuestions key={channelId} channelId={channelId} channelName={botChannel.name} active={active} /></div>}
         {/* Scrollable messages area */}
         <div className="sqc-msg-scroll" ref={scrollRef} onScroll={handleScroll}>
           {/* Spinner while older history loads in on scroll-up */}

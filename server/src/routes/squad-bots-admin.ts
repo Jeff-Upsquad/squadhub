@@ -2,6 +2,7 @@ import { billingSettingsSchema, getProviderBilling } from '../services/aiProvide
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import jobsRouter from './squad-bot-jobs-admin';
+import channelRouter from './squad-bot-channel-admin';
 import { requireAuth } from '../middleware/auth';
 import { requireAdmin } from '../middleware/admin';
 import { supabaseAdmin } from '../supabase';
@@ -293,16 +294,20 @@ router.post('/', async (req: Request, res: Response) => {
         public_name: z.string().trim().min(1).max(100).optional(),
         description: z.string().trim().max(1000).optional(),
         home_app: homeAppSchema.optional(),
+        workspace_id: z.string().uuid().optional(),
       })
       .parse(req.body);
+    const memberships = await supabaseAdmin.from('workspace_members').select('workspace_id').eq('user_id', req.userId!);
+    if (memberships.error || !memberships.data?.length) { res.status(400).json({ error: 'Join a workspace before creating a bot' }); return; }
+    const workspaceId = body.workspace_id ?? (memberships.data.length === 1 ? memberships.data[0].workspace_id : null);
+    if (!workspaceId || !memberships.data.some(m => m.workspace_id === workspaceId)) { res.status(400).json({ error: 'Choose your workspace for this bot' }); return; }
     let slug = slugify(body.internal_name);
     const { data: clash } = await supabaseAdmin.from('squad_bots').select('id').eq('slug', slug).maybeSingle();
     if (clash) slug = `${slug}-${Date.now().toString(36)}`;
     const { data: last } = await supabaseAdmin.from('squad_bots').select('sort_order').order('sort_order', { ascending: false }).limit(1).maybeSingle();
 
     const { data, error } = await supabaseAdmin
-      .from('squad_bots')
-      .insert({
+      .rpc('create_squad_bot_with_channel', { p_workspace_id: workspaceId, p_user_id: req.userId, p_bot: {
         slug,
         internal_name: body.internal_name,
         public_name: body.public_name || 'Squad Bot',
@@ -310,7 +315,7 @@ router.post('/', async (req: Request, res: Response) => {
         home_app: body.home_app ?? 'other',
         status: 'off',
         sort_order: (last?.sort_order ?? 0) + 1,
-      })
+      } })
       .select(BOT_COLUMNS)
       .single();
     if (error) throw new Error(error.message);
@@ -320,6 +325,7 @@ router.post('/', async (req: Request, res: Response) => {
   }
 });
 
+router.use('/:id', channelRouter);
 router.use('/:id', jobsRouter);
 
 // GET /admin/squad-bots/:id — one bot with its knowledge and recent activity.

@@ -10,6 +10,7 @@ import { setupSocketIO } from './sockets';
 import authRoutes from './routes/auth';
 import workspaceRoutes from './routes/workspaces';
 import channelRoutes from './routes/channels';
+import botChannelRoutes from './routes/squad-bot-channels';
 import supportRoutes from './routes/support';
 import messageRoutes from './routes/messages';
 import scheduledMessageRoutes from './routes/scheduled-messages';
@@ -176,6 +177,7 @@ app.get('/health', (_req, res) => {
 // API routes
 app.use('/auth', authRoutes);
 app.use('/workspaces', workspaceRoutes);
+app.use('/bot-channels', botChannelRoutes);
 app.use('/channels', channelRoutes);
 app.use('/support', supportRoutes);
 // Scheduled-message routes mount first: their literal /scheduled paths must

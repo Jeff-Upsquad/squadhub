@@ -111,6 +111,7 @@ export interface Department {
 
 // ---- Channels ----
 export interface Channel {
+  squad_bot_id?: string | null;
   id: string;
   workspace_id: string;
   name: string;
