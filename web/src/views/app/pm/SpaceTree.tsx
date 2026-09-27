@@ -387,7 +387,9 @@ function SpaceIconSmall() {
 // ---- Folder item ----
 function FolderItem({ folder, spaceId, canAdd, canDelete, isManager, myAccess }: { folder: Folder; spaceId: string; canAdd: boolean; canDelete: boolean; isManager: boolean; myAccess?: AccessLevel | null }) {
   const { activeFolderId, activeDesignFolderId, setActiveFolder, setActiveSpace, setActiveDesignFolder } = usePMStore();
-  const [open, setOpen] = useState(true);
+  const expandedFolders = usePMStore((s) => s.expandedFolders);
+  const toggleFolderExpanded = usePMStore((s) => s.toggleFolderExpanded);
+  const open = expandedFolders[folder.id] ?? true;
   const [adding, setAdding] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const createList = useCreateList(spaceId);
@@ -419,7 +421,7 @@ function FolderItem({ folder, spaceId, canAdd, canDelete, isManager, myAccess }:
     <div>
       <div className="group flex items-center">
         <button
-          onClick={(e) => { e.stopPropagation(); setOpen(!open); }}
+          onClick={(e) => { e.stopPropagation(); toggleFolderExpanded(folder.id); }}
           className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-[var(--sh-ink-4)] hover:text-[var(--sh-ink)]"
           aria-label={open ? 'Collapse' : 'Expand'}
         >
@@ -508,7 +510,9 @@ function ClientItem({ folder, childSpaces, spaceId, canAddLists, canAddSpaces, c
   myAccess?: AccessLevel | null;
 }) {
   const { activeFolderId, setActiveFolder, setActiveSpace } = usePMStore();
-  const [open, setOpen] = useState(true);
+  const expandedClients = usePMStore((s) => s.expandedClients);
+  const toggleClientExpanded = usePMStore((s) => s.toggleClientExpanded);
+  const open = expandedClients[folder.id] ?? true;
   const [adding, setAdding] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const isActive = activeFolderId === folder.id;
@@ -517,7 +521,7 @@ function ClientItem({ folder, childSpaces, spaceId, canAddLists, canAddSpaces, c
     <div>
       <div className="group flex items-center">
         <button
-          onClick={(e) => { e.stopPropagation(); setOpen(!open); }}
+          onClick={(e) => { e.stopPropagation(); toggleClientExpanded(folder.id); }}
           className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-[var(--sh-ink-4)] hover:text-[var(--sh-ink)]"
           aria-label={open ? 'Collapse' : 'Expand'}
         >
@@ -575,9 +579,12 @@ function ClientItem({ folder, childSpaces, spaceId, canAddLists, canAddSpaces, c
 // ---- Space item ----
 function SpaceItem({ spaceId, initial }: { spaceId: string; initial?: Space }) {
   const { activeSpaceId, activeSpacePageId, setActiveSpace, setActiveSpacePage } = usePMStore();
+  const expandedSpaces = usePMStore((s) => s.expandedSpaces);
+  const toggleSpaceExpanded = usePMStore((s) => s.toggleSpaceExpanded);
+  const setSpaceExpanded = usePMStore((s) => s.setSpaceExpanded);
   const isActive = activeSpaceId === spaceId;
   const isSpacePageActive = activeSpacePageId === spaceId;
-  const [open, setOpen] = useState(false);
+  const open = expandedSpaces[spaceId] ?? false;
   const [createModal, setCreateModal] = useState<'folder' | 'list' | 'space' | 'client' | null>(null);
   const [showMembers, setShowMembers] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
@@ -608,12 +615,12 @@ function SpaceItem({ spaceId, initial }: { spaceId: string; initial?: Space }) {
     }
     setActiveSpace(spaceId);
     setActiveSpacePage(spaceId);
-    setOpen(true);
+    setSpaceExpanded(spaceId, true);
   };
 
   const handleToggle = (e: React.MouseEvent) => {
     e.stopPropagation();
-    setOpen(!open);
+    toggleSpaceExpanded(spaceId);
   };
 
   const isRowActive = isSpacePageActive || (isActive && open);
