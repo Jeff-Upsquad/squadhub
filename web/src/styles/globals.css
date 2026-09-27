@@ -1086,8 +1086,8 @@ body.sb-resizing { user-select: none; -webkit-user-select: none; cursor: col-res
   --pill-bg: #14304D; --pill-ink: #9CCBF5; --pill-icon: #7DB8F0;
 }
 .sh-view .dp-seg { display: inline-flex; align-items: center; gap: 2px; padding: 3px; border-radius: 9px; background: var(--seg-track); }
-.sh-view .dp-seg > button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; height: 28px; padding: 0 14px; border: 1px solid transparent; border-radius: 7px; background: transparent; font: 500 12.5px var(--font-text); letter-spacing: -0.01em; color: var(--seg-ink); white-space: nowrap; cursor: pointer; transition: background .12s, color .12s, box-shadow .12s, border-color .12s; }
-.sh-view .dp-seg > button .seg-ico, .sh-view .dp-seg > button svg { flex: none; color: var(--seg-icon); transition: color .12s; }
+.sh-view .dp-seg > button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 28px; padding: 0 14px; border: 1px solid transparent; border-radius: 7px; background: transparent; font: 500 12.5px var(--font-text); letter-spacing: -0.01em; color: var(--seg-ink); white-space: nowrap; cursor: pointer; transition: background .12s, color .12s, box-shadow .12s, border-color .12s; }
+.sh-view .dp-seg > button svg { flex: none; color: var(--seg-icon); transition: color .12s; }
 .sh-view .dp-seg > button:hover:not(:disabled) { color: var(--seg-on-ink); }
 .sh-view .dp-seg > button:hover:not(:disabled) svg { color: var(--seg-on-ink); }
 .sh-view .dp-seg > button[data-active] { background: var(--seg-on-bg); border-color: var(--seg-on-border); box-shadow: 0 1px 3px rgba(0,0,0,.1); color: var(--seg-on-ink); cursor: default; }
@@ -1095,10 +1095,8 @@ body.sb-resizing { user-select: none; -webkit-user-select: none; cursor: col-res
 .sh-view .dp-seg > button.nav-btn { width: 30px; padding: 0; }
 .sh-view .dp-seg > button.nav-btn:hover { background: var(--seg-on-bg); border-color: var(--seg-on-border); box-shadow: 0 1px 3px rgba(0,0,0,.1); }
 /* Status tag ("Today", "This week") — light-blue value pill */
-.sh-view .dp-rel { flex: none; display: inline-flex; align-items: center; gap: 5px; height: 22px; padding: 0 8px 0 6px; border-radius: 6px; background: var(--pill-bg); font: 500 12px var(--font-text); letter-spacing: -0.01em; color: var(--pill-ink); }
-.sh-view .dp-rel .seg-ico { width: 13px; height: 13px; color: var(--pill-icon); }
+.sh-view .dp-rel { flex: none; display: inline-flex; align-items: center; height: 22px; padding: 0 8px; border-radius: 6px; background: var(--pill-bg); font: 500 12px var(--font-text); letter-spacing: -0.01em; color: var(--pill-ink); }
 .sh-view .dp-rel:not([data-today]) { background: var(--seg-track); color: var(--seg-ink); }
-.sh-view .dp-rel:not([data-today]) .seg-ico { color: var(--seg-icon); }
 
 /* Range views (3 Day / Weekdays / Week / Month): the planner header over the
    Calendar app's grids, which own their scrolling. */
@@ -1176,7 +1174,7 @@ body.sb-resizing { user-select: none; -webkit-user-select: none; cursor: col-res
   .sh-view.day-planner-view { grid-template-columns: 340px minmax(0, 1fr); }
   .sh-view .dp-cal-head { padding: 0 14px 0 18px; }
   .sh-view .dp-cal-title .sub { display: none; }
-  .sh-view .dp-modes > button { padding: 0 9px; gap: 5px; }
+  .sh-view .dp-modes > button { padding: 0 10px; }
 }
 
 /* ============================ Calendar app ============================ */

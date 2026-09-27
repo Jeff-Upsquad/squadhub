@@ -23,7 +23,6 @@ import {
   DND_GROUP_ESTIMATE_TOTAL,
   DND_TASK_RECURRING_PARENT,
 } from '../calendar/calendarUtils';
-import { SegIcon } from './PlannerRangeCalendar';
 
 type GroupContainer = { type: 'list' | 'folder' | 'space'; id: string; name: string };
 
@@ -490,7 +489,7 @@ export default function DayCalendar({ date, today, onDateChange, keyboard = fals
         <div className="dp-cal-title">
           <h2>
             {dayTitle}
-            {relLabel && <span className="dp-rel" data-today={isToday || undefined}><SegIcon name="clock" />{relLabel}</span>}
+            {relLabel && <span className="dp-rel" data-today={isToday || undefined}>{relLabel}</span>}
           </h2>
           <div className="sub">
             {weekLabel}
@@ -525,7 +524,6 @@ export default function DayCalendar({ date, today, onDateChange, keyboard = fals
               disabled={isToday}
               title={keyboard ? 'Jump to today (T)' : 'Jump to today'}
             >
-              <SegIcon name="today" />
               Today
             </button>
             <button

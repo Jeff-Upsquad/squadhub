@@ -51,25 +51,6 @@ function isoWeek(d: Date): number {
   return 1 + Math.round((t.getTime() - firstThursday.getTime()) / (7 * 86_400_000));
 }
 
-// 14px line icons for the header controls (same stroke weight throughout).
-const ICON_PATHS: Record<PlannerMode | 'today' | 'clock', ReactNode> = {
-  day: <><rect x="3.5" y="5" width="17" height="15.5" rx="3" /><path d="M3.5 10h17M8 3v4M16 3v4" /><rect x="10" y="13" width="4" height="4" rx="1" /></>,
-  '3day': <><rect x="3.5" y="4.5" width="17" height="15" rx="3" /><path d="M9.2 4.5v15M14.8 4.5v15" /></>,
-  weekdays: <><rect x="3" y="7.5" width="18" height="12.5" rx="2.5" /><path d="M9 7.5V5.5a1.5 1.5 0 0 1 1.5-1.5h3A1.5 1.5 0 0 1 15 5.5v2M3 13h18" /></>,
-  week: <><rect x="3.5" y="5" width="17" height="15.5" rx="3" /><path d="M3.5 10h17M8 3v4M16 3v4M7.5 14h9M7.5 17h5" /></>,
-  month: <><rect x="4" y="4" width="7" height="7" rx="2" /><rect x="13" y="4" width="7" height="7" rx="2" /><rect x="4" y="13" width="7" height="7" rx="2" /><rect x="13" y="13" width="7" height="7" rx="2" /></>,
-  today: <><circle cx="12" cy="12" r="8.5" /><circle cx="12" cy="12" r="3" /></>,
-  clock: <><circle cx="12" cy="12" r="8.5" /><path d="M12 7.5V12l3 2" /></>,
-};
-
-export function SegIcon({ name }: { name: keyof typeof ICON_PATHS }) {
-  return (
-    <svg className="seg-ico" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      {ICON_PATHS[name]}
-    </svg>
-  );
-}
-
 // Segmented Day / 3 Day / Weekdays / Week / Month control — rendered in the
 // header of both the single-day calendar and the range views.
 export function PlannerModeSwitch({ mode, onChange }: { mode: PlannerMode; onChange: (m: PlannerMode) => void }) {
@@ -85,8 +66,7 @@ export function PlannerModeSwitch({ mode, onChange }: { mode: PlannerMode; onCha
           title={m.hint}
           onClick={() => onChange(m.key)}
         >
-          <SegIcon name={m.key} />
-          <span>{m.label}</span>
+          {m.label}
         </button>
       ))}
     </div>
@@ -165,7 +145,6 @@ export default function PlannerRangeCalendar({ mode, date, today, onDateChange, 
             {title}
             {inView && (
               <span className="dp-rel" data-today>
-                <SegIcon name="clock" />
                 {mode === 'month' ? 'This month' : mode === '3day' ? 'Includes today' : 'This week'}
               </span>
             )}
@@ -179,7 +158,6 @@ export default function PlannerRangeCalendar({ mode, date, today, onDateChange, 
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6" /></svg>
             </button>
             <button type="button" className="nav-today" data-active={date === today || undefined} disabled={date === today} onClick={() => onDateChange(today)} title="Jump to today (T)">
-              <SegIcon name="today" />
               Today
             </button>
             <button type="button" className="nav-btn" onClick={() => onDateChange(stepAnchor(mode, date, 1))} title={`Next ${unit} (→)`} aria-label={`Next ${unit}`}>
