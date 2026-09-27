@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/stores/authStore';
 import { useHasHydrated } from '@/hooks/useHasHydrated';
 import ThemeToggleAuth from '@/components/ThemeToggleAuth';
+import { loginRedirect } from '@/lib/loginRedirect';
 
 export default function AuthLayout({
   children,
@@ -20,10 +21,7 @@ export default function AuthLayout({
     if (isAuthenticated) {
       // Honor a safe internal ?redirect= (e.g. the SquadBooks launch bridge),
       // otherwise land in the app. Only same-origin relative paths are allowed.
-      let dest = '/app';
-      const r = new URLSearchParams(window.location.search).get('redirect');
-      if (r && r.startsWith('/') && !r.startsWith('//')) dest = r;
-      router.push(dest);
+      router.replace(loginRedirect(window.location.search));
     }
   }, [hydrated, isAuthenticated, router]);
 

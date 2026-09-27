@@ -169,12 +169,12 @@ export default function AdminLmsLibrary() {
         <FilterChip active={!trackFilter} onClick={() => setTrackFilter('')} label="All tracks" />
         <FilterChip active={trackFilter === 'learning'} onClick={() => setTrackFilter('learning')} label="Learning" />
         <FilterChip active={trackFilter === 'sop'} onClick={() => setTrackFilter('sop')} label="Systems & Processes" />
-        <FilterChip active={trackFilter === 'knowledge'} onClick={() => setTrackFilter('knowledge')} label="Knowledge" />
+        <FilterChip active={trackFilter === 'knowledge'} onClick={() => setTrackFilter('knowledge')} label="Knowledge docs" />
         {trackFilter === 'knowledge' && bots.length > 0 && (
           <select
             value={botFilter}
             onChange={(e) => setBotFilter(e.target.value)}
-            aria-label="Filter knowledge by bot"
+            aria-label="Filter knowledge docs by bot"
             className="rounded-full border border-divider bg-surface px-3 py-1 text-[12px] text-foreground-muted focus:border-ink focus:outline-none"
           >
             <option value="">All bots</option>
@@ -256,7 +256,7 @@ export default function AdminLmsLibrary() {
                   </td>
                   <td className="px-4 py-3">
                     <Link href={`/admin/learning/${item.id}`} className="block">
-                      <div className="flex items-center gap-1.5 font-medium text-foreground">
+                      <div className="flex flex-wrap items-center gap-1.5 font-medium text-foreground">
                         {item.title}
                         {item.track === 'sop' && (
                           <span className="rounded-full bg-indigo-50 px-1.5 py-px text-[10px] font-medium uppercase tracking-wide text-indigo-700">
@@ -265,14 +265,14 @@ export default function AdminLmsLibrary() {
                         )}
                         {item.track === 'knowledge' && (
                           <span className="rounded-full bg-emerald-50 px-1.5 py-px text-[10px] font-medium uppercase tracking-wide text-emerald-700">
-                            Knowledge
+                            Knowledge doc
                           </span>
                         )}
-                        {item.track === 'knowledge' && item.bot && (
-                          <span className="rounded-full bg-canvas px-1.5 py-px text-[10px] font-medium text-foreground-muted">
-                            🤖 {item.bot.internal_name}
+                        {item.track === 'knowledge' && (item.bots ?? (item.bot ? [item.bot] : [])).map((bot) => (
+                          <span key={bot.id} className="rounded-full bg-canvas px-1.5 py-px text-[10px] font-medium text-foreground-muted">
+                            🤖 {bot.internal_name}
                           </span>
-                        )}
+                        ))}
                       </div>
                       {item.category && (
                         <span className="mt-0.5 inline-flex items-center gap-1 text-[11px] text-foreground-muted">
@@ -560,7 +560,7 @@ const CONTENT_TYPES: {
   { key: 'post', kind: 'post', track: 'learning', icon: '📄', title: 'Post', desc: 'A single self-contained update or article.', placeholder: 'e.g. Q3 product update' },
   { key: 'course', kind: 'course', track: 'learning', icon: '📚', title: 'Course', desc: 'A multi-lesson journey learners work through.', placeholder: 'e.g. Onboarding 101' },
   { key: 'sop', kind: 'post', track: 'sop', icon: '🧭', title: 'SOP / Guide', desc: 'A how-to under Systems & Procedures.', placeholder: 'e.g. How to submit an expense' },
-  { key: 'knowledge', kind: 'post', track: 'knowledge', icon: '🤖', title: 'Knowledge', desc: 'A Q&A or guide a Squad Bot answers from.', placeholder: 'e.g. When do I get paid?' },
+  { key: 'knowledge', kind: 'post', track: 'knowledge', icon: '🤖', title: 'Knowledge doc', desc: 'A document a Squad Bot answers from.', placeholder: 'e.g. When do I get paid?' },
 ];
 
 function NewContentModal({

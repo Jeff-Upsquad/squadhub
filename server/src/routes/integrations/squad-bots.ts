@@ -84,15 +84,15 @@ router.get('/knowledge', async (req: BotRequest, res: Response) => {
   try {
     const { data: items, error } = await supabaseAdmin
       .from('lms_items')
-      .select('id, title, summary, icon, knowledge_categories, updated_at')
+      .select('id, title, summary, icon, knowledge_categories, updated_at, knowledge_links:squad_bot_knowledge_docs!inner(bot_id)')
       .eq('track', 'knowledge')
       .eq('status', 'published')
-      .eq('bot_id', req.squadBot!.id)
+      .eq('knowledge_links.bot_id', req.squadBot!.id)
       .is('origin_item_id', null)
       .order('updated_at', { ascending: false });
     if (error) throw new Error(error.message);
     const withPages = await Promise.all(
-      (items ?? []).map(async (item) => ({ ...item, pages: await loadPages(item.id) })),
+      (items ?? []).map(async ({ knowledge_links: _links, ...item }) => ({ ...item, pages: await loadPages(item.id) })),
     );
     res.json({ success: true, data: withPages });
   } catch (err) {

@@ -1,6 +1,6 @@
 import { config } from '../config';
 import { supabaseAdmin } from '../supabase';
-import { isSquadhireBot } from './squadBots';
+import { knowledgeDocUsesSquadhire } from './knowledgeDocs';
 
 /**
  * Deliver a Resources item to SquadHire as talent training.
@@ -98,27 +98,24 @@ export async function deliver(itemId: string): Promise<void> {
 
   const { data: item } = await supabaseAdmin
     .from('lms_items')
-    .select('id, kind, track, title, summary, icon, cover_image_url, status, squadhire_audience, knowledge_categories, bot_id')
+    .select('id, kind, track, title, summary, icon, cover_image_url, status, squadhire_audience, knowledge_categories, origin_item_id')
     .eq('id', itemId)
     .maybeSingle();
-  if (!item) return;
-  // Only SquadHire bots' knowledge goes to SquadHire; other bots (Squad CRM, …)
-  // read theirs from SquadHub's /integrations/squad-bots/knowledge.
-  if (item.track === 'knowledge' && !(await isSquadhireBot(item.bot_id))) return;
+  if (!item || item.origin_item_id) return;
 
   let endpoint: string;
   let payload: Record<string, unknown>;
   if (item.track === 'knowledge') {
     // Knowledge: every published item is live for Squad Bot; unpublishing
     // takes it back out.
-    const visible = item.status === 'published';
+    const visible = item.status === 'published' && await knowledgeDocUsesSquadhire(item.id);
     endpoint = squadhireUrl(KNOWLEDGE_SYNC_PATH)!;
     payload = {
       id: item.id,
-      title: item.title,
-      summary: item.summary ?? null,
-      icon: item.icon ?? null,
-      knowledge_categories: item.knowledge_categories ?? [],
+      title: visible ? item.title : 'Unavailable knowledge doc',
+      summary: visible ? item.summary ?? null : null,
+      icon: visible ? item.icon ?? null : null,
+      knowledge_categories: visible ? item.knowledge_categories ?? [] : [],
       visible,
       pages: visible ? await loadPages(itemId) : [],
     };

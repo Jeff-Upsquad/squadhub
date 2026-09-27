@@ -37,7 +37,7 @@ vi.mock('../supabase', () => ({
 const fetchMock = vi.fn(async () => ({ ok: true, text: async () => '' }));
 vi.stubGlobal('fetch', fetchMock);
 
-import { syncContentToSquadhire } from '../services/squadhireTraining';
+import { deliver, syncContentToSquadhire } from '../services/squadhireTraining';
 
 beforeEach(() => {
   vi.useFakeTimers();
@@ -118,6 +118,7 @@ describe('syncContentToSquadhire', () => {
       },
     ];
     tableRows.lms_lessons = [];
+    tableRows.squad_bot_knowledge_docs = [{ item_id: 'item-4', bot: { id: 'hire', home_app: 'squadhire' } }];
     syncContentToSquadhire('item-4');
     await flushAndAdvance(10_000);
     expect(fetchMock).toHaveBeenCalledTimes(1);
@@ -128,25 +129,30 @@ describe('syncContentToSquadhire', () => {
     expect(body.track).toBeUndefined();
   });
 
-  it('sends knowledge that belongs to a SquadHire bot', async () => {
+  it('sends one shared doc when any linked bot uses SquadHire', async () => {
     tableRows.lms_items = [
       { id: 'item-6', kind: 'post', track: 'knowledge', title: 'Hiring answer', status: 'published', knowledge_categories: [], bot_id: 'bot-hire' },
     ];
-    tableRows.squad_bots = [{ home_app: 'squadhire' }];
+    tableRows.squad_bot_knowledge_docs = [
+      { item_id: 'item-6', bot: { id: 'crm', home_app: 'squad_crm' } },
+      { item_id: 'item-6', bot: { id: 'hire', home_app: 'squadhire' } },
+    ];
     tableRows.lms_lessons = [];
     syncContentToSquadhire('item-6');
     await flushAndAdvance(10_000);
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
-  it('keeps knowledge for bots outside SquadHire (e.g. Squad CRM) out of SquadHire', async () => {
+  it('retracts knowledge when only bots outside SquadHire remain linked', async () => {
     tableRows.lms_items = [
       { id: 'item-7', kind: 'post', track: 'knowledge', title: 'Pricing answer', status: 'published', knowledge_categories: [], bot_id: 'bot-crm' },
     ];
-    tableRows.squad_bots = [{ home_app: 'squad_crm' }];
+    tableRows.squad_bot_knowledge_docs = [{ item_id: 'item-7', bot: { id: 'crm', home_app: 'squad_crm' } }];
     syncContentToSquadhire('item-7');
     await flushAndAdvance(10_000);
-    expect(fetchMock).not.toHaveBeenCalled();
+    const body = JSON.parse((fetchMock.mock.calls[0] as unknown as [string, { body: string }])[1].body);
+    expect(body).toMatchObject({ id: 'item-7', visible: false, pages: [], summary: null, knowledge_categories: [] });
+    expect(body.title).not.toBe('Pricing answer');
   });
 
   it('withdraws an unpublished knowledge item', async () => {
@@ -158,4 +164,18 @@ describe('syncContentToSquadhire', () => {
     const body = JSON.parse((fetchMock.mock.calls[0] as unknown as [string, { body: string }])[1].body);
     expect(body).toMatchObject({ id: 'item-5', visible: false, pages: [] });
   });
+});
+
+it('never sends a contributor draft clone to SquadHire', async () => {
+  tableRows.lms_items = [{ id: 'clone', track: 'knowledge', origin_item_id: 'original', status: 'published' }];
+  await deliver('clone');
+  expect(fetchMock).not.toHaveBeenCalled();
+});
+
+it('withdraws a knowledge doc with no bots while keeping it in SquadHub', async () => {
+  tableRows.lms_items = [{ id: 'unlinked', track: 'knowledge', status: 'published' }];
+  tableRows.squad_bot_knowledge_docs = [];
+  await deliver('unlinked');
+  const body = JSON.parse((fetchMock.mock.calls[0] as unknown as [string, { body: string }])[1].body);
+  expect(body).toMatchObject({ id: 'unlinked', visible: false, pages: [] });
 });
