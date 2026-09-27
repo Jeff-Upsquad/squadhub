@@ -2,6 +2,11 @@
 
 import { useEffect, useState, type FormEvent } from 'react';
 import { usePathname } from 'next/navigation';
+import {
+  formatStoredPhone,
+  isValidNationalNumber,
+  normalizeNationalNumber,
+} from '@squadhub/shared';
 
 // Release manifest served by each app's /version endpoint — the same source of
 // truth its in-app updater polls and its GO LIVE release script updates.
@@ -33,6 +38,48 @@ function formatUpdated(iso?: string): string | null {
   }).format(d);
   return `Last updated ${date}, ${time} IST`;
 }
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+// Country calling codes — same set as SquadHire's sign-up page so the stored
+// phone ("+91 98765 43210") matches what the waitlist check compares.
+const COUNTRY_CODES = [
+  { code: '+91', label: 'IN +91' },
+  { code: '+1', label: 'US +1' },
+  { code: '+44', label: 'GB +44' },
+  { code: '+61', label: 'AU +61' },
+  { code: '+971', label: 'AE +971' },
+  { code: '+966', label: 'SA +966' },
+  { code: '+65', label: 'SG +65' },
+  { code: '+60', label: 'MY +60' },
+  { code: '+974', label: 'QA +974' },
+  { code: '+968', label: 'OM +968' },
+  { code: '+973', label: 'BH +973' },
+  { code: '+965', label: 'KW +965' },
+  { code: '+49', label: 'DE +49' },
+  { code: '+33', label: 'FR +33' },
+  { code: '+39', label: 'IT +39' },
+  { code: '+34', label: 'ES +34' },
+  { code: '+31', label: 'NL +31' },
+  { code: '+46', label: 'SE +46' },
+  { code: '+41', label: 'CH +41' },
+  { code: '+353', label: 'IE +353' },
+  { code: '+64', label: 'NZ +64' },
+  { code: '+27', label: 'ZA +27' },
+  { code: '+234', label: 'NG +234' },
+  { code: '+254', label: 'KE +254' },
+  { code: '+63', label: 'PH +63' },
+  { code: '+62', label: 'ID +62' },
+  { code: '+66', label: 'TH +66' },
+  { code: '+84', label: 'VN +84' },
+  { code: '+880', label: 'BD +880' },
+  { code: '+92', label: 'PK +92' },
+  { code: '+94', label: 'LK +94' },
+  { code: '+977', label: 'NP +977' },
+  { code: '+86', label: 'CN +86' },
+  { code: '+81', label: 'JP +81' },
+  { code: '+82', label: 'KR +82' },
+];
 
 const FEATURES = [
   {
@@ -89,19 +136,64 @@ export default function AppDownloadLanding() {
   const [error, setError] = useState<string | null>(null);
   const [waitlistOpen, setWaitlistOpen] = useState(false);
   const [waitlistEmail, setWaitlistEmail] = useState('');
-  const [waitlistPhone, setWaitlistPhone] = useState('');
+  const [waitlistCountryCode, setWaitlistCountryCode] = useState('+91');
+  const [waitlistNationalNumber, setWaitlistNationalNumber] = useState('');
   const [waitlistStatus, setWaitlistStatus] = useState<'idle' | 'submitting' | 'success' | 'error'>('idle');
   const [waitlistError, setWaitlistError] = useState('');
+  const [emailTouched, setEmailTouched] = useState(false);
+  const [phoneTouched, setPhoneTouched] = useState(false);
+  const [liveCheck, setLiveCheck] = useState<'idle' | 'checking' | 'matched' | 'not-found' | 'unavailable'>('idle');
+
+  const emailValid = EMAIL_RE.test(waitlistEmail.trim());
+  const phoneValid = isValidNationalNumber(waitlistNationalNumber, waitlistCountryCode);
+  const fullPhone = formatStoredPhone(waitlistCountryCode, waitlistNationalNumber);
+
+  // Real-time check (mirrors SquadHire's sign-up live status check): debounced
+  // server verification of the email + phone pair once both look valid.
+  useEffect(() => {
+    if (!waitlistOpen || !emailValid || !phoneValid) {
+      setLiveCheck('idle');
+      return;
+    }
+    setLiveCheck('checking');
+    const handle = setTimeout(async () => {
+      try {
+        const response = await fetch('/partner-app/ios-waitlist-check', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: waitlistEmail.trim(), phone: fullPhone }),
+        });
+        if (!response.ok) {
+          setLiveCheck('unavailable');
+          return;
+        }
+        const body = (await response.json().catch(() => ({}))) as { matched?: unknown };
+        setLiveCheck(body.matched === true ? 'matched' : 'not-found');
+      } catch {
+        setLiveCheck('unavailable');
+      }
+    }, 600);
+    return () => clearTimeout(handle);
+  }, [waitlistOpen, waitlistEmail, fullPhone, emailValid, phoneValid]);
 
   async function submitWaitlist(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    setEmailTouched(true);
+    setPhoneTouched(true);
+    if (!emailValid || !phoneValid) {
+      setWaitlistStatus('error');
+      setWaitlistError(
+        !emailValid ? 'Enter a valid email address.' : 'Enter a valid phone number.',
+      );
+      return;
+    }
     setWaitlistStatus('submitting');
     setWaitlistError('');
     try {
       const response = await fetch('/partner-app/ios-waitlist', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: waitlistEmail, phone: waitlistPhone }),
+        body: JSON.stringify({ email: waitlistEmail.trim(), phone: fullPhone }),
       });
       if (!response.ok) {
         const body = await response.json().catch(() => ({}));
@@ -151,9 +243,9 @@ export default function AppDownloadLanding() {
 
       {/* Main */}
       <main className="flex-1 px-6 py-12">
-        <div className="mx-auto max-w-2xl">
+        <div className="mx-auto max-w-4xl">
           {/* Hero */}
-          <div className="mb-10 text-center">
+          <div className="mx-auto mb-10 max-w-2xl text-center">
             <div className="relative mx-auto mb-5 flex h-20 w-20 items-center justify-center rounded-[22px] bg-[#0A0A0A] shadow-[0_16px_38px_-16px_rgba(0,0,0,0.45)]">
               <span className="up-heading text-[26px] font-extrabold tracking-tight text-white">SH</span>
               {/* Lone accent */}
@@ -167,8 +259,18 @@ export default function AppDownloadLanding() {
             </p>
           </div>
 
-          {/* Download card */}
-          <div className="up-card mb-8 p-8 text-center">
+          {/* Android + iOS cards — side by side on desktop, stacked on mobile */}
+          <div className={`mb-8 grid grid-cols-1 items-stretch gap-5 ${!isInternal ? 'lg:grid-cols-2' : 'mx-auto max-w-2xl'}`}>
+          {/* Android download card */}
+          <div className="up-card up-card-accent flex flex-col p-8 text-center">
+            <div className="up-mono mb-2 text-[10px] text-[#525252]">Android / APK</div>
+            <h2 className="up-heading text-[20px] font-bold tracking-[-0.02em] text-[#0A0A0A]">
+              Get the Android app
+            </h2>
+            <p className="mx-auto mt-2 max-w-xs text-[13px] leading-relaxed text-[#525252]">
+              For Android 8.0 and up. Download the APK, sign in with your {accountLabel} email.
+            </p>
+            <div className="mt-5 flex flex-1 flex-col justify-center">
             {loading ? (
               <div className="mx-auto h-[50px] w-56 animate-pulse rounded-full bg-[#F5F5F2]" />
             ) : error ? (
@@ -198,7 +300,7 @@ export default function AppDownloadLanding() {
 
                 {/* Meta row */}
                 <div className="up-mono mt-5 flex flex-wrap items-center justify-center gap-x-3 gap-y-2 text-[10px] text-[#525252]">
-                  <span className="rounded-full bg-[#FFFF99] px-2.5 py-1 text-[#0A0A0A]">v{manifest!.version_name}</span>
+                  <span className="rounded-full bg-[#0A0A0A] px-2.5 py-1 text-[#FFFF99]">v{manifest!.version_name}</span>
                   <span className="h-1 w-1 rounded-full bg-[#D4D4D4]" />
                   <span>Android 8.0+</span>
                   <span className="h-1 w-1 rounded-full bg-[#D4D4D4]" />
@@ -215,10 +317,11 @@ export default function AppDownloadLanding() {
                 The APK isn&apos;t published yet. Check back shortly.
               </div>
             )}
+            </div>
           </div>
 
           {!isInternal && (
-            <section className="up-card mb-8 p-6 sm:p-8">
+            <section className="up-card up-card-accent flex flex-col p-6 text-left sm:p-8">
               <div className="up-mono mb-2 text-[10px] text-[#525252]">iPhone / iOS</div>
               <h2 className="up-heading text-[20px] font-bold tracking-[-0.02em] text-[#0A0A0A]">
                 Join the iOS waiting list
@@ -232,15 +335,17 @@ export default function AppDownloadLanding() {
                   Thanks. If those details match your SquadHire account, you&apos;re on the list. We&apos;ll email you when the iOS app is ready.
                 </p>
               ) : !waitlistOpen ? (
-                <button
-                  type="button"
-                  onClick={() => setWaitlistOpen(true)}
-                  className="up-btn-secondary mt-5 inline-flex rounded-full px-5 py-2.5 text-[13px] font-semibold"
-                >
-                  Join iOS waiting list
-                </button>
+                <div className="mt-5 flex flex-1 items-end">
+                  <button
+                    type="button"
+                    onClick={() => setWaitlistOpen(true)}
+                    className="up-btn inline-flex rounded-full px-5 py-2.5 text-[13px] font-semibold"
+                  >
+                    Join iOS waiting list
+                  </button>
+                </div>
               ) : (
-                <form onSubmit={submitWaitlist} className="mt-5 space-y-4">
+                <form onSubmit={submitWaitlist} className="mt-5 space-y-4" noValidate>
                   <div>
                     <label htmlFor="ios-waitlist-email" className="mb-1.5 block text-[13px] font-semibold text-[#0A0A0A]">
                       SquadHire email
@@ -248,38 +353,124 @@ export default function AppDownloadLanding() {
                     <input
                       id="ios-waitlist-email"
                       type="email"
-                      required
                       maxLength={320}
                       autoComplete="email"
                       value={waitlistEmail}
-                      onChange={(event) => setWaitlistEmail(event.target.value)}
-                      className="w-full rounded-xl border border-[rgba(0,0,0,0.18)] bg-white px-4 py-3 text-[14px] text-[#0A0A0A] outline-none focus:border-[#0A0A0A]"
+                      onChange={(event) => {
+                        setWaitlistEmail(event.target.value);
+                        setEmailTouched(true);
+                      }}
+                      onBlur={() => setEmailTouched(true)}
+                      aria-invalid={emailTouched && waitlistEmail !== '' && !emailValid}
+                      className={`w-full rounded-xl border bg-white px-4 py-3 text-[14px] text-[#0A0A0A] outline-none focus:border-[#0A0A0A] ${
+                        emailTouched && waitlistEmail !== '' && !emailValid
+                          ? 'border-red-400'
+                          : 'border-[rgba(0,0,0,0.18)]'
+                      }`}
                       placeholder="you@example.com"
                     />
+                    {emailTouched && waitlistEmail !== '' && !emailValid && (
+                      <p role="alert" className="mt-1.5 text-[12px] text-red-700">
+                        Enter a valid email address.
+                      </p>
+                    )}
                   </div>
                   <div>
                     <label htmlFor="ios-waitlist-phone" className="mb-1.5 block text-[13px] font-semibold text-[#0A0A0A]">
                       SquadHire phone number
                     </label>
-                    <input
-                      id="ios-waitlist-phone"
-                      type="tel"
-                      required
-                      minLength={10}
-                      maxLength={25}
-                      autoComplete="tel"
-                      value={waitlistPhone}
-                      onChange={(event) => setWaitlistPhone(event.target.value)}
-                      className="w-full rounded-xl border border-[rgba(0,0,0,0.18)] bg-white px-4 py-3 text-[14px] text-[#0A0A0A] outline-none focus:border-[#0A0A0A]"
-                      placeholder="+91 98765 43210"
-                    />
+                    <div className="flex items-stretch gap-2">
+                      <select
+                        aria-label="Country code"
+                        value={waitlistCountryCode}
+                        onChange={(event) => {
+                          const code = event.target.value;
+                          setWaitlistCountryCode(code);
+                          setWaitlistNationalNumber((prev) => normalizeNationalNumber(prev, code));
+                          setPhoneTouched(true);
+                        }}
+                        className="w-[118px] shrink-0 rounded-xl border border-[rgba(0,0,0,0.18)] bg-white px-2 py-3 text-[14px] font-medium text-[#0A0A0A] outline-none focus:border-[#0A0A0A]"
+                      >
+                        {COUNTRY_CODES.map((cc) => (
+                          <option key={cc.code} value={cc.code}>{cc.label}</option>
+                        ))}
+                      </select>
+                      <input
+                        id="ios-waitlist-phone"
+                        type="tel"
+                        inputMode="numeric"
+                        autoComplete="tel"
+                        value={waitlistNationalNumber}
+                        onChange={(event) => {
+                          setWaitlistNationalNumber(
+                            normalizeNationalNumber(event.target.value, waitlistCountryCode),
+                          );
+                          setPhoneTouched(true);
+                          // A pasted full number ("+91 98765…") splits off its code.
+                          const pasted = event.target.value.trim();
+                          if (pasted.startsWith('+')) {
+                            const match = COUNTRY_CODES.filter((cc) => pasted.startsWith(cc.code)).sort(
+                              (a, b) => b.code.length - a.code.length,
+                            )[0];
+                            if (match && match.code !== waitlistCountryCode) {
+                              setWaitlistCountryCode(match.code);
+                              setWaitlistNationalNumber(
+                                normalizeNationalNumber(pasted.slice(match.code.length), match.code),
+                              );
+                            }
+                          }
+                        }}
+                        onBlur={() => setPhoneTouched(true)}
+                        aria-invalid={phoneTouched && waitlistNationalNumber !== '' && !phoneValid}
+                        className={`w-full rounded-xl border bg-white px-4 py-3 text-[14px] text-[#0A0A0A] outline-none focus:border-[#0A0A0A] ${
+                          phoneTouched && waitlistNationalNumber !== '' && !phoneValid
+                            ? 'border-red-400'
+                            : 'border-[rgba(0,0,0,0.18)]'
+                        }`}
+                        placeholder={waitlistCountryCode === '+91' ? '98765 43210' : 'Phone number'}
+                      />
+                    </div>
+                    {phoneTouched && waitlistNationalNumber !== '' && !phoneValid && (
+                      <p role="alert" className="mt-1.5 text-[12px] text-red-700">
+                        {waitlistCountryCode === '+91'
+                          ? 'Enter a valid 10-digit mobile number.'
+                          : 'Enter a valid phone number.'}
+                      </p>
+                    )}
                   </div>
+                  {/* Live check — same pattern as SquadHire's sign-up page. */}
+                  {liveCheck === 'checking' && (
+                    <div className="flex items-center gap-2 rounded-xl border border-[rgba(0,0,0,0.08)] bg-[#F5F5F2] px-4 py-3 text-[13px] text-[#525252]">
+                      <span className="h-4 w-4 animate-spin rounded-full border-2 border-[#A3A3A3] border-t-transparent" />
+                      Checking your details…
+                    </div>
+                  )}
+                  {liveCheck === 'matched' && (
+                    <div className="flex items-start gap-2.5 rounded-xl border border-green-200 bg-green-50 px-4 py-3">
+                      <svg viewBox="0 0 24 24" fill="none" className="mt-0.5 h-4 w-4 shrink-0 text-green-700" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M20 6 9 17l-5-5" />
+                      </svg>
+                      <p className="text-[13px] leading-snug text-green-900">
+                        We found your SquadHire account — you&apos;re good to join.
+                      </p>
+                    </div>
+                  )}
+                  {liveCheck === 'not-found' && (
+                    <div className="flex items-start gap-2.5 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+                      <svg viewBox="0 0 24 24" fill="none" className="mt-0.5 h-4 w-4 shrink-0 text-amber-700" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M12 9v2m0 4h.01M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+                      </svg>
+                      <p className="text-[13px] leading-snug text-amber-900">
+                        We couldn&apos;t find a SquadHire account with this email + phone. Use the ones registered with SquadHire.
+                      </p>
+                    </div>
+                  )}
                   {waitlistStatus === 'error' && (
                     <p role="alert" className="text-[13px] text-red-700">{waitlistError}</p>
                   )}
                   <button
                     type="submit"
-                    disabled={waitlistStatus === 'submitting'}
+                    disabled={waitlistStatus === 'submitting' || liveCheck === 'checking' || !emailValid || !phoneValid}
                     className="up-btn inline-flex rounded-full px-6 py-3 text-[13px] font-semibold disabled:opacity-60"
                   >
                     {waitlistStatus === 'submitting' ? 'Joining…' : 'Join waiting list'}
@@ -288,7 +479,9 @@ export default function AppDownloadLanding() {
               )}
             </section>
           )}
+          </div>
 
+          <div className="mx-auto max-w-2xl">
           {/* What's new */}
           {hasDownload && manifest!.release_notes && (
             <section className="mb-8">
@@ -358,6 +551,7 @@ export default function AppDownloadLanding() {
               </svg>
             </a>
           </section>
+          </div>
         </div>
       </main>
 
@@ -400,6 +594,11 @@ export default function AppDownloadLanding() {
           transform: translateY(-2px);
           border-color: rgba(0, 0, 0, 0.18);
           box-shadow: 0 14px 30px -16px rgba(0, 0, 0, 0.18);
+        }
+        .up-card-accent {
+          background: #FFFF99;
+          border-color: rgba(0, 0, 0, 0.14);
+          box-shadow: 0 18px 44px -24px rgba(0, 0, 0, 0.35);
         }
         .up-btn {
           background: #0a0a0a;
