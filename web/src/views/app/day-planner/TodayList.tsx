@@ -205,21 +205,41 @@ export default function TodayList() {
     });
   };
 
+  // Relative day label: "today", "tomorrow", "yesterday", else "Sep 25".
+  const relDay = (iso: string): string => {
+    const k = planDateKey(new Date(iso));
+    if (k === todayStr) return 'today';
+    if (k === tomorrowStr) return 'tomorrow';
+    if (k === yesterdayStr) return 'yesterday';
+    return fmtDate(iso) ?? '';
+  };
+
+  // The one date worth showing on a card, with its tone:
+  // overdue due date → due date → work date → start date.
+  const cardDate = (t: Task): { label: string; tone?: 'overdue' | 'soon' } | null => {
+    const key = (v: string) => planDateKey(new Date(v));
+    if (t.due_date) {
+      const k = key(t.due_date);
+      if (k < todayStr) return { label: `Overdue · ${fmtDate(t.due_date)}`, tone: 'overdue' };
+      return { label: `Due ${relDay(t.due_date)}`, tone: k <= tomorrowStr ? 'soon' : undefined };
+    }
+    if (t.work_date) {
+      const r = relDay(t.work_date);
+      return { label: r === 'today' || r === 'tomorrow' || r === 'yesterday' ? r[0].toUpperCase() + r.slice(1) : r };
+    }
+    if (t.start_date) return { label: `Starts ${relDay(t.start_date)}` };
+    return null;
+  };
+
   // A single draggable palette row. Used both as a top-level row and as the
   // child renderer for collapsed multi-home ("ALSO IN") groups, so a grouped
   // task drags onto the calendar exactly like any other task.
   const renderRow = (t: Task) => {
-    const badges = badgesFor(t, todayStr, yesterdayStr, tomorrowStr).filter((b) => b !== 'today');
     const pri = priorityChip(t.priority);
     const isFocused = !!t.focused_at;
-    // One date is enough to plan with: overdue due date first, then work, then start.
-    const dateLabel = t.due_date
-      ? `Due ${fmtDate(t.due_date)}`
-      : t.work_date
-        ? `Work ${fmtDate(t.work_date)}`
-        : t.start_date
-          ? `Starts ${fmtDate(t.start_date)}`
-          : null;
+    const date = cardDate(t);
+    // "Starts soon" only matters when the start date isn't already the shown date.
+    const startsSoon = badgesFor(t, todayStr, yesterdayStr, tomorrowStr).includes('starts') && !!(t.due_date || t.work_date);
     const crumbs = [t.space?.name, t.folder?.name, t.list?.name].filter(Boolean) as string[];
     return (
       <div
@@ -246,10 +266,10 @@ export default function TodayList() {
         title="Click to open · drag onto the calendar to schedule"
       >
         <span className="grip" aria-hidden="true">
-          <svg width="8" height="14" viewBox="0 0 8 14" fill="currentColor">
-            <circle cx="2" cy="2" r="1.2" /><circle cx="6" cy="2" r="1.2" />
-            <circle cx="2" cy="7" r="1.2" /><circle cx="6" cy="7" r="1.2" />
-            <circle cx="2" cy="12" r="1.2" /><circle cx="6" cy="12" r="1.2" />
+          <svg width="6" height="12" viewBox="0 0 6 12" fill="currentColor">
+            <circle cx="1.2" cy="1.5" r="1.1" /><circle cx="4.8" cy="1.5" r="1.1" />
+            <circle cx="1.2" cy="6" r="1.1" /><circle cx="4.8" cy="6" r="1.1" />
+            <circle cx="1.2" cy="10.5" r="1.1" /><circle cx="4.8" cy="10.5" r="1.1" />
           </svg>
         </span>
         <button
@@ -261,48 +281,38 @@ export default function TodayList() {
           aria-label={isFocused ? 'Remove from Focus today' : 'Mark as Focus today'}
           aria-pressed={isFocused}
         >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill={isFocused ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth={1.7} strokeLinejoin="round">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill={isFocused ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth={1.7} strokeLinejoin="round">
             <path d="M12 2.5l2.97 6.02 6.65.97-4.81 4.69 1.13 6.62L12 17.7l-5.94 3.12 1.13-6.62L2.38 9.49l6.65-.97L12 2.5z" />
           </svg>
         </button>
         <div className="body">
           <div className="title">{t.title}</div>
-          {crumbs.length > 0 && (
-            <div className="crumb" title={crumbs.join(' › ')}>
-              {crumbs.map((c, i) => (
-                <span key={i} className="part">
-                  {i > 0 && <span className="sep">›</span>}
-                  <span className="name">{c}</span>
-                </span>
-              ))}
-            </div>
-          )}
-          {(pri || badges.length > 0 || dateLabel) && (
-            <div className="meta">
-              {pri && (
-                <span className="dp-tag pri" data-level={pri.level}>
-                  <span className="dot" />
-                  {pri.label}
-                </span>
-              )}
-              {badges.map((b) => (
-                <span key={b} className={`dp-tag ${b}`}>{badgeLabel(b)}</span>
-              ))}
-              {dateLabel && <span className="dp-date" data-overdue={badges.includes('overdue') || undefined}>{dateLabel}</span>}
-            </div>
-          )}
+          <div className="meta">
+            {pri && (
+              <span className="dp-pri" data-level={pri.level} title={`${pri.label} priority`}>
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                  <path d="M5 21V4a1 1 0 0 1 1-1h11.4a.6.6 0 0 1 .5.9L16 7.5l1.9 3.6a.6.6 0 0 1-.5.9H7v9H5z" />
+                </svg>
+                {pri.label}
+              </span>
+            )}
+            {date && <span className="dp-date" data-tone={date.tone}>{date.label}</span>}
+            {startsSoon && <span className="dp-tag starts">Starts soon</span>}
+            {/* List name only — the full Space › Folder › List path is in the tooltip. */}
+            {crumbs.length > 0 && (
+              <span className="crumb" title={crumbs.join(' › ')}>{crumbs[crumbs.length - 1]}</span>
+            )}
+          </div>
         </div>
-        <div className="side">
-          <span className="est" data-empty={!t.time_estimate || undefined} title={t.time_estimate ? 'Estimate' : 'No estimate — schedules as 30m'}>
-            {t.time_estimate ? fmtDuration(t.time_estimate) : '30m'}
-          </span>
-          <button type="button" className="snooze" onClick={(e) => openSnooze(e, t)} title="Snooze" aria-label="Snooze task">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="12" cy="13" r="8" />
-              <path d="M12 9v4l2.5 1.5M5 3 2.5 5.5M19 3l2.5 2.5" />
-            </svg>
-          </button>
-        </div>
+        <span className="est" data-empty={!t.time_estimate || undefined} title={t.time_estimate ? 'Estimate' : 'No estimate — schedules as 30m'}>
+          {t.time_estimate ? fmtDuration(t.time_estimate) : '30m'}
+        </span>
+        <button type="button" className="snooze" onClick={(e) => openSnooze(e, t)} title="Snooze" aria-label="Snooze task">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="13" r="8" />
+            <path d="M12 9v4l2.5 1.5M5 3 2.5 5.5M19 3l2.5 2.5" />
+          </svg>
+        </button>
       </div>
     );
   };
@@ -532,13 +542,4 @@ export default function TodayList() {
       )}
     </div>
   );
-}
-
-function badgeLabel(b: Badge): string {
-  switch (b) {
-    case 'overdue': return 'Overdue';
-    case 'today': return 'Today';
-    case 'focus': return 'Focus';
-    case 'starts': return 'Starts soon';
-  }
 }
