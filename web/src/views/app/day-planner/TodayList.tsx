@@ -385,33 +385,26 @@ export default function TodayList() {
         {/* Day summary: how full today's calendar is, and what's left to place. */}
         <div className="dp-summary" data-over={overCapacity || undefined}>
           <div className="dp-summary-stats">
-            <div className="stat">
-              <span className="v">{fmtDuration(plannedMin)}</span>
-              <span className="k">planned</span>
-            </div>
-            <div className="stat">
-              <span className="v">{unplannedTasks.length}</span>
-              <span className="k">to place</span>
-            </div>
-            <div className="stat">
-              <span className="v">{fmtDuration(toPlanMin)}</span>
-              <span className="k">left to plan</span>
-            </div>
+            <span className="dp-stat"><b>{fmtDuration(plannedMin)}</b> planned</span>
+            <span className="dp-stat"><b>{unplannedTasks.length}</b> to place</span>
+            <span className="dp-stat"><b>{fmtDuration(toPlanMin)}</b> to plan</span>
           </div>
-          <div
-            className="dp-meter"
-            role="meter"
-            aria-label="Planned time against an 8 hour day"
-            aria-valuemin={0}
-            aria-valuemax={DAY_CAPACITY_MIN}
-            aria-valuenow={Math.min(plannedMin, DAY_CAPACITY_MIN)}
-          >
-            <span style={{ width: `${plannedPct}%` }} />
-          </div>
-          <div className="dp-meter-caption">
-            {overCapacity
-              ? `${fmtDuration(plannedMin - DAY_CAPACITY_MIN)} over an 8h day`
-              : `${fmtDuration(DAY_CAPACITY_MIN - plannedMin)} free in an 8h day`}
+          <div className="dp-meter-row">
+            <div
+              className="dp-meter"
+              role="meter"
+              aria-label="Planned time against an 8 hour day"
+              aria-valuemin={0}
+              aria-valuemax={DAY_CAPACITY_MIN}
+              aria-valuenow={Math.min(plannedMin, DAY_CAPACITY_MIN)}
+            >
+              <span style={{ width: `${plannedPct}%` }} />
+            </div>
+            <span className="dp-meter-caption" title="Against an 8h day">
+              {overCapacity
+                ? `${fmtDuration(plannedMin - DAY_CAPACITY_MIN)} over`
+                : `${fmtDuration(DAY_CAPACITY_MIN - plannedMin)} free`}
+            </span>
           </div>
         </div>
 

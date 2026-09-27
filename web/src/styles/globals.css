@@ -915,25 +915,25 @@ body.sb-resizing { user-select: none; -webkit-user-select: none; cursor: col-res
 
 /* ── Palette (left) ── */
 .sh-view .dp-list { display: flex; flex-direction: column; min-height: 0; border-right: 1px solid var(--sh-hair); overflow-y: auto; background: var(--surface); font-family: var(--font-text); }
-.sh-view .dp-list-head { position: sticky; top: 0; z-index: 4; display: flex; flex-direction: column; gap: 12px; padding: 16px 16px 12px; border-bottom: 1px solid var(--sh-hair); background: var(--surface); }
-.sh-view .dp-list-title { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
-.sh-view .dp-list-head h2 { font-family: var(--font-heading); font-size: 20px; line-height: 1.2; font-weight: 700; letter-spacing: -0.02em; margin: 0; color: var(--sh-ink); }
-.sh-view .dp-list-head .sub { margin-top: 2px; font-size: 12.5px; font-weight: 500; color: var(--sh-ink-3); }
+.sh-view .dp-list-head { position: sticky; top: 0; z-index: 4; display: flex; flex-direction: column; gap: 10px; padding: 12px 14px 10px; border-bottom: 1px solid var(--sh-hair); background: var(--surface); }
+.sh-view .dp-list-title { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.sh-view .dp-list-head h2 { font-family: var(--font-heading); font-size: 17px; line-height: 1.2; font-weight: 700; letter-spacing: -0.02em; margin: 0; color: var(--sh-ink); }
+.sh-view .dp-list-head .sub { margin-top: 1px; font-size: 12px; font-weight: 500; color: var(--sh-ink-3); }
 
-/* Day summary card: three stats + capacity meter */
-.sh-view .dp-summary { padding: 12px 14px 10px; border: 1px solid var(--sh-hair); border-radius: 14px; background: var(--surface); }
-.sh-view .dp-summary-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
-.sh-view .dp-summary .stat { display: flex; flex-direction: column; min-width: 0; }
-.sh-view .dp-summary .stat .v { font-size: 17px; line-height: 1.2; font-weight: 700; letter-spacing: -0.03em; color: var(--sh-ink); font-variant-numeric: tabular-nums; white-space: nowrap; }
-.sh-view .dp-summary .stat .k { font-size: 11.5px; font-weight: 500; color: var(--sh-ink-4); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.sh-view .dp-meter { height: 6px; margin-top: 10px; border-radius: 999px; background: var(--sh-hair-3); overflow: hidden; box-shadow: inset 0 0 0 1px var(--sh-hair); }
+/* Day summary strip: one line of stats + a slim capacity meter */
+.sh-view .dp-summary { display: flex; flex-direction: column; gap: 6px; }
+.sh-view .dp-summary-stats { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 12px; row-gap: 2px; font-size: 12px; font-weight: 500; color: var(--sh-ink-4); }
+.sh-view .dp-summary .dp-stat { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.sh-view .dp-summary .dp-stat b { font-size: 13px; font-weight: 700; letter-spacing: -0.02em; color: var(--sh-ink); }
+.sh-view .dp-meter-row { display: flex; align-items: center; gap: 8px; }
+.sh-view .dp-meter { flex: 1; height: 4px; border-radius: 999px; background: var(--sh-hair); overflow: hidden; }
 .sh-view .dp-meter > span { display: block; height: 100%; min-width: 0; border-radius: inherit; background: var(--sh-ink); transition: width .3s ease; }
 .sh-view .dp-summary[data-over] .dp-meter > span { background: #EA580C; }
-.sh-view .dp-meter-caption { margin-top: 6px; font-size: 11.5px; font-weight: 500; color: var(--sh-ink-3); font-variant-numeric: tabular-nums; }
+.sh-view .dp-meter-caption { flex: none; font-size: 11.5px; font-weight: 500; color: var(--sh-ink-3); font-variant-numeric: tabular-nums; }
 .sh-view .dp-summary[data-over] .dp-meter-caption { color: #C2410C; }
 
 /* Filter field */
-.sh-view .dp-search { display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 8px 0 10px; border-radius: 9px; background: var(--sh-hair-3); color: var(--sh-ink-4); border: 1px solid transparent; transition: background .12s, border-color .12s, box-shadow .12s; cursor: text; }
+.sh-view .dp-search { display: flex; align-items: center; gap: 8px; height: 30px; padding: 0 8px 0 10px; border-radius: 9px; background: var(--sh-hair-3); color: var(--sh-ink-4); border: 1px solid transparent; transition: background .12s, border-color .12s, box-shadow .12s; cursor: text; }
 .sh-view .dp-search:focus-within { background: var(--surface); border-color: var(--sh-hair-2); box-shadow: 0 0 0 3px color-mix(in oklch, var(--sh-ink) 6%, transparent); }
 .sh-view .dp-search input { flex: 1; min-width: 0; height: 100%; border: 0; outline: none; background: transparent; font: 500 13px var(--font-text); color: var(--sh-ink); }
 .sh-view .dp-search input::placeholder { color: var(--sh-ink-4); }
