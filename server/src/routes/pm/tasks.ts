@@ -1753,6 +1753,27 @@ router.put('/tasks/:id', async (req: Request, res: Response) => {
         .eq('list_id', body.list_id);
     }
 
+    // Work date moved → drop the caller's stale calendar blocks. A real
+    // task_day_plans row outranks the date-derived virtual occurrence, so
+    // without this a task rescheduled to tomorrow via its Work date keeps its
+    // old timed block on today even though the virtual now fires tomorrow.
+    // Deleting the caller's rows lets tomorrow render via the virtual (timed
+    // if the new work_date carries a time, all-day if date-only). Best-effort:
+    // never fail the task update.
+    if (body.work_date !== undefined
+      && body.work_date !== null
+      && (prior as any)?.work_date !== body.work_date) {
+      try {
+        await supabaseAdmin
+          .from('task_day_plans')
+          .delete()
+          .eq('task_id', id)
+          .eq('user_id', req.userId!);
+      } catch (planErr) {
+        console.error('Stale day-plan cleanup failed:', planErr);
+      }
+    }
+
     // Rule just set/changed and fires today → materialise today's copy now
     // (idempotent: skipped if today's instance already exists).
     if (body.recurrence && !(data as any).recurrence_paused

@@ -1,8 +1,10 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import TodayList from './day-planner/TodayList';
 import DayCalendar from './day-planner/DayCalendar';
 import PlannerRangeCalendar, { PlannerModeSwitch, PLANNER_MODES, type PlannerMode } from './day-planner/PlannerRangeCalendar';
 import { planDateKey } from '../../hooks/useDayPlanner';
+import { usePMStore } from '../../stores/pmStore';
 
 // The chosen view (Day / 3 Day / Weekdays / Week / Month) is remembered per browser.
 const MODE_KEY = 'dp-view-mode';
@@ -26,6 +28,22 @@ export default function DayPlannerView() {
   // Clicking a day header (range views) or a month cell drills into that day.
   const openDay = (key: string) => { setViewDate(key); setMode('day'); };
   const toolbar = <PlannerModeSwitch mode={mode} onChange={setMode} />;
+
+  // Work-date edits made inside the open task panel defer their calendar
+  // refresh (see useUpdateTask) so the block stays put while editing. When the
+  // panel closes, refetch here — the removed block then plays its slide-out
+  // animation on return instead of vanishing mid-edit.
+  const activeTaskId = usePMStore((s) => s.activeTaskId);
+  const qc = useQueryClient();
+  const prevActiveTask = useRef(activeTaskId);
+  useEffect(() => {
+    if (prevActiveTask.current != null && activeTaskId == null) {
+      qc.invalidateQueries({ queryKey: ['day-plans'] });
+      qc.invalidateQueries({ queryKey: ['day-planner'] });
+      qc.invalidateQueries({ queryKey: ['my-tasks'] });
+    }
+    prevActiveTask.current = activeTaskId;
+  }, [activeTaskId, qc]);
 
   return (
     <div className="sh-view day-planner-view">
