@@ -71,18 +71,20 @@ router.get('/', async (_req: Request, res: Response) => {
       supabaseAdmin.from('squad_bots').select(BOT_COLUMNS).order('sort_order').order('created_at'),
       listProviders(),
       allPaused(),
-      supabaseAdmin.from('lms_items').select('bot_id, status').eq('track', 'knowledge').is('origin_item_id', null),
+      supabaseAdmin.from('lms_items').select('status, knowledge_links:squad_bot_knowledge_docs(bot_id)').eq('track', 'knowledge').is('origin_item_id', null),
       supabaseAdmin.from('squad_bot_runs').select('bot_id, ok').gte('created_at', startOfDay.toISOString()),
     ]);
     if (botsRes.error) throw new Error(botsRes.error.message);
 
     const knowledge = new Map<string, { total: number; published: number }>();
+    if (knowledgeRes.error) throw new Error(knowledgeRes.error.message);
     for (const k of knowledgeRes.data ?? []) {
-      if (!k.bot_id) continue;
-      const entry = knowledge.get(k.bot_id) ?? { total: 0, published: 0 };
-      entry.total += 1;
-      if (k.status === 'published') entry.published += 1;
-      knowledge.set(k.bot_id, entry);
+      for (const link of k.knowledge_links ?? []) {
+        const entry = knowledge.get(link.bot_id) ?? { total: 0, published: 0 };
+        entry.total += 1;
+        if (k.status === 'published') entry.published += 1;
+        knowledge.set(link.bot_id, entry);
+      }
     }
     const runs = new Map<string, { total: number; failed: number }>();
     for (const r of runsRes.data ?? []) {
@@ -313,9 +315,9 @@ router.get('/:id', async (req: Request, res: Response) => {
       allPaused(),
       supabaseAdmin
         .from('lms_items')
-        .select('id, title, status, updated_at, knowledge_categories')
+        .select('id, title, status, updated_at, knowledge_categories, knowledge_links:squad_bot_knowledge_docs!inner(bot_id)')
         .eq('track', 'knowledge')
-        .eq('bot_id', req.params.id)
+        .eq('knowledge_links.bot_id', req.params.id)
         .is('origin_item_id', null)
         .order('updated_at', { ascending: false }),
       supabaseAdmin
@@ -325,6 +327,7 @@ router.get('/:id', async (req: Request, res: Response) => {
         .order('created_at', { ascending: false })
         .limit(25),
     ]);
+    if (knowledgeRes.error) throw new Error(knowledgeRes.error.message);
     const row = bot as SquadBotRow;
     res.json({
       success: true,

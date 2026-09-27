@@ -9,6 +9,7 @@ export interface LearningTarget {
   lessonId?: string | null;
   sectionAnchor?: string | null;
   sectionLabel?: string | null;
+  edit?: boolean;
   nonce: number;
 }
 

@@ -6,6 +6,7 @@ import axios from 'axios';
 import { useRouter } from 'next/navigation';
 import api from '../services/api';
 import { useAuthStore } from '../stores/authStore';
+import { loginRedirect } from '../lib/loginRedirect';
 
 type PendingReset = {
   user: unknown;
@@ -44,7 +45,7 @@ export default function LoginPage() {
           return;
         }
         setAuth(res.data.user, res.data.access_token, res.data.refresh_token);
-        router.push('/');
+        router.replace(loginRedirect(window.location.search));
       }
     } catch (err: any) {
       setError(err.response?.data?.error || 'Login failed');
@@ -74,7 +75,7 @@ export default function LoginPage() {
         { headers: { Authorization: `Bearer ${pendingReset.access_token}` } },
       );
       setAuth(pendingReset.user as never, pendingReset.access_token, pendingReset.refresh_token);
-      router.push('/');
+      router.replace(loginRedirect(window.location.search));
     } catch (err: any) {
       setError(err.response?.data?.error || 'Could not set your new password. Please try again.');
     } finally {

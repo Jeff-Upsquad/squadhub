@@ -14,6 +14,7 @@ import { LMS_VIDEO_LANGUAGES, type LmsBlockVideo } from '@squadhub/shared';
 type Props = {
   draftItemId: string;
   isClone: boolean;
+  initialLessonId?: string | null;
   onExit: () => void;
   onSubmitted: () => void;
 };
@@ -25,12 +26,12 @@ const BLOCK_LABELS: Record<string, string> = {
 // authoring stays in the admin editor (uploads are chat-scoped in web).
 const WEB_EDITABLE = new Set(['text', 'video_embed']);
 
-export default function LmsEditor({ draftItemId, isClone, onExit, onSubmitted }: Props) {
+export default function LmsEditor({ draftItemId, isClone, initialLessonId, onExit, onSubmitted }: Props) {
   const { data: item, isLoading } = useCollabFull(draftItemId);
   const m = useEditorMutations(draftItemId);
   const submit = useSubmitReview();
   const discard = useDiscardDraft();
-  const [activeLessonId, setActiveLessonId] = useState<string | null>(null);
+  const [activeLessonId, setActiveLessonId] = useState<string | null>(initialLessonId ?? null);
   const [sendOpen, setSendOpen] = useState(false);
   const [rosterOpen, setRosterOpen] = useState(false);
   const [enforcementOpen, setEnforcementOpen] = useState(false);
@@ -38,13 +39,15 @@ export default function LmsEditor({ draftItemId, isClone, onExit, onSubmitted }:
   const lessons = useMemo(() => item?.lessons || [], [item]);
   const isCourse = item?.kind === 'course';
   const isSop = item?.track === 'sop';
-  const hasNav = isCourse || isSop;
+  const isKnowledge = item?.track === 'knowledge';
+  const hasPageTree = isSop || isKnowledge;
+  const hasNav = isCourse || hasPageTree;
 
   useEffect(() => {
-    if (activeLessonId || !lessons.length) return;
-    const first = isSop ? (lessons.find((l) => !l.parent_lesson_id) || lessons[0]) : lessons[0];
+    if (lessons.some((lesson) => lesson.id === activeLessonId) || !lessons.length) return;
+    const first = hasPageTree ? (lessons.find((l) => !l.parent_lesson_id) || lessons[0]) : lessons[0];
     setActiveLessonId(first.id);
-  }, [lessons, activeLessonId, isSop]);
+  }, [lessons, activeLessonId, hasPageTree]);
 
   if (isLoading || !item) {
     return <div className="flex h-full items-center justify-center text-sm text-[var(--sh-ink-3)]">Loading editor…</div>;
@@ -98,12 +101,12 @@ export default function LmsEditor({ draftItemId, isClone, onExit, onSubmitted }:
         <span className="font-medium">
           {isClone
             ? reviewState === 'changes_requested' ? 'Changes requested' : 'Draft — not yet submitted'
-            : 'Editing live content'}
+            : item.status === 'published' ? 'Editing live content' : 'Editing draft'}
         </span>
         <span className="opacity-80">
           {isClone
             ? 'This is a private draft. Submit it for an admin to review and publish.'
-            : 'Your changes save immediately and are live.'}
+            : item.status === 'published' ? 'Your changes save immediately and are live.' : 'Your changes save immediately. Publish when ready.'}
         </span>
         {isClone && reviewState === 'changes_requested' && item.review_note && (
           <span className="w-full rounded bg-white/60 px-2 py-1 text-[12px]">“{item.review_note}”</span>
@@ -133,7 +136,7 @@ export default function LmsEditor({ draftItemId, isClone, onExit, onSubmitted }:
               </button>
             </>
           )}
-          {!isClone && (
+          {!isClone && !isKnowledge && (
             <label
               className="flex items-center gap-1.5 rounded-md border border-[var(--sh-hair)] bg-white px-2.5 py-1 text-[12px] font-medium text-[var(--sh-ink-2)]"
               title="Publish this to SquadHire talents. Their admin decides who it reaches and what it unlocks."
@@ -232,8 +235,8 @@ export default function LmsEditor({ draftItemId, isClone, onExit, onSubmitted }:
           </aside>
         )}
 
-        {/* SOP: nested page tree */}
-        {isSop && (
+        {/* Reference documents: nested page tree */}
+        {hasPageTree && (
           <aside className="hidden min-h-0 overflow-y-auto border-r border-[var(--sh-hair)] bg-[var(--sidebar)] p-2 lg:block">
             <div className="flex items-center justify-between px-2 py-1.5">
               <span className="text-[10.5px] font-semibold uppercase tracking-wider text-[var(--sh-ink-3)]" title="Drag pages to reorder or nest them">Pages</span>
@@ -287,7 +290,7 @@ export default function LmsEditor({ draftItemId, isClone, onExit, onSubmitted }:
               </div>
             )}
 
-            {isSop && activeLesson && (
+            {hasPageTree && activeLesson && (
               <div className="mt-6 flex items-center gap-2">
                 {/* Emoji icon — type any emoji; blank clears it. */}
                 <input
@@ -325,13 +328,13 @@ export default function LmsEditor({ draftItemId, isClone, onExit, onSubmitted }:
             )}
 
             {/* Draft state + per-page access (SOP pages & course chapters) */}
-            {(isSop || isCourse) && activeLesson && <PageAccessBar key={activeLesson.id} lesson={activeLesson} m={m} />}
+            {hasNav && activeLesson && <PageAccessBar key={activeLesson.id} lesson={activeLesson} m={m} />}
 
             {/* Who the item is shared with (read-only) */}
             <SharedWith itemId={item.id} status={item.status} />
 
             {/* Content */}
-            {isSop ? (
+            {hasPageTree ? (
               activeLesson ? (
                 <div className="mt-6"><SopPageContent item={item} lesson={activeLesson} m={m} /></div>
               ) : (
@@ -830,6 +833,16 @@ function EditorTree({ lessons, activeId, onPick, onMove, onAddSub }: {
 }) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const tree = useMemo(() => buildEditorTree(lessons), [lessons]);
+  useEffect(() => {
+    const byId = new Map(lessons.map((lesson) => [lesson.id, lesson]));
+    const ancestors = new Set<string>();
+    let parentId = activeId ? byId.get(activeId)?.parent_lesson_id : null;
+    while (parentId && !ancestors.has(parentId)) {
+      ancestors.add(parentId);
+      parentId = byId.get(parentId)?.parent_lesson_id;
+    }
+    if (ancestors.size) setExpanded((previous) => new Set([...previous, ...ancestors]));
+  }, [lessons, activeId]);
   const toggle = (id: string) => setExpanded((p) => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n; });
   const handleDrop = (dragId: string, targetId: string, where: DropWhere) => {
     if (where === 'inside') setExpanded((p) => new Set([...p, targetId]));

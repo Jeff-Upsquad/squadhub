@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../services/api';
 import type { SquadBotDetail, SquadBotHomeApp, SquadBotStatus } from '@squadhub/shared';
+import { resourceEditorUrl } from '../../lib/resourceEditor';
 import { HOME_APP_LABELS, StatusChip, StatusSwitch, errorMessage } from './squad-bots/shared';
 
 const inputClass =
@@ -278,16 +279,16 @@ function KnowledgeCard({ bot }: { bot: SquadBotDetail }) {
     mutationFn: (title: string) =>
       api.post('/admin/lms/items', { kind: 'post', track: 'knowledge', bot_id: bot.id, title }).then((r) => r.data.data),
     onSuccess: (item) => router.push(`/admin/learning/${item.id}`),
-    onError: (e) => alert(errorMessage(e, 'Could not create the knowledge item')),
+    onError: (e) => alert(errorMessage(e, 'Could not create the knowledge doc')),
   });
 
   return (
     <Card
-      title="Knowledge Center"
+      title="Knowledge docs"
       hint={
         bot.home_app === 'squadhire'
-          ? 'Q&As and guides this bot answers from. Published items go to SquadHire automatically.'
-          : "Q&As and guides this bot answers from. Its app reads published items from SquadHub."
+          ? 'Docs this bot answers from. A doc can be shared with other bots. Published docs go to SquadHire automatically.'
+          : "Docs this bot answers from. A doc can be shared with other bots from Resources."
       }
       action={
         <div className="flex shrink-0 items-center gap-2">
@@ -299,24 +300,28 @@ function KnowledgeCard({ bot }: { bot: SquadBotDetail }) {
           </Link>
           <button
             onClick={() => {
-              const title = prompt('Question or title for the new knowledge item:');
+              const title = prompt('Title for the new knowledge doc:');
               if (title?.trim()) create.mutate(title.trim());
             }}
             disabled={create.isPending}
             className="rounded-lg bg-ink px-3 py-1.5 text-[12px] font-medium text-white hover:bg-ink-hover disabled:opacity-50"
           >
-            + Add knowledge
+            + Add knowledge doc
           </button>
         </div>
       }
     >
       {bot.knowledge_items.length === 0 ? (
-        <p className="text-[13px] text-foreground-dim">No knowledge yet.</p>
+        <p className="text-[13px] text-foreground-dim">No knowledge docs yet.</p>
       ) : (
         <ul className="divide-y divide-divider">
           {bot.knowledge_items.slice(0, 12).map((k) => (
             <li key={k.id} className="flex items-center justify-between gap-3 py-2">
               <Link href={`/admin/learning/${k.id}`} className="truncate text-[13px] text-foreground hover:underline">{k.title}</Link>
+              <a href={resourceEditorUrl(k.id)} target="_blank" rel="noopener noreferrer"
+                className="ml-auto shrink-0 text-[12px] text-foreground-muted hover:text-foreground hover:underline">
+                Edit pages ↗
+              </a>
               <span
                 className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ${
                   k.status === 'published' ? 'bg-emerald-50 text-emerald-700' : 'bg-canvas text-foreground-muted'

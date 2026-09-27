@@ -4,6 +4,8 @@ import Link from 'next/link';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../services/api';
 import type { LmsItem, LmsLesson, LmsCategory, UserType, KnowledgeCategoryOption, SquadBot } from '@squadhub/shared';
+import { resourceEditorUrl } from '../../lib/resourceEditor';
+import { flattenLessonTree } from '../../lib/lessonTree';
 import BlockList from '../../components/lms/BlockList';
 import AudiencePicker from '../../components/lms/AudiencePicker';
 import MediaUploader from '../../components/lms/MediaUploader';
@@ -67,9 +69,9 @@ export default function AdminLmsItemEditor({ itemId }: Props) {
     staleTime: 60_000,
   });
   const bots: SquadBot[] = botsRes?.bots || [];
-  const itemBot = bots.find((b) => b.id === item?.bot_id) ?? null;
-  // Knowledge with no bot predates bots and is the SquadHire hiring bot's.
-  const forSquadhireBot = !item?.bot_id || itemBot?.home_app === 'squadhire';
+  const linkedBots = item?.bots ?? bots.filter((bot) => bot.id === item?.bot_id);
+  const linkedBotIds = new Set(linkedBots.map((bot) => bot.id));
+  const forSquadhireBot = linkedBots.some((bot) => bot.home_app === 'squadhire');
 
   // SquadHire bots' knowledge is tagged with talent categories, served live by SquadHire.
   const { data: kcRes, isError: kcError } = useQuery({
@@ -89,6 +91,20 @@ export default function AdminLmsItemEditor({ itemId }: Props) {
   const patchItem = useMutation({
     mutationFn: (body: any) => api.patch(`/admin/lms/items/${itemId}`, body),
     onSuccess: () => { markSaved(); qc.invalidateQueries({ queryKey: ['lms-item', itemId] }); },
+  });
+
+  const setBots = useMutation({
+    mutationFn: (bot_ids: string[]) => api.put(`/admin/lms/items/${itemId}/bots`, { bot_ids }),
+    onSuccess: async () => {
+      markSaved();
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ['lms-item', itemId] }),
+        qc.invalidateQueries({ queryKey: ['lms-items'] }),
+        qc.invalidateQueries({ queryKey: ['squad-bots'] }),
+        qc.invalidateQueries({ queryKey: ['squad-bot'] }),
+      ]);
+    },
+    onError: (e: any) => alert(e?.response?.data?.error || 'Could not update the bots using this doc'),
   });
 
   const setAudience = useMutation({
@@ -119,7 +135,7 @@ export default function AdminLmsItemEditor({ itemId }: Props) {
   });
 
   const addLesson = useMutation({
-    mutationFn: () => api.post(`/admin/lms/items/${itemId}/lessons`, {}).then((r) => r.data),
+    mutationFn: () => api.post(`/admin/lms/items/${itemId}/lessons`, item?.track === 'knowledge' ? { title: 'Untitled page' } : {}).then((r) => r.data),
     onSuccess: (res) => {
       markSaved();
       qc.invalidateQueries({ queryKey: ['lms-item', itemId] });
@@ -154,6 +170,9 @@ export default function AdminLmsItemEditor({ itemId }: Props) {
   const isCourse = item.kind === 'course';
   const isSop = item.track === 'sop';
   const isKnowledge = item.track === 'knowledge';
+  const hasPages = isCourse || isKnowledge;
+  const pageLabel = isKnowledge ? 'page' : 'lesson';
+  const pageRows = isKnowledge ? flattenLessonTree(item.lessons) : item.lessons.map((lesson) => ({ lesson, depth: 0 }));
   // SOPs and knowledge are reference content: no learner audience needed.
   const isReference = isSop || isKnowledge;
   const hasKnowledgeCategories = (item.knowledge_categories?.length ?? 0) > 0;
@@ -162,28 +181,28 @@ export default function AdminLmsItemEditor({ itemId }: Props) {
   const lessonRestricted = lessonAudTypes.length > 0 || lessonAudUsers.length > 0;
 
   const isSaving =
-    patchItem.isPending || setAudience.isPending || patchLesson.isPending ||
+    patchItem.isPending || setBots.isPending || setAudience.isPending || patchLesson.isPending ||
     setLessonAudience.isPending || addLesson.isPending || deleteLesson.isPending;
 
   // --- Publish readiness -------------------------------------------------
   const blockCount = item.lessons.reduce((n, l) => n + (l.blocks?.length ?? 0), 0);
-  const hasContent = isCourse
+  const hasContent = hasPages
     ? item.lessons.some((l) => (l.is_active ?? true) && (l.blocks?.length ?? 0) > 0)
     : (item.lessons[0]?.blocks?.length ?? 0) > 0;
   const hasAudience = (item.audience_types?.length ?? 0) + (item.audience_user_ids?.length ?? 0) > 0;
   const hasTitle = !!item.title?.trim();
   // SOPs are reference docs — who sees them is driven purely by Share (roles &
   // people), not the learner Audience, so they never require an audience.
-  const readyToPublish = hasContent && hasTitle && (isReference || hasAudience) && (!isKnowledge || hasKnowledgeCategories);
+  const readyToPublish = hasContent && hasTitle && (isReference || hasAudience) && (!isKnowledge || !forSquadhireBot || hasKnowledgeCategories);
 
   const checklist = [
     { ok: hasTitle, label: 'Has a title' },
     {
       ok: hasContent,
-      label: isCourse ? 'At least one active lesson with content' : 'At least one content block',
+      label: hasPages ? `At least one active ${pageLabel} with content` : 'At least one content block',
     },
     ...(isReference ? [] : [{ ok: hasAudience, label: 'Audience selected', hint: 'Empty audience = nobody can see it' }]),
-    ...(isKnowledge ? [{ ok: hasKnowledgeCategories, label: 'Squad Bot categories chosen', hint: 'Which talents Squad Bot uses this for' }] : []),
+    ...(isKnowledge && forSquadhireBot ? [{ ok: hasKnowledgeCategories, label: 'Squad Bot categories chosen', hint: 'Which talents Squad Bot uses this for' }] : []),
   ];
 
   function onPublish() {
@@ -191,14 +210,14 @@ export default function AdminLmsItemEditor({ itemId }: Props) {
       const missing: string[] = [];
       if (!hasContent) missing.push('• It has no content yet.');
       if (!isReference && !hasAudience) missing.push('• No audience is selected — nobody will see it.');
-      if (isKnowledge && !hasKnowledgeCategories) missing.push('• No Squad Bot category — the bot won\'t know which talents it applies to.');
+      if (isKnowledge && forSquadhireBot && !hasKnowledgeCategories) missing.push('• No Squad Bot category — the bot won\'t know which talents it applies to.');
       if (!confirm(`This isn't fully ready:\n\n${missing.join('\n')}\n\nPublish anyway?`)) return;
     }
     setPublishBusy(true);
     publish.mutate(undefined, { onSettled: () => setPublishBusy(false) });
   }
 
-  const kindLabel = isKnowledge ? 'Knowledge item' : isSop ? 'Guide' : isCourse ? 'Course' : 'Post';
+  const kindLabel = isKnowledge ? 'Knowledge doc' : isSop ? 'Guide' : isCourse ? 'Course' : 'Post';
 
   return (
     <div>
@@ -221,11 +240,17 @@ export default function AdminLmsItemEditor({ itemId }: Props) {
           </div>
           <StatusBadge status={item.status} />
           <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ${isKnowledge ? 'bg-emerald-50 text-emerald-700' : isSop ? 'bg-indigo-50 text-indigo-700' : 'bg-amber-50 text-amber-700'}`}>
-            {isKnowledge ? 'Knowledge' : isSop ? 'SOP / Guide' : item.kind}
+            {isKnowledge ? 'Knowledge doc' : isSop ? 'SOP / Guide' : item.kind}
           </span>
 
           <div className="ml-auto flex flex-wrap items-center gap-2">
             <SaveStatus saving={isSaving} savedAt={savedAt} />
+            {isKnowledge && (
+              <a href={resourceEditorUrl(item.id, activeLesson?.id)} target="_blank" rel="noopener noreferrer"
+                className="rounded-lg border border-divider bg-surface px-3 py-2 text-sm text-foreground-muted hover:bg-surface-alt">
+                Edit pages ↗
+              </a>
+            )}
             <button
               onClick={() => setShowShare(true)}
               className="rounded-lg border border-divider bg-surface px-3 py-2 text-sm text-foreground-muted hover:bg-surface-alt"
@@ -321,6 +346,7 @@ export default function AdminLmsItemEditor({ itemId }: Props) {
               ) : (
                 <button
                   onClick={() => addLesson.mutate()}
+                  disabled={addLesson.isPending}
                   className="w-full rounded-md border border-dashed border-divider-strong bg-surface px-3 py-3 text-[12px] text-foreground-muted hover:border-ink hover:text-foreground"
                 >
                   Add a section first to enable a cover image
@@ -331,30 +357,29 @@ export default function AdminLmsItemEditor({ itemId }: Props) {
 
           {isKnowledge ? (
             <Section
-              title="Squad Bot"
-              hint={
-                forSquadhireBot
-                  ? 'Which bot answers from this, and for which talents. Published knowledge goes to SquadHire\'s Knowledge Center.'
-                  : 'Which bot answers from this. Its app reads published knowledge from SquadHub.'
-              }
+              title="Bots using this doc"
+              hint="Select every bot that can use this knowledge doc. Edits update the same doc for all selected bots."
             >
-              {bots.length > 0 && (
-                <Field label="Bot">
-                  <select
-                    value={item.bot_id ?? ''}
-                    onChange={(e) => {
-                      const next = e.target.value;
-                      if (!next || next === item.bot_id) return;
-                      patchItem.mutate({ bot_id: next });
-                    }}
-                    className="w-full rounded-md border border-divider bg-surface px-3 py-2 text-sm focus:border-ink focus:outline-none"
-                  >
-                    {!item.bot_id && <option value="">Squad Hiring Bot (unassigned)</option>}
-                    {bots.map((b) => (
-                      <option key={b.id} value={b.id}>{b.internal_name}</option>
-                    ))}
-                  </select>
-                </Field>
+              <div className="space-y-2" role="group" aria-label="Bots using this knowledge doc">
+                {bots.map((bot) => (
+                  <label key={bot.id} className="flex items-center gap-2 text-[13px] text-foreground">
+                    <input
+                      type="checkbox"
+                      checked={linkedBotIds.has(bot.id)}
+                      disabled={setBots.isPending}
+                      onChange={(e) => {
+                        const next = new Set(linkedBotIds);
+                        if (e.target.checked) next.add(bot.id); else next.delete(bot.id);
+                        setBots.mutate([...next]);
+                      }}
+                      className="h-4 w-4 rounded border-divider-strong accent-[#0F172B] disabled:opacity-50"
+                    />
+                    {bot.internal_name}
+                  </label>
+                ))}
+              </div>
+              {linkedBots.length === 0 && (
+                <p className="mt-2 text-[12px] text-amber-700">No bots use this doc. Select a bot to share it.</p>
               )}
               {forSquadhireBot ? (
                 <>
@@ -369,8 +394,8 @@ export default function AdminLmsItemEditor({ itemId }: Props) {
               ) : (
                 <p className={`text-[11.5px] ${item.status === 'published' ? 'text-emerald-700' : 'text-foreground-dim'}`}>
                   {item.status === 'published'
-                    ? `Live for ${itemBot?.internal_name ?? 'this bot'}.`
-                    : `${itemBot?.internal_name ?? 'The bot'} starts using this once you publish.`}
+                    ? (linkedBots.length ? `Live for ${linkedBots.map((bot) => bot.internal_name).join(', ')}.` : 'This doc is published but is not linked to any bots.')
+                    : 'Selected bots start using this doc once you publish.'}
                 </p>
               )}
             </Section>
@@ -427,30 +452,33 @@ export default function AdminLmsItemEditor({ itemId }: Props) {
 
         {/* Right: lessons + blocks */}
         <main className="min-w-0 space-y-4">
-          {isCourse && (
+          {hasPages && (
             <div className="rounded-xl border border-divider bg-surface">
               <div className="flex items-center justify-between border-b border-divider px-4 py-2.5">
                 <div className="flex items-center gap-2">
-                  <h3 className="text-[13px] font-semibold text-foreground">Lessons</h3>
+                  <h3 className="text-[13px] font-semibold text-foreground">{isKnowledge ? 'Pages' : 'Lessons'}</h3>
                   <span className="rounded-full bg-canvas px-1.5 py-0.5 text-[11px] text-foreground-muted">{item.lessons.length}</span>
                 </div>
                 <button
                   onClick={() => addLesson.mutate()}
+                  disabled={addLesson.isPending}
                   className="rounded-md border border-divider bg-surface px-2.5 py-1 text-[12px] text-foreground-muted hover:bg-surface-alt"
                 >
-                  + Add lesson
+                  + Add {pageLabel}
                 </button>
               </div>
               <ul className="p-2">
-                {item.lessons.map((lesson, i) => {
+                {pageRows.map(({ lesson, depth }, i) => {
                   const inactive = lesson.is_active === false;
                   const empty = (lesson.blocks?.length ?? 0) === 0;
                   return (
                     <li key={lesson.id}>
                       <button
                         onClick={() => setActiveLessonId(lesson.id)}
+                        style={{ paddingLeft: 12 + depth * 20 }}
+                        aria-current={activeLesson.id === lesson.id ? 'page' : undefined}
                         className={`flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm transition ${
-                          activeLessonId === lesson.id ? 'bg-canvas text-foreground' : 'text-foreground-muted hover:bg-surface-alt'
+                          activeLesson.id === lesson.id ? 'bg-canvas text-foreground' : 'text-foreground-muted hover:bg-surface-alt'
                         }`}
                       >
                         <span className="w-5 text-right font-mono text-[11px] text-foreground-dim">{i + 1}.</span>
@@ -466,7 +494,7 @@ export default function AdminLmsItemEditor({ itemId }: Props) {
                   );
                 })}
                 {item.lessons.length === 0 && (
-                  <li className="px-3 py-4 text-center text-[12px] text-foreground-dim">No lessons yet</li>
+                  <li className="px-3 py-4 text-center text-[12px] text-foreground-dim">No {pageLabel}s yet</li>
                 )}
               </ul>
             </div>
@@ -474,11 +502,11 @@ export default function AdminLmsItemEditor({ itemId }: Props) {
 
           {activeLesson && (
             <div className="rounded-xl border border-divider bg-surface p-4">
-              {isCourse && (
+              {hasPages && (
                 <div className="mb-4 space-y-3">
                   <div className="flex items-start gap-3">
                     <div className="flex-1">
-                      <label className="mb-1 block text-[11px] font-medium uppercase tracking-wider text-foreground-dim">Lesson name</label>
+                      <label className="mb-1 block text-[11px] font-medium uppercase tracking-wider text-foreground-dim">{isKnowledge ? 'Page name' : 'Lesson name'}</label>
                       <input
                         key={activeLesson.id}
                         defaultValue={activeLesson.title}
@@ -486,16 +514,16 @@ export default function AdminLmsItemEditor({ itemId }: Props) {
                           const v = e.target.value.trim();
                           if (v && v !== activeLesson.title) patchLesson.mutate({ id: activeLesson.id, title: v });
                         }}
-                        placeholder="Lesson name"
+                        placeholder={isKnowledge ? 'Page name' : 'Lesson name'}
                         className="w-full rounded-md border border-divider bg-surface px-3 py-2 text-base font-semibold text-foreground focus:border-ink focus:outline-none"
                       />
                     </div>
                     {item.lessons.length > 1 && (
                       <button
-                        onClick={() => { if (confirm(`Delete lesson "${activeLesson.title}"?`)) deleteLesson.mutate(activeLesson.id); }}
+                        onClick={() => { if (confirm(`Delete ${pageLabel} "${activeLesson.title}"${isKnowledge ? ' and all its sub-pages' : ''}?`)) deleteLesson.mutate(activeLesson.id); }}
                         className="mt-6 shrink-0 text-[12px] text-red-600 hover:underline"
                       >
-                        Delete lesson
+                        Delete {pageLabel}
                       </button>
                     )}
                   </div>
@@ -511,7 +539,7 @@ export default function AdminLmsItemEditor({ itemId }: Props) {
                         }
                       }}
                       rows={2}
-                      placeholder="Optional — shown to learners under the lesson title"
+                      placeholder={`Optional — shown under the ${pageLabel} title`}
                       className="w-full rounded-md border border-divider bg-surface px-3 py-2 text-sm placeholder-foreground-dim focus:border-ink focus:outline-none"
                     />
                   </div>
@@ -525,7 +553,7 @@ export default function AdminLmsItemEditor({ itemId }: Props) {
                     />
                     <span className="text-[13px] font-medium text-foreground">Published</span>
                     <span className="text-[12px] text-foreground-dim">
-                      {(activeLesson.is_active ?? true) ? 'Visible to learners' : 'Draft — hidden from users until published'}
+                      {(activeLesson.is_active ?? true) ? (isKnowledge ? 'Available to the bot when this document is published' : 'Visible to learners') : 'Draft — hidden until published'}
                     </span>
                   </label>
                 </div>
@@ -564,7 +592,7 @@ export default function AdminLmsItemEditor({ itemId }: Props) {
               )}
 
               {/* Content header for posts/SOPs (courses get the lesson header above) */}
-              {!isCourse && (
+              {!hasPages && (
                 <div className="mb-3 flex items-center justify-between">
                   <h3 className="text-[13px] font-semibold text-foreground">Content</h3>
                   <span className="text-[11px] text-foreground-dim">{blockCount} block{blockCount === 1 ? '' : 's'}</span>

@@ -44,11 +44,13 @@ export default function LearningItemView({
   itemId,
   initialLessonId,
   initialSectionAnchor,
+  editRequest,
   onBack,
 }: {
   itemId: string;
   initialLessonId?: string | null;
   initialSectionAnchor?: string | null;
+  editRequest?: number;
   onBack: () => void;
 }) {
   const { data, isLoading, refetch } = useLmsItem(itemId);
@@ -57,12 +59,13 @@ export default function LearningItemView({
   const { data: openSopTasks } = useOpenSopTasks();
   const startEdit = useStartEditDraft();
   const [activeLessonId, setActiveLessonId] = useState<string | null>(initialLessonId ?? null);
-  const [editing, setEditing] = useState<{ draftItemId: string; isClone: boolean } | null>(null);
+  const [editing, setEditing] = useState<{ draftItemId: string; isClone: boolean; lessonId?: string | null } | null>(null);
   const [showComments, setShowComments] = useState(false);
   const [showEnforcement, setShowEnforcement] = useState(false);
   const [submittedNote, setSubmittedNote] = useState(false);
   const contentRef = useRef<HTMLElement>(null);
   const pendingSectionRef = useRef<string | null>(initialSectionAnchor ?? null);
+  const handledEditRequest = useRef<number | undefined>(undefined);
 
   // Mark in_progress on first open (if still not_started)
   useEffect(() => {
@@ -76,6 +79,8 @@ export default function LearningItemView({
   const assignment = (data?.assignment as AssignmentFull) ?? null;
   const isCourse = item?.kind === 'course';
   const isSop = item?.track === 'sop';
+  const isKnowledge = item?.track === 'knowledge';
+  const hasPageTree = isSop || isKnowledge;
   const lessons = useMemo(() => item?.lessons || [], [item]);
   const completedSet = useMemo(() => new Set(assignment?.completed_lesson_ids || []), [assignment]);
   const itemTasks = useMemo(
@@ -103,16 +108,16 @@ export default function LearningItemView({
 
   // Default selection: course → first incomplete; SOP → first top-level page.
   useEffect(() => {
-    if (activeLessonId || !lessons.length) return;
+    if (lessons.some((lesson) => lesson.id === activeLessonId) || !lessons.length) return;
     if (isCourse) {
       const firstIncomplete = lessons.find((l) => !completedSet.has(l.id));
       setActiveLessonId((firstIncomplete || lessons[0]).id);
-    } else if (isSop) {
+    } else if (hasPageTree) {
       const firstTop = lessons.find((l) => !l.parent_lesson_id) || lessons[0];
       setActiveLessonId(firstTop.id);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isCourse, isSop, lessons.length]);
+  }, [isCourse, hasPageTree, lessons, activeLessonId]);
 
   useEffect(() => {
     const root = contentRef.current;
@@ -138,10 +143,18 @@ export default function LearningItemView({
 
   const access = item?.my_access;
 
+  // A link may request editing, but the server's access result decides whether
+  // it can open the live editor. Its endpoints enforce the same permission.
+  useEffect(() => {
+    if (!editRequest || handledEditRequest.current === editRequest || access !== 'admin' || !item) return;
+    handledEditRequest.current = editRequest;
+    setEditing({ draftItemId: item.id, isClone: false, lessonId: initialLessonId });
+  }, [editRequest, access, item, initialLessonId]);
+
   async function onEdit() {
     if (!item) return;
     const res = await startEdit.mutateAsync(item.id);
-    setEditing({ draftItemId: res.draft_item_id, isClone: res.is_clone });
+    setEditing({ draftItemId: res.draft_item_id, isClone: res.is_clone, lessonId: res.is_clone ? null : activeLessonId });
   }
 
   if (isLoading || !item) {
@@ -151,7 +164,9 @@ export default function LearningItemView({
   if (editing) {
     return (
       <LmsEditor
+        key={`${editing.draftItemId}:${editRequest ?? 0}`}
         draftItemId={editing.draftItemId}
+        initialLessonId={editing.lessonId}
         isClone={editing.isClone}
         onExit={() => { setEditing(null); refetch(); }}
         onSubmitted={() => { setEditing(null); setSubmittedNote(true); refetch(); }}
@@ -178,7 +193,7 @@ export default function LearningItemView({
         {item.icon && <span className="text-[15px] leading-none">{item.icon}</span>}
         <span className="min-w-0">
           <span className="block truncate text-[13px] font-semibold text-[var(--sh-ink)]">{item.title}</span>
-          <span className="hidden text-[10.5px] text-[var(--sh-ink-3)] sm:block">{isSop ? 'Standard operating procedure' : isCourse ? 'Learning course' : 'Resource'}</span>
+          <span className="hidden text-[10.5px] text-[var(--sh-ink-3)] sm:block">{isKnowledge ? 'Knowledge doc' : isSop ? 'Standard operating procedure' : isCourse ? 'Learning course' : 'Resource'}</span>
         </span>
         <span className="ml-auto flex items-center gap-2">
           {assignment && isCourse && (
@@ -223,9 +238,9 @@ export default function LearningItemView({
       )}
 
       {/* left nav | content | right rail */}
-      {isSop && lessons.length > 0 && (
+      {hasPageTree && lessons.length > 0 && (
         <div className="flex items-center gap-2 border-b border-[var(--sh-hair)] bg-[var(--sidebar)] px-3 py-2 md:hidden">
-          <label className="sr-only" htmlFor="mobile-sop-page">SOP page</label>
+          <label className="sr-only" htmlFor="mobile-sop-page">Page</label>
           <select
             id="mobile-sop-page"
             value={activeLessonId || ''}
@@ -243,7 +258,7 @@ export default function LearningItemView({
       <div className="grid min-h-0 flex-1 grid-cols-1 md:grid-cols-[248px_minmax(0,1fr)] xl:grid-cols-[264px_minmax(0,1fr)]">
         {/* Left — item-specific nav */}
         <aside className="hidden min-h-0 overflow-y-auto border-r border-[var(--sh-hair)] bg-[var(--sidebar)] md:block">
-          {isSop ? (
+          {hasPageTree ? (
             <SopTreePane lessons={lessons} activeId={activeLessonId} onPick={setActiveLessonId} taskCountByLesson={taskCountByLesson} />
           ) : isCourse ? (
             <LessonRail lessons={lessons} completedSet={completedSet} activeLessonId={activeLessonId} onPick={setActiveLessonId} />
@@ -255,7 +270,7 @@ export default function LearningItemView({
         {/* Middle + right */}
         <div className="grid min-h-0 min-w-0 grid-cols-1 xl:grid-cols-[minmax(0,1fr)_264px]">
           <main ref={contentRef} className="min-h-0 min-w-0 overflow-y-auto bg-[var(--surface)] scroll-smooth">
-            {isSop ? (
+            {hasPageTree ? (
               <SopBody item={item} lessons={lessons} activeLesson={activeLesson} onPick={setActiveLessonId} />
             ) : isCourse ? (
               <CourseBody item={item} assignment={assignment} lessons={lessons} completedSet={completedSet} activeLessonId={activeLessonId} setActiveLessonId={setActiveLessonId} />
@@ -265,7 +280,7 @@ export default function LearningItemView({
           </main>
 
           <aside className="hidden min-h-0 overflow-y-auto border-l border-[var(--sh-hair)] bg-[var(--sidebar)] xl:block">
-            {isSop && activeLesson ? (
+            {hasPageTree && activeLesson ? (
               <SopRightRail lessons={lessons} activeLesson={activeLesson} onPick={setActiveLessonId} containerRef={contentRef} scanKey={activeLesson.id} />
             ) : (
               <OnThisPage containerRef={contentRef} scanKey={activeLesson?.id || item.id} />
@@ -423,7 +438,7 @@ function SopTreePane({ lessons, activeId, onPick, taskCountByLesson }: { lessons
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="Search in this SOP…"
+            placeholder="Search in this document…"
             className="w-full rounded-[8px] border border-[var(--sh-hair)] bg-[var(--surface)] py-[7px] pl-8 pr-7 text-[12.5px] text-[var(--sh-ink)] placeholder:text-[var(--sh-ink-3)] focus:border-[var(--sh-ink)] focus:outline-none"
           />
           {q && <button onClick={() => setQ('')} className="absolute right-1.5 top-1/2 grid h-5 w-5 -translate-y-1/2 place-items-center rounded text-[var(--sh-ink-3)] hover:bg-[var(--sh-hair-3)]">×</button>}
@@ -433,7 +448,7 @@ function SopTreePane({ lessons, activeId, onPick, taskCountByLesson }: { lessons
       <div className="min-h-0 flex-1 overflow-y-auto px-1.5 pb-6">
         {results ? (
           results.length === 0 ? (
-            <p className="px-3 py-6 text-center text-[12px] text-[var(--sh-ink-3)]">No matches in this SOP.</p>
+            <p className="px-3 py-6 text-center text-[12px] text-[var(--sh-ink-3)]">No matches in this document.</p>
           ) : (
             <ul>
               {results.map((r) => (
@@ -504,7 +519,7 @@ function SopBody({ item, lessons, activeLesson, onPick }: {
   item: ItemFull; lessons: Lesson[]; activeLesson: Lesson | null; onPick: (id: string) => void;
 }) {
   if (!activeLesson) {
-    return <div className="flex h-full items-center justify-center text-sm text-[var(--sh-ink-3)]">This SOP has no pages yet.</div>;
+    return <div className="flex h-full items-center justify-center text-sm text-[var(--sh-ink-3)]">This document has no published pages yet.</div>;
   }
   const byId = new Map(lessons.map((l) => [l.id, l]));
   const crumbs: Lesson[] = [];
@@ -534,7 +549,7 @@ function SopBody({ item, lessons, activeLesson, onPick }: {
       )}
       <header className="mb-8 border-b border-[var(--sh-hair)] pb-7">
         {activeLesson.icon && <div className="mb-3 text-[36px] leading-none" aria-hidden="true">{activeLesson.icon}</div>}
-        <p className="mb-2 text-[10.5px] font-semibold uppercase tracking-[0.12em] text-[var(--sh-ink-3)]">SOP page</p>
+        <p className="mb-2 text-[10.5px] font-semibold uppercase tracking-[0.12em] text-[var(--sh-ink-3)]">{item.track === 'knowledge' ? 'Knowledge page' : 'SOP page'}</p>
         <h1 className="serif text-[34px] font-bold leading-[1.15] text-[var(--sh-ink)] sm:text-[40px]" style={{ fontFamily: 'var(--font-serif, Plus Jakarta Sans, sans-serif)', letterSpacing: '-0.025em' }}>
           {activeLesson.title}
         </h1>

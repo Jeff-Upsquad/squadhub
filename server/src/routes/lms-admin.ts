@@ -32,7 +32,8 @@ import {
   syncContentToSquadhire,
   syncItemToSquadhire,
 } from '../services/squadhireTraining';
-import { HIRING_BOT_SLUG, botIdForSlug, isSquadhireBot } from '../services/squadBots';
+import { knowledgeDocBots } from '../services/knowledgeDocs';
+import { HIRING_BOT_SLUG, botIdForSlug } from '../services/squadBots';
 
 const router = Router();
 router.use(requireAuth);
@@ -199,7 +200,8 @@ router.get('/items', async (req: Request, res: Response) => {
       .select(`
         *,
         category:lms_categories(id, name, color, slug),
-        bot:squad_bots(id, internal_name)
+        bot:squad_bots!lms_items_bot_id_fkey(id, internal_name)
+        ${botFilter ? ', knowledge_links:squad_bot_knowledge_docs!inner(bot_id)' : ''}
       `)
       // Draft clones (contributor revisions) live only in the Review Queue.
       .is('origin_item_id', null)
@@ -209,7 +211,7 @@ router.get('/items', async (req: Request, res: Response) => {
     if (statusFilter) query = query.eq('status', statusFilter);
     if (categoryFilter) query = query.eq('category_id', categoryFilter);
     if (trackFilter) query = query.eq('track', trackFilter);
-    if (botFilter) query = query.eq('bot_id', botFilter);
+    if (botFilter) query = query.eq('knowledge_links.bot_id', botFilter);
 
     const { data, error } = await query;
     if (error) {
@@ -246,7 +248,9 @@ router.get('/items', async (req: Request, res: Response) => {
       audienceByItem.set((row as any).item_id, list);
     }
 
+    const botsByItem = await knowledgeDocBots(itemIds);
     const result = (data || []).map((i: any) => ({
+      bots: botsByItem.get(i.id) ?? [],
       ...i,
       assignment_count: counts.get(i.id) || 0,
       audience_types: audienceByItem.get(i.id) || [],
@@ -494,6 +498,7 @@ router.get('/items/:id', async (req: Request, res: Response) => {
       success: true,
       data: {
         ...item,
+        bots: (await knowledgeDocBots([itemId as string])).get(itemId as string) ?? [],
         lessons: fullLessons,
         audience_types: (aTypes || []).map((r: any) => r.user_type),
         audience_user_ids: (aUsers || []).map((r: any) => r.user_id),
@@ -502,6 +507,32 @@ router.get('/items/:id', async (req: Request, res: Response) => {
   } catch (err) {
     console.error('Get item error:', err);
     res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// Sharing is separate from content edits: only global admins can change which
+// bots may use a doc. Empty selection deliberately unlinks every bot.
+router.put('/items/:id/bots', async (req: Request, res: Response) => {
+  const parsed = z.object({ bot_ids: z.array(z.string().uuid()).max(100) }).safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ success: false, error: parsed.error.errors[0].message });
+    return;
+  }
+  try {
+    const itemId = req.params.id as string;
+    const { error } = await supabaseAdmin.rpc('set_knowledge_doc_bots', {
+      p_item_id: itemId, p_bot_ids: [...new Set(parsed.data.bot_ids)],
+    });
+    if (error) {
+      res.status(error.code === '22023' ? 400 : 500).json({ success: false, error: error.message });
+      return;
+    }
+    // Also retracts a live doc when its last SquadHire bot is unlinked.
+    syncItemToSquadhire(itemId);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Share knowledge doc error:', err);
+    res.status(500).json({ success: false, error: 'Could not update knowledge doc sharing' });
   }
 });
 
@@ -526,19 +557,15 @@ router.patch('/items/:id', async (req: Request, res: Response) => {
     if (body.category_id !== undefined) patch.category_id = body.category_id;
     if (body.knowledge_categories !== undefined) patch.knowledge_categories = body.knowledge_categories;
 
-    // Moving knowledge to another bot: if it leaves a SquadHire bot, take it
-    // out of SquadHire's Knowledge Center.
-    let leftSquadhire = false;
+    // Compatibility for older clients that still change a doc's primary bot.
+    // The database trigger updates that link while keeping other shared bots.
     if (body.bot_id !== undefined) {
-      const { data: before } = await supabaseAdmin.from('lms_items').select('track, bot_id').eq('id', req.params.id).maybeSingle();
-      if ((before as any)?.track !== 'knowledge') {
-        res.status(400).json({ success: false, error: 'Only knowledge items belong to a bot' });
+      const { data: before } = await supabaseAdmin.from('lms_items').select('track').eq('id', req.params.id).maybeSingle();
+      if (before?.track !== 'knowledge') {
+        res.status(400).json({ success: false, error: 'Only knowledge docs belong to bots' });
         return;
       }
       patch.bot_id = body.bot_id;
-      if ((before as any).bot_id !== body.bot_id) {
-        leftSquadhire = (await isSquadhireBot((before as any).bot_id)) && !(await isSquadhireBot(body.bot_id));
-      }
     }
 
     const { data, error } = await supabaseAdmin
@@ -554,8 +581,7 @@ router.patch('/items/:id', async (req: Request, res: Response) => {
     }
 
     // A live knowledge item's title/summary/categories feed Squad Bot directly.
-    if (leftSquadhire) retractKnowledgeFromSquadhire(req.params.id as string);
-    else if ((data as any).track === 'knowledge' && (data as any).status === 'published') {
+    if ((data as any).track === 'knowledge') {
       syncItemToSquadhire(req.params.id as string);
     }
 
@@ -577,7 +603,7 @@ router.delete('/items/:id', async (req: Request, res: Response) => {
     return;
   }
   // Take a deleted knowledge item out of Squad Bot's Knowledge Center too.
-  if ((doomed as any)?.track === 'knowledge' && (await isSquadhireBot((doomed as any).bot_id))) {
+  if ((doomed as any)?.track === 'knowledge') {
     retractKnowledgeFromSquadhire(req.params.id as string);
   }
   res.json({ success: true });
@@ -681,9 +707,9 @@ router.post('/items/:id/publish', async (req: Request, res: Response) => {
       return;
     }
 
-    // A post is a single document — publishing it publishes its page. (Courses
-    // and SOPs keep per-page draft control.)
-    if ((updated as any).kind === 'post') {
+    // Knowledge documents have individually published pages, even though their
+    // storage kind is 'post'. Keep their unfinished sub-pages in draft.
+    if ((updated as any).kind === 'post' && (updated as any).track !== 'knowledge') {
       await supabaseAdmin.from('lms_lessons').update({ is_active: true }).eq('item_id', itemId);
     }
 
