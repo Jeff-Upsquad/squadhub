@@ -14,14 +14,39 @@ const iosWaitlistSchema = z.object({
   phone: z.string().trim().regex(/^[+()\d\s-]{10,25}$/),
 }).strict();
 
+async function verifyWithSquadhire(data: { email: string; phone: string }): Promise<{ ok: boolean; matched: boolean }> {
+  const url = new URL(config.squadhireWebhookUrl!);
+  url.pathname = '/api/integrations/squadhub/partner-ios-waitlist';
+  url.search = '';
+  const upstream = await fetch(url.toString(), {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-SquadHub-Signature': config.squadhireWebhookSecret!,
+    },
+    body: JSON.stringify(data),
+    signal: AbortSignal.timeout(10_000),
+  });
+  if (!upstream.ok) {
+    console.error('[partner-app/ios-waitlist] SquadHire responded', upstream.status);
+    return { ok: false, matched: false };
+  }
+  const body = (await upstream.json().catch(() => ({}))) as { matched?: unknown };
+  return { ok: true, matched: body.matched === true };
+}
+
+function waitlistKey(req: Request): string {
+  // Caddy appends the actual visitor as the last forwarded hop. This API
+  // runs behind Caddy, while req.ip alone is its Docker gateway address.
+  return req.header('x-forwarded-for')?.split(',').at(-1)?.trim() || req.ip || 'unknown';
+}
+
 router.post(
   '/ios-waitlist',
   rateLimit({
     windowMs: 15 * 60 * 1000,
     max: 5,
-    // Caddy appends the actual visitor as the last forwarded hop. This API
-    // runs behind Caddy, while req.ip alone is its Docker gateway address.
-    keyFn: (req) => req.header('x-forwarded-for')?.split(',').at(-1)?.trim() || req.ip || 'unknown',
+    keyFn: waitlistKey,
   }),
   async (req: Request, res: Response) => {
     const parsed = iosWaitlistSchema.safeParse(req.body);
@@ -35,20 +60,8 @@ router.post(
     }
 
     try {
-      const url = new URL(config.squadhireWebhookUrl);
-      url.pathname = '/api/integrations/squadhub/partner-ios-waitlist';
-      url.search = '';
-      const upstream = await fetch(url.toString(), {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-SquadHub-Signature': config.squadhireWebhookSecret,
-        },
-        body: JSON.stringify(parsed.data),
-        signal: AbortSignal.timeout(10_000),
-      });
-      if (!upstream.ok) {
-        console.error('[partner-app/ios-waitlist] SquadHire responded', upstream.status);
+      const result = await verifyWithSquadhire(parsed.data);
+      if (!result.ok) {
         res.status(503).json({ success: false, error: 'Waitlist is temporarily unavailable. Please try again later.' });
         return;
       }
@@ -57,6 +70,41 @@ router.post(
     } catch (err) {
       console.error('[partner-app/ios-waitlist] SquadHire request failed:', (err as Error).message);
       res.status(503).json({ success: false, error: 'Waitlist is temporarily unavailable. Please try again later.' });
+    }
+  },
+);
+
+// Real-time helper for the download page's iOS form (mirrors SquadHire's
+// sign-up live check). Debounced on the client; rate-limited here per IP so
+// typing can't exhaust the stricter submit budget above.
+router.post(
+  '/ios-waitlist-check',
+  rateLimit({
+    windowMs: 5 * 60 * 1000,
+    max: 30,
+    keyFn: waitlistKey,
+  }),
+  async (req: Request, res: Response) => {
+    const parsed = iosWaitlistSchema.safeParse(req.body);
+    if (!parsed.success || parsed.data.phone.replace(/\D/g, '').length < 10 || parsed.data.phone.replace(/\D/g, '').length > 15) {
+      res.status(400).json({ success: false, error: 'Enter a valid email and phone number.' });
+      return;
+    }
+    if (!config.squadhireWebhookUrl || !config.squadhireWebhookSecret) {
+      res.status(503).json({ success: false, error: 'Waitlist check is temporarily unavailable.' });
+      return;
+    }
+
+    try {
+      const result = await verifyWithSquadhire(parsed.data);
+      if (!result.ok) {
+        res.status(503).json({ success: false, error: 'Waitlist check is temporarily unavailable.' });
+        return;
+      }
+      res.json({ success: true, matched: result.matched });
+    } catch (err) {
+      console.error('[partner-app/ios-waitlist-check] SquadHire request failed:', (err as Error).message);
+      res.status(503).json({ success: false, error: 'Waitlist check is temporarily unavailable.' });
     }
   },
 );
