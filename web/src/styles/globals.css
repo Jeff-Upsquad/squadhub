@@ -1067,23 +1067,38 @@ body.sb-resizing { user-select: none; -webkit-user-select: none; cursor: col-res
 .sh-view .td-cal-embed > .dp-calendar { flex: 1; min-height: 0; }
 
 .sh-view .dp-cal-head { position: sticky; top: 0; z-index: 6; display: flex; align-items: center; justify-content: space-between; gap: 16px; height: var(--dp-head-h); padding: 0 20px 0 24px; border-bottom: 1px solid var(--sh-hair); background: var(--surface); }
-.sh-view .dp-cal-title { min-width: 0; }
+.sh-view .dp-cal-title { flex: 1 1 auto; min-width: 0; }
 .sh-view .dp-cal-title h2 { display: flex; align-items: center; gap: 10px; margin: 0; font-family: var(--font-heading); font-size: 20px; line-height: 1.2; font-weight: 700; letter-spacing: -0.02em; color: var(--sh-ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.sh-view .dp-cal-title .sub { margin-top: 2px; font-size: 12.5px; font-weight: 500; color: var(--sh-ink-3); white-space: nowrap; }
-.sh-view .dp-rel { flex: none; height: 22px; padding: 0 8px; display: inline-flex; align-items: center; border-radius: 7px; background: var(--sh-hair-3); font: 600 11.5px var(--font-text); letter-spacing: 0; color: var(--sh-ink-2); }
-.sh-view .dp-rel[data-today] { background: color-mix(in oklch, #DC2626 12%, var(--surface)); color: #DC2626; }
+.sh-view .dp-cal-title .sub { margin-top: 2px; font-size: 12.5px; font-weight: 500; color: var(--sh-ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .sh-view .dp-cal-tools { display: flex; align-items: center; gap: 12px; flex: none; }
-.sh-view .dp-seg { display: inline-flex; align-items: center; gap: 1px; padding: 2px; border-radius: 10px; background: var(--sh-hair-3); box-shadow: inset 0 0 0 1px var(--sh-hair); }
-.sh-view .dp-seg .nav-btn { width: 28px; height: 28px; display: grid; place-items: center; border: 0; border-radius: 8px; background: transparent; color: var(--sh-ink-2); cursor: pointer; transition: background .12s, color .12s, box-shadow .12s; }
-.sh-view .dp-seg .nav-btn:hover { background: var(--surface); color: var(--sh-ink); box-shadow: 0 1px 2px rgba(0,0,0,.08); }
-.sh-view .dp-seg .nav-today { height: 28px; padding: 0 12px; border: 0; border-radius: 8px; background: transparent; font: 600 12.5px var(--font-text); color: var(--sh-ink-2); cursor: pointer; transition: background .12s, color .12s, box-shadow .12s; }
-.sh-view .dp-seg .nav-today:hover:not(:disabled) { background: var(--surface); color: var(--sh-ink); box-shadow: 0 1px 2px rgba(0,0,0,.08); }
-.sh-view .dp-seg .nav-today[data-active] { background: var(--surface); color: var(--sh-ink); box-shadow: 0 1px 2px rgba(0,0,0,.08); cursor: default; }
 
-/* View switcher (Day / 3 Day / Weekdays / Week / Month) */
-.sh-view .dp-modes > button { height: 28px; padding: 0 10px; border: 0; border-radius: 8px; background: transparent; font: 600 12.5px var(--font-text); color: var(--sh-ink-3); white-space: nowrap; cursor: pointer; transition: background .12s, color .12s, box-shadow .12s; }
-.sh-view .dp-modes > button:hover { color: var(--sh-ink); }
-.sh-view .dp-modes > button[data-active] { background: var(--surface); color: var(--sh-ink); box-shadow: 0 1px 2px rgba(0,0,0,.08); }
+/* Header controls — segmented style from the "settings panel" spec:
+   grey track, icon + label items, the active item raised as a white chip;
+   status tags use the light-blue value pill. */
+.sh-view .dp-calendar {
+  --seg-track: #F0EEEF; --seg-ink: #4D4B4C; --seg-icon: #767475;
+  --seg-on-bg: #FFFFFF; --seg-on-border: #D4D2D3; --seg-on-ink: #000000;
+  --pill-bg: #DBEFFC; --pill-ink: #175A9B; --pill-icon: #1D55A8;
+}
+.dark .sh-view .dp-calendar {
+  --seg-track: #1E1F22; --seg-ink: #B4B2B3; --seg-icon: #8C8A8B;
+  --seg-on-bg: #2C2D31; --seg-on-border: #3A3B40; --seg-on-ink: #FFFFFF;
+  --pill-bg: #14304D; --pill-ink: #9CCBF5; --pill-icon: #7DB8F0;
+}
+.sh-view .dp-seg { display: inline-flex; align-items: center; gap: 2px; padding: 3px; border-radius: 9px; background: var(--seg-track); }
+.sh-view .dp-seg > button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; height: 28px; padding: 0 14px; border: 1px solid transparent; border-radius: 7px; background: transparent; font: 500 12.5px var(--font-text); letter-spacing: -0.01em; color: var(--seg-ink); white-space: nowrap; cursor: pointer; transition: background .12s, color .12s, box-shadow .12s, border-color .12s; }
+.sh-view .dp-seg > button .seg-ico, .sh-view .dp-seg > button svg { flex: none; color: var(--seg-icon); transition: color .12s; }
+.sh-view .dp-seg > button:hover:not(:disabled) { color: var(--seg-on-ink); }
+.sh-view .dp-seg > button:hover:not(:disabled) svg { color: var(--seg-on-ink); }
+.sh-view .dp-seg > button[data-active] { background: var(--seg-on-bg); border-color: var(--seg-on-border); box-shadow: 0 1px 3px rgba(0,0,0,.1); color: var(--seg-on-ink); cursor: default; }
+.sh-view .dp-seg > button[data-active] svg { color: var(--seg-on-ink); }
+.sh-view .dp-seg > button.nav-btn { width: 30px; padding: 0; }
+.sh-view .dp-seg > button.nav-btn:hover { background: var(--seg-on-bg); border-color: var(--seg-on-border); box-shadow: 0 1px 3px rgba(0,0,0,.1); }
+/* Status tag ("Today", "This week") — light-blue value pill */
+.sh-view .dp-rel { flex: none; display: inline-flex; align-items: center; gap: 5px; height: 22px; padding: 0 8px 0 6px; border-radius: 6px; background: var(--pill-bg); font: 500 12px var(--font-text); letter-spacing: -0.01em; color: var(--pill-ink); }
+.sh-view .dp-rel .seg-ico { width: 13px; height: 13px; color: var(--pill-icon); }
+.sh-view .dp-rel:not([data-today]) { background: var(--seg-track); color: var(--seg-ink); }
+.sh-view .dp-rel:not([data-today]) .seg-ico { color: var(--seg-icon); }
 
 /* Range views (3 Day / Weekdays / Week / Month): the planner header over the
    Calendar app's grids, which own their scrolling. */
@@ -1161,7 +1176,7 @@ body.sb-resizing { user-select: none; -webkit-user-select: none; cursor: col-res
   .sh-view.day-planner-view { grid-template-columns: 340px minmax(0, 1fr); }
   .sh-view .dp-cal-head { padding: 0 14px 0 18px; }
   .sh-view .dp-cal-title .sub { display: none; }
-  .sh-view .dp-modes > button { padding: 0 8px; }
+  .sh-view .dp-modes > button { padding: 0 9px; gap: 5px; }
 }
 
 /* ============================ Calendar app ============================ */
