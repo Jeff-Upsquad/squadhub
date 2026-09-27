@@ -1,6 +1,7 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { supabaseAdmin } from '../../supabase';
+import { activitySchema, jobBlockReason, listJobs, targetSchema } from '../../services/squadBotJobs';
 import { loadPages } from '../../services/squadhireTraining';
 import {
   allPaused,
@@ -55,12 +56,13 @@ router.use(requireBotKey);
 router.get('/config', async (req: BotRequest, res: Response) => {
   try {
     const bot = req.squadBot!;
-    const [paused, providers] = await Promise.all([allPaused(), listProviders()]);
+    const [paused, providers, jobs] = await Promise.all([allPaused(), listProviders(), listJobs(bot.id)]);
     const resolved = resolveAi(bot, providers);
     res.json({
       success: true,
       data: {
         slug: bot.slug,
+        jobs: jobs.map((job) => ({ ...job, effective_status: job.enabled ? effectiveStatus(bot, paused) : 'off' })),
         internal_name: bot.internal_name,
         public_name: bot.public_name,
         status: effectiveStatus(bot, paused),
@@ -102,6 +104,8 @@ router.get('/knowledge', async (req: BotRequest, res: Response) => {
 });
 
 const replySchema = z.object({
+  job_id: z.string().uuid().optional(),
+  target: targetSchema.optional(),
   messages: z
     .array(z.object({ role: z.enum(['user', 'assistant']), content: z.string().min(1).max(100_000) }))
     .min(1)
@@ -132,7 +136,20 @@ router.post('/reply', async (req: BotRequest, res: Response) => {
     return;
   }
   try {
-    const reply = await runBotReply(bot, body, { source: 'app', status });
+    const jobs = await listJobs(bot.id);
+    const job = jobs.find((j) => j.id === body.job_id);
+    if ((jobs.length || body.job_id) && !job) {
+      res.status(400).json({ error: 'Choose a job belonging to this bot' }); return;
+    }
+    if (job) {
+      const blocked = jobBlockReason(job, status, body.target ?? {});
+      if (blocked) { res.status(423).json({ error: blocked }); return; }
+      if (job.kind !== 'conversation') { res.status(400).json({ error: 'This job is an action, not a conversation' }); return; }
+    }
+    const reply = await runBotReply(
+      job ? { ...bot, instructions: [bot.instructions, `Job: ${job.name}`, job.instructions].join('\n\n') } : bot,
+      body, { source: 'app', status },
+    );
     res.json({ success: true, data: { status, public_name: bot.public_name, ...reply } });
   } catch (err: any) {
     res.status(502).json({ success: false, error: err?.message ?? 'The AI provider failed', status });
@@ -179,6 +196,38 @@ router.post('/usage', async (req: BotRequest, res: Response) => {
     return;
   }
   res.json({ success: true });
+});
+
+// Check immediately before a connected application performs a job. Practice and
+// approval may prepare drafts, but only live authorizes external side effects.
+router.post('/jobs/:jobId/check', async (req: BotRequest, res: Response) => {
+  const parsed = targetSchema.safeParse(req.body);
+  if (!parsed.success) { res.status(400).json({ error: 'Invalid target' }); return; }
+  try {
+    const bot = req.squadBot!;
+    const job = (await listJobs(bot.id)).find((j) => j.id === req.params.jobId);
+    if (!job) { res.status(404).json({ error: 'Job not found' }); return; }
+    const status = effectiveStatus(bot, await allPaused());
+    const reason = jobBlockReason(job, status, parsed.data);
+    res.json({ success: true, data: { job, status, allowed: !reason, can_execute: !reason && status === 'live', reason } });
+  } catch { res.status(500).json({ error: 'Could not check job' }); }
+});
+
+// Report actual outcomes separately from AI usage. A retry uses the same event
+// ID, and cannot inflate summaries. Reports can arrive after a job is paused.
+router.post('/activity', async (req: BotRequest, res: Response) => {
+  const parsed = activitySchema.safeParse(req.body);
+  if (!parsed.success) { res.status(400).json({ error: parsed.error.errors[0].message }); return; }
+  try {
+    const bot = req.squadBot!;
+    const job = (await listJobs(bot.id)).find((j) => j.id === parsed.data.job_id);
+    if (!job) { res.status(404).json({ error: 'Job not found' }); return; }
+    const { error } = await supabaseAdmin.from('squad_bot_activity').insert({
+      ...parsed.data, bot_id: bot.id, job_name: job.name,
+    });
+    if (error && error.code !== '23505') throw new Error(error.message);
+    res.json({ success: true, duplicate: error?.code === '23505' });
+  } catch { res.status(500).json({ error: 'Could not record activity' }); }
 });
 
 export default router;

@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
+import jobsRouter from './squad-bot-jobs-admin';
 import { requireAuth } from '../middleware/auth';
 import { requireAdmin } from '../middleware/admin';
 import { supabaseAdmin } from '../supabase';
@@ -296,6 +297,8 @@ router.post('/', async (req: Request, res: Response) => {
     sendError(res, err, 'create bot');
   }
 });
+
+router.use('/:id', jobsRouter);
 
 // GET /admin/squad-bots/:id — one bot with its knowledge and recent activity.
 router.get('/:id', async (req: Request, res: Response) => {

@@ -47,7 +47,7 @@ export default function AdminSquadBots() {
         <div>
           <h1 className="font-[family-name:var(--font-display)] text-xl font-bold text-foreground">Squad Bots</h1>
           <p className="mt-1 text-sm text-foreground-muted">
-            Every AI bot in one place: turn them on or off, choose their AI, and manage their knowledge.
+            Every AI bot in one place: turn them on or off, choose their AI, assign jobs, review activity, and manage their knowledge.
           </p>
         </div>
         <button onClick={() => setShowNewBot(true)} className="rounded-lg bg-ink px-4 py-2 text-sm font-medium text-white hover:bg-ink-hover">
@@ -135,7 +135,7 @@ export default function AdminSquadBots() {
                   />
                   {paused && bot.status !== 'off' && <span className="text-[11px] text-red-600">Paused by emergency stop</span>}
                   <Link href={`/admin/squad-bots/${bot.id}`} className="text-[12px] text-foreground-muted hover:text-foreground hover:underline">
-                    Settings →
+                    Jobs, activity & settings →
                   </Link>
                 </div>
               </div>

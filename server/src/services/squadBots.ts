@@ -40,8 +40,10 @@ export const BOT_COLUMNS =
 export const HIRING_BOT_SLUG = 'squad-hiring-bot';
 
 export async function allPaused(): Promise<boolean> {
-  const { data } = await supabaseAdmin.from('squad_bot_settings').select('all_paused').maybeSingle();
-  return data?.all_paused === true;
+  const { data, error } = await supabaseAdmin.from('squad_bot_settings').select('all_paused').maybeSingle();
+  // Fail closed when the emergency-stop setting cannot be read.
+  if (error || !data) return true;
+  return data.all_paused === true;
 }
 
 /** The status the bot actually runs with: the emergency stop turns every bot off. */

@@ -1,9 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 
-vi.mock('../supabase', () => ({ supabaseAdmin: {} }));
+vi.mock('../supabase', () => ({ supabaseAdmin: { from: vi.fn() } }));
 
 import { API_KEY_ENV_PATTERN, isAllowedBaseUrl, providerProblem, type AiProviderRow } from '../services/aiProviders';
-import { effectiveStatus, generateBotApiKey, hashBotApiKey, resolveAi } from '../services/squadBots';
+import { supabaseAdmin } from '../supabase';
+import { allPaused, effectiveStatus, generateBotApiKey, hashBotApiKey, resolveAi } from '../services/squadBots';
 
 function provider(overrides: Partial<AiProviderRow>): AiProviderRow {
   return {
@@ -85,5 +86,18 @@ describe('bot API keys', () => {
     expect(prefix).toBe(key.slice(0, 10));
     expect(hash).toBe(hashBotApiKey(key));
     expect(hash).not.toContain(key);
+  });
+});
+
+
+describe('emergency stop read failures', () => {
+  it.each([
+    [{ data: null, error: { message: 'unavailable' } }, true],
+    [{ data: null, error: null }, true],
+    [{ data: { all_paused: false }, error: null }, false],
+    [{ data: { all_paused: true }, error: null }, true],
+  ])('fails closed when settings are unavailable (%j)', async (result, expected) => {
+    vi.mocked(supabaseAdmin.from).mockReturnValue({ select: () => ({ maybeSingle: async () => result }) } as any);
+    expect(await allPaused()).toBe(expected);
   });
 });
