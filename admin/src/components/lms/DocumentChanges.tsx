@@ -42,7 +42,7 @@ export default function DocumentChanges({ itemId, lessonId, revision }: { itemId
     ?? snapshot?.pages.find(p => p.id === lessonId) ?? snapshot?.pages[0];
 
   return (
-    <section className="document-changes" aria-label="Document changes">
+    <section className="document-changes" data-document-history aria-label="Document changes">
       <button type="button" className="changes-toggle" aria-expanded={open} onClick={() => { setOpen(!open); setVersionId(null); }}>
         <span aria-hidden="true">{open ? '▾' : '▸'}</span> Changes
       </button>
