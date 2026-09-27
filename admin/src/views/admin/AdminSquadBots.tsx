@@ -1,8 +1,9 @@
 import { useState } from 'react';
+import ProviderBillingCard, { BILLING_MODES } from './squad-bots/ProviderBillingCard';
 import Link from 'next/link';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../services/api';
-import type { AiProvider, AiProviderKind, SquadBot, SquadBotHomeApp, SquadBotStatus } from '@squadhub/shared';
+import type { AiProvider, AiProviderBillingSettings, AiProviderKind, SquadBot, SquadBotHomeApp, SquadBotStatus } from '@squadhub/shared';
 import { HOME_APP_LABELS, StatusSwitch, errorMessage } from './squad-bots/shared';
 
 interface Overview {
@@ -164,52 +165,11 @@ export default function AdminSquadBots() {
           + Add provider
         </button>
       </div>
-      <div className="overflow-hidden rounded-xl border border-divider bg-surface">
-        <table className="w-full text-sm">
-          <thead className="bg-surface-alt">
-            <tr>
-              {['Provider', 'Type', 'Default model', 'Key variable', 'State', ''].map((h) => (
-                <th key={h} className="px-4 py-2.5 text-left text-[11px] font-medium uppercase tracking-wider text-foreground-dim">{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-divider">
-            {(data?.providers ?? []).map((p) => (
-              <tr key={p.id}>
-                <td className="px-4 py-3">
-                  <span className="font-medium text-foreground">{p.name}</span>
-                  {p.is_default && (
-                    <span className="ml-2 rounded-full bg-ink px-2 py-0.5 text-[10px] font-medium text-white">Default</span>
-                  )}
-                </td>
-                <td className="px-4 py-3 text-foreground-muted">{p.kind === 'anthropic' ? 'Claude API' : 'OpenAI-compatible'}</td>
-                <td className="px-4 py-3 font-[family-name:var(--font-mono)] text-[12px] text-foreground-muted">{p.default_model || '—'}</td>
-                <td className="px-4 py-3 font-[family-name:var(--font-mono)] text-[12px] text-foreground-muted">{p.api_key_env || '—'}</td>
-                <td className="px-4 py-3 text-[12px]">
-                  {!p.is_enabled ? (
-                    <span className="text-foreground-dim">Off</span>
-                  ) : p.ready ? (
-                    <span className="text-emerald-700">Ready</span>
-                  ) : (
-                    <span className="text-red-600" title={p.problem ?? ''}>⚠ {p.problem}</span>
-                  )}
-                </td>
-                <td className="px-4 py-3 text-right">
-                  <div className="flex items-center justify-end gap-3 text-[12px]">
-                    {!p.is_default && p.is_enabled && (
-                      <button onClick={() => makeDefault.mutate(p.id)} className="text-foreground-muted hover:text-foreground hover:underline">
-                        Make default
-                      </button>
-                    )}
-                    <button onClick={() => setEditingProvider(p)} className="text-foreground-muted hover:text-foreground hover:underline">
-                      Edit
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      <p className="mb-3 text-[12px] text-foreground-dim">Amounts in USD. Monthly spend uses the calendar month in UTC. Provider reports may be delayed; refreshes are cached for one minute.</p>
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+        {(data?.providers ?? []).map((p) => (
+          <ProviderBillingCard key={p.id} provider={p} onEdit={() => setEditingProvider(p)} onMakeDefault={() => makeDefault.mutate(p.id)} defaultPending={makeDefault.isPending} />
+        ))}
       </div>
 
       {showNewBot && <NewBotModal onClose={() => setShowNewBot(false)} onCreated={refresh} />}
@@ -305,6 +265,17 @@ function ProviderModal({ provider, onClose, onSaved }: { provider: AiProvider | 
   const [apiKeyEnv, setApiKeyEnv] = useState(provider?.api_key_env ?? '');
   const [defaultModel, setDefaultModel] = useState(provider?.default_model ?? '');
   const [enabled, setEnabled] = useState(provider?.is_enabled ?? true);
+  const [billingMode, setBillingMode] = useState<AiProviderBillingSettings['mode']>(provider?.billing_settings?.mode ?? 'unknown');
+  const [billingKeyEnv, setBillingKeyEnv] = useState(provider?.billing_settings?.key_env ?? '');
+  const [manualBalance, setManualBalance] = useState(provider?.billing_settings?.manual?.balance_usd?.toString() ?? '');
+  const [manualSpend, setManualSpend] = useState(provider?.billing_settings?.manual?.spend_usd?.toString() ?? '');
+  const [manualAsOf, setManualAsOf] = useState((provider?.billing_settings?.manual?.as_of ?? new Date().toISOString()).slice(0, 16));
+  const hasManual = manualBalance.trim() !== '' || manualSpend.trim() !== '';
+  const validManual = !hasManual || (
+    !!manualAsOf && Number.isFinite(Date.parse(`${manualAsOf}Z`)) && Date.parse(`${manualAsOf}Z`) <= Date.now() &&
+    (manualBalance === '' || (Number.isFinite(Number(manualBalance)) && Math.abs(Number(manualBalance)) <= 1e9)) &&
+    (manualSpend === '' || (Number.isFinite(Number(manualSpend)) && Number(manualSpend) >= 0 && Number(manualSpend) <= 1e9))
+  );
 
   const save = useMutation({
     mutationFn: () => {
@@ -315,6 +286,17 @@ function ProviderModal({ provider, onClose, onSaved }: { provider: AiProvider | 
         api_key_env: apiKeyEnv.trim() || null,
         default_model: defaultModel.trim() || null,
         is_enabled: enabled,
+        billing_settings: {
+          mode: billingMode,
+          key_env: billingKeyEnv.trim() || null,
+          manual: hasManual ? {
+            balance_usd: manualBalance.trim() === '' ? null : Number(manualBalance),
+            spend_usd: manualSpend.trim() === '' ? null : Number(manualSpend),
+            as_of: provider?.billing_settings?.manual?.as_of.slice(0, 16) === manualAsOf
+              ? provider.billing_settings.manual.as_of
+              : new Date(`${manualAsOf}Z`).toISOString(),
+          } : null,
+        },
       };
       return provider ? api.patch(`/admin/squad-bots/providers/${provider.id}`, body) : api.post('/admin/squad-bots/providers', body);
     },
@@ -359,6 +341,33 @@ function ProviderModal({ provider, onClose, onSaved }: { provider: AiProvider | 
       <Field label="Default model" hint="Used by bots that don't pick their own model.">
         <input value={defaultModel} onChange={(e) => setDefaultModel(e.target.value)} placeholder="e.g. meta-llama/llama-3.3-70b-instruct" className={`${inputClass} font-[family-name:var(--font-mono)]`} />
       </Field>
+      <div className="mt-5 border-t border-divider pt-2">
+        <h3 className="mt-2 text-sm font-semibold text-foreground">Billing</h3>
+        <Field label="Billing mode">
+          <select value={billingMode} onChange={(e) => setBillingMode(e.target.value as AiProviderBillingSettings['mode'])} className={inputClass}>
+            {Object.entries(BILLING_MODES).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+          </select>
+        </Field>
+        <Field label="Billing key variable (optional)" hint="Use a server variable holding an admin key for Anthropic/OpenAI, or a management key for OpenRouter. Use the same account as this provider. Never paste a key here.">
+          <input value={billingKeyEnv} onChange={(e) => setBillingKeyEnv(e.target.value.toUpperCase())} placeholder={kind === 'anthropic' ? 'ANTHROPIC_ADMIN_API_KEY' : 'e.g. OPENROUTER_MANAGEMENT_API_KEY'} className={inputClass} />
+        </Field>
+        <details className="mt-4" open={hasManual || undefined}>
+          <summary className="cursor-pointer text-sm font-medium text-foreground">Record billing figures manually</summary>
+          <p className="mt-2 text-[12px] text-foreground-muted">Use figures from your provider’s console when automatic reporting is unavailable. These stay labeled as manual snapshots; automatic figures take priority. Clear both amounts to remove the snapshot.</p>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Credit balance (USD)">
+              <input type="number" step="any" value={manualBalance} onChange={(e) => setManualBalance(e.target.value)} className={inputClass} placeholder="Not recorded" />
+            </Field>
+            <Field label="Month-to-date spend (USD)">
+              <input type="number" min="0" step="any" value={manualSpend} onChange={(e) => setManualSpend(e.target.value)} className={inputClass} placeholder="Not recorded" />
+            </Field>
+          </div>
+          <Field label="Figures as of (UTC)" hint="Spend covers the start of this date’s calendar month through this time. Update the date when recording fresh figures.">
+            <input type="datetime-local" value={manualAsOf} onChange={(e) => setManualAsOf(e.target.value)} max={new Date().toISOString().slice(0, 16)} className={inputClass} />
+          </Field>
+          {!validManual && <p role="alert" className="mt-2 text-[12px] text-red-600">Enter valid USD amounts and a date that is not in the future.</p>}
+        </details>
+      </div>
       <label className="mt-4 flex items-center gap-2 text-sm text-foreground">
         <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} className="h-4 w-4 accent-[#0F172B]" />
         Turned on
@@ -378,7 +387,7 @@ function ProviderModal({ provider, onClose, onSaved }: { provider: AiProvider | 
           <button onClick={onClose} className="rounded-lg border border-divider bg-surface px-4 py-2 text-sm text-foreground-muted hover:bg-surface-alt">Cancel</button>
           <button
             onClick={() => save.mutate()}
-            disabled={!name.trim() || save.isPending}
+            disabled={!name.trim() || !validManual || save.isPending}
             className="rounded-lg bg-ink px-4 py-2 text-sm font-medium text-white hover:bg-ink-hover disabled:opacity-50"
           >
             {save.isPending ? 'Saving…' : 'Save'}

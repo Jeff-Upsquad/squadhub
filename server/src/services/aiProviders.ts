@@ -1,3 +1,4 @@
+import type { AiProviderBillingSettings } from '@squadhub/shared';
 import Anthropic from '@anthropic-ai/sdk';
 
 /**
@@ -18,6 +19,7 @@ import Anthropic from '@anthropic-ai/sdk';
 export type AiProviderKind = 'anthropic' | 'openai_compatible';
 
 export interface AiProviderRow {
+  billing_settings?: AiProviderBillingSettings;
   id: string;
   slug: string;
   name: string;

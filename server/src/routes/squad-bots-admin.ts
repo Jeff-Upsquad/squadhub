@@ -1,3 +1,4 @@
+import { billingSettingsSchema, getProviderBilling } from '../services/aiProviderBilling';
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import jobsRouter from './squad-bot-jobs-admin';
@@ -146,12 +147,29 @@ const baseUrlSchema = z
   .refine(isAllowedBaseUrl, 'Base URL must be https (plain http is allowed only for localhost)');
 
 const providerCreateSchema = z.object({
+  billing_settings: billingSettingsSchema.optional(),
   name: z.string().trim().min(1).max(100),
   kind: z.enum(['anthropic', 'openai_compatible']),
   base_url: baseUrlSchema.nullable().optional(),
   api_key_env: apiKeyEnvSchema.nullable().optional(),
   default_model: z.string().trim().max(200).nullable().optional(),
   is_enabled: z.boolean().optional(),
+});
+
+// Loaded separately so a slow billing API never blocks bot controls.
+router.get('/providers/:id/billing', async (req: Request, res: Response) => {
+  try {
+    const { data, error } = await supabaseAdmin.from('ai_providers').select('*').eq('id', req.params.id).maybeSingle();
+    if (error) throw new Error(error.message);
+    if (!data) {
+      res.status(404).json({ success: false, error: 'Provider not found' });
+      return;
+    }
+    res.setHeader('Cache-Control', 'no-store');
+    res.json({ success: true, data: await getProviderBilling(data as AiProviderRow) });
+  } catch (err) {
+    sendError(res, err, 'provider billing');
+  }
 });
 
 router.post('/providers', async (req: Request, res: Response) => {
@@ -174,6 +192,7 @@ router.post('/providers', async (req: Request, res: Response) => {
         api_key_env: body.api_key_env || null,
         default_model: body.default_model || null,
         is_enabled: body.is_enabled ?? true,
+        ...(body.billing_settings ? { billing_settings: body.billing_settings } : {}),
       })
       .select('*')
       .single();
@@ -188,6 +207,7 @@ router.patch('/providers/:id', async (req: Request, res: Response) => {
   try {
     const body = providerCreateSchema.partial().parse(req.body);
     const patch: Record<string, unknown> = {};
+    if (body.billing_settings !== undefined) patch.billing_settings = body.billing_settings;
     if (body.name !== undefined) patch.name = body.name;
     if (body.kind !== undefined) patch.kind = body.kind;
     if (body.base_url !== undefined) patch.base_url = body.base_url || null;

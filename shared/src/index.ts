@@ -3118,7 +3118,32 @@ export type SquadBotStatus = 'off' | 'practice' | 'approval' | 'live';
 export type SquadBotHomeApp = 'squadhire' | 'squad_crm' | 'other';
 export type AiProviderKind = 'anthropic' | 'openai_compatible';
 
+export interface AiProviderBillingSettings {
+  mode: 'unknown' | 'prepaid' | 'pay_as_you_go';
+  /** Server environment variable name, never a secret. */
+  key_env: string | null;
+  /** A dated account snapshot for providers without billing API access. USD only. */
+  manual: { balance_usd: number | null; spend_usd: number | null; as_of: string } | null;
+}
+
+export interface AiProviderBillingMetric {
+  usd: number;
+  source: 'provider' | 'manual';
+  scope: 'account' | 'organization' | 'api_key';
+  as_of: string;
+  /** UTC calendar month for spend, null for a balance. */
+  period_start: string | null;
+}
+
+export interface AiProviderBilling {
+  balance: AiProviderBillingMetric | null;
+  spend: AiProviderBillingMetric | null;
+  billing_url: string | null;
+  messages: string[];
+}
+
 export interface AiProvider {
+  billing_settings?: AiProviderBillingSettings;
   id: string;
   slug: string;
   name: string;
