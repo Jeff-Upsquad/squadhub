@@ -9,7 +9,7 @@ export default function DayPlannerView() {
   return (
     <div className="sh-view day-planner-view">
       <TodayList />
-      <DayCalendar date={viewDate} today={today} onDateChange={setViewDate} />
+      <DayCalendar date={viewDate} today={today} onDateChange={setViewDate} keyboard />
     </div>
   );
 }

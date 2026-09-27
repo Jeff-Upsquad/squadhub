@@ -34,6 +34,9 @@ interface Props {
   date: string;  // YYYY-MM-DD being viewed
   today: string; // YYYY-MM-DD that means "today" in user's tz
   onDateChange: (next: string) => void;
+  // ←/→ step a day, T jumps to today. Only the standalone planner opts in —
+  // the Home embed shares the page with other keyboard-driven lists.
+  keyboard?: boolean;
 }
 
 function addDays(dateStr: string, n: number): string {
@@ -73,19 +76,32 @@ function fmtTimeRange(start: number, duration: number): string {
   const startStr = fmtMinAsClock(start);
   if (duration < 30) return startStr;
   const end = Math.min(1440, start + duration);
-  return `${startStr}-${fmtMinAsClock(end)}`;
+  return `${startStr} – ${fmtMinAsClock(end)}`;
 }
 
 function snap(min: number): number {
   return Math.max(0, Math.min(1440 - 1, Math.round(min / SNAP_MIN) * SNAP_MIN));
 }
 
-// Long timezone name from the browser ("India Standard Time" for Asia/Kolkata).
-// Falls back to a "GMT+offset" string if Intl can't resolve a name.
-function tzLabel(): string {
+// 45 → "45m", 90 → "1h 30m".
+function fmtDur(min: number): string {
+  const h = Math.floor(min / 60);
+  const m = min % 60;
+  if (h === 0) return `${m}m`;
+  return m ? `${h}h ${m}m` : `${h}h`;
+}
+
+// Working-hours band — rows outside it get a quieter background.
+const WORK_START_H = 8;
+const WORK_END_H = 19;
+
+// Timezone name from the browser: long ("India Standard Time") for tooltips,
+// short ("GMT+5:30") for the narrow gutter. Falls back to a "GMT+offset"
+// string if Intl can't resolve a name.
+function tzLabel(style: 'long' | 'short' = 'long'): string {
   try {
     const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
-    const parts = new Intl.DateTimeFormat('en-US', { timeZone: tz, timeZoneName: 'long' }).formatToParts(new Date());
+    const parts = new Intl.DateTimeFormat('en-US', { timeZone: tz, timeZoneName: style }).formatToParts(new Date());
     const name = parts.find((p) => p.type === 'timeZoneName')?.value;
     if (name) return name;
   } catch {
@@ -113,7 +129,7 @@ function dateFieldLabel(f?: 'work' | 'due' | 'start'): string {
   return 'Work';
 }
 
-export default function DayCalendar({ date, today, onDateChange }: Props) {
+export default function DayCalendar({ date, today, onDateChange, keyboard = false }: Props) {
   const { data: plans = [], isLoading } = useDayPlans(date);
   const schedule = useScheduleTaskOnDay();
   const unschedule = useUnscheduleTask();
@@ -127,7 +143,9 @@ export default function DayCalendar({ date, today, onDateChange }: Props) {
   const setGroupRunPanel = usePMStore((s) => s.setGroupRunPanel);
   const qc = useQueryClient();
 
-  const [dragOverHour, setDragOverHour] = useState<number | null>(null);
+  // Snapped minute under the cursor while a palette row is dragged over the
+  // grid — drives the "drop here" ghost so the landing time is visible.
+  const [dragOverMin, setDragOverMin] = useState<number | null>(null);
   const [allDayOver, setAllDayOver] = useState(false);
   // Block being moved via mousedown drag — drives the live preview position.
   const [moving, setMoving] = useState<{
@@ -167,17 +185,45 @@ export default function DayCalendar({ date, today, onDateChange }: Props) {
     // Wait one tick so the grid + sticky headers are laid out.
     const id = window.setTimeout(() => {
       const cal = calRef.current;
-      const grid = gridRef.current;
-      if (!cal || !grid) return;
-      const nowOffset = grid.offsetTop + nowMinute * PX_PER_MIN;
-      // Small headroom (40px) so the now-line isn't flush with the sticky header.
-      cal.scrollTop = Math.max(0, nowOffset - 40);
+      if (!cal || !gridRef.current) return;
+      // The sticky header + all-day strip sit above the grid and occupy
+      // exactly grid.offsetTop of the viewport, so scrolling by the now-line's
+      // minute offset (minus an hour of headroom) lands it just below them.
+      cal.scrollTop = Math.max(0, (nowMinute - 60) * PX_PER_MIN);
     }, 0);
     return () => window.clearTimeout(id);
   // We want this to fire only when isToday flips on (initial mount, or after
   // navigating back to today) — not every minute as nowMinute ticks.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isToday]);
+
+  // A drag cancelled outside the grid (Esc, drop elsewhere) never fires the
+  // grid's dragleave — clear the ghost whenever any drag ends.
+  useEffect(() => {
+    const clear = () => setDragOverMin(null);
+    document.addEventListener('dragend', clear);
+    document.addEventListener('drop', clear);
+    return () => {
+      document.removeEventListener('dragend', clear);
+      document.removeEventListener('drop', clear);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!keyboard) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.metaKey || e.ctrlKey || e.altKey || e.defaultPrevented) return;
+      const el = e.target as HTMLElement | null;
+      if (el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName))) return;
+      if (e.key === 'ArrowLeft') onDateChange(addDays(date, -1));
+      else if (e.key === 'ArrowRight') onDateChange(addDays(date, 1));
+      else if (e.key === 't' || e.key === 'T') onDateChange(today);
+      else return;
+      e.preventDefault();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [keyboard, date, today, onDateChange]);
 
   // Date-only occurrences go to the all-day strip; everything else (minus
   // legacy all-day sentinels) lands on the timed grid.
@@ -194,7 +240,7 @@ export default function DayCalendar({ date, today, onDateChange }: Props) {
   // handled by startMove (mousedown-based) below.
   const handleHourDrop = (hour: number, e: React.DragEvent) => {
     e.preventDefault();
-    setDragOverHour(null);
+    setDragOverMin(null);
 
     const target = e.currentTarget as HTMLElement;
     const rect = target.getBoundingClientRect();
@@ -405,126 +451,171 @@ export default function DayCalendar({ date, today, onDateChange }: Props) {
     document.addEventListener('mouseup', onUp);
   };
 
-  const { weekLabel, weekdayShort, dayOfMonth } = useMemo(() => {
+  const { dayTitle, weekLabel, relLabel } = useMemo(() => {
     const [y, m, d] = date.split('-').map(Number);
     const dt = new Date(y, m - 1, d);
+    const [ty, tm, td] = today.split('-').map(Number);
+    const diff = Math.round((dt.getTime() - new Date(ty, tm - 1, td).getTime()) / 86_400_000);
+    const rel = diff === 0 ? 'Today' : diff === 1 ? 'Tomorrow' : diff === -1 ? 'Yesterday' : null;
     return {
-      weekLabel: `${new Intl.DateTimeFormat(undefined, { month: 'long', year: 'numeric' }).format(dt)} · W${isoWeekNumber(dt)}`,
-      weekdayShort: new Intl.DateTimeFormat(undefined, { weekday: 'short' }).format(dt),
-      dayOfMonth: dt.getDate(),
+      dayTitle: new Intl.DateTimeFormat(undefined, { weekday: 'long', day: 'numeric', month: 'long' }).format(dt),
+      weekLabel: `${new Intl.DateTimeFormat(undefined, { month: 'long', year: 'numeric' }).format(dt)} · Week ${isoWeekNumber(dt)}`,
+      relLabel: rel,
     };
-  }, [date]);
+  }, [date, today]);
+
+  const plannedMin = useMemo(
+    () => timedPlans.reduce((sum, p) => sum + p.duration_minutes, 0),
+    [timedPlans],
+  );
+  // Past days are fully "elapsed"; today shades up to the now-line.
+  const elapsedMin = date < today ? 1440 : isToday ? nowMinute : 0;
+
+  // Dragover → snapped minute within the hovered hour (same math as the drop).
+  const slotDragOver = (hour: number) => (e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const min = snap(hour * 60 + ((e.clientY - rect.top) / rect.height) * 60);
+    setDragOverMin((cur) => (cur === min ? cur : min));
+  };
 
   return (
     <div className="dp-calendar" ref={calRef}>
-      {/* Top bar — nav + month/week label */}
+      {/* Top bar — day title + segmented prev / Today / next */}
       <div className="dp-cal-head">
-        <div className="dp-cal-nav">
-          <button
-            type="button"
-            className="nav-btn"
-            onClick={() => onDateChange(addDays(date, -1))}
-            title="Previous day"
-            aria-label="Previous day"
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-              <path d="M15 18l-6-6 6-6" />
-            </svg>
-          </button>
-          <button
-            type="button"
-            className="nav-btn"
-            onClick={() => onDateChange(addDays(date, 1))}
-            title="Next day"
-            aria-label="Next day"
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-              <path d="M9 6l6 6-6 6" />
-            </svg>
-          </button>
-          {!isToday && (
-            <button type="button" className="nav-today" onClick={() => onDateChange(today)}>
+        <div className="dp-cal-title">
+          <h2>
+            {dayTitle}
+            {relLabel && <span className="dp-rel" data-today={isToday || undefined}>{relLabel}</span>}
+          </h2>
+          <div className="sub">{weekLabel}</div>
+        </div>
+        <div className="dp-cal-tools">
+          <div className="dp-cal-meta" aria-live="polite">
+            {isLoading ? (
+              <span className="chip">Loading…</span>
+            ) : (
+              <>
+                <span className="chip">
+                  <b>{timedPlans.length}</b> {timedPlans.length === 1 ? 'block' : 'blocks'}
+                </span>
+                {plannedMin > 0 && <span className="chip"><b>{fmtDur(plannedMin)}</b> planned</span>}
+                {allDayPlans.length > 0 && <span className="chip"><b>{allDayPlans.length}</b> all-day</span>}
+              </>
+            )}
+          </div>
+          <div className="dp-seg" role="group" aria-label="Change day">
+            <button
+              type="button"
+              className="nav-btn"
+              onClick={() => onDateChange(addDays(date, -1))}
+              title={keyboard ? 'Previous day (←)' : 'Previous day'}
+              aria-label="Previous day"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                <path d="M15 18l-6-6 6-6" />
+              </svg>
+            </button>
+            <button
+              type="button"
+              className="nav-today"
+              data-active={isToday || undefined}
+              onClick={() => onDateChange(today)}
+              disabled={isToday}
+              title={keyboard ? 'Jump to today (T)' : 'Jump to today'}
+            >
               Today
             </button>
-          )}
-          <h2>{weekLabel}</h2>
-        </div>
-        <div className="dp-cal-meta">
-          {isLoading
-            ? 'Loading…'
-            : `${timedPlans.length} scheduled${allDayPlans.length ? ` · ${allDayPlans.length} all-day` : ''}`}
+            <button
+              type="button"
+              className="nav-btn"
+              onClick={() => onDateChange(addDays(date, 1))}
+              title={keyboard ? 'Next day (→)' : 'Next day'}
+              aria-label="Next day"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                <path d="M9 6l6 6-6 6" />
+              </svg>
+            </button>
+          </div>
         </div>
       </div>
 
-      {/* Day column header: tz on the left gutter, day chip in the column.
-          The all-day strip renders as a second row of this sticky grid so
-          date-only tasks stay visible while the hour grid scrolls. */}
+      {/* All-day strip — sticky under the header so date-only tasks stay
+          visible while the hour grid scrolls. Timezone sits in the gutter. */}
       <div className="dp-col-head">
-        <div className="dp-gmt" title={tzLabel()}>{tzLabel()}</div>
-        <div className="dp-col-day">
-          <div className="dp-day-chip" data-today={isToday}>
-            <span className="wd">{weekdayShort}</span>
-            <span className="dom">{dayOfMonth}</span>
-          </div>
+        <div className="dp-allday-label">
+          <span>All-day</span>
+          <span className="dp-gmt" title={tzLabel()}>{tzLabel('short')}</span>
         </div>
-        <>
-            <div className="dp-allday-label">All-day</div>
-            <div
-              className="dp-allday-items"
-              data-dragover={allDayOver || undefined}
-              onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setAllDayOver(true); }}
-              onDragLeave={() => setAllDayOver(false)}
-              onDrop={handleAllDayDrop}
-            >
-              {allDayPlans.map((p) => {
-                const isWb = p.task?.task_type_key === 'work_block';
-                const wbColor = p.task?.task_type_color || '#8b5cf6';
-                return (
-                  <div
-                    key={p.id}
-                    className="dp-allday-chip"
-                    draggable
-                    data-type={isWb ? 'work_block' : undefined}
-                    style={
-                      isWb
-                        ? {
-                            background: `color-mix(in oklch, ${wbColor} 18%, transparent)`,
-                            borderLeftColor: wbColor,
-                          }
-                        : undefined
-                    }
-                    onDragStart={(e) => {
-                      e.dataTransfer.setData('application/x-task-id', p.task_id);
-                      e.dataTransfer.setData('application/x-task-estimate', String(p.task?.time_estimate ?? 30));
-                      e.dataTransfer.setData(DND_TASK_RECURRING_PARENT, (p.task as any)?.recurring_parent_id ?? '');
-                      e.dataTransfer.effectAllowed = 'copyMove';
-                    }}
-                    onClick={() => setActiveTask(p.task_id)}
-                    title={`${p.task?.title ?? 'Task'} · ${dateFieldLabel(p.date_field)} ${date} · drag onto the grid to give it a time`}
-                  >
-                    <span className="t">{p.task?.title ?? 'Task'}</span>
-                    <span className="f">{dateFieldLabel(p.date_field)}</span>
-                  </div>
-                );
-              })}
-            </div>
-          </>
+        <div
+          className="dp-allday-items"
+          data-dragover={allDayOver || undefined}
+          onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setAllDayOver(true); }}
+          onDragLeave={() => setAllDayOver(false)}
+          onDrop={handleAllDayDrop}
+        >
+          {allDayPlans.length === 0 && (
+            <span className="dp-allday-empty">{allDayOver ? 'Drop to plan it for the whole day' : 'Drop a task here to plan it without a time'}</span>
+          )}
+          {allDayPlans.map((p) => {
+            const isWb = p.task?.task_type_key === 'work_block';
+            const wbColor = p.task?.task_type_color || '#8b5cf6';
+            return (
+              <div
+                key={p.id}
+                className="dp-allday-chip"
+                draggable
+                data-type={isWb ? 'work_block' : undefined}
+                style={isWb ? ({ '--dp-accent': wbColor } as React.CSSProperties) : undefined}
+                onDragStart={(e) => {
+                  e.dataTransfer.setData('application/x-task-id', p.task_id);
+                  e.dataTransfer.setData('application/x-task-estimate', String(p.task?.time_estimate ?? 30));
+                  e.dataTransfer.setData(DND_TASK_RECURRING_PARENT, (p.task as any)?.recurring_parent_id ?? '');
+                  e.dataTransfer.effectAllowed = 'copyMove';
+                }}
+                onClick={() => setActiveTask(p.task_id)}
+                title={`${p.task?.title ?? 'Task'} · ${dateFieldLabel(p.date_field)} ${date} · drag onto the grid to give it a time`}
+              >
+                <span className="t">{p.task?.title ?? 'Task'}</span>
+                <span className="f">{dateFieldLabel(p.date_field)}</span>
+              </div>
+            );
+          })}
+        </div>
       </div>
 
       {/* Hour grid */}
-      <div className="dp-cal-grid" ref={gridRef}>
+      <div
+        className="dp-cal-grid"
+        ref={gridRef}
+        data-dragging={dragOverMin !== null || undefined}
+        onDragLeave={(e) => {
+          // Only clear when the cursor actually leaves the grid, not when it
+          // crosses between hour rows.
+          if (!(e.currentTarget as HTMLElement).contains(e.relatedTarget as Node | null)) setDragOverMin(null);
+        }}
+      >
+        {elapsedMin > 0 && <div className="dp-past" style={{ height: elapsedMin * PX_PER_MIN }} aria-hidden="true" />}
+
         {Array.from({ length: HOURS }).map((_, h) => (
-          <div key={h} className="dp-hour">
-            <span className="label">{fmtHourLabel(h)}</span>
+          <div key={h} className="dp-hour" data-off={h < WORK_START_H || h >= WORK_END_H || undefined}>
+            {/* Hide the hour label the now-chip would sit on top of. */}
+            <span className="label">{h === 0 || (isToday && Math.abs(h * 60 - nowMinute) < 15) ? '' : fmtHourLabel(h)}</span>
             <div
               className="slot"
-              data-dragover={dragOverHour === h ? 'true' : undefined}
-              onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setDragOverHour(h); }}
-              onDragLeave={() => setDragOverHour((cur) => (cur === h ? null : cur))}
+              onDragOver={slotDragOver(h)}
               onDrop={(e) => handleHourDrop(h, e)}
             />
           </div>
         ))}
+
+        {dragOverMin !== null && (
+          <div className="dp-ghost" style={{ top: dragOverMin * PX_PER_MIN, height: 30 * PX_PER_MIN }} aria-hidden="true">
+            <span>Drop at {fmtMinAsClock(dragOverMin)}</span>
+          </div>
+        )}
 
         {positioned.map((p) => {
           const isResizing = resizing?.planId === p.id;
@@ -537,7 +628,7 @@ export default function DayCalendar({ date, today, onDateChange }: Props) {
           const renderDur = isResizing ? resizing!.previewDur : p.duration_minutes;
           const isDone = isTaskDone(p.task?.status);
           const top = renderStart * PX_PER_MIN;
-          const height = Math.max(20, renderDur * PX_PER_MIN);
+          const height = Math.max(22, renderDur * PX_PER_MIN - 2);
           // Work-block occurrences carry a `task_type_key` from the server's
           // hydrate and a `virtual` flag from the day-plans GET extension.
           const isWorkBlock = (p.task as any)?.task_type_key === 'work_block';
@@ -545,29 +636,29 @@ export default function DayCalendar({ date, today, onDateChange }: Props) {
           const isVirtual = (p as any).virtual === true;
           const isGroup = p.kind === 'group_block';
           const groupName = p.container?.name ?? 'Group';
-          const wbStyle = isWorkBlock
-            ? {
-                background: `color-mix(in oklch, ${wbColor} 18%, transparent)`,
-                borderLeft: `3px solid ${wbColor}`,
-              }
-            : null;
+          // Compact (single-line) layout for blocks too short to stack title + time.
+          const size = renderDur < 30 ? 'xs' : renderDur < 45 ? 'sm' : undefined;
+          const blockTitle = isGroup ? `Grouped tasks under ${groupName}` : p.task?.title ?? 'Task';
           return (
             <div
               key={p.id}
               className="dp-block"
               data-moving={isMoving ? 'true' : undefined}
+              data-resizing={isResizing ? 'true' : undefined}
               data-done={isDone ? 'true' : undefined}
               data-type={isGroup ? 'group_block' : isWorkBlock ? 'work_block' : undefined}
+              data-priority={!isGroup && !isWorkBlock ? p.task?.priority ?? undefined : undefined}
               data-virtual={isVirtual ? 'true' : undefined}
+              data-size={size}
               style={{
                 top,
                 height,
-                left: `calc(70px + ${p.col} * (100% - 92px) / ${p.cols})`,
-                width: `calc((100% - 92px) / ${p.cols} - 4px)`,
+                left: `calc(64px + ${p.col} * (100% - 80px) / ${p.cols})`,
+                width: `calc((100% - 80px) / ${p.cols} - 4px)`,
                 right: 'auto',
-                ...(wbStyle || {}),
+                ...(isWorkBlock ? ({ '--dp-accent': wbColor } as React.CSSProperties) : {}),
               }}
-              title={`${isGroup ? `Grouped tasks under ${groupName}` : p.task?.title ?? 'Task'} · ${fmtMinAsClock(renderStart)}${isWorkBlock ? ' · Work block' : ''}`}
+              title={`${blockTitle} · ${fmtTimeRange(renderStart, renderDur)}${isWorkBlock ? ' · Work block' : ''}`}
             >
               {/* Top resize handle — drag to extend earlier */}
               <div
@@ -595,22 +686,29 @@ export default function DayCalendar({ date, today, onDateChange }: Props) {
                     }}
                     onMouseDown={(e) => e.stopPropagation()}
                     aria-label="Remove from calendar"
+                    title="Remove from calendar"
                   >
-                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
                       <path d="M6 6l12 12M18 6L6 18" />
                     </svg>
                   </button>
                 )}
-                <div className="b-title">{isGroup ? `Grouped tasks under ${groupName}` : p.task?.title ?? 'Task'}</div>
+                <div className="b-title">
+                  {isDone && (
+                    <svg className="b-check" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round" aria-label="Done">
+                      <path d="M5 13l4 4L19 7" />
+                    </svg>
+                  )}
+                  {blockTitle}
+                </div>
                 <div className="b-meta">
-                  <svg className="b-clock" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
-                    <circle cx="12" cy="12" r="9" />
-                    <path d="M12 7v5l3 2" />
-                  </svg>
-                  {fmtTimeRange(renderStart, renderDur)}
+                  <span className="b-time">{fmtTimeRange(renderStart, renderDur)}</span>
+                  {renderDur >= 30 && <span className="b-dur">{fmtDur(renderDur)}</span>}
                   {isGroup
                     ? <span className="b-src">Group</span>
-                    : p.date_field && <span className="b-src">{dateFieldLabel(p.date_field)}</span>}
+                    : isWorkBlock
+                      ? <span className="b-src">Work block</span>
+                      : p.date_field && <span className="b-src">{dateFieldLabel(p.date_field)}</span>}
                 </div>
               </div>
 
@@ -639,7 +737,7 @@ interface Positioned {
   task_id: string;
   start_minute: number;
   duration_minutes: number;
-  task?: { id: string; title: string; status?: string | null; task_type_key?: string | null; task_type_color?: string | null } | undefined;
+  task?: { id: string; title: string; status?: string | null; priority?: string | null; task_type_key?: string | null; task_type_color?: string | null } | undefined;
   col: number;
   cols: number;
   virtual?: boolean;
@@ -692,6 +790,7 @@ function positionBlocks(plans: any[]): Positioned[] {
             id: p.task.id,
             title: p.task.title,
             status: p.task.status,
+            priority: p.task.priority ?? null,
             task_type_key: p.task.task_type_key ?? null,
             task_type_color: p.task.task_type_color ?? null,
           }
