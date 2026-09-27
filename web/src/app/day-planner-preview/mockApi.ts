@@ -15,6 +15,14 @@ const SPACES = {
   ops: { id: 'sp-ops', name: 'Operations' },
   growth: { id: 'sp-growth', name: 'Growth' },
 };
+const ME = { id: 'u-me', name: 'Jeff Zeena', email: 'preview@squadhub.local', avatar_url: null };
+
+const STATUSES = [
+  { id: 'st-todo', space_id: 'sp', name: 'To do', color: '#94A3B8', position: 0, is_default: true, category: 'todo' },
+  { id: 'st-doing', space_id: 'sp', name: 'In progress', color: '#3B82F6', position: 1, is_default: false, category: 'active' },
+  { id: 'st-done', space_id: 'sp', name: 'Done', color: '#7C3AED', position: 2, is_default: false, category: 'closed' },
+];
+
 const LISTS = {
   web: { id: 'l-web', name: 'Web app' },
   hiring: { id: 'l-hiring', name: 'Hiring' },
@@ -169,6 +177,27 @@ const adapter: AxiosAdapter = async (config) => {
       return ok(config, null);
     }
   }
+  // Task panel lookups — the task itself plus the list/space it lives in.
+  const getTask = path.match(/^\/pm\/tasks\/([^/]+)$/);
+  if (method === 'get' && getTask && allTasks.has(getTask[1])) {
+    const t = allTasks.get(getTask[1])!;
+    // `status` is the TEXT key on the wire (e.g. 'closed'); status_id points
+    // at the space status row.
+    const done = t.status === 'closed';
+    const statusId = STATUSES.find((st) => (done ? st.category === 'closed' : st.is_default))!.id;
+    return ok(config, { ...t, status_id: statusId, status: done ? 'closed' : 'todo', assignees: [ME], tags: [], subtasks: [], comment_count: 0 });
+  }
+  const getList = path.match(/^\/pm\/lists\/([^/]+)$/);
+  if (method === 'get' && getList) {
+    const list = Object.values(LISTS).find((l) => l.id === getList[1]);
+    const space = [...allTasks.values()].find((t) => t.list?.id === getList[1])?.space ?? SPACES.product;
+    return ok(config, { id: getList[1], name: list?.name ?? 'List', space_id: space.id, folder_id: null, space_statuses: STATUSES, my_access_level: 'owner' });
+  }
+  const getSpace = path.match(/^\/pm\/spaces\/([^/]+)$/);
+  if (method === 'get' && getSpace) {
+    const space = Object.values(SPACES).find((sp) => sp.id === getSpace[1]);
+    return ok(config, { id: getSpace[1], name: space?.name ?? 'Space', color: '#6366F1', space_statuses: STATUSES, my_access_level: 'owner' });
+  }
   const taskMatch = path.match(/^\/pm\/tasks\/([^/]+)(?:\/(focus|snooze))?$/);
   if (taskMatch && (method === 'patch' || method === 'put')) {
     const t = allTasks.get(taskMatch[1]);
@@ -179,8 +208,10 @@ const adapter: AxiosAdapter = async (config) => {
     }
     return ok(config, t ?? null);
   }
-  // Everything else (prefs sync, group runs, activity…) — an empty success.
-  return ok(config, method === 'get' ? null : {});
+  // Everything else (prefs sync, group runs, comments, activity…) — an empty
+  // success. Collection lookups dominate, so unknown GETs return [].
+  if (method === 'get' && /\/(active|summary|current)$/.test(path)) return ok(config, null);
+  return ok(config, method === 'get' ? [] : {});
 };
 
 let installed = false;
