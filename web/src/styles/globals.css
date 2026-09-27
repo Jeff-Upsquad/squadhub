@@ -11044,8 +11044,8 @@ html[data-theme="noir"] .inbox-slider-panel {
 .tp-btn-ghost:hover { background: var(--tp-well); color: var(--sh-ink); }
 
 /* ══ Task panel v3 — desktop layout (Claude Design "Task Panel v3") ═══════
-   Scoped to `.td-compact` (desktop TaskDetailPanel only; mobile and the
-   create panel keep their layouts). Header path + add/move segment → title
+   Scoped to `.td-compact` (desktop TaskDetailPanel + TaskCreatePanel;
+   mobile keeps the legacy layout). Header path + add/move segment → title
    → inline description → assignee row → collapsible bordered Details card
    → collapsible sections (Subtasks, Checklist, Files, Comments, Activity). */
 .td-assignee-ico { display: none; }
@@ -11287,6 +11287,9 @@ html[data-theme="noir"] .inbox-slider-panel {
 .td-panel-luma.apple.td-shell.td-compact .td-settings-card[data-compact="true"] .td-settings-row[data-td="elapsed"] { order: 9; }
 .td-panel-luma.apple.td-shell.td-compact .td-settings-card[data-compact="true"] .td-settings-row[data-td="labels"] { order: 10; }
 .td-panel-luma.apple.td-shell.td-compact .td-settings-card[data-compact="true"] .td-settings-row[data-half="false"] { order: 11; }
+/* Create-panel-only rows (Space read-only + work-block schedule) sit with the full-width rows. */
+.td-panel-luma.apple.td-shell.td-compact .td-settings-card[data-compact="true"] .td-settings-row[data-td="space"],
+.td-panel-luma.apple.td-shell.td-compact .td-settings-card[data-compact="true"] .td-settings-row[data-td="block"] { order: 11; }
 .td-panel-luma.apple.td-shell.td-compact .td-settings-card[data-compact="true"] .td-settings-row[data-td="created"] { order: 12; }
 
 /* Dates row — "Start → Due", each half its own picker trigger */
