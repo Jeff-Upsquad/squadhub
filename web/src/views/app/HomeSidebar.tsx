@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import type { Channel, DmConversation, SubscriptionCardRecipient } from '@squadhub/shared';
 import type { HomeView } from '../../layouts/MainLayout';
@@ -7,7 +7,7 @@ import { useFavorites, useRemoveFavorite } from '../../hooks/useFavorites';
 import { useSharedWithMe } from '../../hooks/useSharedWithMe';
 import { useWorkspaces } from '../../hooks/useSpaces';
 import { useHasPermission } from '../../hooks/usePermissions';
-import { usePMStore } from '../../stores/pmStore';
+import { usePMStore, DEFAULT_SIDEBAR_SECTION_ORDER } from '../../stores/pmStore';
 import { useTabsStore } from '../../stores/tabsStore';
 import { wantsNewTab, buildListSnapshot, buildFolderSnapshot, buildSpaceSnapshot, buildChatSnapshot, buildAppSnapshot } from '../../lib/tabSnapshots';
 import { useCardsAttention } from '@/views/admin/useCardsAttention';
@@ -160,24 +160,70 @@ function NavItem({
   );
 }
 
+function DragGripIcon({ className = 'h-3 w-3' }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="currentColor">
+      <circle cx="9" cy="6" r="1.5" />
+      <circle cx="15" cy="6" r="1.5" />
+      <circle cx="9" cy="12" r="1.5" />
+      <circle cx="15" cy="12" r="1.5" />
+      <circle cx="9" cy="18" r="1.5" />
+      <circle cx="15" cy="18" r="1.5" />
+    </svg>
+  );
+}
+
 // ---- Collapsible section header (monochrome eyebrow) ----
 function SectionHeader({
   title,
   expanded,
   onToggle,
   action,
+  draggable,
+  onDragStart,
+  onDragOver,
+  onDrop,
+  onDragEnd,
+  isOverBefore,
+  isOverAfter,
+  isDragging,
 }: {
   title: string;
   expanded: boolean;
   onToggle: () => void;
   action?: React.ReactNode;
+  draggable?: boolean;
+  onDragStart?: () => void;
+  onDragOver?: (e: React.DragEvent) => void;
+  onDrop?: (e: React.DragEvent) => void;
+  onDragEnd?: () => void;
+  isOverBefore?: boolean;
+  isOverAfter?: boolean;
+  isDragging?: boolean;
 }) {
   return (
-    <div className="group flex items-center justify-between px-2 pt-4 pb-1">
-      <div className="flex items-center gap-1">
+    <div
+      draggable={draggable}
+      onDragStart={onDragStart}
+      onDragOver={onDragOver}
+      onDrop={onDrop}
+      onDragEnd={onDragEnd}
+      className={`group flex items-center justify-between px-2 pt-4 pb-1 transition-all select-none rounded-[6px] ${
+        draggable ? 'cursor-grab active:cursor-grabbing' : ''
+      }`}
+      style={{
+        opacity: isDragging ? 0.35 : 1,
+        boxShadow: isOverBefore
+          ? 'inset 0 2px 0 var(--sh-ink)'
+          : isOverAfter
+            ? 'inset 0 -2px 0 var(--sh-ink)'
+            : undefined,
+      }}
+    >
+      <div className="flex items-center gap-1 min-w-0">
         <button
           onClick={onToggle}
-          className="flex items-center justify-center h-4 w-4 text-[var(--sh-ink-4)] hover:text-[var(--sh-ink)] transition-colors"
+          className="flex items-center justify-center h-4 w-4 text-[var(--sh-ink-4)] hover:text-[var(--sh-ink)] transition-colors shrink-0"
           aria-label={expanded ? 'Collapse' : 'Expand'}
         >
           <svg
@@ -190,16 +236,26 @@ function SectionHeader({
         </button>
         <button
           onClick={onToggle}
-          className="sb-section text-[var(--sh-ink-3)] hover:text-[var(--sh-ink)] whitespace-nowrap transition-colors"
+          className="sb-section text-[var(--sh-ink-3)] hover:text-[var(--sh-ink)] whitespace-nowrap transition-colors truncate"
         >
           {title}
         </button>
       </div>
-      {action && (
-        <span className="opacity-0 group-hover:opacity-100 transition-opacity">
-          {action}
-        </span>
-      )}
+      <div className="flex items-center gap-1 shrink-0">
+        {action && (
+          <span className="opacity-0 group-hover:opacity-100 transition-opacity">
+            {action}
+          </span>
+        )}
+        {draggable && (
+          <span
+            className="opacity-0 group-hover:opacity-60 hover:opacity-100 transition-opacity text-[var(--sh-ink-4)] cursor-grab"
+            title="Drag section to reorder"
+          >
+            <DragGripIcon className="h-3 w-3" />
+          </span>
+        )}
+      </div>
     </div>
   );
 }
@@ -284,25 +340,208 @@ export default function HomeSidebar({
 
   const { data: workspaces } = useWorkspaces(isClient || isPartner ? undefined : workspaceId);
 
-  const [expandedSections, setExpandedSections] = useState({
-    unread: true,
-    apps: true,
-    favorites: true,
-    sharedWithMe: true,
-    workspaces: true,
-    spaces: true,
-    channels: true,
-    dms: true,
-    crmChats: true,
+  const sidebarSectionsExpanded = usePMStore((s) => s.sidebarSectionsExpanded);
+  const toggleSidebarSection = usePMStore((s) => s.toggleSidebarSection);
+  const favoriteItemsOrder = usePMStore((s) => s.favoriteItemsOrder);
+  const setFavoriteItemsOrder = usePMStore((s) => s.setFavoriteItemsOrder);
+  const appFavoritesOrder = usePMStore((s) => s.appFavoritesOrder);
+  const setAppFavoritesOrder = usePMStore((s) => s.setAppFavoritesOrder);
+  const sidebarSectionOrder = usePMStore((s) => s.sidebarSectionOrder);
+  const setSidebarSectionOrder = usePMStore((s) => s.setSidebarSectionOrder);
+
+  const isSectionExpanded = (key: string) => sidebarSectionsExpanded[key] ?? true;
+  const toggleSection = (key: string) => {
+    toggleSidebarSection(key);
+  };
+
+  // Sorted favorite apps based on appFavoritesOrder
+  const sortedFavoriteApps = useMemo(() => {
+    if (!favoriteApps.length) return [];
+    if (!appFavoritesOrder || appFavoritesOrder.length === 0) return favoriteApps;
+    const orderMap = new Map(appFavoritesOrder.map((slug, idx) => [slug, idx]));
+    return [...favoriteApps].sort((a, b) => {
+      const idxA = orderMap.has(a.slug) ? orderMap.get(a.slug)! : 999999;
+      const idxB = orderMap.has(b.slug) ? orderMap.get(b.slug)! : 999999;
+      if (idxA !== idxB) return idxA - idxB;
+      return a.name.localeCompare(b.name);
+    });
+  }, [favoriteApps, appFavoritesOrder]);
+
+  // Sorted favorites based on favoriteItemsOrder
+  const sortedFavorites = useMemo(() => {
+    if (!favorites || favorites.length === 0) return [];
+    if (!favoriteItemsOrder || favoriteItemsOrder.length === 0) return favorites;
+    const orderMap = new Map(favoriteItemsOrder.map((id, idx) => [id, idx]));
+    return [...favorites].sort((a, b) => {
+      const idxA = orderMap.has(a.id) ? orderMap.get(a.id)! : 999999;
+      const idxB = orderMap.has(b.id) ? orderMap.get(b.id)! : 999999;
+      if (idxA !== idxB) return idxA - idxB;
+      return (b.created_at || '').localeCompare(a.created_at || '');
+    });
+  }, [favorites, favoriteItemsOrder]);
+
+  // DnD state for favorites
+  const [dragFavId, setDragFavId] = useState<string | null>(null);
+  const [overFav, setOverFav] = useState<{ id: string; pos: 'before' | 'after' } | null>(null);
+
+  const handleFavDragStart = (id: string) => {
+    setDragFavId(id);
+  };
+
+  const handleFavDragOver = (e: React.DragEvent, id: string) => {
+    if (!dragFavId || dragFavId === id) return;
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = 'move';
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const pos = e.clientY < rect.top + rect.height / 2 ? 'before' : 'after';
+    setOverFav((prev) => (prev && prev.id === id && prev.pos === pos ? prev : { id, pos }));
+  };
+
+  const handleFavDrop = (e: React.DragEvent, targetId: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!dragFavId || dragFavId === targetId) {
+      setDragFavId(null);
+      setOverFav(null);
+      return;
+    }
+    const currentIds = sortedFavorites.map((f) => f.id);
+    const from = currentIds.indexOf(dragFavId);
+    let to = currentIds.indexOf(targetId) + (overFav?.pos === 'before' ? 0 : 1);
+    if (from < to) to -= 1;
+    if (from !== -1 && to !== -1 && from !== to) {
+      const newIds = [...currentIds];
+      newIds.splice(from, 1);
+      newIds.splice(to, 0, dragFavId);
+      setFavoriteItemsOrder(newIds);
+    }
+    setDragFavId(null);
+    setOverFav(null);
+  };
+
+  const handleFavDragEnd = () => {
+    setDragFavId(null);
+    setOverFav(null);
+  };
+
+  // DnD state for apps in Apps section
+  const [dragAppSlug, setDragAppSlug] = useState<string | null>(null);
+  const [overApp, setOverApp] = useState<{ slug: string; pos: 'before' | 'after' } | null>(null);
+
+  const handleAppDragStart = (slug: string) => {
+    setDragAppSlug(slug);
+  };
+
+  const handleAppDragOver = (e: React.DragEvent, slug: string) => {
+    if (!dragAppSlug || dragAppSlug === slug) return;
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = 'move';
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const pos = e.clientY < rect.top + rect.height / 2 ? 'before' : 'after';
+    setOverApp((prev) => (prev && prev.slug === slug && prev.pos === pos ? prev : { slug, pos }));
+  };
+
+  const handleAppDrop = (e: React.DragEvent, targetSlug: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!dragAppSlug || dragAppSlug === targetSlug) {
+      setDragAppSlug(null);
+      setOverApp(null);
+      return;
+    }
+    const currentSlugs = sortedFavoriteApps.map((a) => a.slug);
+    const from = currentSlugs.indexOf(dragAppSlug);
+    let to = currentSlugs.indexOf(targetSlug) + (overApp?.pos === 'before' ? 0 : 1);
+    if (from < to) to -= 1;
+    if (from !== -1 && to !== -1 && from !== to) {
+      const newSlugs = [...currentSlugs];
+      newSlugs.splice(from, 1);
+      newSlugs.splice(to, 0, dragAppSlug);
+      setAppFavoritesOrder(newSlugs);
+    }
+    setDragAppSlug(null);
+    setOverApp(null);
+  };
+
+  const handleAppDragEnd = () => {
+    setDragAppSlug(null);
+    setOverApp(null);
+  };
+
+  // DnD state for sidebar sections
+  const [dragSectionKey, setDragSectionKey] = useState<string | null>(null);
+  const [overSection, setOverSection] = useState<{ key: string; pos: 'before' | 'after' } | null>(null);
+
+  const handleSectionDragStart = (key: string) => {
+    setDragSectionKey(key);
+  };
+
+  const handleSectionDragOver = (e: React.DragEvent, key: string) => {
+    if (!dragSectionKey || dragSectionKey === key) return;
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = 'move';
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const pos = e.clientY < rect.top + rect.height / 2 ? 'before' : 'after';
+    setOverSection((prev) => (prev && prev.key === key && prev.pos === pos ? prev : { key, pos }));
+  };
+
+  const handleSectionDrop = (e: React.DragEvent, targetKey: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!dragSectionKey || dragSectionKey === targetKey) {
+      setDragSectionKey(null);
+      setOverSection(null);
+      return;
+    }
+    const allSections = DEFAULT_SIDEBAR_SECTION_ORDER;
+    const currentOrder = [
+      ...sidebarSectionOrder.filter((k) => allSections.includes(k)),
+      ...allSections.filter((k) => !sidebarSectionOrder.includes(k)),
+    ];
+    const from = currentOrder.indexOf(dragSectionKey);
+    let to = currentOrder.indexOf(targetKey) + (overSection?.pos === 'before' ? 0 : 1);
+    if (from < to) to -= 1;
+    if (from !== -1 && to !== -1 && from !== to) {
+      const newOrder = [...currentOrder];
+      newOrder.splice(from, 1);
+      newOrder.splice(to, 0, dragSectionKey);
+      setSidebarSectionOrder(newOrder);
+    }
+    setDragSectionKey(null);
+    setOverSection(null);
+  };
+
+  const handleSectionDragEnd = () => {
+    setDragSectionKey(null);
+    setOverSection(null);
+  };
+
+  const sectionHeaderDndProps = (key: string) => ({
+    draggable: true,
+    isDragging: dragSectionKey === key,
+    isOverBefore: overSection?.key === key && overSection.pos === 'before',
+    isOverAfter: overSection?.key === key && overSection.pos === 'after',
+    onDragStart: () => handleSectionDragStart(key),
+    onDragOver: (e: React.DragEvent) => handleSectionDragOver(e, key),
+    onDrop: (e: React.DragEvent) => handleSectionDrop(e, key),
+    onDragEnd: handleSectionDragEnd,
   });
+
+  const orderedSectionKeys = useMemo(() => {
+    const all = DEFAULT_SIDEBAR_SECTION_ORDER;
+    return [
+      ...sidebarSectionOrder.filter((k) => all.includes(k)),
+      ...all.filter((k) => !sidebarSectionOrder.includes(k)),
+    ];
+  }, [sidebarSectionOrder]);
+
   const { data: crmChats = [] } = useCrmChats(workspaceId);
   const closeCrmChat = useCloseCrmChat(workspaceId);
   const openChatPanel = useChatSidePanelStore((s) => s.open);
   const activePanelChannelId = useChatSidePanelStore((s) => (s.isOpen ? s.channelId : null));
-
-  const toggleSection = (key: keyof typeof expandedSections) => {
-    setExpandedSections((prev) => ({ ...prev, [key]: !prev[key] }));
-  };
 
   return (
     <div className="group/sidebar flex h-full w-full flex-col text-[var(--sh-ink-2)]">
@@ -461,544 +700,603 @@ export default function HomeSidebar({
         {/* Divider */}
         <div className="mx-2 border-t border-[var(--sh-hair)]" />
 
-        {/* Unread section — chats & channels with unread messages, most-unread
-            first. Hidden entirely while nothing is unread so the sidebar only
-            surfaces this when it needs attention. */}
-        {unreadEntries.length > 0 && (
-          <>
-            <div className="py-1">
-              <SectionHeader
-                title="Unread"
-                expanded={expandedSections.unread}
-                onToggle={() => toggleSection('unread')}
-              />
-              {expandedSections.unread && (
-                <div className="px-2 pb-1">
-                  {unreadEntries.map((entry) =>
-                    entry.kind === 'channel' ? (
-                      <button
-                        key={`channel-${entry.channel.id}`}
-                        onClick={() => onSelectChannel(entry.channel.id)}
-                        className="mb-[1px] flex w-full items-center rounded-[10px] px-[10px] py-[6px] text-left text-[13px] text-[var(--sh-ink-2)] transition hover:bg-[var(--sh-hair-3)] hover:text-[var(--sh-ink)]"
-                      >
-                        <span className="mr-[6px] text-[var(--sh-ink-4)]">#</span>
-                        <span className="flex-1 truncate">{entry.channel.name}</span>
-                        <UnreadBadge count={entry.count} />
-                      </button>
-                    ) : (
-                      <DmListItem
-                        key={`dm-${entry.dm.id}`}
-                        dm={entry.dm}
-                        active={
-                          activeChannelId === entry.dm.id &&
-                          activeChannelKind === 'dm' &&
-                          homeView === 'chat'
-                        }
-                        unreadCount={entry.count}
-                        onClick={() => onSelectDm(entry.dm.id)}
-                      />
-                    ),
-                  )}
+        {/* Dynamic reorderable sections */}
+        {orderedSectionKeys.map((secKey) => {
+          switch (secKey) {
+            case 'unread':
+              if (unreadEntries.length === 0) return null;
+              return (
+                <div key="unread">
+                  <div className="py-1">
+                    <SectionHeader
+                      title="Unread"
+                      expanded={isSectionExpanded('unread')}
+                      onToggle={() => toggleSection('unread')}
+                      {...sectionHeaderDndProps('unread')}
+                    />
+                    {isSectionExpanded('unread') && (
+                      <div className="px-2 pb-1">
+                        {unreadEntries.map((entry) =>
+                          entry.kind === 'channel' ? (
+                            <button
+                              key={`channel-${entry.channel.id}`}
+                              onClick={() => onSelectChannel(entry.channel.id)}
+                              className="mb-[1px] flex w-full items-center rounded-[10px] px-[10px] py-[6px] text-left text-[13px] text-[var(--sh-ink-2)] transition hover:bg-[var(--sh-hair-3)] hover:text-[var(--sh-ink)]"
+                            >
+                              <span className="mr-[6px] text-[var(--sh-ink-4)]">#</span>
+                              <span className="flex-1 truncate">{entry.channel.name}</span>
+                              <UnreadBadge count={entry.count} />
+                            </button>
+                          ) : (
+                            <DmListItem
+                              key={`dm-${entry.dm.id}`}
+                              dm={entry.dm}
+                              active={
+                                activeChannelId === entry.dm.id &&
+                                activeChannelKind === 'dm' &&
+                                homeView === 'chat'
+                              }
+                              unreadCount={entry.count}
+                              onClick={() => onSelectDm(entry.dm.id)}
+                            />
+                          ),
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  <div className="mx-2 border-t border-[var(--sh-hair)]" />
                 </div>
-              )}
-            </div>
+              );
 
-            {/* Divider */}
-            <div className="mx-2 border-t border-[var(--sh-hair)]" />
-          </>
-        )}
-
-        {/* Apps section — pinned apps. Only shown when the user has app access;
-            apps are pinned from the Apps module (the rail's grid icon). */}
-        {availableApps.length > 0 && (
-          <>
-            <div className="py-1" data-tip-anchor="home.apps">
-              <SectionHeader
-                title="Apps"
-                expanded={expandedSections.apps}
-                onToggle={() => toggleSection('apps')}
-                action={
-                  <button
-                    onClick={onOpenApps}
-                    className="text-[var(--sh-ink-4)] transition hover:text-[var(--sh-ink)]"
-                    title="Browse all apps"
-                    aria-label="Browse all apps"
-                  >
-                    <svg className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24">
-                      <rect x="3" y="3" width="7" height="7" rx="1" />
-                      <rect x="14" y="3" width="7" height="7" rx="1" />
-                      <rect x="3" y="14" width="7" height="7" rx="1" />
-                      <rect x="14" y="14" width="7" height="7" rx="1" />
-                    </svg>
-                  </button>
-                }
-              />
-              {expandedSections.apps && (
-                <div className="px-2 pb-1">
-                  {favoriteApps.length === 0 ? (
-                    <button
-                      onClick={onOpenApps}
-                      className="w-full px-2 py-2 text-center text-[11.5px] text-[var(--sh-ink-4)] transition hover:text-[var(--sh-ink-3)]"
-                    >
-                      Star apps to pin them here
-                    </button>
-                  ) : (
-                    favoriteApps.map((app) => {
-                      const active = !!app.view && homeView === app.view;
-                      return (
+            case 'apps':
+              if (availableApps.length === 0) return null;
+              return (
+                <div key="apps">
+                  <div className="py-1" data-tip-anchor="home.apps">
+                    <SectionHeader
+                      title="Apps"
+                      expanded={isSectionExpanded('apps')}
+                      onToggle={() => toggleSection('apps')}
+                      {...sectionHeaderDndProps('apps')}
+                      action={
                         <button
-                          key={app.slug}
-                          onClick={(e) => {
-                            if (app.view && wantsNewTab(e)) {
-                              e.preventDefault();
-                              useTabsStore.getState().openInNewTab(buildAppSnapshot(app.view, 'home'), { background: e.button === 1 });
+                          onClick={onOpenApps}
+                          className="text-[var(--sh-ink-4)] transition hover:text-[var(--sh-ink)]"
+                          title="Browse all apps"
+                          aria-label="Browse all apps"
+                        >
+                          <svg className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24">
+                            <rect x="3" y="3" width="7" height="7" rx="1" />
+                            <rect x="14" y="3" width="7" height="7" rx="1" />
+                            <rect x="3" y="14" width="7" height="7" rx="1" />
+                            <rect x="14" y="14" width="7" height="7" rx="1" />
+                          </svg>
+                        </button>
+                      }
+                    />
+                    {isSectionExpanded('apps') && (
+                      <div className="px-2 pb-1">
+                        {favoriteApps.length === 0 ? (
+                          <button
+                            onClick={onOpenApps}
+                            className="w-full px-2 py-2 text-center text-[11.5px] text-[var(--sh-ink-4)] transition hover:text-[var(--sh-ink-3)]"
+                          >
+                            Star apps to pin them here
+                          </button>
+                        ) : (
+                          sortedFavoriteApps.map((app) => {
+                            const active = !!app.view && homeView === app.view;
+                            const isDragging = dragAppSlug === app.slug;
+                            const isOverBefore = overApp?.slug === app.slug && overApp.pos === 'before';
+                            const isOverAfter = overApp?.slug === app.slug && overApp.pos === 'after';
+
+                            return (
+                              <div
+                                key={app.slug}
+                                draggable
+                                onDragStart={() => handleAppDragStart(app.slug)}
+                                onDragOver={(e) => handleAppDragOver(e, app.slug)}
+                                onDrop={(e) => handleAppDrop(e, app.slug)}
+                                onDragEnd={handleAppDragEnd}
+                                className={`group mb-[1px] flex w-full items-center rounded-[10px] transition cursor-grab active:cursor-grabbing ${
+                                  active
+                                    ? 'bg-[var(--surface)] text-[var(--sh-ink)] font-medium border border-[var(--sh-hair)]'
+                                    : 'text-[var(--sh-ink-2)] hover:bg-[var(--sh-hair-3)] hover:text-[var(--sh-ink)]'
+                                }`}
+                                style={{
+                                  opacity: isDragging ? 0.35 : 1,
+                                  boxShadow: isOverBefore
+                                    ? 'inset 0 2px 0 var(--sh-ink)'
+                                    : isOverAfter
+                                      ? 'inset 0 -2px 0 var(--sh-ink)'
+                                      : active
+                                        ? 'var(--sh-shadow-sm)'
+                                        : undefined,
+                                }}
+                              >
+                                <button
+                                  onClick={(e) => {
+                                    if (app.view && wantsNewTab(e)) {
+                                      e.preventDefault();
+                                      useTabsStore.getState().openInNewTab(buildAppSnapshot(app.view, 'home'), { background: e.button === 1 });
+                                      return;
+                                    }
+                                    onLaunchApp(app);
+                                  }}
+                                  onAuxClick={(e) => { if (e.button === 1 && app.view) { e.preventDefault(); useTabsStore.getState().openInNewTab(buildAppSnapshot(app.view, 'home'), { background: true }); } }}
+                                  className="flex min-w-0 flex-1 items-center gap-[9px] px-[10px] py-[6px] text-left text-[13px]"
+                                >
+                                  <AppIcon
+                                    paths={app.paths}
+                                    className={`h-[14px] w-[14px] shrink-0 ${active ? 'text-[var(--sh-ink)]' : 'text-[var(--sh-ink-3)]'}`}
+                                  />
+                                  <span className="flex-1 truncate">{app.name}</span>
+                                  {app.slug === 'squadcrm-teamchat' && <TeamChatAppBadge source="crm" />}
+                                  {app.slug === 'squadhire-teamchat' && <TeamChatAppBadge source="shcrm" />}
+                                  {app.slug === 'leads' && cardsAttention.total > 0 && (
+                                    <span
+                                      title={cardsAttention.parts.join(' · ')}
+                                      className="shrink-0 inline-flex min-w-[16px] items-center justify-center rounded-full px-1 text-[9.5px] font-bold leading-4 text-white"
+                                      style={{ background: 'var(--color-sh-warning)' }}
+                                    >
+                                      {cardsAttention.total > 99 ? '99+' : cardsAttention.total}
+                                    </span>
+                                  )}
+                                  {app.external && (
+                                    <svg className="h-3 w-3 shrink-0 text-[var(--sh-ink-4)]" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
+                                    </svg>
+                                  )}
+                                </button>
+                                <span
+                                  className="opacity-0 group-hover:opacity-60 hover:opacity-100 transition-opacity mr-2 text-[var(--sh-ink-4)] cursor-grab shrink-0"
+                                  title="Drag to reorder"
+                                >
+                                  <DragGripIcon className="h-3 w-3" />
+                                </span>
+                              </div>
+                            );
+                          })
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  <div className="mx-2 border-t border-[var(--sh-hair)]" />
+                </div>
+              );
+
+            case 'favorites':
+              return (
+                <div key="favorites">
+                  <div className="py-1">
+                    <SectionHeader
+                      title="Favorites"
+                      expanded={isSectionExpanded('favorites')}
+                      onToggle={() => toggleSection('favorites')}
+                      {...sectionHeaderDndProps('favorites')}
+                    />
+                    {isSectionExpanded('favorites') && (
+                      <div className="px-2 pb-1">
+                        {favoritesLoading && (
+                          <p className="px-2 py-[5px] text-[11.5px] text-[var(--sh-ink-4)]">Loading...</p>
+                        )}
+                        {!favoritesLoading && (!sortedFavorites || sortedFavorites.length === 0) && (
+                          <p className="px-2 py-2 text-center text-[11.5px] text-[var(--sh-ink-4)]">
+                            Star items to pin them here
+                          </p>
+                        )}
+                        {sortedFavorites?.map((fav) => {
+                          const favSnapshot = () => {
+                            if (fav.item_type === 'channel') return buildChatSnapshot(fav.item_id, 'channel');
+                            if (fav.item_type === 'list') return buildListSnapshot(fav.space_id || '', fav.item_id);
+                            if (fav.item_type === 'space') return buildSpaceSnapshot(fav.item_id);
+                            if (fav.item_type === 'folder') return buildFolderSnapshot(fav.space_id || '', fav.item_id);
+                            return null;
+                          };
+                          const openFav = (e?: React.MouseEvent) => {
+                            if (e && wantsNewTab(e)) {
+                              const snap = favSnapshot();
+                              if (snap) {
+                                e.preventDefault();
+                                useTabsStore.getState().openInNewTab(snap, { background: e.button === 1 });
+                                return;
+                              }
+                            }
+                            if (fav.item_type === 'channel') {
+                              onSelectChannel(fav.item_id);
                               return;
                             }
-                            onLaunchApp(app);
-                          }}
-                          onAuxClick={(e) => { if (e.button === 1 && app.view) { e.preventDefault(); useTabsStore.getState().openInNewTab(buildAppSnapshot(app.view, 'home'), { background: true }); } }}
-                          className={`mb-[1px] flex w-full items-center gap-[9px] rounded-[10px] px-[10px] py-[6px] text-left text-[13px] transition ${
-                            active
-                              ? 'bg-[var(--surface)] text-[var(--sh-ink)] font-medium border border-[var(--sh-hair)]'
-                              : 'text-[var(--sh-ink-2)] hover:bg-[var(--sh-hair-3)] hover:text-[var(--sh-ink)]'
-                          }`}
-                          style={active ? { boxShadow: 'var(--sh-shadow-sm)' } : undefined}
-                        >
-                          <AppIcon
-                            paths={app.paths}
-                            className={`h-[14px] w-[14px] shrink-0 ${active ? 'text-[var(--sh-ink)]' : 'text-[var(--sh-ink-3)]'}`}
-                          />
-                          <span className="flex-1 truncate">{app.name}</span>
-                          {app.slug === 'squadcrm-teamchat' && <TeamChatAppBadge source="crm" />}
-                          {app.slug === 'squadhire-teamchat' && <TeamChatAppBadge source="shcrm" />}
-                          {app.slug === 'leads' && cardsAttention.total > 0 && (
-                            <span
-                              title={cardsAttention.parts.join(' · ')}
-                              className="shrink-0 inline-flex min-w-[16px] items-center justify-center rounded-full px-1 text-[9.5px] font-bold leading-4 text-white"
-                              style={{ background: 'var(--color-sh-warning)' }}
+                            if (fav.item_type === 'list') {
+                              if (fav.space_id) setActiveSpace(fav.space_id);
+                              setActiveList(fav.item_id);
+                            } else if (fav.item_type === 'space') {
+                              setActiveSpace(fav.item_id);
+                              setActiveSpacePage(fav.item_id);
+                            } else if (fav.item_type === 'folder') {
+                              if (fav.space_id) setActiveSpace(fav.space_id);
+                              setActiveFolder(fav.item_id);
+                            }
+                            onChangeView('tasks');
+                          };
+                          return (
+                            <div
+                              key={fav.id}
+                              draggable
+                              onDragStart={() => handleFavDragStart(fav.id)}
+                              onDragOver={(e) => handleFavDragOver(e, fav.id)}
+                              onDrop={(e) => handleFavDrop(e, fav.id)}
+                              onDragEnd={handleFavDragEnd}
+                              className="group mb-[1px] flex items-center rounded-[10px] transition cursor-grab active:cursor-grabbing"
+                              style={{
+                                opacity: dragFavId === fav.id ? 0.35 : 1,
+                                boxShadow:
+                                  overFav?.id === fav.id
+                                    ? overFav.pos === 'before'
+                                      ? 'inset 0 2px 0 var(--sh-ink)'
+                                      : 'inset 0 -2px 0 var(--sh-ink)'
+                                    : undefined,
+                              }}
                             >
-                              {cardsAttention.total > 99 ? '99+' : cardsAttention.total}
-                            </span>
-                          )}
-                          {app.external && (
-                            <svg className="h-3 w-3 shrink-0 text-[var(--sh-ink-4)]" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
+                              <button
+                                onClick={openFav}
+                                onAuxClick={(e) => { if (e.button === 1) openFav(e); }}
+                                className="flex min-w-0 flex-1 items-center gap-[9px] rounded-[10px] px-[10px] py-[6px] text-left text-[13px] text-[var(--sh-ink-2)] transition hover:bg-[var(--sh-hair-3)] hover:text-[var(--sh-ink)]"
+                              >
+                                <FavoriteIcon type={fav.item_type} />
+                                <span className="truncate">{fav.item_name}</span>
+                              </button>
+                              <span
+                                className="opacity-0 group-hover:opacity-60 hover:opacity-100 transition-opacity mr-1 text-[var(--sh-ink-4)] cursor-grab shrink-0"
+                                title="Drag to reorder"
+                              >
+                                <DragGripIcon className="h-3 w-3" />
+                              </span>
+                              <button
+                                onClick={(e) => { e.stopPropagation(); removeFavorite.mutate(fav.id); }}
+                                className="mr-1 hidden rounded p-0.5 text-[var(--sh-ink-4)] transition hover:text-[var(--sh-ink)] group-hover:block"
+                                title="Remove"
+                              >
+                                <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                              </button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                  <div className="mx-2 border-t border-[var(--sh-hair)]" />
+                </div>
+              );
+
+            case 'sharedWithMe':
+              if (isPartner || isClient || !sharedItems || sharedItems.length === 0) return null;
+              return (
+                <div key="sharedWithMe">
+                  <div className="pb-1">
+                    <SectionHeader
+                      title="Shared with me"
+                      expanded={isSectionExpanded('sharedWithMe')}
+                      onToggle={() => toggleSection('sharedWithMe')}
+                      {...sectionHeaderDndProps('sharedWithMe')}
+                    />
+                    {isSectionExpanded('sharedWithMe') && (
+                      <div className="px-2 pb-1">
+                        {sharedLoading && (
+                          <p className="px-2 py-[5px] text-[11.5px] text-[var(--sh-ink-4)]">Loading...</p>
+                        )}
+                        {sharedItems.map((item) => (
+                          <button
+                            key={item.id}
+                            onClick={(e) => {
+                              if (item.resource_type !== 'list') return;
+                              if (wantsNewTab(e)) {
+                                e.preventDefault();
+                                useTabsStore.getState().openInNewTab(buildListSnapshot(item.space_id, item.resource_id), { background: e.button === 1 });
+                                return;
+                              }
+                              setActiveSpace(item.space_id);
+                              setActiveList(item.resource_id);
+                              onChangeView('tasks');
+                            }}
+                            onAuxClick={(e) => { if (e.button === 1 && item.resource_type === 'list') { e.preventDefault(); useTabsStore.getState().openInNewTab(buildListSnapshot(item.space_id, item.resource_id), { background: true }); } }}
+                            className="flex w-full items-center gap-[9px] rounded-[10px] px-[10px] py-[6px] text-left text-[13px] text-[var(--sh-ink-2)] transition hover:bg-[var(--sh-hair-3)] hover:text-[var(--sh-ink)]"
+                          >
+                            <FavoriteIcon type={item.resource_type} />
+                            <span className="truncate">{item.resource_name}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  <div className="mx-2 border-t border-[var(--sh-hair)]" />
+                </div>
+              );
+
+            case 'workspaces':
+              if (isPartner || isClient) return null;
+              return (
+                <div key="workspaces">
+                  <div className="pb-1">
+                    <SectionHeader
+                      title="Workspaces"
+                      expanded={isSectionExpanded('workspaces')}
+                      onToggle={() => toggleSection('workspaces')}
+                      {...sectionHeaderDndProps('workspaces')}
+                      action={
+                        canCreateFolders && workspaces?.length ? (
+                          <button
+                            onClick={() => setShowCreateWorkspace(true)}
+                            className="text-[var(--sh-ink-4)] transition hover:text-[var(--sh-ink)]"
+                            title="Create workspace"
+                          >
+                            <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M12 4v16m8-8H4" />
                             </svg>
-                          )}
-                        </button>
-                      );
-                    })
-                  )}
+                          </button>
+                        ) : undefined
+                      }
+                    />
+                    {isSectionExpanded('workspaces') && (
+                      <div className="pb-1">
+                        <WorkspaceTree workspaceId={workspaceId} />
+                      </div>
+                    )}
+                    {showCreateWorkspace && workspaces?.[0] && (
+                      <CreateFolderListModal
+                        type="client"
+                        spaceId={workspaces[0].id}
+                        onClose={() => setShowCreateWorkspace(false)}
+                      />
+                    )}
+                  </div>
+                  <div className="mx-2 border-t border-[var(--sh-hair)]" />
                 </div>
-              )}
-            </div>
+              );
 
-            {/* Divider */}
-            <div className="mx-2 border-t border-[var(--sh-hair)]" />
-          </>
-        )}
-
-        {/* Favorites section */}
-        <div className="py-1">
-          <SectionHeader
-            title="Favorites"
-            expanded={expandedSections.favorites}
-            onToggle={() => toggleSection('favorites')}
-          />
-          {expandedSections.favorites && (
-            <div className="px-2 pb-1">
-              {favoritesLoading && (
-                <p className="px-2 py-[5px] text-[11.5px] text-[var(--sh-ink-4)]">Loading...</p>
-              )}
-              {!favoritesLoading && (!favorites || favorites.length === 0) && (
-                <p className="px-2 py-2 text-center text-[11.5px] text-[var(--sh-ink-4)]">
-                  Star items to pin them here
-                </p>
-              )}
-              {favorites?.map((fav) => {
-                // ⌘/Ctrl-click or middle-click opens the favorite in a new tab.
-                const favSnapshot = () => {
-                  if (fav.item_type === 'channel') return buildChatSnapshot(fav.item_id, 'channel');
-                  if (fav.item_type === 'list') return buildListSnapshot(fav.space_id || '', fav.item_id);
-                  if (fav.item_type === 'space') return buildSpaceSnapshot(fav.item_id);
-                  if (fav.item_type === 'folder') return buildFolderSnapshot(fav.space_id || '', fav.item_id);
-                  return null;
-                };
-                const openFav = (e?: React.MouseEvent) => {
-                  if (e && wantsNewTab(e)) {
-                    const snap = favSnapshot();
-                    if (snap) {
-                      e.preventDefault();
-                      useTabsStore.getState().openInNewTab(snap, { background: e.button === 1 });
-                      return;
-                    }
-                  }
-                  if (fav.item_type === 'channel') {
-                    onSelectChannel(fav.item_id);
-                    return;
-                  }
-                  if (fav.item_type === 'list') {
-                    if (fav.space_id) setActiveSpace(fav.space_id);
-                    setActiveList(fav.item_id);
-                  } else if (fav.item_type === 'space') {
-                    setActiveSpace(fav.item_id);
-                    setActiveSpacePage(fav.item_id);
-                  } else if (fav.item_type === 'folder') {
-                    if (fav.space_id) setActiveSpace(fav.space_id);
-                    setActiveFolder(fav.item_id);
-                  }
-                  onChangeView('tasks');
-                };
-                return (
-                <div key={fav.id} className="group flex items-center">
-                  <button
-                    onClick={openFav}
-                    onAuxClick={(e) => { if (e.button === 1) openFav(e); }}
-                    className="flex flex-1 items-center gap-[9px] rounded-[10px] px-[10px] py-[6px] text-left text-[13px] text-[var(--sh-ink-2)] transition hover:bg-[var(--sh-hair-3)] hover:text-[var(--sh-ink)]"
-                  >
-                    <FavoriteIcon type={fav.item_type} />
-                    <span className="truncate">{fav.item_name}</span>
-                  </button>
-                  <button
-                    onClick={(e) => { e.stopPropagation(); removeFavorite.mutate(fav.id); }}
-                    className="mr-1 hidden rounded p-0.5 text-[var(--sh-ink-4)] transition hover:text-[var(--sh-ink)] group-hover:block"
-                    title="Remove"
-                  >
-                    <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </button>
+            case 'spaces':
+              return (
+                <div key="spaces">
+                  <div className="pb-1">
+                    <SectionHeader
+                      title="Areas"
+                      expanded={isSectionExpanded('spaces')}
+                      onToggle={() => toggleSection('spaces')}
+                      {...sectionHeaderDndProps('spaces')}
+                      action={
+                        canCreateSpaces ? (
+                          <button
+                            onClick={() => setShowCreateSpace(true)}
+                            className="text-[var(--sh-ink-4)] transition hover:text-[var(--sh-ink)]"
+                            title="Create area"
+                          >
+                            <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M12 4v16m8-8H4" />
+                            </svg>
+                          </button>
+                        ) : undefined
+                      }
+                    />
+                    {isSectionExpanded('spaces') && (
+                      <div className="pb-1">
+                        <SpaceTree workspaceId={workspaceId} onRequestCreate={() => setShowCreateSpace(true)} />
+                      </div>
+                    )}
+                    {showCreateSpace && (
+                      <CreateSpaceModal workspaceId={workspaceId} onClose={() => setShowCreateSpace(false)} />
+                    )}
+                  </div>
+                  <div className="mx-2 border-t border-[var(--sh-hair)]" />
                 </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
+              );
 
-        {/* Shared with me section — only show when there are shared items.
-            Hidden for partner-tier AND client users: their shared client folders /
-            spaces / lists are surfaced as roots under AREAS (SpaceTree →
-            PartnerSharedRoots). */}
-        {!isPartner && !isClient && sharedItems && sharedItems.length > 0 && (
-          <>
-            {/* Divider */}
-            <div className="mx-2 border-t border-[var(--sh-hair)]" />
-
-            <div className="pb-1">
-              <SectionHeader
-                title="Shared with me"
-                expanded={expandedSections.sharedWithMe}
-                onToggle={() => toggleSection('sharedWithMe')}
-              />
-              {expandedSections.sharedWithMe && (
-                <div className="px-2 pb-1">
-                  {sharedLoading && (
-                    <p className="px-2 py-[5px] text-[11.5px] text-[var(--sh-ink-4)]">Loading...</p>
-                  )}
-                  {sharedItems.map((item) => (
-                    <button
-                      key={item.id}
-                      onClick={(e) => {
-                        if (item.resource_type !== 'list') return;
-                        if (wantsNewTab(e)) {
-                          e.preventDefault();
-                          useTabsStore.getState().openInNewTab(buildListSnapshot(item.space_id, item.resource_id), { background: e.button === 1 });
-                          return;
-                        }
-                        setActiveSpace(item.space_id);
-                        setActiveList(item.resource_id);
-                        // Explicitly switch to the tasks view (like Favorites
-                        // does). Relying on MainLayout's activeListId-change
-                        // effect silently fails when the clicked list is
-                        // already the active one, so nothing opens until a
-                        // page refresh re-runs that effect on mount.
-                        onChangeView('tasks');
-                      }}
-                      onAuxClick={(e) => { if (e.button === 1 && item.resource_type === 'list') { e.preventDefault(); useTabsStore.getState().openInNewTab(buildListSnapshot(item.space_id, item.resource_id), { background: true }); } }}
-                      className="flex w-full items-center gap-[9px] rounded-[10px] px-[10px] py-[6px] text-left text-[13px] text-[var(--sh-ink-2)] transition hover:bg-[var(--sh-hair-3)] hover:text-[var(--sh-ink)]"
-                    >
-                      <FavoriteIcon type={item.resource_type} />
-                      <span className="truncate">{item.resource_name}</span>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          </>
-        )}
-
-        {/* Divider */}
-        <div className="mx-2 border-t border-[var(--sh-hair)]" />
-
-        {/* Workspaces section — shown for internal users only. Workspace roots
-            (client folders and their template spaces) render here, above Areas. */}
-        {!isPartner && !isClient && (
-          <>
-            <div className="pb-1">
-              <SectionHeader
-                title="Workspaces"
-                expanded={expandedSections.workspaces}
-                onToggle={() => toggleSection('workspaces')}
-                action={
-                  canCreateFolders && workspaces?.length ? (
-                    <button
-                      onClick={() => setShowCreateWorkspace(true)}
-                      className="text-[var(--sh-ink-4)] transition hover:text-[var(--sh-ink)]"
-                      title="Create workspace"
-                    >
-                      <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M12 4v16m8-8H4" />
-                      </svg>
-                    </button>
-                  ) : undefined
-                }
-              />
-              {expandedSections.workspaces && (
-                <div className="pb-1">
-                  <WorkspaceTree workspaceId={workspaceId} />
-                </div>
-              )}
-              {showCreateWorkspace && workspaces?.[0] && (
-                <CreateFolderListModal
-                  type="client"
-                  spaceId={workspaces[0].id}
-                  onClose={() => setShowCreateWorkspace(false)}
-                />
-              )}
-            </div>
-
-            {/* Divider */}
-            <div className="mx-2 border-t border-[var(--sh-hair)]" />
-          </>
-        )}
-
-        {/* Areas section — shown for all user types. Clients & partners have no
-            owned areas, so SpaceTree surfaces their shared roots here instead of
-            in a separate "Shared with me" section. */}
-        {(
-          <>
-            <div className="pb-1">
-              <SectionHeader
-                title="Areas"
-                expanded={expandedSections.spaces}
-                onToggle={() => toggleSection('spaces')}
-                action={
-                  canCreateSpaces ? (
-                    <button
-                      onClick={() => setShowCreateSpace(true)}
-                      className="text-[var(--sh-ink-4)] transition hover:text-[var(--sh-ink)]"
-                      title="Create area"
-                    >
-                      <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M12 4v16m8-8H4" />
-                      </svg>
-                    </button>
-                  ) : undefined
-                }
-              />
-              {expandedSections.spaces && (
-                <div className="pb-1">
-                  <SpaceTree workspaceId={workspaceId} onRequestCreate={() => setShowCreateSpace(true)} />
-                </div>
-              )}
-              {showCreateSpace && (
-                <CreateSpaceModal workspaceId={workspaceId} onClose={() => setShowCreateSpace(false)} />
-              )}
-            </div>
-
-            {/* Divider */}
-            <div className="mx-2 border-t border-[var(--sh-hair)]" />
-          </>
-        )}
-
-        {/* Channels section */}
-        <div className="pb-1">
-          <SectionHeader
-            title="Channels"
-            expanded={expandedSections.channels}
-            onToggle={() => toggleSection('channels')}
-            action={
-              canCreateChannels ? (
-                <button
-                  onClick={onCreateChannel}
-                  className="text-[var(--sh-ink-4)] transition hover:text-[var(--sh-ink)]"
-                  title="Create channel"
-                >
-                  <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M12 4v16m8-8H4" />
-                  </svg>
-                </button>
-              ) : undefined
-            }
-          />
-          {expandedSections.channels && (
-            <div className="px-2 pb-1">
-              {visibleChannels.length === 0 ? (
-                <p className="px-2 py-2 text-center text-[11.5px] text-[var(--sh-ink-4)]">No channels yet</p>
-              ) : (
-                visibleChannels.map((ch) => {
-                  const isActive = activeChannelId === ch.id && homeView === 'chat';
-                  const unreadCount = unreadSummary?.channels[ch.id] ?? 0;
-                  return (
-                    <button
-                      key={ch.id}
-                      onClick={() => onSelectChannel(ch.id)}
-                      className={`mb-[1px] flex w-full items-center rounded-[10px] px-[10px] py-[6px] text-left text-[13px] transition ${
-                        isActive
-                          ? 'bg-[var(--surface)] text-[var(--sh-ink)] font-medium border border-[var(--sh-hair)]'
-                          : 'text-[var(--sh-ink-2)] hover:bg-[var(--sh-hair-3)] hover:text-[var(--sh-ink)]'
-                      }`}
-                      style={isActive ? { boxShadow: 'var(--sh-shadow-sm)' } : undefined}
-                    >
-                      <span className={`mr-[6px] ${isActive ? 'text-[var(--sh-ink-3)]' : 'text-[var(--sh-ink-4)]'}`}>#</span>
-                      <span className="flex-1 truncate">{ch.name}</span>
-                      <UnreadBadge count={unreadCount} />
-                    </button>
-                  );
-                })
-              )}
-              {/* Add channels */}
-              <button
-                onClick={onCreateChannel}
-                className="flex w-full items-center gap-[9px] rounded-[10px] px-[10px] py-[6px] text-left text-[13px] text-[var(--sh-ink-4)] transition hover:bg-[var(--sh-hair-3)] hover:text-[var(--sh-ink)]"
-              >
-                <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                </svg>
-                Add channels
-              </button>
-            </div>
-          )}
-        </div>
-
-        {/* Divider */}
-        <div className="mx-2 border-t border-[var(--sh-hair)]" />
-
-        {/* DMs section */}
-        <div className="pb-1">
-          <SectionHeader
-            title="Direct Messages"
-            expanded={expandedSections.dms}
-            onToggle={() => toggleSection('dms')}
-            action={
-              canSendDms ? (
-                <button
-                  onClick={() => setShowNewDm(true)}
-                  className="text-[var(--sh-ink-4)] transition hover:text-[var(--sh-ink)]"
-                  title="New direct message"
-                >
-                  <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M12 4v16m8-8H4" />
-                  </svg>
-                </button>
-              ) : undefined
-            }
-          />
-          {expandedSections.dms && (
-            <div className="px-2 pb-1">
-              {dms.length === 0 ? (
-                <p className="px-2 py-2 text-center text-[11.5px] text-[var(--sh-ink-4)]">No direct messages yet</p>
-              ) : (
-                dms.map((dm) => (
-                  <DmListItem
-                    key={dm.id}
-                    dm={dm}
-                    active={activeChannelId === dm.id && activeChannelKind === 'dm' && homeView === 'chat'}
-                    unreadCount={unreadSummary?.dms[dm.id] ?? 0}
-                    onClick={() => onSelectDm(dm.id)}
-                  />
-                ))
-              )}
-              {canSendDms && (
-                <button
-                  onClick={() => setShowNewDm(true)}
-                  className="flex w-full items-center gap-[9px] rounded-[10px] px-[10px] py-[6px] text-left text-[13px] text-[var(--sh-ink-4)] transition hover:bg-[var(--sh-hair-3)] hover:text-[var(--sh-ink)]"
-                >
-                  <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                  </svg>
-                  New direct message
-                </button>
-              )}
-            </div>
-          )}
-        </div>
-
-        {showNewDm && (
-          <NewDmModal workspaceId={workspaceId} onClose={() => setShowNewDm(false)} />
-        )}
-
-        {/* CRM Chats — open team discussions linked to CRM deals / contacts / leads */}
-        <div className="mx-2 border-t border-[var(--sh-hair)]" />
-        <div className="pb-1">
-          <SectionHeader
-            title="CRM Chats"
-            expanded={expandedSections.crmChats}
-            onToggle={() => toggleSection('crmChats')}
-          />
-          {expandedSections.crmChats && (
-            <div className="px-2 pb-1">
-              {crmChats.length === 0 ? (
-                <p className="px-2 py-2 text-[11.5px] leading-snug text-[var(--sh-ink-4)]">
-                  No open CRM chats. Open a deal or contact in CRM and start a team chat.
-                </p>
-              ) : (
-                crmChats.map((ch) => {
-                  const isActive = activePanelChannelId === ch.channel_id;
-                  return (
-                    <div
-                      key={ch.channel_id}
-                      className={`mb-[1px] group flex w-full items-center rounded-[6px] transition ${
-                        isActive
-                          ? 'bg-[var(--surface)] text-[var(--sh-ink)] font-medium border border-[var(--sh-hair)]'
-                          : 'text-[var(--sh-ink-2)] hover:bg-[var(--sh-hair-3)] hover:text-[var(--sh-ink)]'
-                      }`}
-                      style={isActive ? { boxShadow: 'var(--sh-shadow-sm)' } : undefined}
-                    >
-                      <button
-                        type="button"
-                        onClick={() =>
-                          openChatPanel({
-                            channelId: ch.channel_id,
-                            containerLabel: ch.subtitle
-                              ? `${ch.label} · ${ch.subtitle}`
-                              : ch.label,
-                            isCrmChat: true,
-                            crmEntityType: ch.entity_type,
-                            crmEntityId: ch.entity_id,
+            case 'channels':
+              return (
+                <div key="channels">
+                  <div className="pb-1">
+                    <SectionHeader
+                      title="Channels"
+                      expanded={isSectionExpanded('channels')}
+                      onToggle={() => toggleSection('channels')}
+                      {...sectionHeaderDndProps('channels')}
+                      action={
+                        canCreateChannels ? (
+                          <button
+                            onClick={onCreateChannel}
+                            className="text-[var(--sh-ink-4)] transition hover:text-[var(--sh-ink)]"
+                            title="Create channel"
+                          >
+                            <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M12 4v16m8-8H4" />
+                            </svg>
+                          </button>
+                        ) : undefined
+                      }
+                    />
+                    {isSectionExpanded('channels') && (
+                      <div className="px-2 pb-1">
+                        {visibleChannels.length === 0 ? (
+                          <p className="px-2 py-2 text-center text-[11.5px] text-[var(--sh-ink-4)]">No channels yet</p>
+                        ) : (
+                          visibleChannels.map((ch) => {
+                            const isActive = activeChannelId === ch.id && homeView === 'chat';
+                            const unreadCount = unreadSummary?.channels[ch.id] ?? 0;
+                            return (
+                              <button
+                                key={ch.id}
+                                onClick={() => onSelectChannel(ch.id)}
+                                className={`mb-[1px] flex w-full items-center rounded-[10px] px-[10px] py-[6px] text-left text-[13px] transition ${
+                                  isActive
+                                    ? 'bg-[var(--surface)] text-[var(--sh-ink)] font-medium border border-[var(--sh-hair)]'
+                                    : 'text-[var(--sh-ink-2)] hover:bg-[var(--sh-hair-3)] hover:text-[var(--sh-ink)]'
+                                }`}
+                                style={isActive ? { boxShadow: 'var(--sh-shadow-sm)' } : undefined}
+                              >
+                                <span className={`mr-[6px] ${isActive ? 'text-[var(--sh-ink-3)]' : 'text-[var(--sh-ink-4)]'}`}>#</span>
+                                <span className="flex-1 truncate">{ch.name}</span>
+                                <UnreadBadge count={unreadCount} />
+                              </button>
+                            );
                           })
-                        }
-                        className="flex min-w-0 flex-1 items-center gap-2 px-2 py-[5px] text-left text-[13px]"
-                      >
-                        <span
-                          className={`h-2 w-2 shrink-0 rounded-full ${
-                            ch.entity_type === 'crm_deal'
-                              ? 'bg-indigo-500'
-                              : ch.entity_type === 'crm_contact'
-                                ? 'bg-sky-500'
-                                : 'bg-emerald-600'
-                          }`}
-                        />
-                        <span className="truncate">{ch.label}</span>
-                      </button>
-                      <button
-                        type="button"
-                        title="Close chat"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          closeCrmChat.mutate(ch.channel_id);
-                        }}
-                        className="mr-1 grid h-[18px] w-[18px] shrink-0 place-items-center rounded text-[var(--sh-ink-4)] opacity-0 transition hover:bg-[var(--sh-hair)] hover:text-[var(--sh-ink)] group-hover:opacity-100"
-                      >
-                        ×
-                      </button>
-                    </div>
-                  );
-                })
-              )}
-            </div>
-          )}
-        </div>
+                        )}
+                        {/* Add channels */}
+                        <button
+                          onClick={onCreateChannel}
+                          className="flex w-full items-center gap-[9px] rounded-[10px] px-[10px] py-[6px] text-left text-[13px] text-[var(--sh-ink-4)] transition hover:bg-[var(--sh-hair-3)] hover:text-[var(--sh-ink)]"
+                        >
+                          <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                          </svg>
+                          Add channels
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                  <div className="mx-2 border-t border-[var(--sh-hair)]" />
+                </div>
+              );
+
+            case 'dms':
+              return (
+                <div key="dms">
+                  <div className="pb-1">
+                    <SectionHeader
+                      title="Direct Messages"
+                      expanded={isSectionExpanded('dms')}
+                      onToggle={() => toggleSection('dms')}
+                      {...sectionHeaderDndProps('dms')}
+                      action={
+                        canSendDms ? (
+                          <button
+                            onClick={() => setShowNewDm(true)}
+                            className="text-[var(--sh-ink-4)] transition hover:text-[var(--sh-ink)]"
+                            title="New direct message"
+                          >
+                            <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M12 4v16m8-8H4" />
+                            </svg>
+                          </button>
+                        ) : undefined
+                      }
+                    />
+                    {isSectionExpanded('dms') && (
+                      <div className="px-2 pb-1">
+                        {dms.length === 0 ? (
+                          <p className="px-2 py-2 text-center text-[11.5px] text-[var(--sh-ink-4)]">No direct messages yet</p>
+                        ) : (
+                          dms.map((dm) => (
+                            <DmListItem
+                              key={dm.id}
+                              dm={dm}
+                              active={activeChannelId === dm.id && activeChannelKind === 'dm' && homeView === 'chat'}
+                              unreadCount={unreadSummary?.dms[dm.id] ?? 0}
+                              onClick={() => onSelectDm(dm.id)}
+                            />
+                          ))
+                        )}
+                        {canSendDms && (
+                          <button
+                            onClick={() => setShowNewDm(true)}
+                            className="flex w-full items-center gap-[9px] rounded-[10px] px-[10px] py-[6px] text-left text-[13px] text-[var(--sh-ink-4)] transition hover:bg-[var(--sh-hair-3)] hover:text-[var(--sh-ink)]"
+                          >
+                            <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                            </svg>
+                            New direct message
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  {showNewDm && (
+                    <NewDmModal workspaceId={workspaceId} onClose={() => setShowNewDm(false)} />
+                  )}
+                  <div className="mx-2 border-t border-[var(--sh-hair)]" />
+                </div>
+              );
+
+            case 'crmChats':
+              return (
+                <div key="crmChats">
+                  <div className="pb-1">
+                    <SectionHeader
+                      title="CRM Chats"
+                      expanded={isSectionExpanded('crmChats')}
+                      onToggle={() => toggleSection('crmChats')}
+                      {...sectionHeaderDndProps('crmChats')}
+                    />
+                    {isSectionExpanded('crmChats') && (
+                      <div className="px-2 pb-1">
+                        {crmChats.length === 0 ? (
+                          <p className="px-2 py-2 text-[11.5px] leading-snug text-[var(--sh-ink-4)]">
+                            No open CRM chats. Open a deal or contact in CRM and start a team chat.
+                          </p>
+                        ) : (
+                          crmChats.map((ch) => {
+                            const isActive = activePanelChannelId === ch.channel_id;
+                            return (
+                              <div
+                                key={ch.channel_id}
+                                className={`mb-[1px] group flex w-full items-center rounded-[6px] transition ${
+                                  isActive
+                                    ? 'bg-[var(--surface)] text-[var(--sh-ink)] font-medium border border-[var(--sh-hair)]'
+                                    : 'text-[var(--sh-ink-2)] hover:bg-[var(--sh-hair-3)] hover:text-[var(--sh-ink)]'
+                                }`}
+                                style={isActive ? { boxShadow: 'var(--sh-shadow-sm)' } : undefined}
+                              >
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    openChatPanel({
+                                      channelId: ch.channel_id,
+                                      containerLabel: ch.subtitle
+                                        ? `${ch.label} · ${ch.subtitle}`
+                                        : ch.label,
+                                      isCrmChat: true,
+                                      crmEntityType: ch.entity_type,
+                                      crmEntityId: ch.entity_id,
+                                    })
+                                  }
+                                  className="flex min-w-0 flex-1 items-center gap-2 px-2 py-[5px] text-left text-[13px]"
+                                >
+                                  <span
+                                    className={`h-2 w-2 shrink-0 rounded-full ${
+                                      ch.entity_type === 'crm_deal'
+                                        ? 'bg-indigo-500'
+                                        : ch.entity_type === 'crm_contact'
+                                          ? 'bg-sky-500'
+                                          : 'bg-emerald-600'
+                                    }`}
+                                  />
+                                  <span className="truncate">{ch.label}</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  title="Close chat"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    closeCrmChat.mutate(ch.channel_id);
+                                  }}
+                                  className="mr-1 grid h-[18px] w-[18px] shrink-0 place-items-center rounded text-[var(--sh-ink-4)] opacity-0 transition hover:bg-[var(--sh-hair)] hover:text-[var(--sh-ink)] group-hover:opacity-100"
+                                >
+                                  ×
+                                </button>
+                              </div>
+                            );
+                          })
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  <div className="mx-2 border-t border-[var(--sh-hair)]" />
+                </div>
+              );
+
+            default:
+              return null;
+          }
+        })}
       </div>
 
     </div>
