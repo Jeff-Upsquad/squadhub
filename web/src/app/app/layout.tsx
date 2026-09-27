@@ -18,7 +18,8 @@ export default function AppLayout({
   useEffect(() => {
     if (!hydrated) return;
     if (!isAuthenticated) {
-      router.push('/login');
+      const destination = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+      router.replace(`/login?redirect=${encodeURIComponent(destination)}`);
     }
   }, [hydrated, isAuthenticated, router]);
 

@@ -47,7 +47,7 @@ export default function AdminSquadBots() {
         <div>
           <h1 className="font-[family-name:var(--font-display)] text-xl font-bold text-foreground">Squad Bots</h1>
           <p className="mt-1 text-sm text-foreground-muted">
-            Every AI bot in one place: turn them on or off, choose their AI, and manage their knowledge.
+            Every AI bot in one place: turn them on or off, choose their AI, and manage their knowledge docs.
           </p>
         </div>
         <button onClick={() => setShowNewBot(true)} className="rounded-lg bg-ink px-4 py-2 text-sm font-medium text-white hover:bg-ink-hover">
@@ -115,7 +115,7 @@ export default function AdminSquadBots() {
                       {bot.ai.uses_default_provider && <span className="text-foreground-dim"> (default)</span>}
                     </span>
                     <Link href={`/admin/learning?track=knowledge&bot=${bot.id}`} className="hover:text-foreground hover:underline">
-                      Knowledge: <span className="font-medium text-foreground">{bot.knowledge?.published ?? 0}</span> published
+                      Knowledge docs: <span className="font-medium text-foreground">{bot.knowledge?.published ?? 0}</span> published
                       {(bot.knowledge?.total ?? 0) > (bot.knowledge?.published ?? 0) &&
                         ` · ${(bot.knowledge?.total ?? 0) - (bot.knowledge?.published ?? 0)} draft`}
                     </Link>

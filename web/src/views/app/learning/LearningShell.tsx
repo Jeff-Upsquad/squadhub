@@ -43,7 +43,9 @@ export default function LearningShell() {
     return (
       <div className="h-full overflow-hidden bg-surface">
         <LearningItemView
+          key={activeItemId}
           itemId={activeItemId}
+          editRequest={learningTarget?.itemId === activeItemId && learningTarget.edit ? learningTarget.nonce : undefined}
           initialLessonId={activeLessonId}
           initialSectionAnchor={sectionAnchor}
           onBack={back}

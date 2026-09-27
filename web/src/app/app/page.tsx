@@ -12,7 +12,7 @@ export default function Dashboard() {
   useEffect(() => {
     // If a workspace is selected, navigate to it
     if (currentWorkspace?.id) {
-      router.push(`/app/workspace/${currentWorkspace.id}`);
+      router.replace(`/app/workspace/${currentWorkspace.id}${window.location.search}${window.location.hash}`);
     }
   }, [currentWorkspace?.id, router]);
 

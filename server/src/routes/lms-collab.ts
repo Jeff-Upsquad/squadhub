@@ -616,8 +616,8 @@ router.post('/items/:id/publish', async (req: Request, res: Response) => {
       .eq('id', itemId).select().single();
     if (error) { res.status(500).json({ success: false, error: error.message }); return; }
 
-    // A post is a single document — publishing it publishes its page (matches admin).
-    if ((data as any).kind === 'post') {
+    // Match admin: knowledge documents keep per-page draft control.
+    if ((data as any).kind === 'post' && (data as any).track !== 'knowledge') {
       await supabaseAdmin.from('lms_lessons').update({ is_active: true }).eq('item_id', itemId);
     }
     if (isSquadhireSynced(data as any)) syncItemToSquadhire(itemId);

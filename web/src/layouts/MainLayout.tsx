@@ -861,8 +861,17 @@ export default function MainLayout() {
       const openChannel = params.get('open_channel');
       const openInbox = params.get('open_inbox');
       const openMessage = params.get('open_message');
+      const openResource = params.get('open_resource');
       const conv = params.get('conv');
-      if (openInbox) {
+      if (openResource) {
+        useLearningStore.getState().setLearningTarget({
+          itemId: openResource,
+          lessonId: params.get('resource_page'),
+          edit: params.get('edit_resource') === '1',
+        });
+        setActiveSection('learning');
+        setMobileDrawerOpen(false);
+      } else if (openInbox) {
         openInboxNotification(openInbox);
       } else if (openMessage && conv) {
         const kind: ChatKind = params.get('kind') === 'dm' ? 'dm' : 'channel';
