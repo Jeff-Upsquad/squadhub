@@ -1,3 +1,4 @@
+import { learnedGuidance, guidanceContext } from './squadBotChannels';
 import { createHash, randomBytes } from 'crypto';
 import { supabaseAdmin } from '../supabase';
 import { chat, providerProblem, type AiProviderRow, type ChatMessage } from './aiProviders';
@@ -131,7 +132,9 @@ export async function runBotReply(
     throw new Error(resolved.error);
   }
   const { provider, model } = resolved;
-  const system = [bot.instructions.trim(), input.context?.trim()].filter(Boolean).join('\n\n');
+  const learning = await learnedGuidance(bot.id, 30);
+  const guidance = guidanceContext(learning);
+  const system = [bot.instructions.trim(), guidance, input.context?.trim()].filter(Boolean).join('\n\n');
 
   try {
     const result = await chat(provider, { model, system, messages: input.messages, maxTokens: bot.max_tokens });

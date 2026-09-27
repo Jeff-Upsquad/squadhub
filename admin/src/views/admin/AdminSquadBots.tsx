@@ -209,6 +209,8 @@ function NewBotModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
   const [publicName, setPublicName] = useState('Squad Bot');
   const [description, setDescription] = useState('');
   const [homeApp, setHomeApp] = useState<SquadBotHomeApp>('other');
+  const [workspaceId, setWorkspaceId] = useState('');
+  const { data: workspaces, error: workspaceError } = useQuery<Array<{ id: string; name: string }>>({ queryKey: ['bot-workspaces'], queryFn: () => api.get('/workspaces').then(r => r.data.data) });
 
   const create = useMutation({
     mutationFn: () =>
@@ -217,6 +219,7 @@ function NewBotModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
         public_name: publicName.trim() || 'Squad Bot',
         description: description.trim(),
         home_app: homeApp,
+        workspace_id: workspaceId || workspaces?.[0]?.id,
       }),
     onSuccess: () => {
       onCreated();
@@ -228,6 +231,13 @@ function NewBotModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
   return (
     <Modal title="New Squad Bot" onClose={onClose}>
       <p className="mt-1 text-[13px] text-foreground-muted">It starts Off. Set its AI and knowledge, try it, then switch it on.</p>
+      <Field label="Channel workspace" hint="The bot gets a private channel here, with you as channel admin.">
+        <select aria-label="Channel workspace" value={workspaceId || workspaces?.[0]?.id || ''} onChange={e => setWorkspaceId(e.target.value)} className={inputClass}>
+          {!workspaces?.length && <option value="">No workspace available</option>}
+          {workspaces?.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
+        </select>
+        {workspaceError && <p role="alert" className="mt-1 text-xs text-red-600">Could not load workspaces</p>}
+      </Field>
       <Field label="Internal name" hint="What your team calls it.">
         <input autoFocus value={internalName} onChange={(e) => setInternalName(e.target.value)} placeholder="e.g. Squad Support Bot" className={inputClass} />
       </Field>
@@ -248,7 +258,7 @@ function NewBotModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
         <button onClick={onClose} className="rounded-lg border border-divider bg-surface px-4 py-2 text-sm text-foreground-muted hover:bg-surface-alt">Cancel</button>
         <button
           onClick={() => create.mutate()}
-          disabled={!internalName.trim() || create.isPending}
+          disabled={!internalName.trim() || !workspaces?.length || create.isPending}
           className="rounded-lg bg-ink px-4 py-2 text-sm font-medium text-white hover:bg-ink-hover disabled:opacity-50"
         >
           {create.isPending ? 'Creating…' : 'Create bot'}
