@@ -6,6 +6,7 @@ import api from '../../services/api';
 import type { LmsItem, LmsLesson, LmsCategory, UserType, KnowledgeCategoryOption, SquadBot } from '@squadhub/shared';
 import { resourceEditorUrl } from '../../lib/resourceEditor';
 import { flattenLessonTree } from '../../lib/lessonTree';
+import DocumentChanges from '../../components/lms/DocumentChanges';
 import BlockList from '../../components/lms/BlockList';
 import AudiencePicker from '../../components/lms/AudiencePicker';
 import MediaUploader from '../../components/lms/MediaUploader';
@@ -605,6 +606,7 @@ export default function AdminLmsItemEditor({ itemId }: Props) {
                 blocks={activeLesson.blocks || []}
                 onSaved={markSaved}
               />
+              <DocumentChanges key={item.id} itemId={item.id} lessonId={activeLesson.id} revision={item} />
             </div>
           )}
         </main>

@@ -1,3 +1,4 @@
+import { readLmsHistory } from '../services/lmsHistory';
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import { requireAuth } from '../middleware/auth';
@@ -85,6 +86,12 @@ async function gate(
   }
   return level;
 }
+
+// Versions contain draft pages and quiz answers: only document editors may read them.
+router.get(['/items/:id/changes', '/items/:id/changes/:versionId'], async (req: Request, res: Response) => {
+  if (!await gate(param(req.params.id), req.userId!, 'admin', res)) return;
+  await readLmsHistory(req, res);
+});
 
 // --- GET my access ----------------------------------------------------------
 

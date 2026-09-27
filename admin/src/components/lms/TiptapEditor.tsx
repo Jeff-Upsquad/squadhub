@@ -11,10 +11,12 @@ interface Props {
   onChange: (doc: unknown) => void;
   placeholder?: string;
   minHeight?: number;
+  readOnly?: boolean;
 }
 
-export default function TiptapEditor({ value, onChange, placeholder = 'Write something…', minHeight = 160 }: Props) {
+export default function TiptapEditor({ value, onChange, placeholder = 'Write something…', minHeight = 160, readOnly = false }: Props) {
   const editor = useEditor({
+    editable: !readOnly,
     extensions: [
       StarterKit.configure({}),
       Link.configure({ openOnClick: false, autolink: true }),
@@ -42,7 +44,7 @@ export default function TiptapEditor({ value, onChange, placeholder = 'Write som
 
   return (
     <div className="rounded-lg border border-divider bg-surface">
-      <div className="flex flex-wrap items-center gap-1 border-b border-divider px-2 py-1.5">
+      {!readOnly && <div className="flex flex-wrap items-center gap-1 border-b border-divider px-2 py-1.5">
         <ToolbarButton active={editor.isActive('bold')} onClick={() => editor.chain().focus().toggleBold().run()} label="B" className="font-bold" />
         <ToolbarButton active={editor.isActive('italic')} onClick={() => editor.chain().focus().toggleItalic().run()} label="I" className="italic" />
         <ToolbarButton active={editor.isActive('strike')} onClick={() => editor.chain().focus().toggleStrike().run()} label="S" className="line-through" />
@@ -66,7 +68,7 @@ export default function TiptapEditor({ value, onChange, placeholder = 'Write som
           }}
           label="🔗"
         />
-      </div>
+      </div>}
       <div className="tiptap-surface px-3 py-2 text-sm" style={{ minHeight }}>
         <EditorContent editor={editor} />
       </div>

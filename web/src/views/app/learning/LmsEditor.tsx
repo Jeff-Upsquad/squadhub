@@ -5,6 +5,7 @@ import StarterKit from '@tiptap/starter-kit';
 import Link from '@tiptap/extension-link';
 import Image from '@tiptap/extension-image';
 import { useCollabFull, useEditorMutations, useSubmitReview, useDiscardDraft, useCollabRoles, useCollabUserSearch, useCollabShares } from '../../../hooks/useLmsCollab';
+import DocumentChanges from './DocumentChanges';
 import NotionEditor from './NotionEditor';
 import SendTaskModal from './SendTaskModal';
 import TaskSendsPanel from './TaskSendsPanel';
@@ -364,6 +365,7 @@ export default function LmsEditor({ draftItemId, isClone, initialLessonId, onExi
                 {!activeLesson && <p className="text-center text-sm text-[var(--sh-ink-3)]">No lesson selected.</p>}
               </div>
             )}
+            <DocumentChanges key={item.id} itemId={item.id} lessonId={activeLesson?.id} revision={item} />
           </div>
         </main>
       </div>

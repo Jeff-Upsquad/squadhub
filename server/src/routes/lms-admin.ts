@@ -1,3 +1,4 @@
+import { readLmsHistory } from '../services/lmsHistory';
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import { spawn } from 'child_process';
@@ -38,6 +39,9 @@ import { HIRING_BOT_SLUG, botIdForSlug } from '../services/squadBots';
 const router = Router();
 router.use(requireAuth);
 router.use(requireAdmin);
+
+router.get('/items/:id/changes', readLmsHistory);
+router.get('/items/:id/changes/:versionId', readLmsHistory);
 
 // Fire auto-resend for an item's auto_resend sends after a content mutation
 // (fire-and-forget, like the course mirror sync).
