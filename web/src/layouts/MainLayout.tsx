@@ -8,6 +8,7 @@ import { useAuthStore } from '../stores/authStore';
 import { useWorkUnlockWatch } from '../hooks/useWorkUnlockWatch';
 import { usePMStore } from '../stores/pmStore';
 import { useCompanionTimerSync } from '../hooks/useCompanionTimerSync';
+import { useTimerAutoSave } from '../hooks/useTimerAutoSave';
 import { loadViewPreferences } from '../stores/viewPreferencesSync';
 import { isWorkLocked } from '@squadhub/shared';
 import type { Workspace, Channel } from '@squadhub/shared';
@@ -291,6 +292,7 @@ export default function MainLayout() {
   const { currentWorkspace, activeChannelId, activeChannelKind, dmConversations, setWorkspace, setChannels, setActiveChannel, setDmConversations } = useWorkspaceStore();
   const user = useAuthStore((s) => s.user);
   useCompanionTimerSync(user?.id);
+  useTimerAutoSave(user?.id);
   const logout = useAuthStore((s) => s.logout);
   const pmReset = usePMStore((s) => s.reset);
   // The special Support help-desk channel renders the ticket UI, not chat.

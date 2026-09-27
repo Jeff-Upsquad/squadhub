@@ -71,6 +71,15 @@ export interface TimerShare {
   seconds: number;
 }
 
+export interface PendingTimeSyncItem {
+  id: string;
+  taskId: string;
+  listId: string;
+  startedAt: number;
+  seconds: number;
+  createdAt: number;
+}
+
 // A start request that hit the "another timer is already running" gate. Held
 // here (not persisted) so the global TimerConflictDialog can render it from
 // any surface that starts timers.
@@ -164,6 +173,7 @@ interface PMState {
   timers: TimerState[];
   timerSegmentStart: number | null;
   pendingTimerStart: PendingTimerStart | null;
+  pendingTimeSync: PendingTimeSyncItem[];
   filtersByScope: Record<string, TaskFilterState>;
   focusedTodayIds: string[];
   focusedTodayDate: string;
@@ -223,6 +233,9 @@ interface PMState {
   adoptCompanionTimer: (taskId: string, taskTitle: string, listId: string, baseTracked: number, startedAt: number) => { shares: TimerShare[] } | null;
   stopParallelTimer: (taskId: string) => { stopped: TimerState; shares: TimerShare[] } | null;
   setPendingTimerStart: (pending: PendingTimerStart | null) => void;
+  enqueueTimeShares: (shares: TimerShare[]) => void;
+  removePendingTimeSyncItem: (id: string) => void;
+  checkpointRunningTimers: (minElapsedSeconds?: number) => TimerShare[];
   setScopeFilters: (scopeKey: string, next: TaskFilterState) => void;
   clearScopeFilters: (scopeKey: string) => void;
   setScopedGroupBy: (scopeKey: string, value: GroupBy) => void;
@@ -290,6 +303,7 @@ export const usePMStore = create<PMState>()(
       timers: [],
       timerSegmentStart: null,
       pendingTimerStart: null,
+      pendingTimeSync: [],
       filtersByScope: {},
       focusedTodayIds: [],
       focusedTodayDate: todayKey(),
@@ -436,6 +450,41 @@ export const usePMStore = create<PMState>()(
         return { stopped, shares };
       },
       setPendingTimerStart: (pending) => set({ pendingTimerStart: pending }),
+      enqueueTimeShares: (shares) => {
+        const real = shares.filter((s) => s.seconds >= 1);
+        if (!real.length) return;
+        const now = Date.now();
+        set((state) => {
+          const existing = state.pendingTimeSync || [];
+          const additions: PendingTimeSyncItem[] = real.map((s, idx) => ({
+            id: `${s.taskId}-${s.startedAt}-${now}-${idx}-${Math.random().toString(36).slice(2, 7)}`,
+            taskId: s.taskId,
+            listId: s.listId,
+            startedAt: s.startedAt,
+            seconds: s.seconds,
+            createdAt: now,
+          }));
+          return { pendingTimeSync: [...existing, ...additions] };
+        });
+      },
+      removePendingTimeSyncItem: (id) => {
+        set((state) => ({
+          pendingTimeSync: (state.pendingTimeSync || []).filter((item) => item.id !== id),
+        }));
+      },
+      checkpointRunningTimers: (minElapsedSeconds = 120) => {
+        const { timers, timerSegmentStart } = get();
+        if (!timers.length || timerSegmentStart === null) return [];
+        const now = Date.now();
+        const elapsedSec = (now - timerSegmentStart) / 1000;
+        if (elapsedSec < minElapsedSeconds) return [];
+        const shares = closeSegmentShares(timers, timerSegmentStart, now);
+        if (!shares.length) return [];
+        set({
+          timerSegmentStart: now,
+        });
+        return shares;
+      },
       setScopeFilters: (scopeKey, next) => {
         set((state) => {
           if (isFilterEmpty(next)) {
@@ -618,7 +667,7 @@ export const usePMStore = create<PMState>()(
           focusBucketsRolloverDate: s.focusBucketsRolloverDate,
         };
       },
-      reset: () => set({ activeSpaceId: null, activeListId: null, activeFolderId: null, activeSpacePageId: null, activeTaskId: null, activeDesignFolderId: null, activeDashboardTab: null, activeSecondaryCard: null, newTasksOpen: false, newTaskFabVisible: false, homeView: 'hub', contextListId: null, viewMode: 'list', activeViewIdByList: {}, listGroupBy: 'status', myTasksOnly: false, collapsedGroups: {}, groupedExpanded: {}, focusBucketCollapsed: {}, focusBucketAutoOpenedDate: {}, selectedTasks: [], fadingTaskIds: new Map<string, string>(), peekTaskId: null, groupRunPanel: null, timers: [], timerSegmentStart: null, pendingTimerStart: null, filtersByScope: {}, focusedTodayIds: [], focusedTodayDate: todayKey(), focusBuckets: {}, recurringFocusBuckets: {}, focusBucketsRolloverDate: todayKey(), groupByScope: {}, sortByScope: {}, focusTodayScope: {}, secondaryCardGroupBy: {}, todayListGroupBy: 'none', todayListView: 'list', lastActiveSection: 'home', lastHomeView: 'hub' }),
+      reset: () => set({ activeSpaceId: null, activeListId: null, activeFolderId: null, activeSpacePageId: null, activeTaskId: null, activeDesignFolderId: null, activeDashboardTab: null, activeSecondaryCard: null, newTasksOpen: false, newTaskFabVisible: false, homeView: 'hub', contextListId: null, viewMode: 'list', activeViewIdByList: {}, listGroupBy: 'status', myTasksOnly: false, collapsedGroups: {}, groupedExpanded: {}, focusBucketCollapsed: {}, focusBucketAutoOpenedDate: {}, selectedTasks: [], fadingTaskIds: new Map<string, string>(), peekTaskId: null, groupRunPanel: null, timers: [], timerSegmentStart: null, pendingTimerStart: null, pendingTimeSync: [], filtersByScope: {}, focusedTodayIds: [], focusedTodayDate: todayKey(), focusBuckets: {}, recurringFocusBuckets: {}, focusBucketsRolloverDate: todayKey(), groupByScope: {}, sortByScope: {}, focusTodayScope: {}, secondaryCardGroupBy: {}, todayListGroupBy: 'none', todayListView: 'list', lastActiveSection: 'home', lastHomeView: 'hub' }),
     }),
     {
       name: 'squadhub-pm',
@@ -634,6 +683,7 @@ export const usePMStore = create<PMState>()(
         contextListId: state.contextListId,
         timers: state.timers,
         timerSegmentStart: state.timerSegmentStart,
+        pendingTimeSync: state.pendingTimeSync,
         activeViewIdByList: state.activeViewIdByList,
         listGroupBy: state.listGroupBy,
         myTasksOnly: state.myTasksOnly,
@@ -672,6 +722,9 @@ export const usePMStore = create<PMState>()(
           const legacy = p.timer ?? null;
           p = { ...p, timers: legacy ? [legacy] : [], timerSegmentStart: legacy ? legacy.startedAt : null };
           delete p.timer;
+        }
+        if (!p.pendingTimeSync) {
+          p = { ...p, pendingTimeSync: [] };
         }
         return p;
       },
