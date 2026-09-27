@@ -30,6 +30,9 @@ type GroupContainer = { type: 'list' | 'folder' | 'space'; id: string; name: str
 const HOURS = 24;
 const PX_PER_MIN = 1; // each hour row is 60px tall
 const SNAP_MIN = 15;
+// How long a removed block stays mounted to play its slide-out animation.
+// Must match the dp-block-exit keyframe duration in globals.css.
+const EXIT_MS = 450;
 
 interface Props {
   date: string;  // YYYY-MM-DD being viewed
@@ -146,6 +149,22 @@ export default function DayCalendar({ date, today, onDateChange, keyboard = fals
   const setGroupRunPanel = usePMStore((s) => s.setGroupRunPanel);
   const qc = useQueryClient();
 
+  // Work-date edits made inside the open task panel defer their calendar
+  // refresh (see useUpdateTask) so the block stays put while editing. When the
+  // panel closes, refetch — the removed block then plays its slide-out
+  // animation on return. (DayPlannerView has the same guard for range modes
+  // where this component isn't mounted; double-invalidation is harmless.)
+  const activeTaskId = usePMStore((s) => s.activeTaskId);
+  const prevActiveTask = useRef<string | null>(null);
+  useEffect(() => {
+    if (prevActiveTask.current != null && activeTaskId == null) {
+      qc.invalidateQueries({ queryKey: ['day-plans'] });
+      qc.invalidateQueries({ queryKey: ['day-planner'] });
+      qc.invalidateQueries({ queryKey: ['my-tasks'] });
+    }
+    prevActiveTask.current = activeTaskId;
+  }, [activeTaskId, qc]);
+
   // Snapped minute under the cursor while a palette row is dragged over the
   // grid — drives the "drop here" ghost so the landing time is visible.
   const [dragOverMin, setDragOverMin] = useState<number | null>(null);
@@ -240,6 +259,55 @@ export default function DayCalendar({ date, today, onDateChange, keyboard = fals
 
   // Sort + lay out timed plans in overlap columns.
   const positioned = useMemo(() => positionBlocks(timedPlans), [timedPlans]);
+
+  // Blocks that just left this day (work date moved to tomorrow, block
+  // unscheduled, …) stay mounted briefly with data-exiting so they slide out
+  // to the right instead of popping off the grid. Snapshots keep each block's
+  // exact position + column width so there's no jump before the animation.
+  // Day navigation (←/→/Today) swaps the whole grid — no exit animation there.
+  const [exitingTimed, setExitingTimed] = useState<Positioned[]>([]);
+  const [exitingAllDay, setExitingAllDay] = useState<any[]>([]);
+  const prevTimed = useRef<Map<string, Positioned>>(new Map());
+  const prevAllDay = useRef<Map<string, any>>(new Map());
+  const exitingDate = useRef(date);
+  useEffect(() => {
+    if (exitingDate.current !== date) {
+      exitingDate.current = date;
+      prevTimed.current = new Map(positioned.map((p) => [p.id, p]));
+      prevAllDay.current = new Map(allDayPlans.map((p: any) => [p.id, p]));
+      setExitingTimed([]);
+      setExitingAllDay([]);
+      return;
+    }
+    const curTimed = new Map(positioned.map((p) => [p.id, p]));
+    const removedTimed = [...prevTimed.current.values()].filter((p) => !curTimed.has(p.id));
+    prevTimed.current = curTimed;
+    const curAll = new Map(allDayPlans.map((p: any) => [p.id, p]));
+    const removedAll = [...prevAllDay.current.values()].filter((p) => !curAll.has(p.id));
+    prevAllDay.current = curAll;
+    if (removedTimed.length === 0 && removedAll.length === 0) return;
+    if (removedTimed.length > 0) {
+      setExitingTimed((curEx) => {
+        const ids = new Set(curEx.map((p) => p.id));
+        return [...curEx, ...removedTimed.filter((p) => !ids.has(p.id))];
+      });
+    }
+    if (removedAll.length > 0) {
+      setExitingAllDay((curEx) => {
+        const ids = new Set(curEx.map((p) => p.id));
+        return [...curEx, ...removedAll.filter((p) => !ids.has(p.id))];
+      });
+    }
+    const t = window.setTimeout(() => {
+      if (removedTimed.length > 0) {
+        setExitingTimed((curEx) => curEx.filter((p) => !removedTimed.some((r) => r.id === p.id)));
+      }
+      if (removedAll.length > 0) {
+        setExitingAllDay((curEx) => curEx.filter((p) => !removedAll.some((r) => r.id === p.id)));
+      }
+    }, EXIT_MS);
+    return () => window.clearTimeout(t);
+  }, [positioned, allDayPlans, date]);
 
   // HTML5 drop handler — only fires for list-row drags. Block moves are
   // handled by startMove (mousedown-based) below.
@@ -585,6 +653,12 @@ export default function DayCalendar({ date, today, onDateChange, keyboard = fals
               </div>
             );
           })}
+          {exitingAllDay.map((p) => (
+            <div key={`exit-${p.id}`} className="dp-allday-chip" data-exiting="true" aria-hidden="true">
+              <span className="t">{p.task?.title ?? 'Task'}</span>
+              <span className="f">{dateFieldLabel(p.date_field)}</span>
+            </div>
+          ))}
         </div>
       </div>
 
@@ -741,6 +815,38 @@ export default function DayCalendar({ date, today, onDateChange, keyboard = fals
             <span className="dp-now-chip">{fmtMinAsClock(nowMinute)}</span>
           </div>
         )}
+
+        {exitingTimed.map((p) => {
+          const top = p.start_minute * PX_PER_MIN;
+          const height = Math.max(22, p.duration_minutes * PX_PER_MIN - 2);
+          const isWorkBlock = (p.task as any)?.task_type_key === 'work_block';
+          const wbColor = (p.task as any)?.task_type_color || '#8b5cf6';
+          const isGroup = p.kind === 'group_block';
+          const blockTitle = isGroup ? `Grouped tasks under ${p.container?.name ?? 'Group'}` : p.task?.title ?? 'Task';
+          return (
+            <div
+              key={`exit-${p.id}`}
+              className="dp-block"
+              data-exiting="true"
+              aria-hidden="true"
+              style={{
+                top,
+                height,
+                left: `calc(64px + ${p.col} * (100% - 80px) / ${p.cols})`,
+                width: `calc((100% - 80px) / ${p.cols} - 4px)`,
+                right: 'auto',
+                ...(isWorkBlock ? ({ '--dp-accent': wbColor } as React.CSSProperties) : {}),
+              }}
+            >
+              <div className="dp-block-body">
+                <div className="b-title">{blockTitle}</div>
+                <div className="b-meta">
+                  <span className="b-time">{fmtTimeRange(p.start_minute, p.duration_minutes)}</span>
+                </div>
+              </div>
+            </div>
+          );
+        })}
       </div>
 
       {slotCreate.pending && (

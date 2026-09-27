@@ -9,7 +9,7 @@ import { flushTimerShares } from './useParallelTimers';
 // Invalidate every query key that contributes to a task-list UI so all views
 // (List, Folder, Space, My Tasks, Emergency, Day Planner) refresh after a
 // mutation without requiring the user to reload.
-function invalidateTaskLists(qc: QueryClient, listId: string | null) {
+function invalidateTaskLists(qc: QueryClient, listId: string | null, opts?: { deferDayPlans?: boolean }) {
   qc.invalidateQueries({ queryKey: ['tasks', listId] });
   qc.invalidateQueries({ queryKey: ['folder-tasks'] });
   qc.invalidateQueries({ queryKey: ['space-tasks'] });
@@ -17,6 +17,11 @@ function invalidateTaskLists(qc: QueryClient, listId: string | null) {
   qc.invalidateQueries({ queryKey: ['my-tasks-summary'] });
   qc.invalidateQueries({ queryKey: ['lms-open-sop-tasks'] });
   qc.invalidateQueries({ queryKey: ['emergency-tasks'] });
+  // When a Work date is edited inside the open task panel, the calendar refresh
+  // is deferred until the panel closes (DayCalendar / DayPlannerView refetch on
+  // activeTaskId → null) so the block stays put while editing and only then
+  // animates out.
+  if (opts?.deferDayPlans) return;
   // Day Planner candidate list depends on due_date / work_date / start_date /
   // focused_at — any task edit can flip membership, so re-evaluate on server.
   // Clearing a date or unfocusing here will drop the task from the list.
@@ -309,9 +314,15 @@ export function useUpdateTask(listId: string | null) {
       }
     },
     onSuccess: (data, vars) => {
-      invalidateTaskLists(qc, listId);
+      // Work date edited while the task panel is open → hold the calendar
+      // refresh until the panel closes (DayCalendar / DayPlannerView refetch on
+      // activeTaskId → null) so the block stays put while editing and animates
+      // out only on return.
+      const deferDayPlans =
+        vars.work_date !== undefined && usePMStore.getState().activeTaskId != null;
+      invalidateTaskLists(qc, listId, { deferDayPlans });
       if (vars.list_id && vars.list_id !== listId) {
-        invalidateTaskLists(qc, vars.list_id);
+        invalidateTaskLists(qc, vars.list_id, { deferDayPlans });
         qc.invalidateQueries({ queryKey: ['list', vars.list_id] });
       }
       qc.invalidateQueries({ queryKey: ['task', vars.id] });
