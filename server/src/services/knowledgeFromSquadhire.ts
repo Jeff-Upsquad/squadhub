@@ -1,5 +1,6 @@
 import { supabaseAdmin } from '../supabase';
 import { deliver } from './squadhireTraining';
+import { HIRING_BOT_SLUG, botIdForSlug } from './squadBots';
 
 /**
  * Create a published Knowledge item from an answer an admin approved in
@@ -62,6 +63,8 @@ export async function createApprovedKnowledge(input: ApprovedKnowledge): Promise
     .insert({
       kind: 'post',
       track: 'knowledge',
+      // Answers approved in SquadHire are the Squad Hiring Bot's knowledge.
+      bot_id: await botIdForSlug(HIRING_BOT_SLUG),
       knowledge_categories: input.categories,
       title: input.question,
       slug: await uniqueSlug(slugify(input.question)),

@@ -123,6 +123,8 @@ import jobOfferTemplatesAdminRoutes from './routes/job-offer-templates-admin';
 import jobCardsRoutes from './routes/job-cards';
 import squadhireJobCallbacksRoutes from './routes/integrations/squadhire-job-callbacks';
 import squadhireCallbacksRoutes from './routes/integrations/squadhire-callbacks';
+import squadBotsIntegrationRoutes from './routes/integrations/squad-bots';
+import squadBotsAdminRoutes from './routes/squad-bots-admin';
 import squadhireCategoriesRoutes from './routes/integrations/squadhire-categories';
 import ssoSquadhireRoutes from './routes/sso-squadhire';
 import subscriptionSquadhireProfilesAdminRoutes from './routes/subscription-squadhire-profiles-admin';
@@ -279,6 +281,7 @@ app.use('/business-app', businessAppRoutes);
 app.use('/lms/collab', lmsCollabRoutes);
 app.use('/lms', lmsRoutes);
 app.use('/admin/lms', lmsAdminRoutes);
+app.use('/admin/squad-bots', squadBotsAdminRoutes);
 app.use('/sop-breaches', sopBreachesRoutes);
 app.use('/admin/clips-recovery', clipsRecoveryRoutes);
 app.use('/meetings', meetingsRoutes);
@@ -302,6 +305,8 @@ app.use('/admin/chat/app-config', adminChatAppConfigRoutes);
 // param routes on the generic callbacks router.
 app.use('/integrations/squadhire/jobs', squadhireJobCallbacksRoutes);
 app.use('/integrations/squadhire', squadhireCallbacksRoutes);
+// Squad Bots: each bot's home app reads its settings/knowledge and gets AI replies here.
+app.use('/integrations/squad-bots', squadBotsIntegrationRoutes);
 // Admin-facing read-through proxy for SquadHire metadata (categories etc.)
 app.use('/admin/integrations/squadhire', squadhireCategoriesRoutes);
 // "Sign in with SquadHub" SSO: authorize (browser) + token/directory (server-to-server)

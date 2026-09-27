@@ -185,6 +185,16 @@ export default function MasterAdminLayout({ children }: { children: React.ReactN
           </NavLink>
 
           <div className="!mt-4 border-t border-divider pt-3">
+            <p className="mb-1 px-3 text-[10px] font-medium uppercase tracking-wider text-foreground-dim">AI</p>
+            <NavLink href="/admin/squad-bots">
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 3v2m-5 3h10a2 2 0 012 2v7a2 2 0 01-2 2H7a2 2 0 01-2-2v-7a2 2 0 012-2zm2 5h.01M15 13h.01M9.5 16.5h5M3 13v2m18-2v2" />
+              </svg>
+              Squad Bots
+            </NavLink>
+          </div>
+
+          <div className="!mt-4 border-t border-divider pt-3">
             <p className="mb-1 px-3 text-[10px] font-medium uppercase tracking-wider text-foreground-dim">Sales</p>
             <NavLink href="/admin/sales-dashboard">
               <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">

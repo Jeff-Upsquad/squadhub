@@ -1,5 +1,6 @@
 import { config } from '../config';
 import { supabaseAdmin } from '../supabase';
+import { isSquadhireBot } from './squadBots';
 
 /**
  * Deliver a Resources item to SquadHire as talent training.
@@ -97,10 +98,13 @@ export async function deliver(itemId: string): Promise<void> {
 
   const { data: item } = await supabaseAdmin
     .from('lms_items')
-    .select('id, kind, track, title, summary, icon, cover_image_url, status, squadhire_audience, knowledge_categories')
+    .select('id, kind, track, title, summary, icon, cover_image_url, status, squadhire_audience, knowledge_categories, bot_id')
     .eq('id', itemId)
     .maybeSingle();
   if (!item) return;
+  // Only SquadHire bots' knowledge goes to SquadHire; other bots (Squad CRM, …)
+  // read theirs from SquadHub's /integrations/squad-bots/knowledge.
+  if (item.track === 'knowledge' && !(await isSquadhireBot(item.bot_id))) return;
 
   let endpoint: string;
   let payload: Record<string, unknown>;
@@ -207,7 +211,7 @@ export async function fetchKnowledgeCategories(): Promise<Array<{ key: string; l
  * submissions on its own server and needs them, and this is a signed
  * server-to-server channel, not something a learner can read.
  */
-async function loadPages(itemId: string) {
+export async function loadPages(itemId: string) {
   const { data: lessons } = await supabaseAdmin
     .from('lms_lessons')
     .select('id, parent_lesson_id, title, summary, icon, position, is_active')

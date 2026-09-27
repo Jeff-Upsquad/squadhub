@@ -128,6 +128,27 @@ describe('syncContentToSquadhire', () => {
     expect(body.track).toBeUndefined();
   });
 
+  it('sends knowledge that belongs to a SquadHire bot', async () => {
+    tableRows.lms_items = [
+      { id: 'item-6', kind: 'post', track: 'knowledge', title: 'Hiring answer', status: 'published', knowledge_categories: [], bot_id: 'bot-hire' },
+    ];
+    tableRows.squad_bots = [{ home_app: 'squadhire' }];
+    tableRows.lms_lessons = [];
+    syncContentToSquadhire('item-6');
+    await flushAndAdvance(10_000);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps knowledge for bots outside SquadHire (e.g. Squad CRM) out of SquadHire', async () => {
+    tableRows.lms_items = [
+      { id: 'item-7', kind: 'post', track: 'knowledge', title: 'Pricing answer', status: 'published', knowledge_categories: [], bot_id: 'bot-crm' },
+    ];
+    tableRows.squad_bots = [{ home_app: 'squad_crm' }];
+    syncContentToSquadhire('item-7');
+    await flushAndAdvance(10_000);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it('withdraws an unpublished knowledge item', async () => {
     tableRows.lms_items = [
       { id: 'item-5', kind: 'post', track: 'knowledge', title: 'Old answer', status: 'draft', knowledge_categories: ['tech'] },
