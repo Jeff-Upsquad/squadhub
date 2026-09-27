@@ -1132,6 +1132,14 @@ body.sb-resizing { user-select: none; -webkit-user-select: none; cursor: col-res
 .sh-view .dp-ghost { position: absolute; left: calc(var(--dp-gutter) + 2px); right: 18px; z-index: 3; display: flex; align-items: flex-start; padding: 5px 10px; border: 1.5px dashed var(--sh-ink-3); border-radius: 8px; background: color-mix(in oklch, var(--sh-ink) 5%, var(--surface)); pointer-events: none; transition: top .06s linear; }
 .sh-view .dp-ghost span { font-size: 11.5px; font-weight: 600; color: var(--sh-ink-2); font-variant-numeric: tabular-nums; }
 
+/* Drag-to-create: empty grid space reads as clickable; the drawn slot shows
+   as a dashed "New task" block until the create panel is saved or closed. */
+.sh-view .dp-hour .slot { cursor: cell; }
+.sh-view .dp-new-block { position: absolute; left: calc(var(--dp-gutter) + 2px); right: 18px; z-index: 6; display: flex; flex-direction: column; gap: 1px; margin-top: 1px; padding: 4px 10px; overflow: hidden; border-radius: 8px; border: 1.5px dashed #2563EB; background: color-mix(in oklch, #2563EB 12%, var(--surface)); color: #1D4ED8; pointer-events: none; }
+.sh-view .dp-new-block .t { font-size: 12.5px; font-weight: 700; line-height: 1.25; }
+.sh-view .dp-new-block .m { font-size: 11px; font-weight: 500; opacity: .85; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.dark .sh-view .dp-new-block { color: #93C5FD; }
+
 /* Blocks: tinted card + accent bar, colour by priority / type */
 .sh-view .dp-block { --dp-accent: #2563EB; position: absolute; left: var(--dp-gutter); right: 16px; z-index: 2; display: flex; flex-direction: column; margin-top: 1px; padding: 0; border: 0; border-radius: 8px; overflow: hidden; background: color-mix(in oklch, var(--dp-accent) 11%, var(--surface)); box-shadow: inset 3px 0 0 var(--dp-accent), inset 0 0 0 1px color-mix(in oklch, var(--dp-accent) 18%, transparent); color: color-mix(in oklch, var(--dp-accent) 40%, var(--sh-ink)); font-size: 12.5px; line-height: 1.3; transition: background .12s, box-shadow .12s, opacity .12s; }
 .sh-view .dp-block:hover { background: color-mix(in oklch, var(--dp-accent) 17%, var(--surface)); }
@@ -1304,6 +1312,12 @@ body.sb-resizing { user-select: none; -webkit-user-select: none; cursor: col-res
 .cal-tt-allday-chip { width: 100%; }
 
 .cal-tt-scroll { flex: 1; min-height: 0; overflow-y: auto; position: relative; }
+.cal-tt-col { cursor: cell; }
+.cal-tt-col .cal-tt-block { cursor: auto; }
+.cal-tt-new { position: absolute; left: 2px; right: 4px; z-index: 6; display: flex; flex-direction: column; gap: 1px; padding: 3px 7px; overflow: hidden; border-radius: 6px; border: 1.5px dashed #2563EB; background: color-mix(in oklch, #2563EB 12%, var(--surface)); color: #1D4ED8; pointer-events: none; }
+.cal-tt-new .t { font-size: 11.5px; font-weight: 700; line-height: 1.25; }
+.cal-tt-new .m { font-size: 10.5px; font-weight: 500; opacity: .85; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.dark .cal-tt-new { color: #93C5FD; }
 .cal-tt-grid { position: relative; width: 100%; }
 .cal-tt-hourlabel { position: absolute; left: 0; width: 50px; text-align: right; font-size: 10.5px; color: var(--sh-ink-4); transform: translateY(-6px); font-family: 'Inter', sans-serif; }
 .cal-tt-col { position: absolute; top: 0; bottom: 0; border-left: 1px solid var(--sh-hair); background-image: repeating-linear-gradient(to bottom, var(--sh-hair) 0, var(--sh-hair) 1px, transparent 1px, transparent 60px); }

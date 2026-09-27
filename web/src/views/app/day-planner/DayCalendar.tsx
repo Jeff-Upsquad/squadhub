@@ -23,6 +23,7 @@ import {
   DND_GROUP_ESTIMATE_TOTAL,
   DND_TASK_RECURRING_PARENT,
 } from '../calendar/calendarUtils';
+import { useSlotDragCreate, SlotCreatePanel } from './SlotCreate';
 
 type GroupContainer = { type: 'list' | 'folder' | 'space'; id: string; name: string };
 
@@ -148,6 +149,8 @@ export default function DayCalendar({ date, today, onDateChange, keyboard = fals
   // Snapped minute under the cursor while a palette row is dragged over the
   // grid — drives the "drop here" ghost so the landing time is visible.
   const [dragOverMin, setDragOverMin] = useState<number | null>(null);
+  // Click-and-drag on empty grid space → new task in that slot.
+  const slotCreate = useSlotDragCreate(PX_PER_MIN);
   const [allDayOver, setAllDayOver] = useState(false);
   // Block being moved via mousedown drag — drives the live preview position.
   const [moving, setMoving] = useState<{
@@ -605,10 +608,22 @@ export default function DayCalendar({ date, today, onDateChange, keyboard = fals
             <div
               className="slot"
               onDragOver={slotDragOver(h)}
+              onMouseDown={(e) => slotCreate.begin(date, e, gridRef.current)}
               onDrop={(e) => handleHourDrop(h, e)}
             />
           </div>
         ))}
+
+        {slotCreate.selection?.date === date && (
+          <div
+            className="dp-new-block"
+            style={{ top: slotCreate.selection.start * PX_PER_MIN, height: Math.max(22, slotCreate.selection.dur * PX_PER_MIN - 2) }}
+            aria-hidden="true"
+          >
+            <span className="t">New task</span>
+            <span className="m">{fmtTimeRange(slotCreate.selection.start, slotCreate.selection.dur)} · {fmtDur(slotCreate.selection.dur)}</span>
+          </div>
+        )}
 
         {dragOverMin !== null && (
           <div className="dp-ghost" style={{ top: dragOverMin * PX_PER_MIN, height: 30 * PX_PER_MIN }} aria-hidden="true">
@@ -727,6 +742,10 @@ export default function DayCalendar({ date, today, onDateChange, keyboard = fals
           </div>
         )}
       </div>
+
+      {slotCreate.pending && (
+        <SlotCreatePanel slot={slotCreate.pending} today={today} onClose={slotCreate.clear} />
+      )}
     </div>
   );
 }

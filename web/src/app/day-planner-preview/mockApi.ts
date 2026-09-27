@@ -4,6 +4,8 @@
 // mutations) runs unchanged; state lives only for the page's lifetime.
 import type { AxiosAdapter, AxiosResponse, InternalAxiosRequestConfig } from 'axios';
 import api from '../../services/api';
+import { useAuthStore } from '../../stores/authStore';
+import { useWorkspaceStore } from '../../stores/workspaceStore';
 import { planDateKey } from '../../hooks/useDayPlanner';
 
 type Space = { id: string; name: string };
@@ -15,13 +17,18 @@ const SPACES = {
   ops: { id: 'sp-ops', name: 'Operations' },
   growth: { id: 'sp-growth', name: 'Growth' },
 };
-const ME = { id: 'u-me', name: 'Jeff Zeena', email: 'preview@squadhub.local', avatar_url: null };
+const ME = { id: 'u-me', display_name: 'You', email: 'preview@squadhub.local', avatar_url: null };
 
 const STATUSES = [
   { id: 'st-todo', space_id: 'sp', name: 'To do', color: '#94A3B8', position: 0, is_default: true, category: 'todo' },
   { id: 'st-doing', space_id: 'sp', name: 'In progress', color: '#3B82F6', position: 1, is_default: false, category: 'active' },
   { id: 'st-done', space_id: 'sp', name: 'Done', color: '#7C3AED', position: 2, is_default: false, category: 'closed' },
 ];
+
+const PERSONAL = {
+  space: { id: 'sp-personal', name: 'My Tasks' },
+  list: { id: 'l-personal', name: 'My Tasks' },
+};
 
 const LISTS = {
   web: { id: 'l-web', name: 'Web app' },
@@ -203,10 +210,30 @@ const adapter: AxiosAdapter = async (config) => {
     const space = [...allTasks.values()].find((t) => t.list?.id === getList[1])?.space ?? SPACES.product;
     return ok(config, { id: getList[1], name: list?.name ?? 'List', space_id: space.id, folder_id: null, space_statuses: STATUSES, my_access_level: 'owner' });
   }
+  // "My Tasks" — the private personal space + its default list.
+  if (method === 'get' && path === '/pm/personal') {
+    return ok(config, { space: { ...PERSONAL.space, statuses: STATUSES }, list: PERSONAL.list });
+  }
+  if (method === 'post' && path === '/pm/tasks') {
+    const list = PERSONAL.list.id === body.list_id ? PERSONAL.list : Object.values(LISTS).find((l) => l.id === body.list_id) ?? PERSONAL.list;
+    const created = task(body.title || 'Untitled', {
+      ...body,
+      priority: body.priority && body.priority !== 'none' ? body.priority : 'normal',
+      list,
+      space: list === PERSONAL.list ? PERSONAL.space : SPACES.product,
+    });
+    allTasks.set(created.id, created);
+    plannerTasks.push(created);
+    return ok(config, created, 201);
+  }
   const getSpace = path.match(/^\/pm\/spaces\/([^/]+)$/);
   if (method === 'get' && getSpace) {
     const space = Object.values(SPACES).find((sp) => sp.id === getSpace[1]);
-    return ok(config, { id: getSpace[1], name: space?.name ?? 'Space', color: '#6366F1', space_statuses: STATUSES, my_access_level: 'owner' });
+    if (getSpace[1] === PERSONAL.space.id) {
+      return ok(config, { ...PERSONAL.space, color: '#0A0A0A', statuses: STATUSES, space_statuses: STATUSES, lists: [PERSONAL.list], folders: [], my_access_level: 'owner' });
+    }
+    const lists = Object.values(LISTS).filter((l) => [...allTasks.values()].some((t) => t.list?.id === l.id && t.space?.id === getSpace[1]));
+    return ok(config, { id: getSpace[1], name: space?.name ?? 'Space', color: '#6366F1', statuses: STATUSES, space_statuses: STATUSES, lists, folders: [], my_access_level: 'owner' });
   }
   const taskMatch = path.match(/^\/pm\/tasks\/([^/]+)(?:\/(focus|snooze))?$/);
   if (taskMatch && (method === 'patch' || method === 'put')) {
@@ -229,4 +256,8 @@ export function installPreviewApi() {
   if (installed) return;
   installed = true;
   api.defaults.adapter = adapter;
+  // A stand-in signed-in user + workspace: the create panel needs both
+  // (assignee default, workspace-scoped pickers). Not authenticated.
+  useAuthStore.setState({ user: ME as any });
+  useWorkspaceStore.setState({ currentWorkspace: { id: 'ws-preview', name: 'Preview' } as any });
 }
