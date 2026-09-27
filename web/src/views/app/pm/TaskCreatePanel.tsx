@@ -441,6 +441,20 @@ export default function TaskCreatePanel({
     && !submitting
     && (!isDesignTask || draft.description.trim().length > 0);
 
+  // A pre-filled draft (e.g. a calendar slot's work date + estimate) that the
+  // user never touched isn't worth saving as a Draft on close. Resumed drafts
+  // (_draftId) keep their existing save/remove behaviour. status and
+  // task_type_id are left out: the effects above normalise them on open.
+  const userFields = (d: Draft) => {
+    const { pendingFiles, status: _s, task_type_id: _t, ...rest } = d;
+    return pendingFiles.length ? null : JSON.stringify(rest);
+  };
+  const pristineRef = useRef<string | null>(null);
+  if (pristineRef.current === null) {
+    pristineRef.current = initialDraft && !initialDraft._draftId ? userFields(draft) ?? '' : '';
+  }
+  const isUntouchedPrefill = () => !!pristineRef.current && userFields(draft) === pristineRef.current;
+
   const handleClose = () => {
     // A create is already in flight — block the close so we don't persist a
     // draft of the task that's about to be saved. Otherwise a backdrop click /
@@ -449,7 +463,7 @@ export default function TaskCreatePanel({
     // resuming that draft creates a duplicate. The panel closes itself once
     // the create resolves (handleSubmit -> onClose).
     if (submitting) return;
-    if (isDraftNonEmpty(draft)) {
+    if (isDraftNonEmpty(draft) && !isUntouchedPrefill()) {
       // If resuming an existing draft, remove the old version first
       if (initialDraft?._draftId) {
         useDraftTaskStore.getState().removeDraft(initialDraft._draftId);

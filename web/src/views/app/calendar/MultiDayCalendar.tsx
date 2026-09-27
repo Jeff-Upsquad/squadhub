@@ -28,6 +28,7 @@ import {
   priorityLevel,
   setSlimDragImage,
 } from './calendarUtils';
+import { useSlotDragCreate, SlotCreatePanel } from '../day-planner/SlotCreate';
 
 type GroupContainer = { type: 'list' | 'folder' | 'space'; id: string; name: string };
 
@@ -173,6 +174,8 @@ export default function MultiDayCalendar({ days, todayKey, onOpenTask, onOpenDay
   const N = days.length;
 
   const [dragOver, setDragOver] = useState<{ date: string; start: number } | null>(null);
+  // Click-and-drag on empty column space → new task in that slot.
+  const slotCreate = useSlotDragCreate(PX_PER_MIN);
   const [allDayOver, setAllDayOver] = useState<string | null>(null);
   const [moving, setMoving] = useState<{
     key: string; fromDate: string; duration: number; previewDate: string; previewStart: number; threshold: boolean;
@@ -488,7 +491,22 @@ export default function MultiDayCalendar({ days, todayKey, onOpenTask, onOpenDay
               }}
               onDragLeave={() => setDragOver((c) => (c?.date === day ? null : c))}
               onDrop={(e) => handleColumnDrop(day, e)}
+              onMouseDown={(e) => {
+                // Only empty space — blocks own their own move/resize drags.
+                if ((e.target as HTMLElement).closest('.cal-tt-block')) return;
+                slotCreate.begin(day, e, e.currentTarget as HTMLElement);
+              }}
             >
+              {slotCreate.selection?.date === day && (
+                <div
+                  className="cal-tt-new"
+                  style={{ top: slotCreate.selection.start * PX_PER_MIN, height: Math.max(18, slotCreate.selection.dur * PX_PER_MIN - 2) }}
+                  aria-hidden="true"
+                >
+                  <span className="t">New task</span>
+                  <span className="m">{fmtTimeRange(slotCreate.selection.start, slotCreate.selection.dur)}</span>
+                </div>
+              )}
               {/* Live drop preview — shows exactly where (and when) it'll land */}
               {dragOver?.date === day && (
                 <div className="cal-tt-drop" style={{ top: dragOver.start * PX_PER_MIN, height: 30 * PX_PER_MIN }}>
@@ -585,6 +603,10 @@ export default function MultiDayCalendar({ days, todayKey, onOpenTask, onOpenDay
           })()}
         </div>
       </div>
+
+      {slotCreate.pending && (
+        <SlotCreatePanel slot={slotCreate.pending} today={todayKey} onClose={slotCreate.clear} />
+      )}
     </div>
   );
 }
