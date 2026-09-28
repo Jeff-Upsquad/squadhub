@@ -104,8 +104,10 @@ function isAllDaySentinel(p: { start_minute: number; duration_minutes: number })
 
 function isTaskDone(status?: string | null): boolean {
   if (!status) return false;
-  if (status === 'done' || status === 'closed' || status === 'cancelled') return true;
-  return getTaskStatusCategory(status) === 'closed';
+  const s = status.toLowerCase().trim();
+  if (s === 'done' || s === 'closed' || s === 'cancelled') return true;
+  const cat = getTaskStatusCategory(status);
+  return cat === 'closed' || cat === 'done';
 }
 
 function dateFieldLabel(f?: 'work' | 'due' | 'start'): string {

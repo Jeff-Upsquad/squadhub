@@ -172,7 +172,7 @@ router.get(['/my-open-sop-tasks', '/my-open-knowledge-tasks'], async (req: Reque
       .select('id, title, due_date, source_id, status')
       .eq('source_kind', sourceKind)
       .eq('source_user_id', req.userId!)
-      .not('status', 'in', '(done,closed,cancelled)')
+      .not('status', 'in', '(done,closed,cancelled,Done,Closed,Cancelled)')
       .order('due_date', { ascending: true, nullsFirst: false });
 
     if (taskError) {

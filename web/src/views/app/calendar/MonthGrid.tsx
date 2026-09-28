@@ -24,8 +24,10 @@ const MAX_CHIPS = 3;
 
 function isDone(status?: string | null): boolean {
   if (!status) return false;
-  if (status === 'done' || status === 'closed' || status === 'cancelled') return true;
-  return getTaskStatusCategory(status) === 'closed';
+  const s = status.toLowerCase().trim();
+  if (s === 'done' || s === 'closed' || s === 'cancelled') return true;
+  const cat = getTaskStatusCategory(status);
+  return cat === 'closed' || cat === 'done';
 }
 
 export default function MonthGrid({ monthAnchor, todayKey, tasks, weekStartsOn, onDropTask, onOpenTask, onOpenDay }: Props) {

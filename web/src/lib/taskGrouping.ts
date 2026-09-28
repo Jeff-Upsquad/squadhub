@@ -1,4 +1,5 @@
 import type { Task } from '@squadhub/shared';
+import { getTaskStatusCategory } from '@squadhub/shared';
 
 // Sentinel for callers that genuinely have no fading state to thread through
 // (e.g., exports, server-side rendering, tests). Real UI callers must pass the
@@ -203,7 +204,14 @@ export function isTaskCompleted(t: Task): boolean {
   if (s && typeof s === 'object') {
     return s.category === 'done' || s.category === 'closed';
   }
-  if (typeof s === 'string') return s === 'closed' || s === 'done' || s === 'cancelled';
+  if (typeof s === 'string') {
+    const lower = s.toLowerCase().trim();
+    if (lower === 'closed' || lower === 'done' || lower === 'cancelled') return true;
+    const cat = getTaskStatusCategory(s);
+    if (cat === 'done' || cat === 'closed') return true;
+  }
+  const category = (t as unknown as { category?: string | null }).category;
+  if (category === 'done' || category === 'closed') return true;
   return false;
 }
 

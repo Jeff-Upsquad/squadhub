@@ -571,7 +571,7 @@ router.get('/tasks/my', async (req: Request, res: Response) => {
       .is('recurrence', null);
 
     if (!includeDone) {
-      query = query.not('status', 'in', '(done,closed,cancelled)');
+      query = query.not('status', 'in', '(done,closed,cancelled,Done,Closed,Cancelled)');
     }
 
     const { data, error } = await query.order('due_date', { ascending: true, nullsFirst: false });
@@ -590,6 +590,36 @@ router.get('/tasks/my', async (req: Request, res: Response) => {
     // Meetings / Calls) can filter by label name client-side, plus each task's
     // direct subtasks so Home rows can expand their subtask list inline.
     const tasks = await hydrateSubtasks(await hydrateLabels(withParents));
+
+    // Resolve done/closed statuses across the spaces these tasks belong to
+    // so custom status names (or 'Done'/'Closed' in any case) are properly
+    // identified as complete.
+    const spaceIds = Array.from(new Set(tasks.map((t: any) => t.space?.id).filter(Boolean)));
+    let doneStatusKeys = new Set<string>();
+    if (spaceIds.length > 0) {
+      const { data: spaceStatuses } = await supabaseAdmin
+        .from('space_statuses')
+        .select('space_id, name, category')
+        .in('space_id', spaceIds as string[]);
+      doneStatusKeys = new Set(
+        (spaceStatuses || [])
+          .filter((s: any) => s.category === 'done' || s.category === 'closed')
+          .map((s: any) => `${s.space_id}::${String(s.name).toLowerCase()}`),
+      );
+    }
+
+    const isTaskDone = (t: any): boolean => {
+      const st = t.status;
+      if (!st) return false;
+      const lower = String(st).toLowerCase().trim();
+      if (lower === 'done' || lower === 'closed' || lower === 'cancelled') return true;
+      const cat = getTaskStatusCategory(st);
+      if (cat === 'done' || cat === 'closed') return true;
+      if (t.space?.id && doneStatusKeys.has(`${t.space.id}::${lower}`)) return true;
+      return false;
+    };
+
+    const openTasks = includeDone ? tasks : tasks.filter((t: any) => !isTaskDone(t));
 
     // Compute day boundaries in user's timezone
     const fmt = new Intl.DateTimeFormat('en-CA', {
@@ -615,7 +645,7 @@ router.get('/tasks/my', async (req: Request, res: Response) => {
       return fmt.format(new Date(v as string));
     };
 
-    for (const t of tasks) {
+    for (const t of openTasks) {
       const dueStr = toTzDay(t.due_date);
       const workStr = toTzDay(t.work_date);
       const startStr = toTzDay(t.start_date);
@@ -674,7 +704,7 @@ router.get('/tasks/my', async (req: Request, res: Response) => {
       // in the Home Today list, so this bucket carries all focused tasks.
       const isFocused = (t: any) => t.focused_at != null;
       const existingIds = new Set(tasks.map((t: any) => t.id));
-      const fromExisting = (tasks as any[]).filter(isFocused);
+      const fromExisting = (openTasks as any[]).filter(isFocused);
       const { data: createdFocused } = await supabaseAdmin
         .from('tasks')
         .select('*')
@@ -682,10 +712,17 @@ router.get('/tasks/my', async (req: Request, res: Response) => {
         .eq('created_by', req.userId!);
       let extra = (createdFocused ?? []).filter((t: any) => !existingIds.has(t.id) && isFocused(t));
       if (!includeDone) {
-        extra = extra.filter((t: any) => t.status !== 'done' && t.status !== 'closed' && t.status !== 'cancelled');
+        extra = extra.filter((t: any) => {
+          const lower = String(t.status || '').toLowerCase().trim();
+          if (lower === 'done' || lower === 'closed' || lower === 'cancelled') return false;
+          const cat = getTaskStatusCategory(t.status);
+          if (cat === 'done' || cat === 'closed') return false;
+          return true;
+        });
       }
       const hydratedExtra = await hydrateSubtasks(await hydrateLabels(await hydrateParents(await hydrateLists(await hydrateAssignees(extra)))));
-      buckets.focused = [...fromExisting, ...hydratedExtra];
+      const filteredExtra = includeDone ? hydratedExtra : hydratedExtra.filter((t: any) => !isTaskDone(t));
+      buckets.focused = [...fromExisting, ...filteredExtra];
     }
 
     // "In progress today" — tasks the caller has logged time on today (in their
@@ -719,10 +756,17 @@ router.get('/tasks/my', async (req: Request, res: Response) => {
           .from('tasks')
           .select('*')
           .in('id', missingWorked);
-        const filtered = includeDone
-          ? (extraRows ?? [])
-          : (extraRows ?? []).filter((t: any) => t.status !== 'done' && t.status !== 'closed' && t.status !== 'cancelled');
-        workedExtras = await hydrateSubtasks(await hydrateParents(await hydrateLists(await hydrateAssignees(filtered))));
+        let preFiltered = (extraRows ?? []);
+        if (!includeDone) {
+          preFiltered = preFiltered.filter((t: any) => {
+            const lower = String(t.status || '').toLowerCase().trim();
+            if (lower === 'done' || lower === 'closed' || lower === 'cancelled') return false;
+            const cat = getTaskStatusCategory(t.status);
+            if (cat === 'done' || cat === 'closed') return false;
+            return true;
+          });
+        }
+        workedExtras = await hydrateSubtasks(await hydrateParents(await hydrateLists(await hydrateAssignees(preFiltered))));
       }
       const workedById = new Map<string, any>([
         ...have,
@@ -730,7 +774,8 @@ router.get('/tasks/my', async (req: Request, res: Response) => {
       ]);
       buckets.in_progress_today = workedTodayIds
         .map((id) => workedById.get(id))
-        .filter(Boolean);
+        .filter(Boolean)
+        .filter((t) => includeDone || !isTaskDone(t));
     }
 
     res.json({ success: true, data: buckets });
@@ -761,7 +806,7 @@ router.get('/tasks/new', async (req: Request, res: Response) => {
         .select('*')
         .is('recurrence', null)
         .is('source_kind', null)
-        .not('status', 'in', '(done,closed,cancelled)');
+        .not('status', 'in', '(done,closed,cancelled,Done,Closed,Cancelled)');
 
     // (A) Assigned to me.
     const assignedRes = await base().contains('assignee_ids', [userId]);
@@ -814,11 +859,11 @@ router.get('/tasks/new', async (req: Request, res: Response) => {
       const doneStatusKeys = new Set(
         (spaceStatuses || [])
           .filter((s: any) => s.category === 'done' || s.category === 'closed')
-          .map((s: any) => `${s.space_id}::${s.name}`),
+          .map((s: any) => `${s.space_id}::${String(s.name).toLowerCase()}`),
       );
       if (doneStatusKeys.size > 0) {
         hydrated = hydrated.filter(
-          (t: any) => !(t.space?.id && doneStatusKeys.has(`${t.space.id}::${t.status}`)),
+          (t: any) => !(t.space?.id && doneStatusKeys.has(`${t.space.id}::${String(t.status || '').toLowerCase()}`)),
         );
       }
     }
@@ -840,7 +885,7 @@ router.get('/tasks/emergency', async (req: Request, res: Response) => {
       .from('tasks')
       .select('*')
       .eq('priority', 'emergency')
-      .not('status', 'in', '(done,closed,cancelled)')
+      .not('status', 'in', '(done,closed,cancelled,Done,Closed,Cancelled)')
       .is('parent_task_id', null)
       .is('recurrence', null)
       .order('created_at', { ascending: false });

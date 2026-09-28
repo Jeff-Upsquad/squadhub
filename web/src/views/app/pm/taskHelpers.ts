@@ -36,10 +36,11 @@ function hashHue(input: string): number {
  *  against the space's statuses (design/video spaces store names). */
 export function statusIsComplete(status: string | null | undefined, statuses: SpaceStatus[]): boolean {
   if (!status) return false;
-  if (status === 'done' || status === 'closed' || status === 'cancelled') return true;
+  const s = status.toLowerCase().trim();
+  if (s === 'done' || s === 'closed' || s === 'cancelled') return true;
   const cat = getTaskStatusCategory(status);
   if (cat === 'done' || cat === 'closed') return true;
-  const match = statuses.find((s) => s.name === status);
+  const match = statuses.find((st) => st.name.toLowerCase() === s);
   return match?.category === 'done' || match?.category === 'closed';
 }
 

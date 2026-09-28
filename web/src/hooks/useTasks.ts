@@ -39,13 +39,14 @@ function invalidateTaskLists(qc: QueryClient, listId: string | null, opts?: { de
 // custom status NAME — resolved against any cached space_statuses.
 function statusMeansComplete(qc: QueryClient, status: string | undefined): boolean {
   if (!status) return false;
-  if (status === 'done' || status === 'closed' || status === 'cancelled') return true;
+  const lower = status.toLowerCase().trim();
+  if (lower === 'done' || lower === 'closed' || lower === 'cancelled') return true;
   const cat = getTaskStatusCategory(status);
   if (cat === 'done' || cat === 'closed') return true;
   const spaceHasDoneStatus = (space: unknown): boolean => {
     const list = (space as { space_statuses?: SpaceStatus[] } | null)?.space_statuses;
     return Array.isArray(list)
-      && list.some((s) => s.name === status && (s.category === 'done' || s.category === 'closed'));
+      && list.some((s) => s.name.toLowerCase() === lower && (s.category === 'done' || s.category === 'closed'));
   };
   for (const [, data] of qc.getQueriesData({ queryKey: ['space'] })) {
     if (spaceHasDoneStatus(data)) return true;
@@ -274,6 +275,28 @@ export function useUpdateTask(listId: string | null) {
               qc.setQueryData(key, { ...(data as object), tasks: nextTasks });
             }
           }
+        }
+      }
+
+      // Patch my-tasks queries so the Home Focus list and In progress today
+      // update instantly without waiting for the server roundtrip.
+      for (const [key, data] of qc.getQueriesData({ queryKey: ['my-tasks'] })) {
+        if (!data || typeof data !== 'object') continue;
+        const b = data as Record<string, unknown>;
+        let changed = false;
+        const nextBuckets: Record<string, unknown> = {};
+        for (const k of ['overdue', 'today', 'tomorrow', 'upcoming', 'later', 'focused', 'in_progress_today', 'day_planner', 'unscheduled'] as const) {
+          if (Array.isArray(b[k])) {
+            const patched = patchInArray(b[k]);
+            if (patched !== b[k]) changed = true;
+            nextBuckets[k] = patched;
+          } else {
+            nextBuckets[k] = b[k];
+          }
+        }
+        if (changed) {
+          snapshots.push([key, data]);
+          qc.setQueryData(key, { ...b, ...nextBuckets });
         }
       }
 
