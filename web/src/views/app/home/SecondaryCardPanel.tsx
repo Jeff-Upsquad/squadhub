@@ -14,8 +14,8 @@ const GROUP_OPTIONS = GROUP_BY_OPTIONS;
 // Slide-in lister opened when a Home "disappearing card" is clicked. Mirrors
 // DashboardListPanel's mount / Escape / backdrop behaviour, header, group-by
 // pills and row UI exactly: rows are DashboardTaskRow (same overdue/priority/
-// path/avatar display) and open via the peek slot so the lister stays open
-// behind the task detail — the layout in the design reference.
+// path/avatar display). Resource rows use their source-opening action; other
+// rows open via the peek slot so the lister stays behind the task detail.
 export default function SecondaryCardPanel({ card }: { card: SecondaryCardConfig | null }) {
   const setActiveSecondaryCard = usePMStore((s) => s.setActiveSecondaryCard);
   const fadingTaskIds = usePMStore((s) => s.fadingTaskIds);
@@ -61,6 +61,7 @@ export default function SecondaryCardPanel({ card }: { card: SecondaryCardConfig
   }, [open, setActiveSecondaryCard]);
 
   const items = card?.data.items ?? [];
+  const itemsById = useMemo(() => new Map(items.map((item) => [item.id, item])), [items]);
   const tz = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC', []);
   const tasks = useMemo(() => items.map((it) => it.task), [items]);
 
@@ -82,10 +83,22 @@ export default function SecondaryCardPanel({ card }: { card: SecondaryCardConfig
           expanded={!!groupedExpanded[item.key]}
           onToggle={() => toggleGroupedExpanded(item.key)}
           onOpenContainer={openContainer}
-          renderChild={(t) => <DashboardTaskRow key={t.id} task={t} />}
+          renderChild={(t) => (
+            <DashboardTaskRow
+              key={t.id}
+              task={t}
+              onOpen={itemsById.get(t.id)?.open}
+              completeInResource={t.source_kind === 'sop' || t.source_kind === 'knowledge'}
+            />
+          )}
         />
       ) : (
-        <DashboardTaskRow key={item.id} task={item} />
+        <DashboardTaskRow
+          key={item.id}
+          task={item}
+          onOpen={itemsById.get(item.id)?.open}
+          completeInResource={item.source_kind === 'sop' || item.source_kind === 'knowledge'}
+        />
       ),
     );
 

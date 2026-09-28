@@ -41,7 +41,11 @@ const PRIORITY_LABEL: Record<string, string | null> = {
   none: null,
 };
 
-export default function DashboardTaskRow({ task }: { task: Task }) {
+export default function DashboardTaskRow({ task, onOpen: openOverride, completeInResource = false }: {
+  task: Task;
+  onOpen?: () => void;
+  completeInResource?: boolean;
+}) {
   const setActiveTask = usePMStore((s) => s.setActiveTask);
   const setPeekTask = usePMStore((s) => s.setPeekTask);
   const updateTask = useUpdateTask(null);
@@ -66,6 +70,10 @@ export default function DashboardTaskRow({ task }: { task: Task }) {
   const taskPath = [task.space?.name, task.folder?.name, task.list?.name].filter(Boolean).join(' › ');
 
   const onOpen = () => {
+    if (openOverride) {
+      openOverride();
+      return;
+    }
     if (isMobile) {
       setActiveTask(task.id);
       return;
@@ -92,6 +100,10 @@ export default function DashboardTaskRow({ task }: { task: Task }) {
 
   const onToggleDone = (e: React.MouseEvent) => {
     e.stopPropagation();
+    if (completeInResource) {
+      onOpen();
+      return;
+    }
     // Re-opening a completed task: flip straight back, no prompt.
     if (isDone) {
       updateTask.mutate({ id: task.id, status: 'todo' } as any);
@@ -124,6 +136,7 @@ export default function DashboardTaskRow({ task }: { task: Task }) {
         taskPath={taskPath}
         onOpen={onOpen}
         onToggleDone={onToggleDone}
+        completeInResource={completeInResource}
         onRowTransitionEnd={onRowTransitionEnd}
         isFadingOut={isFadingOut}
       />
@@ -180,6 +193,7 @@ function DashboardTaskRowInner({
   taskPath,
   onOpen,
   onToggleDone,
+  completeInResource,
   onRowTransitionEnd,
   isFadingOut,
 }: {
@@ -197,6 +211,7 @@ function DashboardTaskRowInner({
   taskPath: string;
   onOpen: () => void;
   onToggleDone: (e: React.MouseEvent) => void;
+  completeInResource: boolean;
   onRowTransitionEnd: (e: React.TransitionEvent<HTMLDivElement>) => void;
   isFadingOut: boolean;
 }) {
@@ -298,7 +313,9 @@ function DashboardTaskRowInner({
         data-done={displayDone}
         data-celebrating={isFadingOut}
         role="button"
-        aria-label={isDone ? 'Mark incomplete' : 'Mark complete'}
+        aria-label={completeInResource
+          ? `Open ${task.source_kind === 'knowledge' ? 'Knowledge Doc to mark reviewed' : 'SOP to mark complete'}`
+          : isDone ? 'Mark incomplete' : 'Mark complete'}
         onClick={onToggleDone}
       />
       <div className="body">
