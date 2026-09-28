@@ -1097,7 +1097,8 @@ router.get('/tasks/:id/time-entries', async (req: Request, res: Response) => {
 // unwind the two aggregates it fed (tasks.time_tracked + the day's summary), so
 // the popover's "Recent" list is the correction path for a mis-logged block.
 // Gated by the edit_logged_time skill for every entry, your own included.
-// Work-block rows are owned by their run and are not deletable here.
+// Work-block rows may be removed too, but only as a reduce (they hold positive
+// time, so deleting lowers the total) — never to add time back.
 router.delete('/tasks/:id/time-entries/:entryId', async (req: Request, res: Response) => {
   try {
     const taskId = req.params.id as string;
@@ -1122,10 +1123,6 @@ router.delete('/tasks/:id/time-entries/:entryId', async (req: Request, res: Resp
       .maybeSingle();
     if (!entry) {
       res.status(404).json({ success: false, error: 'Time entry not found' });
-      return;
-    }
-    if ((entry as any).source === 'work_block') {
-      res.status(400).json({ success: false, error: 'Work-block time is managed by its run' });
       return;
     }
     // Removing an entry changes the logged total, so it is gated by the
@@ -1164,11 +1161,12 @@ router.delete('/tasks/:id/time-entries/:entryId', async (req: Request, res: Resp
     // Only unwind the day if this entry ever fed it. A timer that overlapped a
     // work-block run was logged with skipDailySummary (the block owns that
     // wall-clock), so subtracting here would remove time the day never counted.
+    // A work-block entry itself always fed the day at closeRun, so it unwinds.
     if ((entry as any).workspace_id) {
       const entryStoppedAt = new Date(
         new Date((entry as any).started_at).getTime() + Math.max(0, seconds) * 1000,
       ).toISOString();
-      const fedTheDay = !(await overlapsWorkBlockRun(
+      const fedTheDay = (entry as any).source === 'work_block' || !(await overlapsWorkBlockRun(
         (entry as any).user_id,
         (entry as any).started_at,
         entryStoppedAt,
@@ -1193,10 +1191,12 @@ router.delete('/tasks/:id/time-entries/:entryId', async (req: Request, res: Resp
 // PATCH /pm/tasks/:id/time-entries/:entryId — change an already logged entry
 // (duration, start, note) in place. Gated by the edit_logged_time skill:
 // 'reduce' may only lower the entry's duration, 'full' may change it either
-// way. The entry keeps its logger (user_id); edited_at/edited_by record the
+// way — except work-block rows, which anyone may only reduce, never raise.
+// The entry keeps its logger (user_id); edited_at/edited_by record the
 // change. Both aggregates it fed are moved by the difference: tasks.time_tracked
 // by the delta, and the daily summary by unwinding the old day and re-adding on
-// the (possibly new) day — each only if that window actually fed the day.
+// the (possibly new) day — each only if that window actually fed the day
+// (a work-block row always fed it at closeRun).
 const updateTimeEntrySchema = z.object({
   duration_seconds: z.number().int().min(1, 'Negative time entries are disabled').optional(),
   started_at: z.string().datetime().optional(),
@@ -1231,10 +1231,7 @@ router.patch('/tasks/:id/time-entries/:entryId', async (req: Request, res: Respo
       return;
     }
     const e = entry as any;
-    if (e.source === 'work_block') {
-      res.status(400).json({ success: false, error: 'Work-block time is managed by its run' });
-      return;
-    }
+    const isBlockEntry = e.source === 'work_block';
 
     const oldSeconds = e.duration_seconds as number;
     const newSeconds = body.duration_seconds ?? oldSeconds;
@@ -1242,6 +1239,12 @@ router.patch('/tasks/:id/time-entries/:entryId', async (req: Request, res: Respo
     // positive value instead of logging a negative adjustment.
     if (newSeconds <= 0) {
       res.status(400).json({ success: false, error: 'Negative time entries are disabled' });
+      return;
+    }
+    // Work-block rows are auto-logged by their run: anyone may reduce them but
+    // no one may raise them, whatever skill level they hold.
+    if (isBlockEntry && newSeconds > oldSeconds) {
+      res.status(403).json({ success: false, error: 'Work-block time can only be reduced, not increased' });
       return;
     }
     // A negative entry is stored with its pair reordered (see logTaskTimeEntry),
@@ -1309,18 +1312,19 @@ router.patch('/tasks/:id/time-entries/:entryId', async (req: Request, res: Respo
 
     // Move the day's aggregate: take the old window off the day it fed, put
     // the new one on the day it lands. A window inside a work-block run never
-    // fed the day (the block owns that wall-clock), so skip it on either side.
+    // fed the day (the block owns that wall-clock), so skip it on either side —
+    // but a work-block row itself always fed the day at closeRun, so it moves.
     if (e.workspace_id && (delta !== 0 || newAnchor !== oldAnchor)) {
       // Same window the log path asked about: [anchor, anchor + positive span].
       const windowEnd = (anchor: string, secs: number) =>
         new Date(new Date(anchor).getTime() + Math.max(0, secs) * 1000).toISOString();
-      const oldFed = !(await overlapsWorkBlockRun(e.user_id, oldAnchor, windowEnd(oldAnchor, oldSeconds)));
+      const oldFed = isBlockEntry || !(await overlapsWorkBlockRun(e.user_id, oldAnchor, windowEnd(oldAnchor, oldSeconds)));
       if (oldFed) {
         await addDailyWorkSeconds({
           userId: e.user_id, workspaceId: e.workspace_id, startedAt: oldAnchor, durationSeconds: -oldSeconds,
         });
       }
-      const newFeeds = !(await overlapsWorkBlockRun(e.user_id, newAnchor, windowEnd(newAnchor, newSeconds)));
+      const newFeeds = isBlockEntry || !(await overlapsWorkBlockRun(e.user_id, newAnchor, windowEnd(newAnchor, newSeconds)));
       if (newFeeds) {
         await addDailyWorkSeconds({
           userId: e.user_id, workspaceId: e.workspace_id, startedAt: newAnchor, durationSeconds: newSeconds,
