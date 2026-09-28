@@ -22,10 +22,12 @@ vi.mock('../services/squadhireTraining', () => ({ syncContentToSquadhire: vi.fn(
 import { readLmsHistory } from '../services/lmsHistory';
 import router from '../routes/lms-collab';
 const itemId = '10000000-0000-4000-8000-000000000001';
+const lessonId = '30000000-0000-4000-8000-000000000001';
+const otherLessonId = '30000000-0000-4000-8000-000000000002';
 const versionId = '20000000-0000-4000-8000-000000000001';
 const response = () => ({status:vi.fn().mockReturnThis(),json:vi.fn()});
-beforeEach(() => {state.level='admin';state.reads=0;state.rows=[{id:versionId,item_id:itemId,change_label:'Content updated',page_title:'Onboarding',changed_at:'2026-09-27T12:00:00Z',snapshot:{pages:[{title:'Private previous answer'}]}}];});
-async function read(params: any,query = {}) {const res=response();await readLmsHistory({params,query} as Request,res as unknown as Response);return res;}
+beforeEach(() => {state.level='admin';state.reads=0;state.rows=[{id:versionId,item_id:itemId,page_id:lessonId,change_label:'Content updated',page_title:'Onboarding',changed_at:'2026-09-27T12:00:00Z',snapshot:{pages:[{id:lessonId,title:'Private previous answer'},{id:otherLessonId,title:'Other page'}]}}];});
+async function read(params: any,query: any = {}) {const res=response();await readLmsHistory({params,query:{lesson_id:lessonId,...query}} as Request,res as unknown as Response);return res;}
 describe('document history', () => {
  it('lists metadata only, with bounded pagination',async()=>{
    state.rows=Array.from({length:32},(_,i)=>({...state.rows[0],id:`version-${i}`}));
@@ -36,21 +38,28 @@ describe('document history', () => {
  it('cannot read a version through a different document',async()=>{
    const res=await read({id:'10000000-0000-4000-8000-000000000002',versionId});expect(res.status).toHaveBeenCalledWith(404);
  });
+ it('lists and opens changes only for the selected page',async()=>{
+   state.rows.push({...state.rows[0],id:'20000000-0000-4000-8000-000000000002',page_id:otherLessonId});
+   const list=await read({id:itemId});
+   expect(list.json.mock.calls[0][0].data.map((row: any)=>row.id)).toEqual([versionId]);
+   expect((await read({id:itemId,versionId},{lesson_id:otherLessonId})).status).toHaveBeenCalledWith(404);
+ });
  it('returns the immutable snapshot for the authorized document',async()=>{
-   const res=await read({id:itemId,versionId});expect(res.json.mock.calls[0][0].data.snapshot.pages[0].title).toBe('Private previous answer');
+   const res=await read({id:itemId,versionId});expect(res.json.mock.calls[0][0].data.snapshot.pages).toEqual([{id:lessonId,title:'Private previous answer'}]);
  });
  it('rejects invalid identifiers and pagination',async()=>{
    expect((await read({id:'bad'})).status).toHaveBeenCalledWith(400);
    expect((await read({id:itemId},{page:-1})).status).toHaveBeenCalledWith(400);
+   expect((await read({id:itemId},{lesson_id:'bad'})).status).toHaveBeenCalledWith(400);
  });
  const route = router.stack.find((r: any) => Array.isArray(r.route?.path) && r.route.path.includes('/items/:id/changes'))?.route;
  it.each([null,'viewer','commenter','contributor'])('does not expose historical drafts to %s',async level=>{
    state.level=level;const res=response();expect(route).toBeTruthy();
-   await route!.stack[0].handle({params:{id:itemId,versionId},query:{},userId:'user'} as unknown as Request,res as unknown as Response,vi.fn());
+   await route!.stack[0].handle({params:{id:itemId,versionId},query:{lesson_id:lessonId},userId:'user'} as unknown as Request,res as unknown as Response,vi.fn());
    expect(res.status).toHaveBeenCalledWith(403);expect(state.reads).toBe(0);
  });
  it('lets a document admin open Changes',async()=>{
-   const res=response();await route!.stack[0].handle({params:{id:itemId},query:{},userId:'admin'} as unknown as Request,res as unknown as Response,vi.fn());
+   const res=response();await route!.stack[0].handle({params:{id:itemId},query:{lesson_id:lessonId},userId:'admin'} as unknown as Request,res as unknown as Response,vi.fn());
    expect(res.json.mock.calls[0][0].success).toBe(true);
  });
 });

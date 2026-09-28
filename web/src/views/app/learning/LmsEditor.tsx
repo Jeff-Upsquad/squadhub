@@ -365,7 +365,7 @@ export default function LmsEditor({ draftItemId, isClone, initialLessonId, onExi
                 {!activeLesson && <p className="text-center text-sm text-[var(--sh-ink-3)]">No lesson selected.</p>}
               </div>
             )}
-            <DocumentChanges key={item.id} itemId={item.id} lessonId={activeLesson?.id} revision={item} />
+            {activeLesson && <DocumentChanges key={item.id} itemId={item.id} lessonId={activeLesson.id} revision={item} />}
           </div>
         </main>
       </div>
