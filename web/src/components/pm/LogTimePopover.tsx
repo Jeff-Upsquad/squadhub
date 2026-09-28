@@ -506,6 +506,7 @@ export default function LogTimePopover({
                 level={rowLevel}
                 isMine={isMineRow}
                 adminCapped={!isMineRow && isAdmin && editLevel === 'full'}
+                isWorkBlock={entry.source === 'work_block'}
                 onDone={() => setEditingId(null)}
               />
             ) : (
@@ -576,7 +577,7 @@ function RecentRow({
       <span className="tp-recent-meta">
         <span className="tp-recent-who">logged by {who}</span>
         <span className="tp-recent-when">{when}</span>
-        <span className="tp-recent-tag tp-recent-tag-lower" title={sourceLabel === 'timer' ? 'Logged by the timer' : sourceLabel === 'manual' ? 'Logged manually' : 'Logged by a work block'}>
+        <span className="tp-recent-tag tp-recent-tag-lower" title={sourceLabel === 'timer' ? 'Logged by the timer' : sourceLabel === 'manual' ? 'Logged manually' : 'Logged by a work block · reduce only'}>
           {sourceLabel}
         </span>
         {negative && (
@@ -618,6 +619,7 @@ function RecentRow({
  * One entry opened for editing, in place of its row: duration, when it was
  * logged from, and the note. With the 'reduce' level the duration may only go
  * down — the form says so up front and blocks a raise before the server does.
+ * Work-block rows are always reduce-only, whatever the level.
  */
 function EditEntryRow({
   taskId,
@@ -625,6 +627,7 @@ function EditEntryRow({
   level,
   isMine,
   adminCapped = false,
+  isWorkBlock = false,
   onDone,
 }: {
   taskId: string;
@@ -632,6 +635,7 @@ function EditEntryRow({
   level: EditLoggedTimeLevel;
   isMine: boolean;
   adminCapped?: boolean;
+  isWorkBlock?: boolean;
   onDone: () => void;
 }) {
   const update = useUpdateTaskTimeEntry();
@@ -667,7 +671,13 @@ function EditEntryRow({
   const newSeconds = durationTouched && minutes != null ? Math.round(minutes * 60) : oldSeconds;
   const isNegative = durationTouched && newSeconds <= 0;
   const raising = newSeconds > oldSeconds;
-  const blocked = (level === 'reduce' && raising) || isNegative;
+  const reduceOnly = level === 'reduce' || isWorkBlock;
+  const blocked = (reduceOnly && raising) || isNegative;
+  const blockedMsg = isWorkBlock
+    ? 'Work-block time can only be reduced, not increased'
+    : adminCapped
+      ? 'Admins can only reduce logged time, not increase it'
+      : 'You can only reduce this entry';
 
   const handleStartTimeChange = (val: string) => {
     setStartTimeValue(val);
@@ -759,7 +769,7 @@ function EditEntryRow({
     if (update.isPending) return;
     if (durationTouched && invalid) { setError(minutes != null && minutes < 0 ? 'Negative time entries are disabled' : 'Enter a duration, e.g. 1h 30m'); return; }
     if (isNegative) { setError('Negative time entries are disabled'); return; }
-    if (blocked) { setError(adminCapped ? 'Admins can only reduce logged time, not increase it' : 'You can only reduce this entry'); return; }
+    if (blocked) { setError(blockedMsg); return; }
     const start = whenTouched ? fromDateTimeInputs(startDateValue, startTimeValue) : null;
     const end = whenTouched ? fromDateTimeInputs(endDateValue, endTimeValue) : null;
     if (whenTouched && (!start || !end)) { setError('Pick a valid date and time'); return; }
@@ -799,10 +809,12 @@ function EditEntryRow({
     ? error
     : isNegative
       ? 'Negative time entries are disabled'
-      : level === 'reduce'
-      ? adminCapped
-        ? `Admin reduce only · up to ${formatHoursMinutes(Math.round(oldSeconds / 60)) || '<1m'}`
-        : `Reduce only · up to ${formatHoursMinutes(Math.round(oldSeconds / 60)) || '<1m'}`
+      : reduceOnly
+      ? isWorkBlock
+        ? `Block time · reduce only · up to ${formatHoursMinutes(Math.round(oldSeconds / 60)) || '<1m'}`
+        : adminCapped
+          ? `Admin reduce only · up to ${formatHoursMinutes(Math.round(oldSeconds / 60)) || '<1m'}`
+          : `Reduce only · up to ${formatHoursMinutes(Math.round(oldSeconds / 60)) || '<1m'}`
       : durationTouched && newSeconds !== oldSeconds
         ? `${raising ? '+' : '−'}${formatHoursMinutes(Math.abs(Math.round((newSeconds - oldSeconds) / 60))) || '<1m'} on ${who} entry`
         : 'Enter to save';
@@ -878,7 +890,7 @@ function EditEntryRow({
       </div>
       <div className="tp-edit-foot">
         <span className={`tp-foot-hint${error || blocked ? ' is-bad' : ''}`}>
-          {blocked && !error ? (adminCapped ? 'Admins can only reduce logged time, not increase it' : 'You can only reduce this entry') : hint}
+          {blocked && !error ? blockedMsg : hint}
         </span>
         <button type="button" className="tp-btn-ghost" onClick={onDone}>Cancel</button>
         <button
