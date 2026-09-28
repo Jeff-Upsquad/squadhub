@@ -66,6 +66,16 @@ async function loadPrincipals(userId: string): Promise<Principals> {
   return { isAdmin, userType: (user as any)?.user_type ?? null, roleIds };
 }
 
+/** True when the user is a platform or workspace admin (auto-holds every skill). */
+export async function isUserAdmin(userId: string): Promise<boolean> {
+  try {
+    const p = await loadPrincipals(userId);
+    return p.isAdmin;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Effective level of every skill for a user. Admins hold the top level of
  * every skill; everyone else gets the highest grant matching them directly,
