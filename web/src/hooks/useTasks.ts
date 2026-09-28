@@ -133,7 +133,7 @@ export type PersonalSpace = { space: Space; list: List };
  * can see it; it's hidden from the normal Spaces sidebar. Rarely changes, so a
  * long staleTime keeps it cached across navigation.
  */
-export function usePersonalList() {
+export function usePersonalList(enabled = true) {
   return useQuery<PersonalSpace>({
     queryKey: ['personal-space'],
     queryFn: async () => {
@@ -141,6 +141,7 @@ export function usePersonalList() {
       return res.data.data;
     },
     staleTime: 5 * 60_000,
+    enabled,
   });
 }
 

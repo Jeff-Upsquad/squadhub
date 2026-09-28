@@ -496,6 +496,14 @@ export default function MainLayout() {
   const [showChannelSettings, setShowChannelSettings] = useState(false);
   const [showCreateTaskModal, setShowCreateTaskModal] = useState(false);
   const [resumingDraft, setResumingDraft] = useState<SavedDraft | null>(null);
+  // Embedded views (e.g. the My Tasks section header) open the global create
+  // modal via `window.dispatchEvent(new CustomEvent('sh:open-create-task'))`
+  // since the modal state lives here, not in the view.
+  useEffect(() => {
+    const open = () => setShowCreateTaskModal(true);
+    window.addEventListener('sh:open-create-task', open);
+    return () => window.removeEventListener('sh:open-create-task', open);
+  }, []);
   const [timesheetOpen, setTimesheetOpen] = useState(false);
   const [timesheetAnchor, setTimesheetAnchor] = useState<DOMRect | null>(null);
   const [inboxSliderOpen, setInboxSliderOpen] = useState(false);
@@ -2104,6 +2112,9 @@ export default function MainLayout() {
           // list-context page; otherwise (Home/Inbox/My Tasks/Docs/etc.) the
           // persisted activeListId/contextListId would leak in as a stale default.
           inListContext={activeSection === 'home' && homeView === 'tasks'}
+          // In My Tasks the personal list is the sensible default so a task can
+          // be created directly inside the section.
+          inMyTasks={activeSection === 'home' && homeView === 'my-tasks'}
         />
       )}
 
