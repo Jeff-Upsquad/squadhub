@@ -211,7 +211,7 @@ export default function ListPage({
   return (
     // min-h-0 is load-bearing: without it this flex child's automatic minimum
     // is its content height, so the .lv-canvas scroll area below gets clipped.
-    <div className="relative flex min-h-0 flex-1 flex-col">
+    <div className={`relative flex min-h-0 flex-1 flex-col${embedded ? ' lv-embedded' : ''}`}>
       {isMobile && !embedded && (
         <div className="mtk-phone-head">
           <h1>{listData?.name || 'List'}</h1>
@@ -476,6 +476,8 @@ export default function ListPage({
             listId={activeListId}
             statuses={statuses}
             canEdit={canEdit}
+            activeView={activeView}
+            allViews={views}
           />
         )}
 

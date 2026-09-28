@@ -272,18 +272,33 @@ function EntryRow({
               ↳ Parent: {task.parent_task.title}
             </div>
           )}
-          <div className="mt-1 flex items-center gap-1.5 text-[11px] text-[var(--sh-ink-3)]">
+          <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] text-[var(--sh-ink-3)]">
             {entry.source === 'manual' ? (
-              <span className="rounded-[4px] bg-[var(--sh-hair-3)] px-1.5 py-[1px] font-medium text-[var(--sh-ink-3)]">
-                Manual
+              <span className="rounded-[4px] bg-[var(--sh-hair-3)] px-1.5 py-[1px] text-[10px] font-medium lowercase text-[var(--sh-ink-3)]">
+                manual
+              </span>
+            ) : entry.source === 'work_block' ? (
+              <span className="rounded-[4px] px-1.5 py-[1px] text-[10px] font-medium lowercase"
+                style={{ backgroundColor: 'rgba(139,92,246,0.14)', color: '#8b5cf6' }}>
+                block
               </span>
             ) : (
-              <span>{formatTimeRange(entry.started_at, entry.stopped_at)}</span>
+              <>
+                <span>{formatTimeRange(entry.started_at, entry.stopped_at)}</span>
+                <span className="rounded-[4px] bg-[var(--sh-hair-3)] px-1.5 py-[1px] text-[10px] font-medium lowercase text-[var(--sh-ink-3)]">
+                  timer
+                </span>
+              </>
             )}
             <span>·</span>
             <span className={entry.duration_seconds < 0 ? 'text-red-500' : undefined}>
               {formatTracked(entry.duration_seconds) || '—'}
             </span>
+            {entry.edited_at && (
+              <span className="rounded-[4px] border border-[var(--sh-hair)] px-1.5 py-[1px] text-[10px] font-medium lowercase text-[var(--sh-ink-3)]" title={`Edited ${new Date(entry.edited_at).toLocaleString()}`}>
+                edited
+              </span>
+            )}
           </div>
         </div>
         {!isBlock && (
@@ -351,9 +366,10 @@ function consolidateEntries(entries: TaskTimeEntry[]): TaskTimeEntry[] {
     const sameTask = (prev.task?.id || prev.task_id) === (entry.task?.id || entry.task_id);
     const sameSource = (prev.source || 'timer') === (entry.source || 'timer');
     const sameRun = (prev.work_block_run_id ?? null) === (entry.work_block_run_id ?? null);
+    const sameEdited = Boolean(prev.edited_at) === Boolean(entry.edited_at);
     const bothPositive = prev.duration_seconds > 0 && entry.duration_seconds > 0;
 
-    if (sameTask && sameSource && sameRun && bothPositive) {
+    if (sameTask && sameSource && sameRun && sameEdited && bothPositive) {
       const prevEnd = new Date(prev.stopped_at).getTime();
       const currStart = new Date(entry.started_at).getTime();
       const currEnd = new Date(entry.stopped_at).getTime();

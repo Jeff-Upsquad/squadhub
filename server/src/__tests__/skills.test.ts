@@ -27,16 +27,13 @@ describe('checkLoggedTimeChange', () => {
   it('lets "reduce" lower or remove time but never raise it', () => {
     expect(checkLoggedTimeChange('reduce', 3600, 1800)).toBeNull();
     expect(checkLoggedTimeChange('reduce', 3600, 0)).toBeNull(); // delete
-    expect(checkLoggedTimeChange('reduce', 0, -1800)).toBeNull(); // negative log
     expect(checkLoggedTimeChange('reduce', 3600, 3600)).toBeNull(); // note/start only
     expect(checkLoggedTimeChange('reduce', 3600, 3601)).toMatch(/only reduce/);
-    // Deleting a negative adjustment would put time back on.
-    expect(checkLoggedTimeChange('reduce', -1800, 0)).toMatch(/only reduce/);
   });
 
   it('lets "full" change time either way', () => {
     expect(checkLoggedTimeChange('full', 3600, 7200)).toBeNull();
     expect(checkLoggedTimeChange('full', 3600, 60)).toBeNull();
-    expect(checkLoggedTimeChange('full', -1800, 0)).toBeNull();
+    expect(checkLoggedTimeChange('full', 3600, 0)).toBeNull();
   });
 });

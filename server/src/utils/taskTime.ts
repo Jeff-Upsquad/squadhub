@@ -282,9 +282,10 @@ export function consolidateContiguousEntries<
     const sameSource = (prev.source || 'timer') === (entry.source || 'timer');
     const sameRun = (prev.work_block_run_id ?? null) === (entry.work_block_run_id ?? null);
     const sameNote = (prev.note ?? null) === (entry.note ?? null);
+    const sameEdited = Boolean((prev as any).edited_at) === Boolean((entry as any).edited_at);
     const bothPositive = prev.duration_seconds > 0 && entry.duration_seconds > 0;
 
-    if (sameTask && sameUser && sameSource && sameRun && sameNote && bothPositive) {
+    if (sameTask && sameUser && sameSource && sameRun && sameNote && sameEdited && bothPositive) {
       const prevEnd = new Date(prev.stopped_at).getTime();
       const currStart = new Date(entry.started_at).getTime();
       const currEnd = new Date(entry.stopped_at).getTime();

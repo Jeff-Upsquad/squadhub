@@ -923,6 +923,8 @@ export interface TaskTimeEntry {
   created_at: string;
   // Joined on the task-scoped history endpoint (who logged it).
   user?: { id: string; display_name: string | null; email: string | null } | null;
+  // Joined when edited_at is set (who actually edited it last).
+  edited_by_user?: { id: string; display_name: string | null; email: string | null } | null;
   // Joined — task + its list/folder/space + parent (for UI breadcrumbs)
   task?: Pick<Task, 'id' | 'title' | 'list_id' | 'time_tracked'> & {
     list?: { id: string; name: string } | null;

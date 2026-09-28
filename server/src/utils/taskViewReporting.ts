@@ -58,6 +58,35 @@ export async function getExcludedTaskIds(tasks: TaskViewCheckItem[]): Promise<Se
 
   if (excludedViewsByList.size === 0) return excludedIds;
 
+  // Hydrate label names so keyword matching covers title + description + tags,
+  // mirroring web/src/lib/viewKeywordMatching.ts. Tags live in
+  // task_tag_assignments -> task_tags(name).
+  const taskIds = tasks.map((t) => t.id);
+  const tagsByTask = new Map<string, string[]>();
+  try {
+    const { data: assignments } = await supabaseAdmin
+      .from('task_tag_assignments')
+      .select('task_id, tag_id')
+      .in('task_id', taskIds);
+    const tagIds = Array.from(new Set((assignments || []).map((a: any) => a.tag_id).filter(Boolean)));
+    if (tagIds.length > 0) {
+      const { data: tags } = await supabaseAdmin
+        .from('task_tags')
+        .select('id, name')
+        .in('id', tagIds);
+      const nameById = new Map<string, string>((tags || []).map((t: any) => [t.id as string, ((t.name || '') as string).toLowerCase()]));
+      for (const a of (assignments || []) as any[]) {
+        const name = nameById.get(a.tag_id as string);
+        if (!name) continue;
+        const arr: string[] = tagsByTask.get(a.task_id as string) || [];
+        arr.push(name);
+        tagsByTask.set(a.task_id, arr);
+      }
+    }
+  } catch {
+    // Tag hydration is best-effort — fall back to title/description matching.
+  }
+
   // For tasks that have excluded views on their list, check keyword / metadata matches
   for (const t of tasks) {
     const listViews = excludedViewsByList.get(t.list_id);
@@ -65,6 +94,7 @@ export async function getExcludedTaskIds(tasks: TaskViewCheckItem[]): Promise<Se
 
     const titleLower = (t.title || '').toLowerCase();
     const descLower = (t.description || '').toLowerCase();
+    const tagNames = tagsByTask.get(t.id) || [];
     const taskViewId = t.metadata?.view_id;
 
     for (const v of listViews) {
@@ -77,7 +107,7 @@ export async function getExcludedTaskIds(tasks: TaskViewCheckItem[]): Promise<Se
       if (keywords.length > 0) {
         const matchesKeyword = keywords.some((kw) => {
           const k = (kw || '').trim().toLowerCase();
-          return k && (titleLower.includes(k) || descLower.includes(k));
+          return k && (titleLower.includes(k) || descLower.includes(k) || tagNames.some((tn) => tn.includes(k)));
         });
         if (matchesKeyword) {
           excludedIds.add(t.id);
