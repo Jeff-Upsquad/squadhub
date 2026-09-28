@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
-import type { ListViewRow, ListView } from '@squadhub/shared';
+import type { ListViewRow, ListView, ListViewConfig } from '@squadhub/shared';
+import ViewSettingsModal from './ViewSettingsModal';
 
 // View-type glyphs — mirror the icons the old fixed List/Board/Whiteboard tabs used.
 const TYPE_ICON: Record<ListView, ReactNode> = {
@@ -22,19 +23,16 @@ const TYPE_ICON: Record<ListView, ReactNode> = {
   ),
 };
 
-const CREATE_OPTIONS: { type: ListView; label: string; hint: string }[] = [
-  { type: 'list', label: 'List', hint: 'Task list with saved filter' },
-  { type: 'board', label: 'Board', hint: 'Kanban grouped by status' },
-  { type: 'whiteboard', label: 'Whiteboard', hint: 'Blank FigJam-style canvas' },
-];
-
 interface ViewTabsProps {
   views: ListViewRow[];
   activeViewId: string | null;
   currentUserId?: string;
   canEdit: boolean;
+  listId?: string;
   onSelect: (viewId: string) => void;
   onCreate: (type: ListView) => void;
+  onCreateCustom?: (payload: { name: string; view_type: ListView; config: ListViewConfig; is_private?: boolean }) => void;
+  onUpdateCustom?: (view: ListViewRow, payload: { name: string; view_type: ListView; config: ListViewConfig; is_private?: boolean }) => void;
   onRename: (view: ListViewRow, name: string) => void;
   onDuplicate: (view: ListViewRow) => void;
   onSetDefault: (view: ListViewRow) => void;
@@ -71,11 +69,19 @@ function PortalMenu({ anchor, onClose, children }: { anchor: HTMLElement; onClos
 }
 
 export default function ViewTabs({
-  views, activeViewId, currentUserId, canEdit,
-  onSelect, onCreate, onRename, onDuplicate, onSetDefault, onTogglePrivate, onDelete,
+  views, activeViewId, currentUserId, canEdit, listId,
+  onSelect, onCreate, onCreateCustom, onUpdateCustom, onRename, onDuplicate, onSetDefault, onTogglePrivate, onDelete,
 }: ViewTabsProps) {
   const [menuFor, setMenuFor] = useState<{ view: ListViewRow; anchor: HTMLElement } | null>(null);
-  const [createAnchor, setCreateAnchor] = useState<HTMLElement | null>(null);
+  const [modalConfig, setModalConfig] = useState<{
+    isOpen: boolean;
+    mode: 'create' | 'edit';
+    initialView: ListViewRow | null;
+  }>({
+    isOpen: false,
+    mode: 'create',
+    initialView: null,
+  });
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draftName, setDraftName] = useState('');
 
@@ -95,6 +101,8 @@ export default function ViewTabs({
       {views.map((view) => {
         const active = view.id === activeViewId;
         const isEditing = editingId === view.id;
+        const hasKeywords = view.config?.keywords && view.config.keywords.length > 0;
+        const timeReportExcluded = view.config?.includeInTimeReport === false;
         return (
           <div key={view.id} className="vt-tab-wrap">
             {isEditing ? (
@@ -120,6 +128,23 @@ export default function ViewTabs({
               >
                 {TYPE_ICON[view.view_type]}
                 <span className="vt-tab-name">{view.name}</span>
+                {hasKeywords && (
+                  <span
+                    className="vt-kw-pill"
+                    title={`Keywords: ${view.config.keywords!.join(', ')}`}
+                  >
+                    {view.config.keywords!.length} kw
+                  </span>
+                )}
+                {timeReportExcluded && (
+                  <span
+                    className="vt-badge"
+                    title="Excluded from time report"
+                    style={{ color: '#f59e0b', fontSize: 10, marginLeft: 2 }}
+                  >
+                    ⏱✕
+                  </span>
+                )}
                 {view.is_default && (
                   <svg className="vt-badge" viewBox="0 0 24 24" fill="currentColor" aria-label="Default view">
                     <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77 5.82 21.02 7 14.14l-5-4.87 6.91-1.01L12 2z" />
@@ -154,34 +179,24 @@ export default function ViewTabs({
           className="vt-add"
           aria-label="Add view"
           title="Add a view"
-          onClick={(e) => setCreateAnchor(e.currentTarget)}
+          onClick={() => setModalConfig({ isOpen: true, mode: 'create', initialView: null })}
         >
           <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>
         </button>
       )}
 
-      {createAnchor && (
-        <PortalMenu anchor={createAnchor} onClose={() => setCreateAnchor(null)}>
-          <div className="lv-groupby-menu-head">Add a view</div>
-          {CREATE_OPTIONS.map((opt) => (
-            <button
-              key={opt.type}
-              type="button"
-              className="lv-groupby-item vt-create-item"
-              onClick={() => { onCreate(opt.type); setCreateAnchor(null); }}
-            >
-              <span className="vt-create-ico">{TYPE_ICON[opt.type]}</span>
-              <span className="vt-create-text">
-                <span className="vt-create-label">{opt.label}</span>
-                <span className="vt-create-hint">{opt.hint}</span>
-              </span>
-            </button>
-          ))}
-        </PortalMenu>
-      )}
-
       {menuFor && (
         <PortalMenu anchor={menuFor.anchor} onClose={() => setMenuFor(null)}>
+          <button
+            type="button"
+            className="lv-groupby-item"
+            onClick={() => {
+              setModalConfig({ isOpen: true, mode: 'edit', initialView: menuFor.view });
+              setMenuFor(null);
+            }}
+          >
+            Edit view settings
+          </button>
           <button type="button" className="lv-groupby-item" onClick={() => startRename(menuFor.view)}>Rename</button>
           <button type="button" className="lv-groupby-item" onClick={() => { onDuplicate(menuFor.view); setMenuFor(null); }}>Duplicate</button>
           {!menuFor.view.is_default && (
@@ -197,6 +212,23 @@ export default function ViewTabs({
           )}
         </PortalMenu>
       )}
+
+      <ViewSettingsModal
+        isOpen={modalConfig.isOpen}
+        mode={modalConfig.mode}
+        initialView={modalConfig.initialView}
+        listId={listId || ''}
+        onClose={() => setModalConfig({ isOpen: false, mode: 'create', initialView: null })}
+        onSave={(payload) => {
+          if (modalConfig.mode === 'create') {
+            if (onCreateCustom) onCreateCustom(payload);
+            else onCreate(payload.view_type);
+          } else if (modalConfig.mode === 'edit' && modalConfig.initialView) {
+            if (onUpdateCustom) onUpdateCustom(modalConfig.initialView, payload);
+          }
+          setModalConfig({ isOpen: false, mode: 'create', initialView: null });
+        }}
+      />
     </>
   );
 }

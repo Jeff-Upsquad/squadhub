@@ -15,7 +15,14 @@ const configSchema = z
     filters: z.record(z.any()).optional(),
     groupBy: z.string().optional(),
     sortBy: z.string().optional(),
+    keywords: z.array(z.string()).optional(),
+    includeInTimeReport: z.boolean().optional(),
+    defaultPriority: z.string().nullable().optional(),
+    defaultTaskTypeId: z.string().nullable().optional(),
+    defaultLabel: z.string().nullable().optional(),
+    showAllTasks: z.boolean().optional(),
   })
+  .passthrough()
   .default({});
 
 const createSchema = z.object({

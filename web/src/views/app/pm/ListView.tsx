@@ -1,10 +1,11 @@
 import { useMemo } from 'react';
-import type { SpaceStatus, Task } from '@squadhub/shared';
+import type { SpaceStatus, Task, ListViewRow } from '@squadhub/shared';
 import { useTasks, useUpdateTask, groupTasksByStatus } from '../../../hooks/useTasks';
 import { usePMStore, type ListGroupBy } from '../../../stores/pmStore';
 import { useAuthStore } from '../../../stores/authStore';
 import { groupTasks as groupTasksGeneric, partitionByCompletion, sortTasks, buildFocusTodayGroup, isTaskFocused, isTaskUpcoming, nestSubtasks, filterWithSubtasks, sortByCreationOrder, type SortBy } from '../../../lib/taskGrouping';
 import { filterTasks, countActiveFilters, EMPTY_FILTER, type TaskFilterState } from '../../../lib/filters';
+import { isTaskVisibleInView } from '../../../lib/viewKeywordMatching';
 import { useIsMobile } from '../../../hooks/useIsMobile';
 import TaskGroupCard from './TaskGroupCard';
 
@@ -19,6 +20,8 @@ export default function ListView({
   canEdit = true,
   sortBy = 'manual',
   focusToday = false,
+  activeView,
+  allViews = [],
 }: {
   listId: string;
   statuses: SpaceStatus[];
@@ -30,6 +33,8 @@ export default function ListView({
   canEdit?: boolean;
   sortBy?: SortBy;
   focusToday?: boolean;
+  activeView?: ListViewRow | null;
+  allViews?: ListViewRow[];
 }) {
   // Include subtasks as flat rows, then nest them under their parents so each
   // parent row gets the expandable subtask dropdown (TaskRow's chevron) instead
@@ -47,6 +52,7 @@ export default function ListView({
   const filteredTasks = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
     const matches = (t: Task): boolean => {
+      if (!isTaskVisibleInView(t, activeView, allViews)) return false;
       if (filterTasks([t], filters ?? EMPTY_FILTER, tz).length === 0) return false;
       if (q && !t.title.toLowerCase().includes(q)) return false;
       if (myTasksOnly) {
@@ -62,7 +68,7 @@ export default function ListView({
     // task lands at the bottom of its group. Explicit sorts take precedence.
     arr = sortBy !== 'manual' ? sortTasks(arr, sortBy) : sortByCreationOrder(arr);
     return arr;
-  }, [tasks, filters, searchQuery, myTasksOnly, currentUserId, tz, focusToday, sortBy]);
+  }, [tasks, filters, searchQuery, myTasksOnly, currentUserId, tz, focusToday, sortBy, activeView, allViews]);
 
   const activeFilterCount = countActiveFilters(filters);
 
@@ -88,6 +94,7 @@ export default function ListView({
     const noDateFilters = { ...f, dueDate: undefined, workDate: undefined };
     const q = searchQuery.trim().toLowerCase();
     const matches = (t: Task): boolean => {
+      if (!isTaskVisibleInView(t, activeView, allViews)) return false;
       if (filterTasks([t], noDateFilters, tz).length === 0) return false;
       if (q && !t.title.toLowerCase().includes(q)) return false;
       if (myTasksOnly) {
@@ -102,7 +109,7 @@ export default function ListView({
     const { open } = partitionByCompletion(base, fadingTaskIds);
     const upcoming = open.filter((t) => isTaskUpcoming(t, tz));
     return sortBy !== 'manual' ? sortTasks(upcoming, sortBy) : sortByCreationOrder(upcoming);
-  }, [tasks, filters, searchQuery, myTasksOnly, currentUserId, tz, focusToday, sortBy, openTasks, fadingTaskIds]);
+  }, [tasks, filters, searchQuery, myTasksOnly, currentUserId, tz, focusToday, sortBy, openTasks, fadingTaskIds, activeView, allViews]);
 
   const upcomingIds = useMemo(() => new Set(upcomingTasks.map((t) => t.id)), [upcomingTasks]);
 
@@ -235,6 +242,10 @@ export default function ListView({
                 dimFocused={!!focusGroup}
                 defaultNewTaskStatus={status.category}
                 onDrop={handleStatusChange}
+                defaultPriority={activeView?.config?.defaultPriority}
+                defaultTaskTypeId={activeView?.config?.defaultTaskTypeId}
+                defaultLabelId={activeView?.config?.defaultLabel}
+                activeViewId={activeView?.id}
               />
             ))}
             {upcomingCard()}
@@ -252,6 +263,10 @@ export default function ListView({
                 canEdit={canEdit}
                 showAddRow={canEdit}
                 dimFocused={!!focusGroup}
+                defaultPriority={activeView?.config?.defaultPriority}
+                defaultTaskTypeId={activeView?.config?.defaultTaskTypeId}
+                defaultLabelId={activeView?.config?.defaultLabel}
+                activeViewId={activeView?.id}
               />
             )}
             {upcomingCard()}

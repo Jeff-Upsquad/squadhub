@@ -171,6 +171,7 @@ export function useCreateTask(listId: string | null) {
       parent_task_id?: string | null;
       task_type_id?: string | null;
       recurrence?: TaskRecurrence | null;
+      tag_id?: string | null;
     }) => {
       const targetListId = body.list_id || listId;
       const res = await api.post('/pm/tasks', { ...body, list_id: targetListId });

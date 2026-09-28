@@ -4375,6 +4375,21 @@ body.sb-resizing { user-select: none; -webkit-user-select: none; cursor: col-res
 .vt-ico { width: 15px; height: 15px; flex-shrink: 0; }
 .vt-badge { width: 11px; height: 11px; flex-shrink: 0; color: var(--sh-ink-4); }
 .vt-tab[data-active="true"] .vt-badge { color: var(--sh-ink-3); }
+.vt-kw-pill {
+  font-size: 10px;
+  line-height: 1;
+  padding: 1.5px 5px;
+  border-radius: 999px;
+  background: var(--sh-hair);
+  color: var(--sh-ink-3);
+  font-weight: 600;
+  margin-left: 3px;
+  flex-shrink: 0;
+}
+.vt-tab[data-active="true"] .vt-kw-pill {
+  background: rgba(41, 98, 255, 0.15);
+  color: #2962ff;
+}
 .vt-kebab {
   display: inline-flex;
   align-items: center;

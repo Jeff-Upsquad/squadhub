@@ -1,5 +1,6 @@
 import { supabaseAdmin } from '../supabase';
 import { IST_OFFSET_MS } from './ist';
+import { filterTasksExcludedFromTimeReports, getExcludedTaskIds } from './taskViewReporting';
 import type {
   TimesheetProgressLine,
   TimesheetCompletedTask,
@@ -128,14 +129,15 @@ export async function getCompletedTasksForUser(
   // midnight-stored values land in the right day regardless of server timezone.
   const { data: tasks } = await supabaseAdmin
     .from('tasks')
-    .select('id, title, work_date, time_tracked')
+    .select('id, title, description, list_id, metadata, work_date, time_tracked')
     .contains('assignee_ids', [userId])
     .in('status', COMPLETED_STATUSES)
     .not('work_date', 'is', null)
     .gte('work_date', startDate)
     .lt('work_date', nextDay(endDate));
 
-  return (tasks || []) as RawCompletedTask[];
+  const validTasks = await filterTasksExcludedFromTimeReports(tasks || []);
+  return validTasks as RawCompletedTask[];
 }
 
 /** Completed tasks for a single day, hydrated with client, for the review list. */
@@ -168,7 +170,19 @@ async function getTimeEntries(userId: string, startDate: string, endDate: string
     .eq('user_id', userId)
     .gte('started_at', `${startDate}T00:00:00+05:30`)
     .lte('started_at', `${endDate}T23:59:59.999+05:30`);
-  return (data || []) as RawTimeEntry[];
+
+  const entries = (data || []) as RawTimeEntry[];
+  if (entries.length === 0) return entries;
+
+  const taskIds = Array.from(new Set(entries.map((e) => e.task_id)));
+  const { data: tasks } = await supabaseAdmin
+    .from('tasks')
+    .select('id, title, description, list_id, metadata')
+    .in('id', taskIds);
+  const excludedIds = await getExcludedTaskIds((tasks || []) as any[]);
+  if (excludedIds.size === 0) return entries;
+
+  return entries.filter((e) => !excludedIds.has(e.task_id));
 }
 
 // ---- progress computation ----
