@@ -327,7 +327,7 @@ export default function ThreadPanel({ parentId, channelId, kind, onClose, embedd
         channelId={channelId}
         kind={kind}
         parentMessageId={parentId}
-        placeholder="Reply…"
+        placeholder={root?.metadata?.kind === 'bot_doubt' ? 'Tell the bot what to do…' : 'Reply…'}
         onSend={() => queryClient.invalidateQueries({ queryKey })}
       />
     </div>

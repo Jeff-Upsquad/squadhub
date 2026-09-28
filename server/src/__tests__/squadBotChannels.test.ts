@@ -19,7 +19,7 @@ const bot = { id: botId, status: 'live' };
 const doubt = { id: doubtId, bot_id: botId, status: 'instructed', target: {}, job_id: null };
 function result(data: unknown, error: unknown = null) {
   const q: any = { then: (ok: any, fail: any) => Promise.resolve({ data, error }).then(ok, fail) };
-  for (const m of ['select','eq','is','order','range','update','insert','upsert','limit','maybeSingle','single']) q[m] = vi.fn(() => q);
+  for (const m of ['select','eq','is','order','range','update','insert','upsert','limit','maybeSingle','single','contains']) q[m] = vi.fn(() => q);
   mocks.from.mockReturnValueOnce(q); return q;
 }
 beforeAll(async () => {
@@ -29,7 +29,13 @@ beforeAll(async () => {
   base = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
 });
 afterAll(() => new Promise<void>(resolve => server.close(() => resolve())));
-beforeEach(() => { vi.resetAllMocks(); mocks.access.mockResolvedValue('member'); mocks.paused.mockResolvedValue(false); mocks.jobs.mockResolvedValue([]); mocks.channel.mockResolvedValue({ id: channelId }); });
+beforeEach(() => {
+  vi.resetAllMocks();
+  const fallback: any = { then: (ok: any, fail: any) => Promise.resolve({ data: null, error: null }).then(ok, fail) };
+  for (const m of ['select','eq','is','order','range','update','insert','upsert','limit','maybeSingle','single','contains']) fallback[m] = vi.fn(() => fallback);
+  mocks.from.mockReturnValue(fallback);
+  mocks.access.mockResolvedValue('member'); mocks.paused.mockResolvedValue(false); mocks.jobs.mockResolvedValue([]); mocks.channel.mockResolvedValue({ id: channelId });
+});
 const post = (path: string, body: unknown, headers = {}) => fetch(base + path, { method: 'POST', headers: { 'Content-Type':'application/json', ...headers }, body: JSON.stringify(body) });
 const resolution = `/channels/${channelId}/doubts/${doubtId}/resolve`;
 describe('bot questions and channel authority', () => {

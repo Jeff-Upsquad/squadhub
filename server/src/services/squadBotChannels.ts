@@ -57,3 +57,52 @@ export function guidanceContext(rows: Array<{ question: string; instruction: str
   }
   return parts.length ? 'Guidance saved by your internal team (apply when relevant):\n' + parts.join('\n\n') : '';
 }
+
+/** Get or provision the internal user record representing a squad bot. */
+export async function getOrCreateBotUser(
+  bot: { id: string; slug: string; internal_name: string; public_name?: string },
+  workspaceId: string,
+): Promise<{ id: string; display_name: string; avatar_url?: string | null }> {
+  const email = `bot-${bot.slug}@squadbots.internal`;
+  const { data: existing } = await supabaseAdmin
+    .from('users')
+    .select('id, display_name, avatar_url')
+    .eq('email', email)
+    .maybeSingle();
+
+  let botUser = existing;
+  if (!botUser) {
+    const { data: created, error } = await supabaseAdmin
+      .from('users')
+      .insert({
+        email,
+        display_name: bot.public_name || bot.internal_name,
+        user_type: 'internal',
+        is_admin: false,
+      })
+      .select('id, display_name, avatar_url')
+      .single();
+    if (error || !created) throw new Error(error?.message || 'Failed to create bot user');
+    botUser = created;
+  }
+
+  // Ensure membership in the workspace so channel and message checks succeed
+  const { data: wm } = await supabaseAdmin
+    .from('workspace_members')
+    .select('id')
+    .eq('workspace_id', workspaceId)
+    .eq('user_id', botUser.id)
+    .maybeSingle();
+  if (!wm) {
+    try {
+      await supabaseAdmin
+        .from('workspace_members')
+        .insert({ workspace_id: workspaceId, user_id: botUser.id, role: 'member' });
+    } catch {
+      // Ignore conflict
+    }
+  }
+
+  return botUser;
+}
+

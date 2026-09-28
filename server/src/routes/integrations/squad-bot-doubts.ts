@@ -2,7 +2,7 @@ import { Router, Request } from 'express';
 import { randomUUID } from 'crypto';
 import { z } from 'zod';
 import { supabaseAdmin } from '../../supabase';
-import { botChannel, doubtSchema } from '../../services/squadBotChannels';
+import { botChannel, doubtSchema, getOrCreateBotUser } from '../../services/squadBotChannels';
 import { allPaused, effectiveStatus, type SquadBotRow } from '../../services/squadBots';
 import { jobBlockReason, listJobs } from '../../services/squadBotJobs';
 
@@ -12,7 +12,8 @@ const fail = (res: any, e: unknown) => res.status(e instanceof z.ZodError ? 400 
 router.post('/doubts', async (req: BotRequest, res) => {
   try {
     const body = doubtSchema.parse(req.body), bot = req.squadBot!;
-    if (!await botChannel(bot.id)) { res.status(409).json({ error: 'Set up the bot channel in admin first' }); return; }
+    const channel = await botChannel(bot.id);
+    if (!channel) { res.status(409).json({ error: 'Set up the bot channel in admin first' }); return; }
     const jobs = await listJobs(bot.id);
     if ((jobs.length || body.job_id) && !jobs.some(j => j.id === body.job_id)) { res.status(400).json({ error: 'Choose a job belonging to this bot' }); return; }
     // A stable event_id makes retries return the original question, including
@@ -21,6 +22,47 @@ router.post('/doubts', async (req: BotRequest, res) => {
     if (insert.error) throw insert.error;
     const { data, error } = await supabaseAdmin.from('squad_bot_doubts').select('*').eq('bot_id', bot.id).eq('event_id', body.event_id).single();
     if (error) throw error;
+
+    // Post as a normal message in the bot's channel so the team sees it in the feed
+    try {
+      const { data: existingMsg } = await supabaseAdmin
+        .from('messages')
+        .select('id')
+        .eq('channel_id', channel.id)
+        .contains('metadata', { doubt_id: data.id })
+        .maybeSingle();
+
+      if (!existingMsg) {
+        const botUser = await getOrCreateBotUser(bot, channel.workspace_id);
+        const { data: newMsg } = await supabaseAdmin
+          .from('messages')
+          .insert({
+            channel_id: channel.id,
+            sender_id: botUser.id,
+            content: body.question,
+            type: 'text',
+            metadata: {
+              kind: 'bot_doubt',
+              doubt_id: data.id,
+              bot_id: bot.id,
+              question: body.question,
+              context: body.context,
+              source_url: body.source_url,
+              status: data.status,
+            },
+          })
+          .select('*, sender:users!sender_id(id, display_name, avatar_url)')
+          .single();
+
+        const io = req.app.get('io');
+        if (io && newMsg) {
+          io.to(channel.id).emit('new_message', newMsg);
+        }
+      }
+    } catch (msgErr) {
+      console.error('[squad-bot-doubts] could not post channel message for doubt:', msgErr);
+    }
+
     res.json({ success: true, data });
   } catch (e) { fail(res, e); }
 });
@@ -78,6 +120,68 @@ router.post('/doubts/:id/outcome', async (req: BotRequest, res) => {
       if (previous.data?.status === body.status && previous.data.outcome_note === body.note) { res.json({ success: true, data: previous.data }); return; }
       res.status(409).json({ error: 'No matching executing action' }); return;
     }
+    // Post outcome reply into the thread so the team sees the result
+    try {
+      const { data: parentMsg } = await supabaseAdmin
+        .from('messages')
+        .select('id, channel_id, metadata')
+        .contains('metadata', { doubt_id: id })
+        .maybeSingle();
+
+      if (parentMsg) {
+        const channel = await botChannel(req.squadBot!.id);
+        const botUser = await getOrCreateBotUser(req.squadBot!, channel?.workspace_id || '');
+        const replyText = body.status === 'completed'
+          ? `✅ Done! ${body.note || 'Reply sent to candidate.'}`
+          : `⚠️ Action failed: ${body.note || 'Unable to complete action.'}`;
+
+        const { data: threadReply } = await supabaseAdmin
+          .from('messages')
+          .insert({
+            channel_id: parentMsg.channel_id,
+            parent_message_id: parentMsg.id,
+            sender_id: botUser.id,
+            content: replyText,
+            type: 'text',
+          })
+          .select('*, sender:users!sender_id(id, display_name, avatar_url)')
+          .single();
+        if (threadReply) {
+          await supabaseAdmin.from('message_threads').insert({
+            parent_message_id: parentMsg.id,
+            reply_message_id: threadReply.id,
+          });
+        }
+
+        // Update parent message metadata status
+        const { data: updatedParent } = await supabaseAdmin
+          .from('messages')
+          .update({
+            metadata: {
+              ...(parentMsg as any).metadata,
+              status: body.status,
+              outcome_note: body.note,
+            },
+          })
+          .eq('id', parentMsg.id)
+          .select('*, sender:users!sender_id(id, display_name, avatar_url)')
+          .single();
+
+        const io = req.app.get('io');
+        if (io) {
+          if (updatedParent) {
+            io.to(parentMsg.channel_id).emit('message_updated', updatedParent);
+          }
+          if (threadReply) {
+            io.to(parentMsg.channel_id).emit('new_message', threadReply);
+            io.to(parentMsg.channel_id).emit('thread_reply', threadReply);
+          }
+        }
+      }
+    } catch (err) {
+      console.error('[squad-bot-doubts] could not post thread outcome reply:', err);
+    }
+
     res.json({ success: true, data });
   } catch (e) { fail(res, e); }
 });

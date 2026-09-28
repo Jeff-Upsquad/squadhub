@@ -235,6 +235,16 @@ export interface CrmActivityMeta {
 
 export interface MessageMetadata {
   crm_activity?: CrmActivityMeta;
+  kind?: string;
+  doubt_id?: string;
+  bot_id?: string;
+  question?: string;
+  context?: string;
+  source_url?: string;
+  status?: string;
+  instruction?: string | null;
+  outcome_note?: string | null;
+  [key: string]: unknown;
 }
 
 export interface Message {

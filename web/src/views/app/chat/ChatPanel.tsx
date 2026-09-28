@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
-import BotQuestions from './BotQuestions';
 import api from '../../../services/api';
 import { connectSocket, subscribeToChannelRoom } from '../../../services/socket';
 import type { Message } from '@squadhub/shared';
@@ -155,7 +154,6 @@ export default function ChatPanel({
   soloGuard?: boolean;
   active?: boolean;
 }) {
-  const botChannel = useWorkspaceStore(s => kind === 'channel' ? s.channels.find(c => c.id === channelId && c.squad_bot_id) : undefined);
   const queryClient = useQueryClient();
   const activeThreadParentId = useWorkspaceStore((s) => s.activeThreadParentId);
   const setActiveThread = useWorkspaceStore((s) => s.setActiveThread);
@@ -577,9 +575,16 @@ export default function ChatPanel({
     const prev = messagesWithDates[idx - 1];
     const cur = messagesWithDates[idx];
     if (!prev || prev.type !== 'message' || cur.type !== 'message') return false;
-    // Activity lines break the stacking chain — the next real message keeps
-    // its avatar/header even from the same author.
-    if (getActivityMeta(prev.message!) || getActivityMeta(cur.message!)) return false;
+    // Activity lines and bot doubt cards break the stacking chain — each
+    // doubt gets its own avatar, header, and card.
+    if (
+      getActivityMeta(prev.message!) ||
+      getActivityMeta(cur.message!) ||
+      prev.message!.metadata?.kind === 'bot_doubt' ||
+      cur.message!.metadata?.kind === 'bot_doubt'
+    ) {
+      return false;
+    }
     if (prev.message!.sender_id !== cur.message!.sender_id) return false;
     const dt = new Date(cur.message!.created_at).getTime() - new Date(prev.message!.created_at).getTime();
     return dt >= 0 && dt < 5 * 60 * 1000;
@@ -600,7 +605,6 @@ export default function ChatPanel({
             <div className="sqc-drop-overlay__label">Drop a file to attach</div>
           </div>
         )}
-        {botChannel && <div className="max-h-[55%] shrink-0 overflow-y-auto"><BotQuestions key={channelId} channelId={channelId} channelName={botChannel.name} active={active} /></div>}
         {/* Scrollable messages area */}
         <div className="sqc-msg-scroll" ref={scrollRef} onScroll={handleScroll}>
           {/* Spinner while older history loads in on scroll-up */}

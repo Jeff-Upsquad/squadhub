@@ -11,6 +11,7 @@ import ImageLightbox from './ImageLightbox';
 import LinkUnfurlCard from './LinkUnfurlCard';
 import MeetingPollCard from './MeetingPollCard';
 import HuddleCard from './HuddleCard';
+import BotDoubtCard from './BotDoubtCard';
 import { URL_PATTERN, URL_TEST, splitTrailingPunct, toHref } from '../../../lib/urlPattern';
 import { openExternalUrl } from '../../../lib/openExternal';
 import SopBreachReportModal from '../../../components/sop/SopBreachReportModal';
@@ -911,7 +912,8 @@ export default function MessageBubble({ message, onOpenThread, inThread, grouped
   return <ChatMessageBubble {...{ message, onOpenThread, inThread, grouped, threadMeta, highlighted, animateIn }} />;
 }
 
-function ChatMessageBubble({ message, onOpenThread, inThread, grouped, threadMeta, highlighted, animateIn }: Props) {
+function ChatMessageBubble({ message, onOpenThread, inThread, grouped: rawGrouped, threadMeta, highlighted, animateIn }: Props) {
+  const isGrouped = message.metadata?.kind === 'bot_doubt' ? false : rawGrouped;
   const queryClient = useQueryClient();
   const [showPicker, setShowPicker] = useState(false);
   const emojiBtnRef = useRef<HTMLButtonElement>(null);
@@ -1051,7 +1053,7 @@ function ChatMessageBubble({ message, onOpenThread, inThread, grouped, threadMet
 
   const cls =
     'sqc-msg' +
-    (grouped ? ' is-grouped' : '') +
+    (isGrouped ? ' is-grouped' : '') +
     (isMentioned ? ' is-mentioned' : '') +
     (highlighted ? ' is-search-hit' : '') +
     (animateIn ? ' is-live-arrival' : '');
@@ -1121,7 +1123,7 @@ function ChatMessageBubble({ message, onOpenThread, inThread, grouped, threadMet
       )}
 
       <div className="sqc-msg__gutter">
-        {grouped ? (
+        {isGrouped ? (
           <div className="sqc-msg__time-mini">{timeMini}</div>
         ) : (
           <div className="sqc-msg__avatar" style={{ background: avatarBg }} title={sender?.display_name || ''}>
@@ -1131,9 +1133,12 @@ function ChatMessageBubble({ message, onOpenThread, inThread, grouped, threadMet
       </div>
 
       <div className="sqc-msg__body">
-        {!grouped && (
+        {!isGrouped && (
           <div className="sqc-msg__header">
             <span className="sqc-msg__author">{sender?.display_name || 'Unknown'}</span>
+            {(message.metadata?.kind === 'bot_doubt' || sender?.display_name === 'Squad Bot') && (
+              <span className="sqc-msg__author-role">BOT</span>
+            )}
             <span className="sqc-msg__time">{time}</span>
           </div>
         )}
@@ -1211,6 +1216,9 @@ function ChatMessageBubble({ message, onOpenThread, inThread, grouped, threadMet
 
         {message.meeting_event_id && <MeetingPollCard meetingEventId={message.meeting_event_id} />}
         {message.huddle_id && <HuddleCard huddleId={message.huddle_id} />}
+        {message.metadata?.kind === 'bot_doubt' && (
+          <BotDoubtCard message={message} onOpenThread={onOpenThread} inThread={inThread} />
+        )}
         {message.unfurl && <LinkUnfurlCard unfurl={message.unfurl} />}
         <AttachmentBlock message={message} />
 

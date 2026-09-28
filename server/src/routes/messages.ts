@@ -287,6 +287,87 @@ router.post('/', requireAuth, async (req: Request, res: Response) => {
       }
     }
 
+    // If replying in a bot doubt thread, record instructions and acknowledge
+    if (body.parent_message_id) {
+      try {
+        const { data: parentMsg } = await supabaseAdmin
+          .from('messages')
+          .select('id, channel_id, metadata, sender_id')
+          .eq('id', body.parent_message_id)
+          .maybeSingle();
+
+        const parentMeta = parentMsg?.metadata as any;
+        if (
+          parentMsg &&
+          parentMeta?.kind === 'bot_doubt' &&
+          parentMeta.doubt_id &&
+          parentMeta.bot_id &&
+          parentMsg.sender_id !== req.userId &&
+          body.content &&
+          body.content.trim()
+        ) {
+          if (parentMeta.status === 'open') {
+            const { data: resolved, error: rpcErr } = await supabaseAdmin.rpc('resolve_squad_bot_doubt', {
+              p_id: parentMeta.doubt_id,
+              p_bot_id: parentMeta.bot_id,
+              p_user_id: req.userId,
+              p_mode: 'instruct',
+              p_instruction: body.content.trim(),
+            });
+
+            if (!rpcErr && resolved) {
+              const updatedMeta = {
+                ...parentMeta,
+                status: 'instructed',
+                instruction: body.content.trim(),
+              };
+
+              const { data: updatedParent } = await supabaseAdmin
+                .from('messages')
+                .update({ metadata: updatedMeta })
+                .eq('id', parentMsg.id)
+                .select('*, sender:users!sender_id(id, display_name, avatar_url)')
+                .single();
+
+              const room = body.channel_id || body.dm_conversation_id || parentMsg.channel_id;
+              if (io && updatedParent && room) {
+                io.to(room).emit('message_updated', updatedParent);
+              }
+
+              // Post bot acknowledgment reply in the thread
+              const botReplyContent = "Got it! I've saved this guidance and queued the reply to send to the candidate.";
+              const { data: botReply } = await supabaseAdmin
+                .from('messages')
+                .insert({
+                  channel_id: parentMsg.channel_id,
+                  parent_message_id: parentMsg.id,
+                  sender_id: parentMsg.sender_id,
+                  content: botReplyContent,
+                  type: 'text',
+                })
+                .select('*, sender:users!sender_id(id, display_name, avatar_url)')
+                .single();
+
+              if (botReply) {
+                await supabaseAdmin.from('message_threads').insert({
+                  parent_message_id: parentMsg.id,
+                  reply_message_id: botReply.id,
+                });
+                if (io && room) {
+                  io.to(room).emit('new_message', botReply);
+                  io.to(room).emit('thread_reply', botReply);
+                }
+              }
+            } else if (rpcErr) {
+              console.error('[messages] resolve_squad_bot_doubt error:', rpcErr);
+            }
+          }
+        }
+      } catch (botErr) {
+        console.error('[messages] bot doubt thread error:', botErr);
+      }
+    }
+
     // CRM entity chats: a new message reopens the chat for everyone who closed it
     // (delete close-state rows so it reappears under CRM Chats). Mentions also
     // grant channel membership so @someone is brought into the CRM chat.
