@@ -218,6 +218,16 @@ export default function MobileTour({
   const vh = typeof window === 'undefined' ? 800 : window.innerHeight;
   const above = !!hole && hole.top > vh - (hole.top + hole.height);
 
+  // Clamp the card so its actions can never slide below the fold (Android
+  // Chrome's dynamic toolbar makes 100vh unreliable — the CSS pairs this with
+  // a dvh-based max-height and internal scroll as a second net).
+  const SAFE = 24;
+  const maxHeight = hole
+    ? above
+      ? Math.max(180, hole.top - SAFE)
+      : Math.max(180, vh - (hole.top + hole.height) - SAFE)
+    : Math.max(180, vh - SAFE * 2);
+
   const card = (
     <div
       className="mtour-card"
@@ -227,11 +237,14 @@ export default function MobileTour({
       style={
         hole
           ? above
-            ? { bottom: vh - hole.top + 12 }
-            : { top: hole.top + hole.height + 12 }
-          : { top: '50%', transform: 'translateY(-50%)' }
+            ? { bottom: vh - hole.top + 12, maxHeight }
+            : { top: hole.top + hole.height + 12, maxHeight }
+          : { top: '50%', transform: 'translateY(-50%)', maxHeight }
       }
     >
+      <button type="button" className="mtour-close" aria-label="Dismiss tour" onClick={finish}>
+        ✕
+      </button>
       <span className="mtour-badge">Quick tour · {i + 1} of {steps.length}</span>
       <h2 id="mtour-title">{step.title}</h2>
       <p>{step.body}</p>
