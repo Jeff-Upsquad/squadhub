@@ -88,6 +88,11 @@ export interface PendingTimerStart {
   taskTitle: string;
   listId: string;
   baseTracked: number;
+  // True when the target is a work-block task: starting "a timer" on it must
+  // start a work-block run instead of a per-task timer, so the run-based
+  // completions system engages no matter which client completes work inside it
+  // (including the companion app's complete-on-add, which only the server sees).
+  isWorkBlock?: boolean;
 }
 
 // Close the running segment: every currently running timer gets an equal split
