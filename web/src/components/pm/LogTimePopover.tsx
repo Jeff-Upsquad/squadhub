@@ -69,10 +69,11 @@ export default function LogTimePopover({
   const [tab, setTab] = useState<Tab>('log');
   const [duration, setDuration] = useState('');
   const [note, setNote] = useState('');
-  const [dateValue, setDateValue] = useState(() => toDateInputValue(new Date()));
-  const [timeValue, setTimeValue] = useState(() => toTimeInputValue(new Date()));
-  // Until the user edits "when" themselves, the start time trails the duration
-  // so a freshly typed "1h 30m" means "the 90 minutes that just ended".
+  const [startDateValue, setStartDateValue] = useState(() => toDateInputValue(new Date()));
+  const [startTimeValue, setStartTimeValue] = useState(() => toTimeInputValue(new Date()));
+  const [endDateValue, setEndDateValue] = useState(() => toDateInputValue(new Date()));
+  const [endTimeValue, setEndTimeValue] = useState(() => toTimeInputValue(new Date()));
+  const [lastAnchor, setLastAnchor] = useState<'start' | 'end'>('end');
   const [whenTouched, setWhenTouched] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [justLogged, setJustLogged] = useState<number | null>(null);
@@ -102,13 +103,6 @@ export default function LogTimePopover({
   }, [canLog]);
 
   useEffect(() => {
-    if (whenTouched || minutes == null || minutes <= 0) return;
-    const start = new Date(Date.now() - minutes * 60_000);
-    setDateValue(toDateInputValue(start));
-    setTimeValue(toTimeInputValue(start));
-  }, [minutes, whenTouched]);
-
-  useEffect(() => {
     const onDown = (e: MouseEvent) => {
       if (ref.current && !ref.current.contains(e.target as Node)) onClose();
     };
@@ -131,22 +125,120 @@ export default function LogTimePopover({
     ? liveTotalSeconds - estimateSeconds
     : 0;
 
-  const startAt = fromDateTimeInputs(dateValue, timeValue);
-  const endAt = startAt && minutes ? new Date(startAt.getTime() + Math.abs(minutes) * 60_000) : null;
+  const startAt = fromDateTimeInputs(startDateValue, startTimeValue);
+  const endAt = fromDateTimeInputs(endDateValue, endTimeValue);
+
+  const handleStartTimeChange = (val: string) => {
+    setStartTimeValue(val);
+    setWhenTouched(true);
+    setError(null);
+    setLastAnchor('start');
+    const start = fromDateTimeInputs(startDateValue, val);
+    const end = fromDateTimeInputs(endDateValue, endTimeValue);
+    if (start && end) {
+      const diffMins = Math.round((end.getTime() - start.getTime()) / 60_000);
+      setDuration(diffMins !== 0 ? formatHoursMinutes(diffMins) : '0m');
+    }
+  };
+
+  const handleStartDateChange = (val: string) => {
+    setStartDateValue(val);
+    setWhenTouched(true);
+    setError(null);
+    setLastAnchor('start');
+    let targetEndDate = endDateValue;
+    if (startDateValue === endDateValue) {
+      setEndDateValue(val);
+      targetEndDate = val;
+    }
+    const start = fromDateTimeInputs(val, startTimeValue);
+    const end = fromDateTimeInputs(targetEndDate, endTimeValue);
+    if (start && end) {
+      const diffMins = Math.round((end.getTime() - start.getTime()) / 60_000);
+      setDuration(diffMins !== 0 ? formatHoursMinutes(diffMins) : '0m');
+    }
+  };
+
+  const handleEndTimeChange = (val: string) => {
+    setEndTimeValue(val);
+    setWhenTouched(true);
+    setError(null);
+    setLastAnchor('start');
+    const start = fromDateTimeInputs(startDateValue, startTimeValue);
+    const end = fromDateTimeInputs(endDateValue, val);
+    if (start && end) {
+      const diffMins = Math.round((end.getTime() - start.getTime()) / 60_000);
+      setDuration(diffMins !== 0 ? formatHoursMinutes(diffMins) : '0m');
+    }
+  };
+
+  const handleEndDateChange = (val: string) => {
+    setEndDateValue(val);
+    setWhenTouched(true);
+    setError(null);
+    setLastAnchor('start');
+    const start = fromDateTimeInputs(startDateValue, startTimeValue);
+    const end = fromDateTimeInputs(val, endTimeValue);
+    if (start && end) {
+      const diffMins = Math.round((end.getTime() - start.getTime()) / 60_000);
+      setDuration(diffMins !== 0 ? formatHoursMinutes(diffMins) : '0m');
+    }
+  };
+
+  const handleDurationChange = (val: string) => {
+    setDuration(val);
+    setError(null);
+    const parsed = parseDuration(val);
+    if (parsed != null && parsed !== 0) {
+      if (lastAnchor === 'start') {
+        const start = fromDateTimeInputs(startDateValue, startTimeValue);
+        if (start) {
+          const nextEnd = new Date(start.getTime() + parsed * 60_000);
+          setEndDateValue(toDateInputValue(nextEnd));
+          setEndTimeValue(toTimeInputValue(nextEnd));
+        }
+      } else {
+        const end = fromDateTimeInputs(endDateValue, endTimeValue);
+        if (end) {
+          const nextStart = new Date(end.getTime() - parsed * 60_000);
+          setStartDateValue(toDateInputValue(nextStart));
+          setStartTimeValue(toTimeInputValue(nextStart));
+        }
+      }
+    }
+  };
 
   const bumpDuration = (delta: number) => {
     const base = minutes ?? 0;
     const next = base + delta;
-    setDuration(next > 0 ? formatDuration(next) : '');
+    setDuration(next !== 0 ? formatHoursMinutes(next) : '');
     setError(null);
+    if (next !== 0) {
+      if (lastAnchor === 'start') {
+        const start = fromDateTimeInputs(startDateValue, startTimeValue);
+        if (start) {
+          const nextEnd = new Date(start.getTime() + next * 60_000);
+          setEndDateValue(toDateInputValue(nextEnd));
+          setEndTimeValue(toTimeInputValue(nextEnd));
+        }
+      } else {
+        const end = fromDateTimeInputs(endDateValue, endTimeValue);
+        if (end) {
+          const nextStart = new Date(end.getTime() - next * 60_000);
+          setStartDateValue(toDateInputValue(nextStart));
+          setStartTimeValue(toTimeInputValue(nextStart));
+        }
+      }
+    }
   };
 
   const submit = async () => {
     if (createEntry.isPending) return;
     if (minutes == null || minutes === 0) { setError('Enter a duration, e.g. 1h 30m'); return; }
     if (minutes < 0 && !canAdjust) { setError('Taking time off needs the “Edit logged time” skill'); return; }
-    if (!startAt) { setError('Pick a valid date and time'); return; }
-    if (startAt.getTime() > Date.now() + 60_000) { setError("That's in the future"); return; }
+    if (!startAt || !endAt) { setError('Pick a valid date and time'); return; }
+    if (endAt.getTime() > Date.now() + 60_000) { setError("That's in the future"); return; }
+    if (startAt.getTime() > endAt.getTime() && minutes > 0) { setError("End time cannot be before start time"); return; }
 
     try {
       await createEntry.mutateAsync({
@@ -160,6 +252,12 @@ export default function LogTimePopover({
       setDuration('');
       setNote('');
       setWhenTouched(false);
+      setLastAnchor('end');
+      const resetNow = new Date();
+      setStartDateValue(toDateInputValue(resetNow));
+      setStartTimeValue(toTimeInputValue(resetNow));
+      setEndDateValue(toDateInputValue(resetNow));
+      setEndTimeValue(toTimeInputValue(resetNow));
       setError(null);
       setTimeout(() => setJustLogged(null), 2200);
     } catch (err: unknown) {
@@ -265,7 +363,7 @@ export default function LogTimePopover({
                 id="tp-duration"
                 ref={durationRef}
                 value={duration}
-                onChange={(e) => { setDuration(e.target.value); setError(null); }}
+                onChange={(e) => handleDurationChange(e.target.value)}
                 onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void submit(); } }}
                 placeholder="1h 30m"
                 className="tp-input tp-input-sm"
@@ -282,31 +380,46 @@ export default function LogTimePopover({
           </div>
 
           <div className="tp-row">
-            <label className="tp-label" htmlFor="tp-date">Started</label>
+            <label className="tp-label" htmlFor="tp-start-time">Started</label>
             <div className="tp-row-main">
               <input
-                id="tp-date"
-                type="date"
-                value={dateValue}
-                max={toDateInputValue(new Date())}
-                onChange={(e) => { setDateValue(e.target.value); setWhenTouched(true); setError(null); }}
-                className="tp-input tp-input-date"
+                id="tp-start-time"
+                type="time"
+                value={startTimeValue}
+                onChange={(e) => handleStartTimeChange(e.target.value)}
+                className="tp-input tp-input-time"
               />
               <input
-                type="time"
-                value={timeValue}
-                onChange={(e) => { setTimeValue(e.target.value); setWhenTouched(true); setError(null); }}
-                className="tp-input tp-input-time"
+                id="tp-start-date"
+                type="date"
+                value={startDateValue}
+                max={toDateInputValue(new Date())}
+                onChange={(e) => handleStartDateChange(e.target.value)}
+                className="tp-input tp-input-date"
               />
             </div>
           </div>
 
-          {endAt && !subtracting && (
-            <div className="tp-span">
-              {formatClockTime(startAt!)} → {formatClockTime(endAt)}
-              {!whenTouched && <span className="tp-span-hint"> · ends now</span>}
+          <div className="tp-row">
+            <label className="tp-label" htmlFor="tp-end-time">Ended</label>
+            <div className="tp-row-main">
+              <input
+                id="tp-end-time"
+                type="time"
+                value={endTimeValue}
+                onChange={(e) => handleEndTimeChange(e.target.value)}
+                className="tp-input tp-input-time"
+              />
+              <input
+                id="tp-end-date"
+                type="date"
+                value={endDateValue}
+                max={toDateInputValue(new Date())}
+                onChange={(e) => handleEndDateChange(e.target.value)}
+                className="tp-input tp-input-date"
+              />
             </div>
-          )}
+          </div>
 
           <div className="tp-row">
             <label className="tp-label" htmlFor="tp-note">Note</label>
@@ -516,17 +629,19 @@ function EditEntryRow({
 }) {
   const update = useUpdateTaskTimeEntry();
   const oldSeconds = entry.duration_seconds;
-  // A negative entry is stored with its pair reordered, so the moment it was
-  // logged "from" is stopped_at.
-  const anchor = new Date(oldSeconds < 0 ? entry.stopped_at : entry.started_at);
+  const startAnchor = new Date(entry.started_at);
+  const endAnchor = new Date(entry.stopped_at);
 
   const [duration, setDuration] = useState(
     () => formatHoursMinutes(Math.round(oldSeconds / 60)) || (oldSeconds < 0 ? '-1m' : '1m'),
   );
   const [durationTouched, setDurationTouched] = useState(false);
-  const [dateValue, setDateValue] = useState(() => toDateInputValue(anchor));
-  const [timeValue, setTimeValue] = useState(() => toTimeInputValue(anchor));
+  const [startDateValue, setStartDateValue] = useState(() => toDateInputValue(startAnchor));
+  const [startTimeValue, setStartTimeValue] = useState(() => toTimeInputValue(startAnchor));
+  const [endDateValue, setEndDateValue] = useState(() => toDateInputValue(endAnchor));
+  const [endTimeValue, setEndTimeValue] = useState(() => toTimeInputValue(endAnchor));
   const [whenTouched, setWhenTouched] = useState(false);
+  const [lastAnchor, setLastAnchor] = useState<'start' | 'end'>('start');
   const [note, setNote] = useState(entry.note || '');
   const [error, setError] = useState<string | null>(null);
   const durationRef = useRef<HTMLInputElement>(null);
@@ -546,15 +661,107 @@ function EditEntryRow({
   const raising = newSeconds > oldSeconds;
   const blocked = level === 'reduce' && raising;
 
+  const handleStartTimeChange = (val: string) => {
+    setStartTimeValue(val);
+    setWhenTouched(true);
+    setDurationTouched(true);
+    setError(null);
+    setLastAnchor('start');
+    const start = fromDateTimeInputs(startDateValue, val);
+    const end = fromDateTimeInputs(endDateValue, endTimeValue);
+    if (start && end) {
+      const diffMins = Math.round((end.getTime() - start.getTime()) / 60_000);
+      setDuration(diffMins !== 0 ? formatHoursMinutes(diffMins) : '0m');
+    }
+  };
+
+  const handleStartDateChange = (val: string) => {
+    setStartDateValue(val);
+    setWhenTouched(true);
+    setDurationTouched(true);
+    setError(null);
+    setLastAnchor('start');
+    let targetEndDate = endDateValue;
+    if (startDateValue === endDateValue) {
+      setEndDateValue(val);
+      targetEndDate = val;
+    }
+    const start = fromDateTimeInputs(val, startTimeValue);
+    const end = fromDateTimeInputs(targetEndDate, endTimeValue);
+    if (start && end) {
+      const diffMins = Math.round((end.getTime() - start.getTime()) / 60_000);
+      setDuration(diffMins !== 0 ? formatHoursMinutes(diffMins) : '0m');
+    }
+  };
+
+  const handleEndTimeChange = (val: string) => {
+    setEndTimeValue(val);
+    setWhenTouched(true);
+    setDurationTouched(true);
+    setError(null);
+    setLastAnchor('start');
+    const start = fromDateTimeInputs(startDateValue, startTimeValue);
+    const end = fromDateTimeInputs(endDateValue, val);
+    if (start && end) {
+      const diffMins = Math.round((end.getTime() - start.getTime()) / 60_000);
+      setDuration(diffMins !== 0 ? formatHoursMinutes(diffMins) : '0m');
+    }
+  };
+
+  const handleEndDateChange = (val: string) => {
+    setEndDateValue(val);
+    setWhenTouched(true);
+    setDurationTouched(true);
+    setError(null);
+    setLastAnchor('start');
+    const start = fromDateTimeInputs(startDateValue, startTimeValue);
+    const end = fromDateTimeInputs(val, endTimeValue);
+    if (start && end) {
+      const diffMins = Math.round((end.getTime() - start.getTime()) / 60_000);
+      setDuration(diffMins !== 0 ? formatHoursMinutes(diffMins) : '0m');
+    }
+  };
+
+  const handleDurationChange = (val: string) => {
+    setDuration(val);
+    setDurationTouched(true);
+    setError(null);
+    const parsed = parseDuration(val);
+    if (parsed != null && parsed !== 0) {
+      setWhenTouched(true);
+      if (lastAnchor === 'start') {
+        const start = fromDateTimeInputs(startDateValue, startTimeValue);
+        if (start) {
+          const nextEnd = new Date(start.getTime() + parsed * 60_000);
+          setEndDateValue(toDateInputValue(nextEnd));
+          setEndTimeValue(toTimeInputValue(nextEnd));
+        }
+      } else {
+        const end = fromDateTimeInputs(endDateValue, endTimeValue);
+        if (end) {
+          const nextStart = new Date(end.getTime() - parsed * 60_000);
+          setStartDateValue(toDateInputValue(nextStart));
+          setStartTimeValue(toTimeInputValue(nextStart));
+        }
+      }
+    }
+  };
+
   const save = async () => {
     if (update.isPending) return;
     if (durationTouched && invalid) { setError('Enter a duration, e.g. 1h 30m'); return; }
     if (blocked) { setError('You can only reduce this entry'); return; }
-    const start = whenTouched ? fromDateTimeInputs(dateValue, timeValue) : null;
-    if (whenTouched && !start) { setError('Pick a valid date and time'); return; }
+    const start = whenTouched ? fromDateTimeInputs(startDateValue, startTimeValue) : null;
+    const end = whenTouched ? fromDateTimeInputs(endDateValue, endTimeValue) : null;
+    if (whenTouched && (!start || !end)) { setError('Pick a valid date and time'); return; }
+    if (end && end.getTime() > Date.now() + 60_000) { setError("That entry would end in the future"); return; }
+    if (start && end && start.getTime() > end.getTime() && newSeconds > 0) {
+      setError("End time cannot be before start time");
+      return;
+    }
 
     const noteValue = note.trim() || null;
-    const changed = newSeconds !== oldSeconds || whenTouched || noteValue !== (entry.note || null);
+    const changed = (durationTouched && newSeconds !== oldSeconds) || whenTouched || noteValue !== (entry.note || null);
     if (!changed) { onDone(); return; }
 
     try {
@@ -596,7 +803,7 @@ function EditEntryRow({
             id={`tp-edit-dur-${entry.id}`}
             ref={durationRef}
             value={duration}
-            onChange={(e) => { setDuration(e.target.value); setDurationTouched(true); setError(null); }}
+            onChange={(e) => handleDurationChange(e.target.value)}
             className="tp-input tp-input-sm"
             aria-invalid={(durationTouched && invalid) || blocked}
             placeholder="1h 30m"
@@ -604,21 +811,42 @@ function EditEntryRow({
         </div>
       </div>
       <div className="tp-row">
-        <label className="tp-label" htmlFor={`tp-edit-date-${entry.id}`}>Started</label>
+        <label className="tp-label" htmlFor={`tp-edit-start-time-${entry.id}`}>Started</label>
         <div className="tp-row-main">
           <input
-            id={`tp-edit-date-${entry.id}`}
-            type="date"
-            value={dateValue}
-            max={toDateInputValue(new Date())}
-            onChange={(e) => { setDateValue(e.target.value); setWhenTouched(true); setError(null); }}
-            className="tp-input tp-input-date"
+            id={`tp-edit-start-time-${entry.id}`}
+            type="time"
+            value={startTimeValue}
+            onChange={(e) => handleStartTimeChange(e.target.value)}
+            className="tp-input tp-input-time"
           />
           <input
+            id={`tp-edit-start-date-${entry.id}`}
+            type="date"
+            value={startDateValue}
+            max={toDateInputValue(new Date())}
+            onChange={(e) => handleStartDateChange(e.target.value)}
+            className="tp-input tp-input-date"
+          />
+        </div>
+      </div>
+      <div className="tp-row">
+        <label className="tp-label" htmlFor={`tp-edit-end-time-${entry.id}`}>Ended</label>
+        <div className="tp-row-main">
+          <input
+            id={`tp-edit-end-time-${entry.id}`}
             type="time"
-            value={timeValue}
-            onChange={(e) => { setTimeValue(e.target.value); setWhenTouched(true); setError(null); }}
+            value={endTimeValue}
+            onChange={(e) => handleEndTimeChange(e.target.value)}
             className="tp-input tp-input-time"
+          />
+          <input
+            id={`tp-edit-end-date-${entry.id}`}
+            type="date"
+            value={endDateValue}
+            max={toDateInputValue(new Date())}
+            onChange={(e) => handleEndDateChange(e.target.value)}
+            className="tp-input tp-input-date"
           />
         </div>
       </div>
