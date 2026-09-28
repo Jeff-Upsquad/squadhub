@@ -1,9 +1,11 @@
 import { useMemo, useState } from 'react';
-import type { SpaceStatus, Task } from '@squadhub/shared';
+import type { SpaceStatus, Task, ListViewRow } from '@squadhub/shared';
+import api from '../../../services/api';
 import { useTasks, useUpdateTask, useCreateTask, groupTasksByStatus } from '../../../hooks/useTasks';
 import { usePMStore } from '../../../stores/pmStore';
 import { filterTasks, EMPTY_FILTER, type TaskFilterState } from '../../../lib/filters';
 import { sortByCreationOrder } from '../../../lib/taskGrouping';
+import { isTaskVisibleInView } from '../../../lib/viewKeywordMatching';
 import { formatDated } from './taskHelpers';
 import TaskPriorityBadge from './TaskPriorityBadge';
 
@@ -136,6 +138,10 @@ function BoardColumn({
   listName,
   onDrop,
   canEdit = true,
+  defaultPriority,
+  defaultTaskTypeId,
+  defaultLabelId,
+  activeViewId,
 }: {
   status: SpaceStatus;
   tasks: Task[];
@@ -144,6 +150,10 @@ function BoardColumn({
   listName: string;
   onDrop: (taskId: string, statusId: string) => void;
   canEdit?: boolean;
+  defaultPriority?: any;
+  defaultTaskTypeId?: string;
+  defaultLabelId?: string;
+  activeViewId?: string;
 }) {
   const [addingTask, setAddingTask] = useState(false);
   const [title, setTitle] = useState('');
@@ -156,7 +166,7 @@ function BoardColumn({
     setIsDragOver(true);
   };
 
-  const handleDragLeave = (e: React.DragEvent) => {
+  const handleLeave = (e: React.DragEvent) => {
     if (!e.currentTarget.contains(e.relatedTarget as Node)) {
       setIsDragOver(false);
     }
@@ -172,15 +182,33 @@ function BoardColumn({
   const handleAdd = () => {
     if (!title.trim()) { setAddingTask(false); return; }
     createTask.mutate(
-      { title: title.trim(), status: status.name },
-      { onSuccess: () => { setTitle(''); } },
+      {
+        title: title.trim(),
+        status: status.name,
+        priority: defaultPriority && defaultPriority !== 'none' ? defaultPriority : undefined,
+        task_type_id: defaultTaskTypeId,
+        metadata: activeViewId ? { view_id: activeViewId } : undefined,
+        tag_id: defaultLabelId,
+      },
+      {
+        onSuccess: async (newTask) => {
+          setTitle('');
+          if (defaultLabelId && newTask?.id) {
+            try {
+              await api.post(`/pm/labels/tasks/${newTask.id}/labels`, { tag_id: defaultLabelId });
+            } catch (err) {
+              // Ignore if already attached by create payload
+            }
+          }
+        },
+      },
     );
   };
 
   return (
     <div
       onDragOver={handleDragOver}
-      onDragLeave={handleDragLeave}
+      onDragLeave={handleLeave}
       onDrop={handleDrop}
       className="bv-column"
       data-dragover={isDragOver}
@@ -258,6 +286,8 @@ export default function BoardView({
   listName = '',
   searchQuery = '',
   canEdit = true,
+  activeView,
+  allViews,
 }: {
   listId: string;
   statuses: SpaceStatus[];
@@ -265,20 +295,30 @@ export default function BoardView({
   listName?: string;
   searchQuery?: string;
   canEdit?: boolean;
+  activeView?: ListViewRow | null;
+  allViews?: ListViewRow[];
 }) {
   const { data: tasks, isLoading } = useTasks(listId, undefined);
   const updateTask = useUpdateTask(listId);
   const fadingTaskIds = usePMStore((s) => s.fadingTaskIds);
   const tz = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone, []);
 
+  const defaultPriority = (activeView?.config?.defaultPriority as any) || undefined;
+  const defaultTaskTypeId = (activeView?.config?.defaultTaskTypeId as string) || undefined;
+  const defaultLabelId = (activeView?.config?.defaultLabel as string) || undefined;
+  const activeViewId = activeView?.id;
+
   const groups = useMemo(() => {
     let arr = filterTasks(sortByCreationOrder(tasks ?? []), filters ?? EMPTY_FILTER, tz);
+    if (activeView) {
+      arr = arr.filter((t) => isTaskVisibleInView(t, activeView, allViews));
+    }
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
       arr = arr.filter((t) => t.title.toLowerCase().includes(q));
     }
     return groupTasksByStatus(arr, statuses, fadingTaskIds);
-  }, [tasks, statuses, searchQuery, filters, tz, fadingTaskIds]);
+  }, [tasks, statuses, searchQuery, filters, tz, fadingTaskIds, activeView, allViews]);
 
   const handleDrop = (taskId: string, statusId: string) => {
     if (!canEdit) return;
@@ -306,6 +346,10 @@ export default function BoardView({
             listName={listName}
             onDrop={handleDrop}
             canEdit={canEdit}
+            defaultPriority={defaultPriority}
+            defaultTaskTypeId={defaultTaskTypeId}
+            defaultLabelId={defaultLabelId}
+            activeViewId={activeViewId}
           />
         ))}
       </div>

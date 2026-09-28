@@ -155,6 +155,10 @@ export default function ListPage({
   };
   const handleCreateView = (type: ListViewType) =>
     createView.mutate({ view_type: type, name: defaultViewName(type) }, { onSuccess: (v) => selectView(v.id) });
+  const handleCreateCustomView = (payload: { name: string; view_type: ListViewType; config: ListViewConfig; is_private?: boolean }) =>
+    createView.mutate(payload, { onSuccess: (v) => selectView(v.id) });
+  const handleUpdateCustomView = (view: ListViewRow, payload: { name: string; view_type: ListViewType; config: ListViewConfig; is_private?: boolean }) =>
+    updateView.mutate({ id: view.id, ...payload });
   const handleRenameView = (view: ListViewRow, name: string) => updateView.mutate({ id: view.id, name });
   const handleDuplicateView = (view: ListViewRow) =>
     createView.mutate(
@@ -221,38 +225,48 @@ export default function ListPage({
       )}
       {/* Row 1: Breadcrumb + global actions */}
       <div className="lv-breadcrumb-row">
-        {/* Left: breadcrumb (hidden when embedded — the host view renders its own header) */}
+        {/* Left: breadcrumb, or when embedded (e.g. My Tasks), a clean compact title header */}
         {!embedded ? (
-        <div className="lv-breadcrumb">
-          {spaceData?.name && activeSpaceId && (
-            <>
-              <button
-                type="button"
-                className="lv-bc-link"
-                onClick={() => setActiveSpacePage(activeSpaceId)}
-                title={`Go to ${spaceData.name}`}
-              >
-                {spaceData.name}
-              </button>
-              <span className="lv-bc-sep">/</span>
-            </>
-          )}
-          {folderData?.name && folderId && (
-            <>
-              <button
-                type="button"
-                className="lv-bc-link"
-                onClick={() => setActiveFolder(folderId)}
-                title={`Go to ${folderData.name}`}
-              >
-                {folderData.name}
-              </button>
-              <span className="lv-bc-sep">/</span>
-            </>
-          )}
-          <span className="lv-bc-current">{listData?.name || 'List'}</span>
-        </div>
-        ) : <div />}
+          <div className="lv-breadcrumb">
+            {spaceData?.name && activeSpaceId && (
+              <>
+                <button
+                  type="button"
+                  className="lv-bc-link"
+                  onClick={() => setActiveSpacePage(activeSpaceId)}
+                  title={`Go to ${spaceData.name}`}
+                >
+                  {spaceData.name}
+                </button>
+                <span className="lv-bc-sep">/</span>
+              </>
+            )}
+            {folderData?.name && folderId && (
+              <>
+                <button
+                  type="button"
+                  className="lv-bc-link"
+                  onClick={() => setActiveFolder(folderId)}
+                  title={`Go to ${folderData.name}`}
+                >
+                  {folderData.name}
+                </button>
+                <span className="lv-bc-sep">/</span>
+              </>
+            )}
+            <span className="lv-bc-current">{listData?.name || 'List'}</span>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="font-semibold text-sm text-[color:var(--sh-ink-1)] tracking-tight">Your personal tasks</span>
+            <span className="rounded bg-[color:var(--sh-accent-soft)] px-1.5 py-0.5 text-[10px] font-medium text-[color:var(--sh-accent)]">
+              Private
+            </span>
+            <span className="hidden sm:inline text-xs text-[color:var(--sh-ink-4)] truncate">
+              · 🔒 Only you can see these (⌘⇧T to capture)
+            </span>
+          </div>
+        )}
 
         {/* Right: actions */}
         <div className="flex items-center gap-2">
@@ -289,8 +303,11 @@ export default function ListPage({
           activeViewId={activeView?.id ?? null}
           currentUserId={currentUserId}
           canEdit={canEdit && !isMobile}
+          listId={activeListId}
           onSelect={selectView}
           onCreate={handleCreateView}
+          onCreateCustom={handleCreateCustomView}
+          onUpdateCustom={handleUpdateCustomView}
           onRename={handleRenameView}
           onDuplicate={handleDuplicateView}
           onSetDefault={handleSetDefaultView}
@@ -426,6 +443,8 @@ export default function ListPage({
             canEdit={canEdit}
             sortBy={sortBy}
             focusToday={focusToday}
+            activeView={activeView}
+            allViews={views}
           />
         ) : contentType === 'board' ? (
           <BoardView
@@ -435,6 +454,8 @@ export default function ListPage({
             listName={listData?.name || ''}
             searchQuery={searchQuery}
             canEdit={canEdit}
+            activeView={activeView}
+            allViews={views}
           />
         ) : (
           <WhiteboardView

@@ -19,26 +19,6 @@ export default function MyTasksView() {
 
   return (
     <div className="sh-view flex h-full min-h-0 flex-col">
-      <div className="mtk-private-head" style={{ padding: '14px 16px 10px', flexShrink: 0 }}>
-        <div
-          style={{
-            fontSize: 11,
-            fontWeight: 600,
-            letterSpacing: '.04em',
-            textTransform: 'uppercase',
-            color: 'var(--sh-ink-4)',
-          }}
-        >
-          My Tasks · Private
-        </div>
-        <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--sh-ink-1, inherit)', marginTop: 2 }}>
-          Your personal tasks
-        </div>
-        <div style={{ fontSize: 12, color: 'var(--sh-ink-3)', marginTop: 2 }}>
-          🔒 Only you can see these. Capture from anywhere with ⌘⇧T on desktop.
-        </div>
-      </div>
-
       {isLoading && (
         <div className="flex flex-1 items-center justify-center text-sm text-[var(--sh-ink-3)]">
           Loading your personal space…

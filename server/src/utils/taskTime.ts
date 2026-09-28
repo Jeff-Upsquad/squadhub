@@ -1,5 +1,6 @@
 import { supabaseAdmin } from '../supabase';
 import { IST_OFFSET_MS } from './ist';
+import { isTaskExcludedFromTimeReports } from './taskViewReporting';
 
 export type LogTaskTimeSource = 'timer' | 'manual' | 'work_block';
 
@@ -132,9 +133,12 @@ export async function logTaskTimeEntry(params: LogTaskTimeParams): Promise<LogTa
   }
 
   if (!skipDailySummary) {
-    // Bucket the day by the entry's own start, not the reordered row, so a
-    // negative correction lands on the date the user picked.
-    await upsertDailySummary(userId, workspaceId, startedAt, stoppedAt, durationSeconds);
+    const isExcluded = await isTaskExcludedFromTimeReports(taskId);
+    if (!isExcluded) {
+      // Bucket the day by the entry's own start, not the reordered row, so a
+      // negative correction lands on the date the user picked.
+      await upsertDailySummary(userId, workspaceId, startedAt, stoppedAt, durationSeconds);
+    }
   }
 
   return { ok: true, entry, workspaceId };

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { Task, SpaceStatus } from '@squadhub/shared';
+import api from '../../../services/api';
 import { usePMStore } from '../../../stores/pmStore';
 import { useCreateTask } from '../../../hooks/useTasks';
 import { isTaskCompleted, isTaskFocused } from '../../../lib/taskGrouping';
@@ -22,6 +23,10 @@ interface TaskGroupCardProps {
   variant?: 'default' | 'focus';
   /** Fade focused (but not completed) rows — signals they're already in the Focus Today banner above. */
   dimFocused?: boolean;
+  defaultPriority?: string | null;
+  defaultTaskTypeId?: string | null;
+  defaultLabelId?: string | null;
+  activeViewId?: string | null;
 }
 
 export default function TaskGroupCard({
@@ -39,6 +44,10 @@ export default function TaskGroupCard({
   defaultCollapsed = false,
   variant = 'default',
   dimFocused = false,
+  defaultPriority,
+  defaultTaskTypeId,
+  defaultLabelId,
+  activeViewId,
 }: TaskGroupCardProps) {
   const isFocus = variant === 'focus';
   const { collapsedGroups, setGroupCollapsed } = usePMStore();
@@ -247,8 +256,27 @@ export default function TaskGroupCard({
                       const val = addTitle.trim();
                       if (val) {
                         createTask.mutate(
-                          { title: val, status: defaultNewTaskStatus || 'todo', list_id: listId },
-                          { onSuccess: () => setAddTitle('') },
+                          {
+                            title: val,
+                            status: defaultNewTaskStatus || 'todo',
+                            list_id: listId,
+                            priority: defaultPriority && defaultPriority !== 'none' ? (defaultPriority as any) : undefined,
+                            task_type_id: defaultTaskTypeId || undefined,
+                            metadata: activeViewId ? { view_id: activeViewId } : undefined,
+                            tag_id: defaultLabelId,
+                          },
+                          {
+                            onSuccess: async (created) => {
+                              setAddTitle('');
+                              if (defaultLabelId && created?.id) {
+                                try {
+                                  await api.post(`/pm/labels/tasks/${created.id}/labels`, { tag_id: defaultLabelId });
+                                } catch (err) {
+                                  // Ignore if already attached by create payload
+                                }
+                              }
+                            },
+                          },
                         );
                       } else setAddTitle(null);
                     } else if (e.key === 'Escape') {
@@ -260,8 +288,27 @@ export default function TaskGroupCard({
                     const val = addTitle.trim();
                     if (val) {
                       createTask.mutate(
-                        { title: val, status: defaultNewTaskStatus || 'todo', list_id: listId },
-                        { onSuccess: () => setAddTitle(null) },
+                        {
+                          title: val,
+                          status: defaultNewTaskStatus || 'todo',
+                          list_id: listId,
+                          priority: defaultPriority && defaultPriority !== 'none' ? (defaultPriority as any) : undefined,
+                          task_type_id: defaultTaskTypeId || undefined,
+                          metadata: activeViewId ? { view_id: activeViewId } : undefined,
+                          tag_id: defaultLabelId,
+                        },
+                        {
+                          onSuccess: async (created) => {
+                            setAddTitle(null);
+                            if (defaultLabelId && created?.id) {
+                              try {
+                                await api.post(`/pm/labels/tasks/${created.id}/labels`, { tag_id: defaultLabelId });
+                              } catch (err) {
+                                // Ignore if already attached by create payload
+                              }
+                            }
+                          },
+                        },
                       );
                     } else setAddTitle(null);
                   }}

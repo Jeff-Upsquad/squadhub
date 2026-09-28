@@ -11,6 +11,7 @@ import { PARTNER_USER_TYPES } from '@squadhub/shared';
 import { spawnRoutineInstance } from '../../services/routineSpawner';
 import { todayIST } from '../../utils/ist';
 import { logTaskTimeEntry, ensureAssigneeOnTimeLogged, addDailyWorkSeconds, overlapsWorkBlockRun, consolidateContiguousEntries } from '../../utils/taskTime';
+import { getExcludedTaskIds } from '../../utils/taskViewReporting';
 import { logTaskActivity, type TaskActivityEvent } from '../../utils/taskActivity';
 import { getUserSkillLevel, checkLoggedTimeChange } from '../../utils/skills';
 import { resolveClientSource } from '../../utils/clientSource';
@@ -48,6 +49,8 @@ const createSchema = z.object({
   start_timer: z.boolean().optional(),
   metadata: z.record(z.string(), z.any()).optional(),
   recurrence: recurrenceSchema.nullable().optional(),
+  tag_id: z.string().uuid().optional(),
+  tag_ids: z.array(z.string().uuid()).optional(),
   // Client platform that created the task (web|mobile_web|desktop_app|companion|
   // partner_app|internal_app|business_app|...). Prefer the X-Client-Source
   // header; this body field is the fallback for writers that can't set headers.
@@ -890,8 +893,13 @@ router.get('/tasks/my-time-entries', async (req: Request, res: Response) => {
     const taskIds = Array.from(new Set(rows.map((e: any) => e.task_id)));
     const { data: tasks } = await supabaseAdmin
       .from('tasks')
-      .select('id, title, list_id, parent_task_id, time_tracked')
+      .select('id, title, description, list_id, metadata, parent_task_id, time_tracked')
       .in('id', taskIds);
+
+    const excludedIds = await getExcludedTaskIds((tasks || []) as any[]);
+    const effectiveRows = req.query.exclude_unreported === 'true'
+      ? rows.filter((e: any) => !excludedIds.has(e.task_id))
+      : rows;
 
     const hydratedTasks = await hydrateParents(await hydrateLists(tasks || []));
     const taskById = new Map<string, any>(hydratedTasks.map((t: any) => [t.id, t]));
@@ -899,7 +907,7 @@ router.get('/tasks/my-time-entries', async (req: Request, res: Response) => {
     // Work-block entries carry a sub-breakdown: the tasks worked on / completed
     // during the run, shown nested under the block in the Time Sheet.
     const runIds = Array.from(new Set(
-      rows
+      effectiveRows
         .filter((e: any) => e.source === 'work_block' && e.work_block_run_id)
         .map((e: any) => e.work_block_run_id as string),
     ));
@@ -948,8 +956,9 @@ router.get('/tasks/my-time-entries', async (req: Request, res: Response) => {
       }
     }
 
-    const data = rows.map((e: any) => ({
+    const data = effectiveRows.map((e: any) => ({
       ...e,
+      in_time_report: !excludedIds.has(e.task_id),
       task: taskById.get(e.task_id) || null,
       children: e.source === 'work_block' && e.work_block_run_id
         ? (childrenByRun.get(e.work_block_run_id) || [])
@@ -1617,6 +1626,16 @@ router.post('/tasks', async (req: Request, res: Response) => {
     // immediately so the user sees it without waiting for the midnight cron.
     if (body.recurrence && taskRecurrenceOccursOn(body.recurrence as TaskRecurrence, todayIST())) {
       await spawnRoutineInstance(task, todayIST());
+    }
+
+    // Attach initial label/tags if requested on creation
+    if (body.tag_id) {
+      await supabaseAdmin.from('task_tag_assignments').insert({ task_id: (task as any).id, tag_id: body.tag_id });
+    }
+    if (Array.isArray(body.tag_ids)) {
+      for (const tid of body.tag_ids) {
+        await supabaseAdmin.from('task_tag_assignments').insert({ task_id: (task as any).id, tag_id: tid });
+      }
     }
 
     // Activity: the task's own "created" event, plus a "subtask_added" event on

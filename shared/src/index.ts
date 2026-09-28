@@ -570,6 +570,12 @@ export interface ListViewConfig {
   filters?: ListViewFilters;
   groupBy?: string;
   sortBy?: string;
+  keywords?: string[];
+  includeInTimeReport?: boolean;
+  defaultPriority?: string | null;
+  defaultTaskTypeId?: string | null;
+  defaultLabel?: string | null;
+  showAllTasks?: boolean;
 }
 
 export interface ListViewRow {

@@ -5,15 +5,15 @@ import Providers from './providers';
 import ToastContainer from '@/components/Toast';
 
 const jakarta = Plus_Jakarta_Sans({
-  subsets: ['latin'],
-  weight: ['500', '600', '700'],
+  subsets: ['latin', 'latin-ext'],
+  style: ['normal', 'italic'],
   variable: '--font-jakarta',
   display: 'swap',
 });
 
 const inter = Inter({
-  subsets: ['latin'],
-  weight: ['400', '500', '600', '700'],
+  subsets: ['latin', 'latin-ext'],
+  style: ['normal', 'italic'],
   variable: '--font-inter',
   display: 'swap',
 });
