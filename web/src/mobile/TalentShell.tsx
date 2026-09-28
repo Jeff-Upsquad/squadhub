@@ -1,6 +1,10 @@
 'use client';
 
 import { useState, ReactNode } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { isWorkLocked } from '@squadhub/shared';
+import { useAuthStore } from '../stores/authStore';
+import api from '../services/api';
 import MobileChat from './MobileChat';
 import TalentHomeView from './TalentHomeView';
 import TalentNotificationsView, { TalentNotificationPrompts, useOpportunityNotifications } from './TalentNotifications';
@@ -31,7 +35,10 @@ function BellIcon() {
 function GridIcon() {
   return (
     <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
+      <circle cx="9" cy="9" r="2.2" />
+      <circle cx="15.5" cy="9" r="2.2" />
+      <circle cx="9" cy="15.5" r="2.2" />
+      <circle cx="15.5" cy="15.5" r="2.2" />
     </svg>
   );
 }
@@ -48,8 +55,16 @@ type TalentTab = 'home' | 'chatroom' | 'notifications' | 'more' | 'squadhub';
 function TalentBadge({ count }: { count: number }) {
   if (count <= 0) return null;
   return (
-    <span className="absolute -right-1.5 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-[#0a0a0a] px-1 text-[9px] font-bold text-white">
+    <span className="absolute -right-2 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-[#0a0a0a] px-1 text-[9px] font-bold text-white">
       {count > 99 ? '99+' : count}
+    </span>
+  );
+}
+
+function TalentDot() {
+  return (
+    <span className="absolute -right-1 -top-0.5 flex h-2.5 w-2.5">
+      <span className="absolute inline-flex h-full w-full rounded-full bg-amber-500" />
     </span>
   );
 }
@@ -59,16 +74,17 @@ interface TalentBottomNavProps {
   onChange: (t: TalentTab) => void;
   unreadMessages?: number;
   unreadNotifications?: number;
-  incompleteTraining?: number;
+  /** Orange attention dot on More — mirrors the SquadHire talent app. */
+  hasMoreAttention?: boolean;
   hasAssignedCard?: boolean;
 }
 
-export function TalentBottomNav({ active, onChange, unreadMessages = 0, unreadNotifications = 0, incompleteTraining = 0, hasAssignedCard = false }: TalentBottomNavProps) {
-  const items: Array<{ key: TalentTab; label: string; icon: ReactNode; badge?: number }> = [
+export function TalentBottomNav({ active, onChange, unreadMessages = 0, unreadNotifications = 0, hasMoreAttention = false, hasAssignedCard = false }: TalentBottomNavProps) {
+  const items: Array<{ key: TalentTab; label: string; icon: ReactNode; badge?: number; dot?: boolean }> = [
     { key: 'home', label: 'Home', icon: <HomeIcon /> },
     { key: 'chatroom', label: 'Chatroom', icon: <ChatIcon />, badge: unreadMessages },
     { key: 'notifications', label: 'Notifications', icon: <BellIcon />, badge: unreadNotifications },
-    { key: 'more', label: 'More', icon: <GridIcon />, badge: incompleteTraining },
+    { key: 'more', label: 'More', icon: <GridIcon />, dot: hasMoreAttention },
   ];
   if (hasAssignedCard) items.push({ key: 'squadhub', label: 'SquadHub', icon: <SquadHubIcon /> });
 
@@ -89,6 +105,7 @@ export function TalentBottomNav({ active, onChange, unreadMessages = 0, unreadNo
                 <span className="relative">
                   {item.icon}
                   <TalentBadge count={item.badge ?? 0} />
+                  {item.dot && !(item.badge && item.badge > 0) && <TalentDot />}
                 </span>
                 {item.label}
               </button>
@@ -100,85 +117,66 @@ export function TalentBottomNav({ active, onChange, unreadMessages = 0, unreadNo
   );
 }
 
-// ── TalentMore (ported from Profiles/frontend/src/views/talent/TalentMore.tsx) ──
+// ── TalentMore — SquadHire's real More page, embedded ───────────────────────
+// The list (Basic Profile / Job Profiles / My Clients / Settings / Training /
+// Contact Support) with its Pending pills lives in the SquadHire talent app
+// (Profiles `TalentMore`). We iframe it so badges can never drift behind
+// again, instead of maintaining a static copy here.
 const TALENT_WEB_BASE = 'https://squadhire.upsquadconnect.com';
-const MORE_ROUTE: Record<string, string> = {
-  'Basic Profile': '/talent/basic-profile',
-  'Job Profiles': '/talent/profiles',
-  'My Clients': '/talent/my-clients',
-  Settings: '/talent/settings',
-  'Training Program': '/talent/training',
-  'Contact Support': '/talent/contact-support',
-};
+const TALENT_MORE_PATH = '/talent/more';
 
-function TalentMoreView({ onSelect }: { onSelect?: (label: string) => void }) {
-  const [detail, setDetail] = useState<string | null>(null);
-  if (detail) {
-    const route = MORE_ROUTE[detail] ? `${TALENT_WEB_BASE}${MORE_ROUTE[detail]}?in_app=1` : null;
+function useSquadhireAppToken() {
+  return useQuery({
+    queryKey: ['squadhire-app-token'],
+    queryFn: async () => {
+      const res = await api.get('/partner/talent/squadhire-token');
+      return (res.data?.data?.token ?? null) as string | null;
+    },
+    staleTime: 10 * 60_000,
+    refetchOnWindowFocus: false,
+    retry: 1,
+  });
+}
+
+function TalentMoreView() {
+  const tokenQuery = useSquadhireAppToken();
+  const token = tokenQuery.data ?? null;
+  const src = token
+    ? `${TALENT_WEB_BASE}${TALENT_MORE_PATH}?in_app=1&app_token=${encodeURIComponent(token)}`
+    : `${TALENT_WEB_BASE}${TALENT_MORE_PATH}?in_app=1`;
+  const browserSrc = `${TALENT_WEB_BASE}${TALENT_MORE_PATH}`;
+
+  if (tokenQuery.isLoading) {
     return (
-      <div className="flex min-h-full flex-col bg-[#F5F5F6]">
-        <div className="sticky top-0 z-10 flex items-center gap-2 bg-white px-3 py-2 shadow-sm">
-          <button type="button" onClick={() => setDetail(null)} className="inline-flex items-center gap-1.5 rounded-full bg-[#F5F5F6] px-3 py-1.5 text-sm font-medium text-[#0a0a0a]">
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" /></svg>
-            Back
-          </button>
-          <span className="text-sm font-semibold text-[#0a0a0a]">{detail}</span>
-          <a href={route ?? '#'} target="_blank" rel="noreferrer" className="ml-auto text-xs font-medium text-[#525252] hover:text-[#0a0a0a]">Open</a>
-        </div>
-        {route ? (
-          <iframe src={route} title={detail} className="h-[calc(100dvh-220px)] w-full flex-1 border-0 bg-white" loading="lazy" />
-        ) : (
-          <div className="p-4"><div className="rounded-2xl border border-[#E7E7EA] bg-white p-6 text-center text-sm text-[#737373]">Not available</div></div>
-        )}
+      <div className="space-y-3 bg-[#F5F5F6] p-4">
+        <div className="h-7 w-24 animate-pulse rounded-lg bg-[#E7E7EA]" />
+        <div className="h-4 w-48 animate-pulse rounded bg-[#E7E7EA]" />
+        <div className="h-64 animate-pulse rounded-2xl bg-white" />
       </div>
     );
   }
-  const handle = (label: string) => {
-    setDetail(label);
-    if (onSelect) onSelect(label);
-  };
+
   return (
-    <div className="space-y-6 bg-[#F5F5F6] p-4">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-[-0.02em] text-[#0a0a0a]">More</h1>
-        <p className="mt-1 text-sm text-[#737373]">Profile, training, and account</p>
+    <div className="flex min-h-full flex-col bg-[#F5F5F6]">
+      {tokenQuery.isError && (
+        <div className="mx-3 mt-3 flex items-center justify-between gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2">
+          <p className="text-xs text-amber-800">Couldn&apos;t sign you into SquadHire — showing the public view.</p>
+          <button type="button" onClick={() => tokenQuery.refetch()} className="shrink-0 rounded-full bg-[#0a0a0a] px-3 py-1 text-xs font-semibold text-white">Retry</button>
+        </div>
+      )}
+      <iframe
+        key={src}
+        src={src}
+        title="More — profile, training, and account"
+        className="h-[calc(100dvh-220px)] w-full flex-1 border-0 bg-white"
+        loading="lazy"
+        allow="clipboard-write"
+      />
+      <div className="flex justify-center bg-[#F5F5F6] px-4 py-2">
+        <a href={browserSrc} target="_blank" rel="noreferrer" className="text-xs font-medium text-[#525252] hover:text-[#0a0a0a]">
+          Open in browser
+        </a>
       </div>
-      {[
-        { title: 'Profile', items: [
-          { label: 'Basic Profile', desc: 'Your personal details and job preferences' },
-          { label: 'Job Profiles', desc: 'Role-specific profiles businesses discover' },
-          { label: 'My Clients', desc: 'Businesses you are working with' },
-        ]},
-        { title: 'Account', items: [
-          { label: 'Settings', desc: 'Login details and account preferences' },
-          { label: 'Training Program', desc: 'Courses, SOPs, and assigned lessons' },
-          { label: 'Contact Support', desc: 'Chat with the UpSquad team' },
-        ]},
-      ].map((group) => (
-        <section key={group.title} className="overflow-hidden rounded-2xl border border-[#E7E7EA] bg-white">
-          <div className="border-b border-[#E7E7EA] px-5 py-3">
-            <h2 className="text-xs font-semibold uppercase tracking-wide text-[#a3a3a3]">{group.title}</h2>
-          </div>
-          <ul className="divide-y divide-[#E7E7EA]">
-            {group.items.map((it) => (
-              <li key={it.label}>
-                <button type="button" onClick={() => handle(it.label)} className="flex w-full items-center gap-3 px-5 py-3.5 text-left transition-colors hover:bg-[#F5F5F6] active:bg-[#EFEFEF]">
-                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#F5F5F6] text-[#525252]">
-                    <GridIcon />
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-[15px] font-semibold text-[#0a0a0a]">{it.label}</span>
-                    <span className="mt-0.5 block truncate text-xs text-[#737373]">{it.desc}</span>
-                  </span>
-                  <svg className="h-4 w-4 shrink-0 text-[#a3a3a3]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-                  </svg>
-                </button>
-              </li>
-            ))}
-          </ul>
-        </section>
-      ))}
     </div>
   );
 }
@@ -233,11 +231,16 @@ interface TalentShellProps {
 
 export default function TalentShell({ channels, dms, meId, supportChannelId, supportUnread, onOpenChannel }: TalentShellProps) {
   const [tab, setTab] = useState<TalentTab>('home');
+  const user = useAuthStore((s) => s.user);
   const opportunityNotifications = useOpportunityNotifications();
-  const normalNotificationCount = (opportunityNotifications.data || []).filter((item) => {
-    const card = item.card as any;
-    return item.status === 'pending' && !item.business_review_status && !item.selected_at && !card?.funnel_stage;
-  }).length;
+  // SquadHire's bell counts everything awaiting the talent — pending matches
+  // plus unanswered shortlists/selections — so the badge mirrors that, not
+  // just untouched matches.
+  const notificationBadge = (opportunityNotifications.data || []).filter((item) => item.status === 'pending').length;
+  // The real Pending pills live inside the embedded SquadHire More page. The
+  // nav dot is a fallback mirror: pre-assignment talents (Work locked) almost
+  // always have profile work outstanding.
+  const hasMoreAttention = isWorkLocked(user);
 
   return (
     <div className="flex flex-1 flex-col min-h-0 bg-[#F5F5F6]">
@@ -255,14 +258,14 @@ export default function TalentShell({ channels, dms, meId, supportChannelId, sup
           />
         )}
         {tab === 'notifications' && <TalentNotificationsView />}
-        {tab === 'more' && <TalentMoreView onSelect={(label) => { /* keep in More for now; toast */ if (typeof window !== 'undefined') console.log('[talent more]', label); }} />}
+        {tab === 'more' && <TalentMoreView />}
         {tab === 'squadhub' && (
           <div className="bg-[#F5F5F6] p-6 text-center">
             <p className="text-sm text-[#737373]">SquadHub gateway — switch back to Work to continue.</p>
           </div>
         )}
       </div>
-      <TalentBottomNav active={tab} onChange={setTab} unreadNotifications={normalNotificationCount} />
+      <TalentBottomNav active={tab} onChange={setTab} unreadMessages={supportUnread} unreadNotifications={notificationBadge} hasMoreAttention={hasMoreAttention} />
     </div>
   );
 }
