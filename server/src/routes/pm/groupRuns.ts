@@ -393,6 +393,38 @@ router.post('/group-runs/runs/:run_id/completions', async (req: Request, res: Re
   }
 });
 
+/**
+ * Automatically records a completion against any currently active group run
+ * for the given user, provided the completed task belongs to the group container.
+ */
+export async function recordGroupRunCompletionIfActive(userId: string, completedTaskId: string): Promise<void> {
+  try {
+    const { data: activeRuns } = await supabaseAdmin
+      .from('group_runs')
+      .select('id, user_id, ended_at, group_key')
+      .eq('user_id', userId)
+      .is('ended_at', null);
+
+    if (!activeRuns || activeRuns.length === 0) return;
+
+    for (const run of activeRuns) {
+      if (await taskOutsideRunGroup(run as any, completedTaskId)) continue;
+      await supabaseAdmin
+        .from('group_run_completions')
+        .upsert(
+          {
+            run_id: run.id,
+            completed_task_id: completedTaskId,
+            completed_at: new Date().toISOString(),
+          },
+          { onConflict: 'run_id,completed_task_id' },
+        );
+    }
+  } catch (err) {
+    console.error('[recordGroupRunCompletionIfActive] error:', err);
+  }
+}
+
 // =====================================================================
 // Per-task timer overlaps — opened when a per-task timer starts inside an
 // active group run; closed when that timer stops (or when the run stops).

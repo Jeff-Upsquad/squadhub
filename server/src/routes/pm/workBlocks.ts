@@ -479,6 +479,38 @@ router.post('/work-blocks/runs/:run_id/completions', async (req: Request, res: R
   }
 });
 
+/**
+ * Automatically records a completion against any currently active work-block run
+ * for the given user, provided the completed task is not the work block itself.
+ */
+export async function recordWorkBlockCompletionIfActive(userId: string, completedTaskId: string): Promise<void> {
+  try {
+    const { data: activeRuns } = await supabaseAdmin
+      .from('work_block_runs')
+      .select('id, task_id')
+      .eq('user_id', userId)
+      .is('ended_at', null);
+
+    if (!activeRuns || activeRuns.length === 0) return;
+
+    for (const run of activeRuns) {
+      if (run.task_id === completedTaskId) continue;
+      await supabaseAdmin
+        .from('work_block_completions')
+        .upsert(
+          {
+            run_id: run.id,
+            completed_task_id: completedTaskId,
+            completed_at: new Date().toISOString(),
+          },
+          { onConflict: 'run_id,completed_task_id' },
+        );
+    }
+  } catch (err) {
+    console.error('[recordWorkBlockCompletionIfActive] error:', err);
+  }
+}
+
 // =====================================================================
 // Task-time overlaps: opened when a per-task timer starts inside an active
 // work-block run; closed when that timer stops (or when the run stops).
