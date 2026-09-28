@@ -544,9 +544,12 @@ export default function MobileShell({
         />
       )}
 
-      {/* Only on the Home tab, where the tour anchors are on screen, and never
-          over the create sheet. */}
-      {tourOpen && !onSection && tab === 'home' && !creating && (
+      {/* Only on the Work Home tab, where the tour anchors are on screen, and never
+          over the create sheet. The Discover surface (TalentShell) and the locked
+          Work placeholder render neither [data-tour="tabbar"] nor the FAB, so an
+          ungated tour would spotlight nothing, centre a tall card with its
+          Next/Skip buttons below the fold, and block every tap behind it. */}
+      {tourOpen && !onSection && tab === 'home' && !creating && surface === 'work' && !(isPartner && workLocked) && (
         <MobileTour
           userId={user?.id}
           audience={isClient ? 'client' : isPartner ? 'partner' : 'internal'}

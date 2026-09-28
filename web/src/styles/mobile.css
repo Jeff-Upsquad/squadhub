@@ -2514,6 +2514,15 @@
   right: 16px;
   pointer-events: auto;
   padding: 18px;
+  /* Tall first steps (five-tab bullet lists) must never push Next/Skip below
+     the fold on short Android viewports — clamp to the dynamic viewport and
+     scroll internally instead. */
+  max-height: 78vh;
+  max-height: 78dvh;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  padding-bottom: calc(18px + env(safe-area-inset-bottom, 0px));
   border-radius: 20px;
   background: var(--m-surface);
   color: var(--m-ink);
@@ -2596,6 +2605,22 @@
   color: var(--m-surface);
 }
 .mtour-next:active, .mtour-back:active { transform: scale(0.96); }
+.mtour-close {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: var(--m-surface-alt);
+  color: var(--m-ink-3);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+}
 
 /* ── Partner / internal Home (.mph) ───────────────────────────────────
  * The Partner Android app's Home, which asks "what am I on the hook for
