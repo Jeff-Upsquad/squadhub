@@ -28,6 +28,7 @@ import type { Channel, DmConversation, Favorite, SubscriptionCardRecipient, User
 import type { ActiveSection, HomeView } from '../layouts/MainLayout';
 import { launchApp, type AppDef } from '../config/apps';
 import { useIsClient, useIsPartner } from '../hooks/useUserType';
+import { useAuthStore } from '../stores/authStore';
 import { usePMStore } from '../stores/pmStore';
 import MobileHome, { applyOpenTarget } from './MobileHome';
 import MobilePartnerHome from './MobilePartnerHome';
@@ -117,12 +118,18 @@ export default function MobileShell({
   // embedded with its own bottom nav (TalentBottomNav). Persisted so a refresh keeps the surface.
   const [surface, setSurface] = useState<'work' | 'discover'>(() => {
     if (typeof window === 'undefined') return 'work';
-    if (workLocked) return 'discover';
+    // `user` arrives a beat after the first render, so it is usually null here
+    // and isWorkLocked fails open. The persisted profile hydrates synchronously,
+    // so consult it too — otherwise a locked partner with a stored 'work'
+    // surface first-paints the empty Work home before the correction below fires.
+    let cached: User | null = null;
+    try { cached = useAuthStore.getState().user; } catch { cached = null; }
+    if (workLocked || isWorkLocked(cached)) return 'discover';
     try { return (localStorage.getItem('msh-surface') as 'work' | 'discover') || 'work'; } catch { return 'work'; }
   });
   useEffect(() => { try { localStorage.setItem('msh-surface', surface); } catch {} }, [surface]);
-  // `user` arrives a beat after the first render, so the lock can turn on after
-  // the initializer already picked Work. Land them on Discover when it does.
+  // Backstop for first-ever sign-ins with no cached profile: the lock can turn
+  // on after the initializer already picked Work. Land them on Discover when it does.
   const lockLanded = useRef(false);
   useEffect(() => {
     if (!workLocked || lockLanded.current) return;
