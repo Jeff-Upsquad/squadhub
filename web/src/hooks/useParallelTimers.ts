@@ -4,6 +4,7 @@ import { usePMStore, MAX_PARALLEL_TIMERS } from '../stores/pmStore';
 import type { PendingTimerStart, TimerShare } from '../stores/pmStore';
 import {
   useActiveWorkBlockRun,
+  useStartWorkBlockRun,
   useOpenWorkBlockTaskTime,
   useCloseWorkBlockTaskTime,
 } from './useWorkBlocks';
@@ -92,6 +93,7 @@ export function useParallelTimers() {
   const qc = useQueryClient();
   const timers = usePMStore((s) => s.timers);
   const activeWorkBlock = useActiveWorkBlockRun();
+  const startWorkBlockRun = useStartWorkBlockRun();
   const activeGroupRun = useActiveGroupRun();
   const openTaskTime = useOpenWorkBlockTaskTime();
   const closeTaskTime = useCloseWorkBlockTaskTime();
@@ -101,9 +103,31 @@ export function useParallelTimers() {
   const wbRun = activeWorkBlock.data && !activeWorkBlock.data.run.ended_at ? activeWorkBlock.data : null;
   const gRun = activeGroupRun.data?.run && !activeGroupRun.data.run.ended_at ? activeGroupRun.data.run : null;
 
+  // Work-block tasks never run per-task timers. Starting "a timer" on one
+  // starts a work-block run instead (mirroring the task detail panel), so a
+  // run is always active while the block is being timed — which is what the
+  // server's completion auto-record (PUT/POST-done) keys off. Without this,
+  // a timer-only work block leaves no run behind, and tasks completed inside
+  // it (e.g. via the companion app's complete-on-add) are never logged
+  // against the block.
+  const startWorkBlockTarget = async (target: PendingTimerStart): Promise<boolean> => {
+    if (wbRun && wbRun.task.id === target.taskId) return false;
+    try {
+      const run = await startWorkBlockRun.mutateAsync({ task_id: target.taskId });
+      for (const t of timers) {
+        if (t.taskId !== target.taskId) openTaskTime.mutate({ run_id: run.id, task_id: t.taskId });
+      }
+      return true;
+    } catch (err) {
+      console.error('Failed to start work-block run:', err);
+      return false;
+    }
+  };
+
   // Start without the conflict gate — the fast path when nothing is running,
   // and the dialog's "add as secondary" confirm.
   const startTimer = async (target: PendingTimerStart): Promise<boolean> => {
+    if (target.isWorkBlock) return startWorkBlockTarget(target);
     const res = usePMStore
       .getState()
       .startParallelTimer(target.taskId, target.taskTitle, target.listId, target.baseTracked);
@@ -120,7 +144,12 @@ export function useParallelTimers() {
 
   // The user-facing gate: nothing running → start as primary; otherwise park
   // the request so the global TimerConflictDialog can ask about a secondary.
+  // Work-block targets bypass the gate: runs are independent of per-task
+  // timers by design (a regular task's timer can run alongside a run).
   const requestStartTimer = async (target: PendingTimerStart): Promise<StartTimerResult> => {
+    if (target.isWorkBlock) {
+      return (await startWorkBlockTarget(target)) ? 'started' : 'noop';
+    }
     const s = usePMStore.getState();
     if (s.timers.some((t) => t.taskId === target.taskId)) return 'noop';
     if (s.timers.length === 0) {

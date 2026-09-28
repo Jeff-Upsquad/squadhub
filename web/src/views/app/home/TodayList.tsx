@@ -6,6 +6,8 @@ import { useCompletionGate } from '../../../hooks/useCompletionGate';
 import { useAuthStore } from '../../../stores/authStore';
 import { useMyTimeEntries } from '../../../hooks/useTaskTimeEntries';
 import { useParallelTimers } from '../../../hooks/useParallelTimers';
+import { useTaskTypes } from '../../../hooks/useTaskTypes';
+import { useActiveWorkBlockRun, useStopWorkBlockRun } from '../../../hooks/useWorkBlocks';
 import { usePMStore, todayKey, effectiveFocusBucket, type FocusBucket } from '../../../stores/pmStore';
 import { avatarColor, initialOf, formatTaskDates } from '../pm/taskHelpers';
 import AssigneePicker from '../pm/AssigneePicker';
@@ -566,16 +568,36 @@ function TodayRow({ task: t, onOpen, secondsToday = 0 }: { task: Task; onOpen: (
   const isFading = usePMStore((s) => s.fadingTaskIds.has(t.id));
   const { timers, requestStartTimer, stopTimer } = useParallelTimers();
   const isTracking = timers.some((x) => x.taskId === t.id);
+  // Work-block tasks are timed via runs, never per-task timers (the timer
+  // hook redirects them). The button below therefore stops the run when one
+  // is active on this task.
+  const { data: taskTypes } = useTaskTypes();
+  const isWorkBlockTask =
+    (t as any).task_type?.key === 'work_block' ||
+    (!!(t as any).task_type_id && !!taskTypes?.some((x) => x.id === (t as any).task_type_id && (x as any).key === 'work_block'));
+  const { data: activeWB } = useActiveWorkBlockRun();
+  const stopWBRun = useStopWorkBlockRun();
+  const isWBRunForThisTask = !!activeWB && !activeWB.run.ended_at && activeWB.task.id === t.id;
+  const isTiming = isTracking || isWBRunForThisTask;
 
   const onTimerClick = async (e: React.MouseEvent) => {
     e.stopPropagation();
+    if (isWBRunForThisTask && activeWB) {
+      try {
+        await stopWBRun.mutateAsync({ run_id: activeWB.run.id, task_id: t.id });
+      } catch (err) {
+        console.error('Failed to stop work-block run:', err);
+      }
+      return;
+    }
     if (isTracking) {
       await stopTimer(t.id);
       return;
     }
     // With nothing running this starts the primary timer; otherwise it opens
     // the global conflict dialog offering to add this task as a secondary.
-    await requestStartTimer({ taskId: t.id, taskTitle: t.title, listId: t.list_id || '', baseTracked: t.time_tracked || 0 });
+    // Work-block tasks start a run instead (handled inside the timer hook).
+    await requestStartTimer({ taskId: t.id, taskTitle: t.title, listId: t.list_id || '', baseTracked: t.time_tracked || 0, isWorkBlock: isWorkBlockTask });
   };
   const [isHidden, setIsHidden] = useState(false);
   // Tomorrow / This Saturday / Next Monday at local midnight — shared with the
@@ -777,12 +799,12 @@ function TodayRow({ task: t, onOpen, secondsToday = 0 }: { task: Task; onOpen: (
       <button
         type="button"
         className="hm-timer-btn"
-        data-active={isTracking || undefined}
-        aria-label={isTracking ? 'Stop timer' : 'Start timer'}
-        title={isTracking ? 'Stop timer' : 'Start timer'}
+        data-active={isTiming || undefined}
+        aria-label={isTiming ? 'Stop timer' : 'Start timer'}
+        title={isTiming ? 'Stop timer' : 'Start timer'}
         onClick={onTimerClick}
       >
-        {isTracking ? (
+        {isTiming ? (
           <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
             <rect x="6" y="6" width="12" height="12" rx="2" />
           </svg>

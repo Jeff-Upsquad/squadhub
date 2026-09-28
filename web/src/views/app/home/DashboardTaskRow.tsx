@@ -6,6 +6,8 @@ import { useAuthStore } from '../../../stores/authStore';
 import { useUpdateTask } from '../../../hooks/useTasks';
 import { useCompletionGate } from '../../../hooks/useCompletionGate';
 import { useParallelTimers } from '../../../hooks/useParallelTimers';
+import { useTaskTypes } from '../../../hooks/useTaskTypes';
+import { useActiveWorkBlockRun, useStopWorkBlockRun } from '../../../hooks/useWorkBlocks';
 import { computeSnoozeTargets } from '../../../hooks/useDayPlanner';
 import { useIsMobile } from '../../../hooks/useIsMobile';
 import { formatTaskDates } from '../pm/taskHelpers';
@@ -200,6 +202,16 @@ function DashboardTaskRowInner({
   const updateTask = useUpdateTask(null);
   const { timers, requestStartTimer, stopTimer } = useParallelTimers();
   const isTracking = timers.some((x) => x.taskId === task.id);
+  // Work-block tasks are timed via runs, never per-task timers (the timer
+  // hook redirects them) — the button below stops the run when active.
+  const { data: taskTypes } = useTaskTypes();
+  const isWorkBlockTask =
+    (task as any).task_type?.key === 'work_block' ||
+    (!!(task as any).task_type_id && !!taskTypes?.some((x) => x.id === (task as any).task_type_id && (x as any).key === 'work_block'));
+  const { data: activeWB } = useActiveWorkBlockRun();
+  const stopWBRun = useStopWorkBlockRun();
+  const isWBRunForThisTask = !!activeWB && !activeWB.run.ended_at && activeWB.task.id === task.id;
+  const isTiming = isTracking || isWBRunForThisTask;
   const [menuPos, setMenuPos] = useState<{ left: number; top: number } | null>(null);
   const moveRef = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -209,11 +221,19 @@ function DashboardTaskRowInner({
 
   const onTimerClick = async (e: React.MouseEvent) => {
     e.stopPropagation();
+    if (isWBRunForThisTask && activeWB) {
+      try {
+        await stopWBRun.mutateAsync({ run_id: activeWB.run.id, task_id: task.id });
+      } catch (err) {
+        console.error('Failed to stop work-block run:', err);
+      }
+      return;
+    }
     if (isTracking) {
       await stopTimer(task.id);
       return;
     }
-    await requestStartTimer({ taskId: task.id, taskTitle: task.title, listId: task.list_id || '', baseTracked: task.time_tracked || 0 });
+    await requestStartTimer({ taskId: task.id, taskTitle: task.title, listId: task.list_id || '', baseTracked: task.time_tracked || 0, isWorkBlock: isWorkBlockTask });
   };
 
   const openMenu = (e: React.MouseEvent) => {
@@ -297,12 +317,12 @@ function DashboardTaskRowInner({
       <button
         type="button"
         className="hmp-timer-btn"
-        data-active={isTracking || undefined}
-        aria-label={isTracking ? 'Stop timer' : 'Start timer'}
-        title={isTracking ? 'Stop timer' : 'Start timer'}
+        data-active={isTiming || undefined}
+        aria-label={isTiming ? 'Stop timer' : 'Start timer'}
+        title={isTiming ? 'Stop timer' : 'Start timer'}
         onClick={onTimerClick}
       >
-        {isTracking ? (
+        {isTiming ? (
           <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
             <rect x="6" y="6" width="12" height="12" rx="2" />
           </svg>
