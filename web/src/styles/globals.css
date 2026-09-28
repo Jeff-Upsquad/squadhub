@@ -4448,6 +4448,14 @@ body.sb-resizing { user-select: none; -webkit-user-select: none; cursor: col-res
 .dark .vt-danger { color: #f87171; }
 .vt-danger:hover { background: rgba(220,38,38,0.08); }
 .vt-saverow { display: inline-flex; align-items: center; gap: 6px; margin: 0 4px; }
+
+/* ── Embedded My Tasks: compact the tall 48px + 38px header stack ──────────
+   The personal list previously carried the full list chrome (breadcrumb row +
+   tab row + filter bar ≈ 120px before the first task). In embedded mode the
+   breadcrumb is already a compact title, so tighten both rows. */
+.lv-embedded .lv-breadcrumb-row { height: 40px; padding: 0 16px; }
+.lv-embedded .lv-tabs-row { height: 34px; padding: 0 16px; }
+.lv-embedded .lv-search { width: 180px; height: 28px; }
 .vt-save {
   background: var(--sh-ink);
   color: var(--surface);

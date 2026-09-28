@@ -32,10 +32,11 @@ import {
   type NodeProps,
   type EdgeProps,
 } from '@xyflow/react';
-import type { SpaceStatus, WhiteboardData, WhiteboardNode, WhiteboardEdge, WhiteboardNodeData, WhiteboardNodeType, WhiteboardShape, WhiteboardLineType, Task } from '@squadhub/shared';
+import type { SpaceStatus, WhiteboardData, WhiteboardNode, WhiteboardEdge, WhiteboardNodeData, WhiteboardNodeType, WhiteboardShape, WhiteboardLineType, Task, ListViewRow } from '@squadhub/shared';
 import { getTaskStatusCategory } from '@squadhub/shared';
 import { useWhiteboard, useWhiteboardAutosave } from '../../../hooks/useWhiteboard';
 import { useCreateTask, useUpdateTask, useTasks } from '../../../hooks/useTasks';
+import api from '../../../services/api';
 import { useWorkspaceSearch } from '../../../hooks/useWorkspaceSearch';
 import { useWorkspaceStore } from '../../../stores/workspaceStore';
 import { usePMStore } from '../../../stores/pmStore';
@@ -1011,12 +1012,14 @@ function Canvas({
   initial,
   statuses,
   canEdit,
+  activeView,
 }: {
   viewId: string;
   listId: string;
   initial: WhiteboardData;
   statuses: SpaceStatus[];
   canEdit: boolean;
+  activeView?: ListViewRow | null;
 }) {
   const rf = useReactFlow();
   const wrapperRef = useRef<HTMLDivElement | null>(null);
@@ -1115,11 +1118,33 @@ function Canvas({
   const convertToTask = useCallback((id: string) => {
     const node = rf.getNode(id) as WBNode | undefined;
     const title = (node?.data.text || '').trim() || 'Untitled task';
+    const cfg = activeView?.config || {};
+    const defaultPriority = (cfg.defaultPriority as any) || undefined;
+    const defaultTaskTypeId = (cfg.defaultTaskTypeId as string) || undefined;
+    const defaultLabelId = (cfg.defaultLabel as string) || undefined;
     createTask.mutate(
-      { title, status: statuses[0]?.name },
-      { onSuccess: (task: { id: string; display_number?: number | null }) => setNodeData(id, { taskId: task.id, taskNumber: task.display_number ?? null, done: false }) },
+      {
+        title,
+        status: statuses[0]?.name,
+        priority: defaultPriority && defaultPriority !== 'none' ? defaultPriority : undefined,
+        task_type_id: defaultTaskTypeId,
+        metadata: activeView?.id ? { view_id: activeView.id } : undefined,
+        tag_id: defaultLabelId,
+      },
+      {
+        onSuccess: async (task: { id: string; display_number?: number | null }) => {
+          setNodeData(id, { taskId: task.id, taskNumber: task.display_number ?? null, done: false });
+          if (defaultLabelId && task?.id) {
+            try {
+              await api.post(`/pm/labels/tasks/${task.id}/labels`, { tag_id: defaultLabelId });
+            } catch {
+              // Ignore if already attached by create payload
+            }
+          }
+        },
+      },
     );
-  }, [rf, createTask, statuses, setNodeData]);
+  }, [rf, createTask, statuses, setNodeData, activeView]);
 
   // Mention (reference) an existing task from the element's edit bar. Unlike
   // convertToTask, this creates NO task and does NOT alter the selected element:
@@ -1564,11 +1589,15 @@ export default function WhiteboardView({
   listId,
   statuses,
   canEdit = true,
+  activeView,
+  allViews,
 }: {
   viewId: string;
   listId: string;
   statuses: SpaceStatus[];
   canEdit?: boolean;
+  activeView?: ListViewRow | null;
+  allViews?: ListViewRow[];
 }) {
   const { data: wb, isLoading } = useWhiteboard(viewId);
 
@@ -1582,7 +1611,7 @@ export default function WhiteboardView({
 
   return (
     <ReactFlowProvider>
-      <Canvas key={viewId} viewId={viewId} listId={listId} initial={wb} statuses={statuses} canEdit={canEdit} />
+      <Canvas key={viewId} viewId={viewId} listId={listId} initial={wb} statuses={statuses} canEdit={canEdit} activeView={activeView} />
     </ReactFlowProvider>
   );
 }
