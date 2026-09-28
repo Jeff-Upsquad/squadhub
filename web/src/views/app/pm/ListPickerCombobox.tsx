@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQueries } from '@tanstack/react-query';
 import api from '../../../services/api';
 import { useSpaces, useSpace } from '../../../hooks/useSpaces';
+import { usePersonalList } from '../../../hooks/useTasks';
 import type { AccessLevel, Folder, List, Space } from '@squadhub/shared';
 
 const ACCESS_RANK: Record<AccessLevel, number> = {
@@ -67,6 +68,12 @@ export default function ListPickerCombobox({
   onOpenChange?: (open: boolean) => void;
 }) {
   const { data: spaces } = useSpaces(workspaceId);
+  // Personal private list — surfaced pinned on top as "My Tasks" so a task can
+  // be created directly into the caller's personal section. The endpoint is
+  // get-or-create and cached (5m staleTime), so this is cheap.
+  const { data: personal } = usePersonalList();
+  const personalListId = personal?.list?.id ?? null;
+  const personalSpaceId = personal?.space?.id ?? null;
   const [openInternal, setOpenInternal] = useState(false);
   const open = openProp !== undefined ? openProp : openInternal;
   const setOpen = (next: boolean | ((prev: boolean) => boolean)) => {
@@ -194,9 +201,60 @@ export default function ListPickerCombobox({
                 query={query.trim().toLowerCase()}
                 selectedListId={selectedListId}
                 onPick={pick}
+                personalListId={personalListId}
+                personalSpaceId={personalSpaceId}
               />
             ) : (
               <>
+                {personalListId && personalSpaceId && (
+                  <>
+                    <div className="px-2 pt-1 pb-1 text-[11px] uppercase tracking-wider text-[color:var(--sh-ink-4)]">
+                      My Tasks
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => pick(personalListId, personalSpaceId)}
+                      className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left transition ${
+                        personalListId === selectedListId
+                          ? 'bg-[color:rgba(34,197,94,0.12)] text-[#16a34a]'
+                          : 'hover:bg-[color:var(--sh-hair-3)]'
+                      }`}
+                      title="Create in your private personal list — only you can see these"
+                    >
+                      <span
+                        className="grid h-5 w-5 place-items-center rounded-[5px] text-[10px] font-semibold text-white shrink-0"
+                        style={{ background: 'var(--sh-ink)' }}
+                        aria-hidden
+                      >
+                        ✓
+                      </span>
+                      <span className="flex-1 min-w-0">
+                        <span className="block text-[13px] truncate">My Tasks</span>
+                        <span className="block text-[11px] text-[color:var(--sh-ink-4)] truncate">
+                          Private · Only you can see these
+                        </span>
+                      </span>
+                      <span className="rounded bg-[color:var(--sh-accent-soft)] px-1.5 py-0.5 text-[10px] font-medium text-[color:var(--sh-accent)] shrink-0">
+                        Private
+                      </span>
+                      {personalListId === selectedListId && (
+                        <svg
+                          width="13"
+                          height="13"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2.5"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          className="shrink-0"
+                        >
+                          <path d="M5 12l5 5 9-11" />
+                        </svg>
+                      )}
+                    </button>
+                  </>
+                )}
                 <div className="px-2 pt-1 pb-1 text-[11px] uppercase tracking-wider text-[color:var(--sh-ink-4)]">
                   Spaces
                 </div>
@@ -437,11 +495,15 @@ function SearchResults({
   query,
   selectedListId,
   onPick,
+  personalListId,
+  personalSpaceId,
 }: {
   spaces: Space[];
   query: string;
   selectedListId: string | null;
   onPick: (listId: string, spaceId: string) => void;
+  personalListId?: string | null;
+  personalSpaceId?: string | null;
 }) {
   // Fetch every space's full data in parallel; results are cached (same key as useSpace)
   const results = useQueries({
@@ -471,7 +533,12 @@ function SearchResults({
     );
   }
 
-  if (!matches.length) {
+  const myTasksMatch =
+    personalListId &&
+    personalSpaceId &&
+    ('my tasks'.includes(query) || 'private'.includes(query) || 'personal'.includes(query));
+
+  if (!matches.length && !myTasksMatch) {
     return (
       <div className="px-2 py-4 text-center text-[12px] text-[color:var(--sh-ink-4)]">
         No lists match &ldquo;{query}&rdquo;
@@ -481,6 +548,24 @@ function SearchResults({
 
   return (
     <div>
+      {myTasksMatch && personalListId && personalSpaceId && (
+        <button
+          type="button"
+          onClick={() => onPick(personalListId, personalSpaceId)}
+          className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left transition ${
+            personalListId === selectedListId
+              ? 'bg-[color:rgba(34,197,94,0.12)] text-[#16a34a]'
+              : 'hover:bg-[color:var(--sh-hair-3)]'
+          }`}
+        >
+          <span className="flex-1 min-w-0">
+            <span className="block text-[13px] truncate">My Tasks</span>
+            <span className="block text-[11px] text-[color:var(--sh-ink-4)] truncate">
+              Private · Only you can see these
+            </span>
+          </span>
+        </button>
+      )}
       {matches.map(({ list, space, folderName }) => (
         <ListRow
           key={list.id}

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useCreateTask } from '../../../hooks/useTasks';
+import { useCreateTask, usePersonalList } from '../../../hooks/useTasks';
 import { useFocusTask } from '../../../hooks/useDayPlanner';
 import { useAssignableUsersByList } from '../../../hooks/useAssignableUsers';
 import { useTaskTypes } from '../../../hooks/useTaskTypes';
@@ -283,6 +283,20 @@ export default function TaskCreatePanel({
   const [selectedSpaceId, setSelectedSpaceId] = useState<string | null>(initialSpaceId ?? null);
   const [selectedListId, setSelectedListId] = useState<string | null>(initialListId ?? null);
 
+  // initialSpaceId/initialListId can arrive async (e.g. the My Tasks personal
+  // list resolves after the panel mounts). Adopt them once they land, but never
+  // clobber a manual pick the user already made.
+  const userPickedRef = useRef(false);
+  useEffect(() => {
+    if (userPickedRef.current) return;
+    if (!selectedListId && initialListId) {
+      setSelectedListId(initialListId);
+      if (initialSpaceId) setSelectedSpaceId(initialSpaceId);
+    } else if (!selectedSpaceId && initialSpaceId) {
+      setSelectedSpaceId(initialSpaceId);
+    }
+  }, [initialListId, initialSpaceId, selectedListId, selectedSpaceId]);
+
   // Load the selected space for statuses + selected list metadata (name/color)
   const { data: spaceData } = useSpace(pickable ? selectedSpaceId : null);
 
@@ -302,13 +316,34 @@ export default function TaskCreatePanel({
   const effectiveListId = pickable ? selectedListId : (listId ?? null);
   const needsListForAssignee = pickable && !effectiveListId;
   const effectiveStatuses = useMemo<SpaceStatus[]>(
-    () => (pickable ? (spaceData?.statuses || []) : (statuses || [])),
-    [pickable, spaceData?.statuses, statuses],
+    () => (pickable ? ((spaceData as any)?.space_statuses || spaceData?.statuses || []) : (statuses || [])),
+    [pickable, spaceData, statuses],
   );
-  const effectiveSpaceName = pickable ? spaceData?.name : spaceName;
+  // When the personal private list is selected, brand it as "My Tasks" instead
+  // of the raw "Personal / Tasks" names so the picker reads the way users think.
+  const { data: personalForBrand } = usePersonalList(pickable && !!selectedListId);
+  const isPersonalSelected = !!(
+    pickable &&
+    selectedListId &&
+    personalForBrand?.list?.id &&
+    selectedListId === personalForBrand.list.id
+  );
+  const effectiveSpaceName = pickable
+    ? isPersonalSelected
+      ? 'My Tasks'
+      : spaceData?.name
+    : spaceName;
   const effectiveSpaceColor = pickable ? (spaceData?.color ?? null) : (spaceColor ?? null);
-  const effectiveFolderName = pickable ? (selectedListInfo?.folderName ?? null) : (folderName ?? null);
-  const effectiveListName = pickable ? (selectedListInfo?.name ?? null) : (listName ?? null);
+  const effectiveFolderName = pickable
+    ? isPersonalSelected
+      ? null
+      : (selectedListInfo?.folderName ?? null)
+    : (folderName ?? null);
+  const effectiveListName = pickable
+    ? isPersonalSelected
+      ? null
+      : (selectedListInfo?.name ?? null)
+    : (listName ?? null);
 
   const createTask = useCreateTask(effectiveListId);
   const { data: assignableUsers = [] } = useAssignableUsersByList(effectiveListId);
@@ -842,6 +877,7 @@ export default function TaskCreatePanel({
               selectedSpaceColor={effectiveSpaceColor}
               initialSpaceId={selectedSpaceId}
               onChange={(newListId, newSpaceId) => {
+                userPickedRef.current = true;
                 setSelectedListId(newListId);
                 setSelectedSpaceId(newSpaceId);
               }}

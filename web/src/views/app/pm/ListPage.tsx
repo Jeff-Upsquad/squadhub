@@ -273,6 +273,19 @@ export default function ListPage({
           {/* Search input */}
           <ViewSearchInput value={searchQuery} onChange={setSearchQuery} />
 
+          {/* New task inside My Tasks — opens the global create modal defaulted
+              to the personal list (see GlobalCreateTaskModal inMyTasks). */}
+          {embedded && canEdit && (
+            <button
+              type="button"
+              onClick={() => window.dispatchEvent(new CustomEvent('sh:open-create-task'))}
+              className="lv-newtask-btn"
+              title="Create a task in My Tasks"
+            >
+              + New task
+            </button>
+          )}
+
           {/* Settings button */}
           {canAccessSettings && (
             <button
