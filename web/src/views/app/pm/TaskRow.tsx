@@ -9,7 +9,7 @@ import { useFocusTask } from '../../../hooks/useDayPlanner';
 import { useTaskTypes } from '../../../hooks/useTaskTypes';
 import { useActiveWorkBlockRun, useRecordWorkBlockCompletion } from '../../../hooks/useWorkBlocks';
 import { useActiveGroupRun, useRecordGroupRunCompletion } from '../../../hooks/useGroupRuns';
-import { isTaskFocused } from '../../../lib/taskGrouping';
+import { isTaskFocused, isTaskCompleted } from '../../../lib/taskGrouping';
 import { avatarColor, initialOf, formatWhen, nextQuickDate, statusIsComplete } from './taskHelpers';
 import AssigneePicker from './AssigneePicker';
 import NoAssigneeCompleteDialog from './NoAssigneeCompleteDialog';
@@ -112,7 +112,7 @@ export default function TaskRow({
   const isSelected = selectedTasks.includes(task.id);
 
   const statusCategory = (task as any).status as string | undefined;
-  const isDone = statusCategory === 'done' || statusCategory === 'closed' || statusCategory === 'cancelled';
+  const isDone = isTaskCompleted(task);
   const isFading = fadingTaskIds.has(task.id);
   const displayDone = isDone || isFading;
   const priority = (task.priority || 'none') as TaskPriority;

@@ -14,7 +14,7 @@ import AssigneePicker from '../pm/AssigneePicker';
 import IncompleteItemsDialog from '../pm/IncompleteItemsDialog';
 import NoAssigneeCompleteDialog from '../pm/NoAssigneeCompleteDialog';
 import { formatTracked, toLocalDateKey } from '../../../lib/formatDuration';
-import { groupTasks, isFutureDay, isTaskFocused, collapseGroupedTasks, isGroupedRow, GROUP_BY_OPTIONS } from '../../../lib/taskGrouping';
+import { groupTasks, isFutureDay, isTaskFocused, collapseGroupedTasks, isGroupedRow, GROUP_BY_OPTIONS, isTaskCompleted } from '../../../lib/taskGrouping';
 import GroupedTaskRow from './GroupedTaskRow';
 import DayCalendar from '../day-planner/DayCalendar';
 import { planDateKey, computeSnoozeTargets } from '../../../hooks/useDayPlanner';
@@ -118,7 +118,7 @@ export default function TodayList() {
     // Previously this inherited the overdue/today bucket order above, which
     // made the same focused tasks appear in a different sequence on Home.
     return unique
-      .filter((t) => isTaskFocused(t) && !isFutureDay(t.work_date, tz))
+      .filter((t) => !isTaskCompleted(t) && isTaskFocused(t) && !isFutureDay(t.work_date, tz))
       .sort((a, b) => (a.focused_at ?? '').localeCompare(b.focused_at ?? ''));
   }, [data, tz]);
   // Keep just-completed rows rendered until their slide-out finishes. The
@@ -133,7 +133,10 @@ export default function TodayList() {
   // server-side, full task objects, most-recently-worked first). These render
   // as their own section ABOVE the focus list and are pulled out of the focus
   // sections below so a worked task never shows up twice.
-  const rawInProgress: Task[] = useMemo(() => data?.in_progress_today ?? [], [data]);
+  const rawInProgress: Task[] = useMemo(
+    () => (data?.in_progress_today ?? []).filter((t) => !isTaskCompleted(t)),
+    [data],
+  );
   const inProgressTasks = useRetainFading(rawInProgress, fadingTaskIds);
   const inProgressIds = useMemo(() => new Set(inProgressTasks.map((t) => t.id)), [inProgressTasks]);
 
@@ -677,17 +680,14 @@ function TodayRow({ task: t, onOpen, secondsToday = 0 }: { task: Task; onOpen: (
   const isSubtask = !!t.parent_task_id;
   const parentTitle = t.parent_task?.title || null;
   const status = (t as any).status as string | undefined;
-  const isDone = status === 'done' || status === 'closed' || status === 'cancelled';
+  const isDone = isTaskCompleted(t);
   const displayDone = isDone || isFading;
   // Inline subtask dropdown — hydrated by GET /pm/tasks/my (direct children,
   // done ones included so they render struck-through). Chevron + N/M done
   // counter sit before the title; expanding reveals the child rows below.
   const subtasks = t.subtasks ?? [];
   const [subsExpanded, setSubsExpanded] = useState(false);
-  const subsDone = subtasks.filter((s) => {
-    const st = (s as any).status as string | undefined;
-    return st === 'done' || st === 'closed' || st === 'cancelled';
-  }).length;
+  const subsDone = subtasks.filter((s) => isTaskCompleted(s as any)).length;
 
   // Completion writes go through the shared gate so checking off here runs
   // the same subtask/checklist + no-assignee prompts as the list view.
@@ -934,7 +934,7 @@ function TodayRow({ task: t, onOpen, secondsToday = 0 }: { task: Task; onOpen: (
 function HomeSubtaskRow({ sub: s, onOpen }: { sub: Task; onOpen: (id: string) => void }) {
   const updateTask = useUpdateTask(null);
   const status = (s as any).status as string | undefined;
-  const isDone = status === 'done' || status === 'closed' || status === 'cancelled';
+  const isDone = isTaskCompleted(s);
   const when = formatTaskDates(s);
   const assignee = s.assignees?.[0];
   const completeTask = useCallback((taskId: string, assigneeIds?: string[]) => {

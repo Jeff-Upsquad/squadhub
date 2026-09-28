@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { Task } from '@squadhub/shared';
+import { isTaskCompleted } from '../../../lib/taskGrouping';
 import { usePMStore } from '../../../stores/pmStore';
 import { useAuthStore } from '../../../stores/authStore';
 import { useUpdateTask } from '../../../hooks/useTasks';
@@ -48,7 +49,7 @@ export default function DashboardTaskRow({ task }: { task: Task }) {
   const [isFadingOut, setIsFadingOut] = useState(false);
   const [isHidden, setIsHidden] = useState(false);
 
-  const isDone = ((task as any).status as string | undefined) === 'done' || ((task as any).status as string | undefined) === 'closed' || ((task as any).status as string | undefined) === 'cancelled';
+  const isDone = isTaskCompleted(task);
   const displayDone = isDone || isFadingOut;
   const firstAssignee = (task.assignees && task.assignees[0]) || null;
   const seed = firstAssignee?.display_name || firstAssignee?.email || task.id;

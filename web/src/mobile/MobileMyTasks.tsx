@@ -14,6 +14,7 @@ import { useUpdateTask } from '../hooks/useTasks';
 import { usePMStore } from '../stores/pmStore';
 import { MAvatar, MEmpty, MLoading } from './MobileKit';
 import { formatDated } from '../views/app/pm/taskHelpers';
+import { isTaskCompleted } from '../lib/taskGrouping';
 
 type Filter = 'all' | 'today' | 'overdue';
 
@@ -43,8 +44,7 @@ function shortDate(iso: string | null | undefined): string | null {
 }
 
 function isDone(task: Task) {
-  const s = (task as { status?: string }).status;
-  return s === 'done' || s === 'closed' || s === 'cancelled';
+  return isTaskCompleted(task);
 }
 
 export default function MobileMyTasks() {

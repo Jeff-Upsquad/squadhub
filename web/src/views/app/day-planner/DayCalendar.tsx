@@ -939,8 +939,10 @@ interface Positioned {
 // text values that earlier task types still write.
 function isTaskDone(status?: string | null): boolean {
   if (!status) return false;
-  if (status === 'done' || status === 'closed' || status === 'cancelled') return true;
-  return getTaskStatusCategory(status) === 'closed';
+  const s = status.toLowerCase().trim();
+  if (s === 'done' || s === 'closed' || s === 'cancelled') return true;
+  const cat = getTaskStatusCategory(status);
+  return cat === 'closed' || cat === 'done';
 }
 
 // Greedy overlap layout: walk plans in order, assign each to the first column
