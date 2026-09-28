@@ -280,8 +280,8 @@ export default function LearningItemView({
             ) : (
               <PostBody item={item} assignment={assignment} />
             )}
-            {access === 'admin' && <div className="mx-auto max-w-4xl px-6 pb-10">
-              <DocumentChanges key={item.id} itemId={item.id} lessonId={activeLesson?.id} revision={item} />
+            {access === 'admin' && activeLesson && <div className="mx-auto max-w-4xl px-6 pb-10">
+              <DocumentChanges key={item.id} itemId={item.id} lessonId={activeLesson.id} revision={item} />
             </div>}
           </main>
 

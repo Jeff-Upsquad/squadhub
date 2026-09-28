@@ -13,17 +13,31 @@ INSERT INTO lms_items(id,title) VALUES ('10000000-0000-4000-8000-000000000001','
 INSERT INTO lms_lessons(id,item_id,title) VALUES ('20000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000001','Onboarding');
 INSERT INTO lms_content_blocks(id,lesson_id,text_content) VALUES ('30000000-0000-4000-8000-000000000001','20000000-0000-4000-8000-000000000001','{"text":"Original answer"}');
 \ir ../../../supabase/migrations/20260928090000_lms_document_history.sql
+-- Model two versions saved before page IDs were recorded. The second is a
+-- same-title page addition and must not be assigned to the existing page.
+INSERT INTO lms_item_versions(item_id,transaction_id,change_label,page_title,snapshot) VALUES
+ ('10000000-0000-4000-8000-000000000001',-1,'Content updated','Onboarding',
+  '{"document":{"title":"Hiring knowledge"},"pages":[{"id":"20000000-0000-4000-8000-000000000001","title":"Onboarding","blocks":[]}]}'),
+ ('10000000-0000-4000-8000-000000000001',-2,'Page added','Onboarding',
+  '{"document":{"title":"Hiring knowledge"},"pages":[{"id":"20000000-0000-4000-8000-000000000001","title":"Onboarding","blocks":[]}]}');
+\ir ../../../supabase/migrations/20260928170000_lms_page_history.sql
+DO $$ BEGIN
+ ASSERT (SELECT page_id = '20000000-0000-4000-8000-000000000001' FROM lms_item_versions WHERE transaction_id = -1), 'Existing page history is assigned by stable ID';
+ ASSERT (SELECT page_id IS NULL FROM lms_item_versions WHERE transaction_id = -2), 'Same-title additions are not attributed to another page';
+END $$;
+DELETE FROM lms_item_versions WHERE transaction_id IN (-1,-2);
 GRANT SELECT, INSERT, UPDATE, DELETE ON lms_items, lms_lessons, lms_content_blocks, lms_content_block_videos, lms_quiz_questions TO service_role;
 SET ROLE service_role;
 UPDATE lms_content_blocks SET text_content = '{"text":"New answer"}';
 DO $$ BEGIN
  ASSERT (SELECT count(*) = 1 FROM lms_item_versions), 'Every saved change captures history';
+ ASSERT (SELECT page_id = '20000000-0000-4000-8000-000000000001' FROM lms_item_versions), 'Changes identify their page';
  ASSERT (SELECT snapshot->'pages'->0->'blocks'->0->'text_content'->>'text' = 'Original answer' FROM lms_item_versions), 'History contains the pre-save content';
  ASSERT (SELECT count(*) = 1 FROM lms_lessons), 'History must not create navigation pages';
  ASSERT NOT has_table_privilege('anon','lms_item_versions','SELECT'), 'No anonymous history reads';
  ASSERT NOT has_table_privilege('authenticated','lms_item_versions','SELECT'), 'No direct user history reads';
  ASSERT NOT has_table_privilege('service_role','lms_item_versions','UPDATE'), 'Snapshots cannot be edited';
- ASSERT NOT has_function_privilege('authenticated','capture_lms_item_version(uuid,text,text)','EXECUTE'), 'Cannot invoke privileged snapshot function';
+ ASSERT NOT has_function_privilege('authenticated','capture_lms_item_version(uuid,text,text,uuid)','EXECUTE'), 'Cannot invoke privileged snapshot function';
 END $$;
 UPDATE lms_content_blocks SET text_content = '{"text":"New answer"}', updated_at = now();
 UPDATE lms_items SET squadhire_synced_at = now(), squadhire_last_error = 'retry', updated_at = now();
@@ -83,5 +97,23 @@ DELETE FROM lms_lessons WHERE id = '20000000-0000-4000-8000-000000000001';
 DELETE FROM lms_items WHERE id = '10000000-0000-4000-8000-000000000002';
 DO $$ BEGIN
  ASSERT EXISTS (SELECT 1 FROM lms_item_versions WHERE item_id = '10000000-0000-4000-8000-000000000001' AND snapshot->'pages'->0->>'title' = 'Original page'), 'Review replacement preserves previous pages';
+END $$;
+RESET ROLE;
+
+-- Editing two pages in one transaction gives each page its own pre-change entry.
+SET ROLE service_role;
+INSERT INTO lms_items(id,title) VALUES ('10000000-0000-4000-8000-000000000003','Two pages');
+INSERT INTO lms_lessons(id,item_id,title) VALUES
+ ('20000000-0000-4000-8000-000000000003','10000000-0000-4000-8000-000000000003','First'),
+ ('20000000-0000-4000-8000-000000000004','10000000-0000-4000-8000-000000000003','Second');
+INSERT INTO lms_content_blocks(id,lesson_id,text_content) VALUES
+ ('30000000-0000-4000-8000-000000000003','20000000-0000-4000-8000-000000000003','{"text":"First before"}'),
+ ('30000000-0000-4000-8000-000000000004','20000000-0000-4000-8000-000000000004','{"text":"Second before"}');
+BEGIN;
+UPDATE lms_content_blocks SET text_content = '{"text":"After"}' WHERE id IN ('30000000-0000-4000-8000-000000000003','30000000-0000-4000-8000-000000000004');
+COMMIT;
+DO $$ BEGIN
+ ASSERT (SELECT count(*) = 2 FROM lms_item_versions WHERE item_id = '10000000-0000-4000-8000-000000000003' AND change_label = 'Content updated'), 'Both edited pages get history';
+ ASSERT (SELECT count(DISTINCT page_id) = 2 FROM lms_item_versions WHERE item_id = '10000000-0000-4000-8000-000000000003' AND change_label = 'Content updated'), 'Page histories do not overlap';
 END $$;
 RESET ROLE;
