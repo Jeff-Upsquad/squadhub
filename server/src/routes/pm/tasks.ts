@@ -14,6 +14,8 @@ import { logTaskTimeEntry, ensureAssigneeOnTimeLogged, addDailyWorkSeconds, over
 import { logTaskActivity, type TaskActivityEvent } from '../../utils/taskActivity';
 import { getUserSkillLevel, checkLoggedTimeChange } from '../../utils/skills';
 import { resolveClientSource } from '../../utils/clientSource';
+import { recordWorkBlockCompletionIfActive } from './workBlocks';
+import { recordGroupRunCompletionIfActive } from './groupRuns';
 
 const router = Router();
 router.use(requireAuth);
@@ -96,6 +98,15 @@ async function getSpaceDoneStatusNames(listId: string | null): Promise<Set<strin
     .in('category', ['done', 'closed']);
   for (const s of (data || []) as { name: string }[]) names.add(s.name);
   return names;
+}
+
+async function isTaskStatusDone(listId: string | null, status: string | null | undefined): Promise<boolean> {
+  if (!status) return false;
+  if (status === 'done' || status === 'closed') return true;
+  const cat = getTaskStatusCategory(status);
+  if (cat === 'done' || cat === 'closed') return true;
+  const doneNames = await getSpaceDoneStatusNames(listId);
+  return doneNames.has(status);
 }
 
 // Open (not yet complete) direct subtasks + unchecked checklist items.
@@ -1617,6 +1628,18 @@ router.post('/tasks', async (req: Request, res: Response) => {
       }]);
     }
 
+    // Auto-record completion if task was created in a done/closed state
+    // while the user has an active work block or group run.
+    if (task && (task as any).status) {
+      const isDone = await isTaskStatusDone(body.list_id, (task as any).status);
+      if (isDone) {
+        await Promise.allSettled([
+          recordWorkBlockCompletionIfActive(req.userId!, (task as any).id),
+          recordGroupRunCompletionIfActive(req.userId!, (task as any).id),
+        ]);
+      }
+    }
+
     const [hydratedTask] = await hydrateAssignees([task]);
     res.status(201).json({ success: true, data: hydratedTask });
   } catch (err) {
@@ -1741,6 +1764,24 @@ router.put('/tasks/:id', async (req: Request, res: Response) => {
     if (error) {
       res.status(500).json({ success: false, error: error.message });
       return;
+    }
+
+    // Auto-record completion if task moved into a done/closed state
+    // while the user has an active work block or group run.
+    if (body.status !== undefined) {
+      const priorStatus = (prior as any)?.status;
+      const nextStatus = (data as any)?.status ?? body.status;
+      const targetListId = body.list_id || listId;
+      const [wasDone, isNowDone] = await Promise.all([
+        isTaskStatusDone(listId, priorStatus),
+        isTaskStatusDone(targetListId, nextStatus),
+      ]);
+      if (isNowDone && !wasDone) {
+        await Promise.allSettled([
+          recordWorkBlockCompletionIfActive(req.userId!, id),
+          recordGroupRunCompletionIfActive(req.userId!, id),
+        ]);
+      }
     }
 
     // If the task was MOVED into a list it was also LINKED into, drop the now
