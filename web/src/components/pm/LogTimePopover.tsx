@@ -8,6 +8,7 @@ import {
   useUpdateTaskTimeEntry,
 } from '../../hooks/useTaskTimeEntries';
 import { useEditLoggedTimeLevel } from '../../hooks/useMySkills';
+import { useIsAdmin } from '../../hooks/usePermissions';
 import {
   parseDuration,
   formatDuration,
@@ -29,10 +30,11 @@ type Tab = 'log' | 'timer';
  *
  * Logging is entry-based rather than "overwrite the total" — that keeps the
  * per-session history, the daily timesheet and the task's own aggregate
- * telling the same story. Changing time that is already logged — editing an
- * entry, a negative entry, removing an entry — needs the edit_logged_time
- * skill (admin → Skills): 'reduce' can only lower time, 'full' can change it
- * either way. The server enforces the same rule on every call.
+ * telling the same story. Changing time that is already logged needs the
+ * edit_logged_time skill (admin → Skills): 'reduce' can only lower time,
+ * 'full' can change it either way — except admins editing someone else's
+ * entry, who are capped to reduce-only. Negative entries are disabled; reduce
+ * by editing an entry down. The server enforces the same rules on every call.
  */
 export default function LogTimePopover({
   anchorRect,
@@ -81,8 +83,7 @@ export default function LogTimePopover({
   const [editingId, setEditingId] = useState<string | null>(null);
 
   const editLevel = useEditLoggedTimeLevel();
-  // Any level may take time off; only the skill lets you change logged time.
-  const canAdjust = editLevel != null;
+  const isAdmin = useIsAdmin();
 
   const entriesQuery = useTaskTimeEntries(taskId);
   const createEntry = useCreateTaskTimeEntry();
@@ -93,8 +94,7 @@ export default function LogTimePopover({
     if (!trimmed) return null;
     return parseDuration(trimmed);
   }, [duration]);
-  const invalid = duration.trim().length > 0 && minutes == null;
-  const subtracting = (minutes ?? 0) < 0;
+  const invalid = duration.trim().length > 0 && (minutes == null || minutes <= 0);
 
   useEffect(() => {
     if (!canLog) return undefined;
@@ -234,8 +234,7 @@ export default function LogTimePopover({
 
   const submit = async () => {
     if (createEntry.isPending) return;
-    if (minutes == null || minutes === 0) { setError('Enter a duration, e.g. 1h 30m'); return; }
-    if (minutes < 0 && !canAdjust) { setError('Taking time off needs the “Edit logged time” skill'); return; }
+    if (minutes == null || minutes <= 0) { setError(minutes != null && minutes < 0 ? 'Negative time entries are disabled' : 'Enter a duration, e.g. 1h 30m'); return; }
     if (!startAt || !endAt) { setError('Pick a valid date and time'); return; }
     if (endAt.getTime() > Date.now() + 60_000) { setError("That's in the future"); return; }
     if (startAt.getTime() > endAt.getTime() && minutes > 0) { setError("End time cannot be before start time"); return; }
@@ -441,10 +440,8 @@ export default function LogTimePopover({
               {error
                 ? error
                 : justLogged != null
-                  ? (justLogged < 0
-                      ? `Removed ${formatDuration(Math.abs(justLogged))} ✓`
-                      : `Added ${formatDuration(justLogged)} ✓`)
-                  : canAdjust ? 'Tip: “-30m” takes time off' : 'Enter to save'}
+                  ? `Added ${formatDuration(justLogged)} ✓`
+                  : 'Enter to save'}
             </span>
             <button
               type="button"
@@ -454,9 +451,7 @@ export default function LogTimePopover({
             >
               {createEntry.isPending
                 ? 'Saving…'
-                : subtracting
-                  ? `Remove ${formatDuration(Math.abs(minutes!))}`
-                  : minutes ? `Log ${formatDuration(minutes)}` : 'Log time'}
+                : minutes ? `Log ${formatDuration(minutes)}` : 'Log time'}
             </button>
           </div>
         </div>
@@ -487,6 +482,9 @@ export default function LogTimePopover({
           {canLog && editLevel === 'reduce' && (
             <span className="tp-recent-lvl" title="Your “Edit logged time” skill level"> · you can reduce entries</span>
           )}
+          {canLog && isAdmin && editLevel === 'full' && (
+            <span className="tp-recent-lvl" title="Admins can reduce other users' entries"> · admin: reduce others</span>
+          )}
           {deleteError && <span className="tp-recent-err"> · {deleteError}</span>}
         </div>
         {entriesQuery.isLoading ? (
@@ -495,13 +493,19 @@ export default function LogTimePopover({
           <div className="tp-recent-empty">No time logged yet.</div>
         ) : (
           <ul className="tp-recent-list">
-            {entries.slice(0, 12).map((entry) => editingId === entry.id && editLevel ? (
+            {entries.slice(0, 12).map((entry) => {
+              const isMineRow = entry.user_id === currentUserId;
+              // Admins editing someone else's entry are capped to reduce-only.
+              const rowLevel: EditLoggedTimeLevel | null = !isMineRow && isAdmin && editLevel === 'full' ? 'reduce' : editLevel;
+              const rowCanAdjust = rowLevel != null;
+              return editingId === entry.id && rowLevel ? (
               <EditEntryRow
                 key={entry.id}
                 taskId={taskId}
                 entry={entry}
-                level={editLevel}
-                isMine={entry.user_id === currentUserId}
+                level={rowLevel}
+                isMine={isMineRow}
+                adminCapped={!isMineRow && isAdmin && editLevel === 'full'}
                 onDone={() => setEditingId(null)}
               />
             ) : (
@@ -510,10 +514,9 @@ export default function LogTimePopover({
                 entry={entry}
                 // Removing an entry changes the logged total, so it carries the
                 // same skill gate the server applies — for your own rows too.
-                // 'reduce' can't remove a negative adjustment (that adds time).
-                canDelete={canLog && canAdjust
-                  && (editLevel === 'full' || entry.duration_seconds > 0)}
-                canEdit={canLog && canAdjust}
+                canDelete={canLog && rowCanAdjust
+                  && (rowLevel === 'full' || entry.duration_seconds > 0)}
+                canEdit={canLog && rowCanAdjust}
                 onEdit={() => { setDeleteError(null); setEditingId(entry.id); }}
                 onDelete={() => {
                   setDeleteError(null);
@@ -525,9 +528,9 @@ export default function LogTimePopover({
                     },
                   });
                 }}
-                isMine={entry.user_id === currentUserId}
+                isMine={isMineRow}
               />
-            ))}
+            );})}
           </ul>
         )}
       </div>
@@ -557,8 +560,10 @@ function RecentRow({
   const when = sameDay
     ? `Today ${formatClockTime(started)}`
     : started.toLocaleDateString([], { month: 'short', day: 'numeric' }) + ` ${formatClockTime(started)}`;
-  const who = isMine ? 'You' : (entry.user?.display_name || entry.user?.email || 'Someone');
+  const who = isMine ? 'you' : (entry.user?.display_name || entry.user?.email || 'someone');
+  const editedBy = entry.edited_by_user?.display_name || entry.edited_by_user?.email || null;
   const negative = entry.duration_seconds < 0;
+  const sourceLabel = entry.source === 'work_block' ? 'block' : entry.source === 'manual' ? 'manual' : 'timer';
 
   return (
     <li className="tp-recent-row">
@@ -569,11 +574,14 @@ function RecentRow({
           || `${negative ? '-' : ''}<1m`}
       </span>
       <span className="tp-recent-meta">
-        <span className="tp-recent-who">{who}</span>
+        <span className="tp-recent-who">logged by {who}</span>
         <span className="tp-recent-when">{when}</span>
+        <span className="tp-recent-tag tp-recent-tag-lower" title={sourceLabel === 'timer' ? 'Logged by the timer' : sourceLabel === 'manual' ? 'Logged manually' : 'Logged by a work block'}>
+          {sourceLabel}
+        </span>
         {negative && (
           <span
-            className="tp-recent-tag"
+            className="tp-recent-tag tp-recent-tag-lower"
             title="Time taken back off the total, not work logged"
           >
             adjustment
@@ -581,17 +589,14 @@ function RecentRow({
         )}
         {entry.edited_at && (
           <span
-            className="tp-recent-tag"
-            title={`Changed ${new Date(entry.edited_at).toLocaleString()}`}
+            className="tp-recent-tag tp-recent-tag-lower"
+            title={editedBy ? `Edited by ${editedBy} · ${new Date(entry.edited_at).toLocaleString()}` : `Changed ${new Date(entry.edited_at).toLocaleString()}`}
           >
-            edited
+            edited{editedBy ? ` by ${editedBy}` : ''}
           </span>
         )}
         {entry.note && <span className="tp-recent-note">{entry.note}</span>}
       </span>
-      {entry.source === 'work_block' && (
-        <span className="tp-recent-tag" title="Logged by a work block">block</span>
-      )}
       {canEdit && (
         <button type="button" className="tp-recent-del tp-recent-edit" onClick={onEdit} aria-label="Edit this entry" title="Edit">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
@@ -619,12 +624,14 @@ function EditEntryRow({
   entry,
   level,
   isMine,
+  adminCapped = false,
   onDone,
 }: {
   taskId: string;
   entry: TaskTimeEntry;
   level: EditLoggedTimeLevel;
   isMine: boolean;
+  adminCapped?: boolean;
   onDone: () => void;
 }) {
   const update = useUpdateTaskTimeEntry();
@@ -654,12 +661,13 @@ function EditEntryRow({
   }, []);
 
   const minutes = duration.trim() ? parseDuration(duration) : null;
-  const invalid = minutes == null || minutes === 0;
+  const invalid = minutes == null || minutes <= 0;
   // Untouched, the typed value is a minute-rounded view of the real seconds —
   // don't let that rounding count as a change.
   const newSeconds = durationTouched && minutes != null ? Math.round(minutes * 60) : oldSeconds;
+  const isNegative = durationTouched && newSeconds <= 0;
   const raising = newSeconds > oldSeconds;
-  const blocked = level === 'reduce' && raising;
+  const blocked = (level === 'reduce' && raising) || isNegative;
 
   const handleStartTimeChange = (val: string) => {
     setStartTimeValue(val);
@@ -749,8 +757,9 @@ function EditEntryRow({
 
   const save = async () => {
     if (update.isPending) return;
-    if (durationTouched && invalid) { setError('Enter a duration, e.g. 1h 30m'); return; }
-    if (blocked) { setError('You can only reduce this entry'); return; }
+    if (durationTouched && invalid) { setError(minutes != null && minutes < 0 ? 'Negative time entries are disabled' : 'Enter a duration, e.g. 1h 30m'); return; }
+    if (isNegative) { setError('Negative time entries are disabled'); return; }
+    if (blocked) { setError(adminCapped ? 'Admins can only reduce logged time, not increase it' : 'You can only reduce this entry'); return; }
     const start = whenTouched ? fromDateTimeInputs(startDateValue, startTimeValue) : null;
     const end = whenTouched ? fromDateTimeInputs(endDateValue, endTimeValue) : null;
     if (whenTouched && (!start || !end)) { setError('Pick a valid date and time'); return; }
@@ -788,8 +797,12 @@ function EditEntryRow({
   const who = isMine ? 'your' : `${entry.user?.display_name || entry.user?.email || 'their'}’s`;
   const hint = error
     ? error
-    : level === 'reduce'
-      ? `Reduce only · up to ${formatHoursMinutes(Math.round(oldSeconds / 60)) || '<1m'}`
+    : isNegative
+      ? 'Negative time entries are disabled'
+      : level === 'reduce'
+      ? adminCapped
+        ? `Admin reduce only · up to ${formatHoursMinutes(Math.round(oldSeconds / 60)) || '<1m'}`
+        : `Reduce only · up to ${formatHoursMinutes(Math.round(oldSeconds / 60)) || '<1m'}`
       : durationTouched && newSeconds !== oldSeconds
         ? `${raising ? '+' : '−'}${formatHoursMinutes(Math.abs(Math.round((newSeconds - oldSeconds) / 60))) || '<1m'} on ${who} entry`
         : 'Enter to save';
@@ -865,7 +878,7 @@ function EditEntryRow({
       </div>
       <div className="tp-edit-foot">
         <span className={`tp-foot-hint${error || blocked ? ' is-bad' : ''}`}>
-          {blocked && !error ? 'You can only reduce this entry' : hint}
+          {blocked && !error ? (adminCapped ? 'Admins can only reduce logged time, not increase it' : 'You can only reduce this entry') : hint}
         </span>
         <button type="button" className="tp-btn-ghost" onClick={onDone}>Cancel</button>
         <button

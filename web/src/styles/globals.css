@@ -10741,8 +10741,11 @@ html[data-theme="noir"] .inbox-slider-panel {
 .tp-input:focus { background: var(--tp-surface); border-color: var(--sh-ink); }
 .tp-input[aria-invalid='true'] { border-color: var(--sh-badge-alert); }
 .tp-input-sm { font-size: 13px; font-weight: 500; }
-.tp-input-date { flex: 1 1 58%; }
-.tp-input-time { flex: 1 1 42%; }
+.tp-input-date { flex: 1 1 58%; min-width: 0; }
+.tp-input-time { flex: 1 1 42%; min-width: 112px; color-scheme: light dark; }
+.tp-input-time::-webkit-datetime-edit-ampm-field { opacity: 1; margin-left: 2px; }
+.tp-input-time::-webkit-calendar-picker-indicator { opacity: 0.55; margin-left: 2px; }
+.tp-input-time::-webkit-datetime-edit { display: flex; align-items: center; overflow: visible; }
 
 .tp-readback {
   flex: 0 0 auto;
@@ -11000,6 +11003,7 @@ html[data-theme="noir"] .inbox-slider-panel {
   border-radius: 5px;
   padding: 1px 4px;
 }
+.tp-recent-tag-lower { text-transform: none; letter-spacing: 0; font-weight: 600; font-size: 10px; }
 .tp-recent-del {
   flex: 0 0 auto;
   width: 18px;

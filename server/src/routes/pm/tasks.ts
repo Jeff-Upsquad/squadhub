@@ -13,7 +13,7 @@ import { todayIST } from '../../utils/ist';
 import { logTaskTimeEntry, ensureAssigneeOnTimeLogged, addDailyWorkSeconds, overlapsWorkBlockRun, consolidateContiguousEntries } from '../../utils/taskTime';
 import { getExcludedTaskIds } from '../../utils/taskViewReporting';
 import { logTaskActivity, type TaskActivityEvent } from '../../utils/taskActivity';
-import { getUserSkillLevel, checkLoggedTimeChange } from '../../utils/skills';
+import { getUserSkillLevel, checkLoggedTimeChange, isUserAdmin } from '../../utils/skills';
 import { resolveClientSource } from '../../utils/clientSource';
 import { recordWorkBlockCompletionIfActive } from './workBlocks';
 import { recordGroupRunCompletionIfActive } from './groupRuns';
@@ -974,12 +974,11 @@ router.get('/tasks/my-time-entries', async (req: Request, res: Response) => {
 // POST /pm/tasks/:id/time-entries — record one timer session. Creates a row
 // in task_time_entries AND atomically bumps tasks.time_tracked so existing
 // aggregate UIs (task detail "Logged" field) stay in sync.
-// duration_seconds may be negative: the "Log time" popover accepts a leading
-// minus ("-30m") to subtract over-logged time, stored as a correction entry so
-// the sum of entries keeps matching tasks.time_tracked (see migration 042).
+// duration_seconds must be positive: negative correction entries are disabled —
+// reduce over-logged time by editing the entry down instead.
 const createTimeEntrySchema = z.object({
   started_at: z.string(),
-  duration_seconds: z.number().int().refine((n) => n !== 0, 'Duration cannot be zero'),
+  duration_seconds: z.number().int().min(1, 'Negative time entries are disabled'),
   note: z.string().trim().max(500).optional().nullable(),
   source: z.enum(['timer', 'manual']).optional(),
 });
@@ -1006,17 +1005,11 @@ router.post('/tasks/:id/time-entries', async (req: Request, res: Response) => {
       return;
     }
 
-    // Subtracting time is an edit of the logged total, so it needs the
-    // edit_logged_time skill (either level — it only ever lowers the total).
-    // Adding time does not — that is just logging your own work, which any
-    // member of the list may do.
-    if (duration_seconds < 0) {
-      const level = await getUserSkillLevel(req.userId!, 'edit_logged_time');
-      const denied = checkLoggedTimeChange(level, 0, duration_seconds);
-      if (denied) {
-        res.status(403).json({ success: false, error: denied });
-        return;
-      }
+    // Negative time entries are disabled across all time-logged features.
+    // Reduce over-logged time by editing the entry down instead.
+    if (duration_seconds <= 0) {
+      res.status(400).json({ success: false, error: 'Negative time entries are disabled' });
+      return;
     }
 
     // If this timer overlapped a work-block run, the block already counts this
@@ -1083,13 +1076,13 @@ router.get('/tasks/:id/time-entries', async (req: Request, res: Response) => {
     }
 
     const rows = (entries || []) as any[];
-    const userIds = Array.from(new Set(rows.map((e) => e.user_id))).filter(Boolean);
+    const userIds = Array.from(new Set([...rows.map((e) => e.user_id), ...rows.map((e) => e.edited_by)] as string[])).filter(Boolean);
     const { data: users } = userIds.length
       ? await supabaseAdmin.from('users').select('id, display_name, email').in('id', userIds)
       : { data: [] as any[] };
     const byId = new Map<string, any>((users || []).map((u: any) => [u.id, u]));
 
-    const mapped = rows.map((e) => ({ ...e, user: byId.get(e.user_id) ?? null }));
+    const mapped = rows.map((e) => ({ ...e, user: byId.get(e.user_id) ?? null, edited_by_user: e.edited_by ? (byId.get(e.edited_by) ?? null) : null }));
     res.json({
       success: true,
       data: consolidateContiguousEntries(mapped),
@@ -1139,9 +1132,12 @@ router.delete('/tasks/:id/time-entries/:entryId', async (req: Request, res: Resp
     // edit_logged_time skill exactly like editing the entry down to zero. That
     // keeps the restriction from being sidestepped by deleting instead of
     // editing — and means 'reduce' cannot delete a negative adjustment, which
-    // would put time back on.
+    // would put time back on. Admins editing someone else's entry are capped
+    // to reduce-only even though they hold 'full'.
     const level = await getUserSkillLevel(req.userId!, 'edit_logged_time');
-    const denied = checkLoggedTimeChange(level, (entry as any).duration_seconds, 0);
+    const isOther = (entry as any).user_id !== req.userId!;
+    const effectiveLevel = isOther && (await isUserAdmin(req.userId!)) && level === 'full' ? 'reduce' : level;
+    const denied = checkLoggedTimeChange(effectiveLevel, (entry as any).duration_seconds, 0);
     if (denied) {
       res.status(403).json({ success: false, error: denied });
       return;
@@ -1202,7 +1198,7 @@ router.delete('/tasks/:id/time-entries/:entryId', async (req: Request, res: Resp
 // by the delta, and the daily summary by unwinding the old day and re-adding on
 // the (possibly new) day — each only if that window actually fed the day.
 const updateTimeEntrySchema = z.object({
-  duration_seconds: z.number().int().refine((n) => n !== 0, 'Duration cannot be zero').optional(),
+  duration_seconds: z.number().int().min(1, 'Negative time entries are disabled').optional(),
   started_at: z.string().datetime().optional(),
   note: z.string().trim().max(500).optional().nullable(),
 });
@@ -1242,6 +1238,12 @@ router.patch('/tasks/:id/time-entries/:entryId', async (req: Request, res: Respo
 
     const oldSeconds = e.duration_seconds as number;
     const newSeconds = body.duration_seconds ?? oldSeconds;
+    // Negative time entries are disabled — reduce by lowering to a smaller
+    // positive value instead of logging a negative adjustment.
+    if (newSeconds <= 0) {
+      res.status(400).json({ success: false, error: 'Negative time entries are disabled' });
+      return;
+    }
     // A negative entry is stored with its pair reordered (see logTaskTimeEntry),
     // so the moment the user logged "from" is stopped_at, not started_at.
     const oldAnchor = oldSeconds < 0 ? e.stopped_at as string : e.started_at as string;
@@ -1249,10 +1251,16 @@ router.patch('/tasks/:id/time-entries/:entryId', async (req: Request, res: Respo
 
     // Any edit — even a note or a moved start — is changing logged time, so
     // the skill is required throughout; 'reduce' additionally can't raise it.
+    // Admins editing someone else's entry are capped to reduce-only.
     const level = await getUserSkillLevel(req.userId!, 'edit_logged_time');
-    const denied = checkLoggedTimeChange(level, oldSeconds, newSeconds);
+    const isOther = e.user_id !== req.userId!;
+    const effectiveLevel = isOther && (await isUserAdmin(req.userId!)) && level === 'full' ? 'reduce' : level;
+    const denied = checkLoggedTimeChange(effectiveLevel, oldSeconds, newSeconds);
     if (denied) {
-      res.status(403).json({ success: false, error: denied });
+      const msg = isOther && effectiveLevel === 'reduce' && newSeconds > oldSeconds
+        ? 'Admins can only reduce logged time, not increase it'
+        : denied;
+      res.status(403).json({ success: false, error: msg });
       return;
     }
 
@@ -2201,7 +2209,8 @@ router.delete('/tasks/:id/lists/:listId', async (req: Request, res: Response) =>
 // PATCH /pm/tasks/:id/time-tracked — manual edit of the "Logged" value on a task.
 // Requires the edit_logged_time skill ('reduce' may only lower it). This is
 // separate from PUT /pm/tasks/:id so that ActiveTimer can keep writing through
-// PUT without tripping the role check.
+// PUT without tripping the role check. Negative adjustments are disabled, so
+// lowering the total here is rejected — reduce by editing entries down instead.
 const patchTimeTrackedSchema = z.object({
   time_tracked: z.number().int().min(0),
 });
@@ -2237,6 +2246,12 @@ router.patch('/tasks/:id/time-tracked', async (req: Request, res: Response) => {
     const denied = checkLoggedTimeChange(level, oldTotal, time_tracked);
     if (denied) {
       res.status(403).json({ success: false, error: denied });
+      return;
+    }
+    // Negative time entries are disabled: lowering the total would write a
+    // negative compensating entry, so reject it here.
+    if (delta < 0) {
+      res.status(400).json({ success: false, error: 'Negative time entries are disabled — edit entries down to reduce time' });
       return;
     }
 
