@@ -50,8 +50,9 @@ export default function TimeSheetPanel({ anchorRect, onClose }: Props) {
 
   const groups = useMemo(() => {
     if (!entries) return [];
+    const consolidated = consolidateEntries(entries);
     const byDate = new Map<string, TaskTimeEntry[]>();
-    for (const e of entries) {
+    for (const e of consolidated) {
       const key = toLocalDateKey(e.started_at);
       const arr = byDate.get(key) || [];
       arr.push(e);
@@ -334,3 +335,60 @@ function EntryRow({
     </div>
   );
 }
+
+function consolidateEntries(entries: TaskTimeEntry[]): TaskTimeEntry[] {
+  if (!entries || entries.length <= 1) return entries || [];
+  const sorted = [...entries].sort(
+    (a, b) => new Date(a.started_at).getTime() - new Date(b.started_at).getTime()
+  );
+  const merged: TaskTimeEntry[] = [];
+  for (const entry of sorted) {
+    if (merged.length === 0) {
+      merged.push({ ...entry });
+      continue;
+    }
+    const prev = merged[merged.length - 1];
+    const sameTask = (prev.task?.id || prev.task_id) === (entry.task?.id || entry.task_id);
+    const sameSource = (prev.source || 'timer') === (entry.source || 'timer');
+    const sameRun = (prev.work_block_run_id ?? null) === (entry.work_block_run_id ?? null);
+    const bothPositive = prev.duration_seconds > 0 && entry.duration_seconds > 0;
+
+    if (sameTask && sameSource && sameRun && bothPositive) {
+      const prevEnd = new Date(prev.stopped_at).getTime();
+      const currStart = new Date(entry.started_at).getTime();
+      const currEnd = new Date(entry.stopped_at).getTime();
+
+      if (currStart <= prevEnd + 5000) {
+        if (currEnd > prevEnd) {
+          prev.stopped_at = entry.stopped_at;
+          if (currStart >= prevEnd - 1000) {
+            prev.duration_seconds += entry.duration_seconds;
+          } else {
+            const addedSec = Math.max(0, Math.round((currEnd - prevEnd) / 1000));
+            prev.duration_seconds += addedSec;
+          }
+        }
+        if (entry.children && entry.children.length > 0) {
+          const childMap = new Map<string, { task_id: string; title: string; seconds: number; completed: boolean }>();
+          for (const c of prev.children || []) childMap.set(c.task_id, { ...c });
+          for (const c of entry.children) {
+            const existing = childMap.get(c.task_id);
+            if (existing) {
+              existing.seconds += c.seconds || 0;
+              existing.completed = existing.completed || c.completed;
+            } else {
+              childMap.set(c.task_id, { ...c });
+            }
+          }
+          prev.children = Array.from(childMap.values()).sort((a, b) => b.seconds - a.seconds);
+        }
+        continue;
+      }
+    }
+    merged.push({ ...entry });
+  }
+  return merged.sort(
+    (a, b) => new Date(b.started_at).getTime() - new Date(a.started_at).getTime()
+  );
+}
+
