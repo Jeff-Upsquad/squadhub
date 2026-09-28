@@ -613,19 +613,7 @@ export const usePMStore = create<PMState>()(
           pendingTimeSync: (state.pendingTimeSync || []).filter((item) => item.id !== id),
         }));
       },
-      checkpointRunningTimers: (minElapsedSeconds = 120) => {
-        const { timers, timerSegmentStart } = get();
-        if (!timers.length || timerSegmentStart === null) return [];
-        const now = Date.now();
-        const elapsedSec = (now - timerSegmentStart) / 1000;
-        if (elapsedSec < minElapsedSeconds) return [];
-        const shares = closeSegmentShares(timers, timerSegmentStart, now);
-        if (!shares.length) return [];
-        set({
-          timerSegmentStart: now,
-        });
-        return shares;
-      },
+      checkpointRunningTimers: (_minElapsedSeconds = 120) => [],
       setScopeFilters: (scopeKey, next) => {
         set((state) => {
           if (isFilterEmpty(next)) {
