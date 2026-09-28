@@ -149,6 +149,14 @@ export function useStopWorkBlockRun() {
     onSettled: (_d, _e, vars) => {
       qc.invalidateQueries({ queryKey: ['work-block', vars.task_id] });
       qc.invalidateQueries({ queryKey: ['work-block', 'active'] });
+      // Refresh task data so time_tracked updates without a manual reload
+      qc.invalidateQueries({ queryKey: ['task', vars.task_id] });
+      qc.invalidateQueries({ queryKey: ['task-time-entries', vars.task_id] });
+      qc.invalidateQueries({ queryKey: ['tasks'] });
+      qc.invalidateQueries({ queryKey: ['folder-tasks'] });
+      qc.invalidateQueries({ queryKey: ['space-tasks'] });
+      qc.invalidateQueries({ queryKey: ['my-tasks'] });
+      qc.invalidateQueries({ queryKey: ['folder-time-summary'] });
     },
   });
 }

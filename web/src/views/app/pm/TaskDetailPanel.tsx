@@ -2271,9 +2271,9 @@ export default function TaskDetailPanel({
                 >
                   <span className="k">{META_ICONS.Estimate}Time logged</span>
                   <span className="v">
-                    {(task.time_tracked || isTimerForThisTask) ? (
+                    {(task.time_tracked || isAnyRunningForThisTask) ? (
                       <span>
-                        {formatTracked(isTimerForThisTask ? ((task.time_tracked || 0) + timerElapsed) : task.time_tracked) || '0m'}
+                        {formatTracked(isAnyRunningForThisTask ? ((task.time_tracked || 0) + timerElapsed) : task.time_tracked) || '0m'}
                       </span>
                     ) : (
                       <span className="td-prop-empty">Add time</span>

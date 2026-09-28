@@ -398,9 +398,9 @@ export default function LogTimePopover({
                 // Removing an entry changes the logged total, so it carries the
                 // same skill gate the server applies — for your own rows too.
                 // 'reduce' can't remove a negative adjustment (that adds time).
-                canDelete={canLog && canAdjust && entry.source !== 'work_block'
+                canDelete={canLog && canAdjust
                   && (editLevel === 'full' || entry.duration_seconds > 0)}
-                canEdit={canLog && canAdjust && entry.source !== 'work_block'}
+                canEdit={canLog && canAdjust}
                 onEdit={() => { setDeleteError(null); setEditingId(entry.id); }}
                 onDelete={() => {
                   setDeleteError(null);
@@ -476,24 +476,21 @@ function RecentRow({
         )}
         {entry.note && <span className="tp-recent-note">{entry.note}</span>}
       </span>
-      {entry.source === 'work_block' ? (
+      {entry.source === 'work_block' && (
         <span className="tp-recent-tag" title="Logged by a work block">block</span>
-      ) : (
-        <>
-          {canEdit && (
-            <button type="button" className="tp-recent-del tp-recent-edit" onClick={onEdit} aria-label="Edit this entry" title="Edit">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-                <path d="M12 20h9" />
-                <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z" />
-              </svg>
-            </button>
-          )}
-          {canDelete && (
-            <button type="button" className="tp-recent-del" onClick={onDelete} aria-label="Remove this entry" title="Remove">
-              ×
-            </button>
-          )}
-        </>
+      )}
+      {canEdit && (
+        <button type="button" className="tp-recent-del tp-recent-edit" onClick={onEdit} aria-label="Edit this entry" title="Edit">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+            <path d="M12 20h9" />
+            <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z" />
+          </svg>
+        </button>
+      )}
+      {canDelete && (
+        <button type="button" className="tp-recent-del" onClick={onDelete} aria-label="Remove this entry" title="Remove">
+          ×
+        </button>
       )}
     </li>
   );
