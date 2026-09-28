@@ -44,6 +44,11 @@ interface Props {
   keyboard?: boolean;
   // Extra header controls (the planner's Day/Week/Month switcher).
   toolbar?: ReactNode;
+  // Fires when a pointer interaction starts/ends inside the grid (block
+  // move/resize, slot-create drag, create panel, date popup, native drag).
+  // Hover-opened hosts (e.g. the rail calendar peek) use it to suppress their
+  // hover-close timer so the panel isn't yanked away mid-drag.
+  onInteractChange?: (active: boolean) => void;
 }
 
 function addDays(dateStr: string, n: number): string {
@@ -136,7 +141,7 @@ function dateFieldLabel(f?: 'work' | 'due' | 'start'): string {
   return 'Work';
 }
 
-export default function DayCalendar({ date, today, onDateChange, keyboard = false, toolbar }: Props) {
+export default function DayCalendar({ date, today, onDateChange, keyboard = false, toolbar, onInteractChange }: Props) {
   const { data: plans = [], isLoading } = useDayPlans(date);
   const schedule = useScheduleTaskOnDay();
   const unschedule = useUnscheduleTask();
@@ -188,6 +193,9 @@ export default function DayCalendar({ date, today, onDateChange, keyboard = fals
     previewStart: number;
     previewDur: number;
   } | null>(null);
+  // Native HTML5 drag in flight (all-day chip move) — held so hover hosts can
+  // suppress their hover-close timer (pointerenter doesn't fire during it).
+  const [nativeDragging, setNativeDragging] = useState(false);
   const [nowMinute, setNowMinute] = useState(() => {
     const d = new Date();
     return d.getHours() * 60 + d.getMinutes();
@@ -227,7 +235,10 @@ export default function DayCalendar({ date, today, onDateChange, keyboard = fals
   // A drag cancelled outside the grid (Esc, drop elsewhere) never fires the
   // grid's dragleave — clear the ghost whenever any drag ends.
   useEffect(() => {
-    const clear = () => setDragOverMin(null);
+    const clear = () => {
+      setDragOverMin(null);
+      setNativeDragging(false);
+    };
     document.addEventListener('dragend', clear);
     document.addEventListener('drop', clear);
     return () => {
@@ -235,6 +246,35 @@ export default function DayCalendar({ date, today, onDateChange, keyboard = fals
       document.removeEventListener('drop', clear);
     };
   }, []);
+
+  // Tell hover-opened hosts (rail peek) when an interaction is active so they
+  // can hold their hover-close timer: block move/resize, slot-create drag or
+  // its create panel, date popup, native HTML5 drag, or a dragover ghost.
+  const interactNotified = useRef(false);
+  const interactActive =
+    moving !== null ||
+    resizing !== null ||
+    slotCreate.selection !== null ||
+    datePickerOpen ||
+    nativeDragging ||
+    dragOverMin !== null ||
+    allDayOver;
+  useEffect(() => {
+    if (!onInteractChange) return;
+    if (interactActive && !interactNotified.current) {
+      interactNotified.current = true;
+      onInteractChange(true);
+    } else if (!interactActive && interactNotified.current) {
+      interactNotified.current = false;
+      onInteractChange(false);
+    }
+  }, [interactActive, onInteractChange]);
+  useEffect(() => () => {
+    if (interactNotified.current) {
+      interactNotified.current = false;
+      onInteractChange?.(false);
+    }
+  }, [onInteractChange]);
 
   useEffect(() => {
     if (!keyboard) return;
@@ -667,7 +707,9 @@ export default function DayCalendar({ date, today, onDateChange, keyboard = fals
                   e.dataTransfer.setData('application/x-task-estimate', String(p.task?.time_estimate ?? 30));
                   e.dataTransfer.setData(DND_TASK_RECURRING_PARENT, (p.task as any)?.recurring_parent_id ?? '');
                   e.dataTransfer.effectAllowed = 'copyMove';
+                  setNativeDragging(true);
                 }}
+                onDragEnd={() => setNativeDragging(false)}
                 onClick={() => setActiveTask(p.task_id)}
                 title={`${p.task?.title ?? 'Task'} · ${dateFieldLabel(p.date_field)} ${date} · drag onto the grid to give it a time`}
               >

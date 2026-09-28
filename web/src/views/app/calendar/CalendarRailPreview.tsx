@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useMyTasks } from '../../../hooks/useTasks';
 import { usePMStore } from '../../../stores/pmStore';
 import { useTabsStore } from '../../../stores/tabsStore';
@@ -60,6 +60,40 @@ export default function CalendarRailPreview({
   const setActiveTask = usePMStore((s) => s.setActiveTask);
   const [tab, setTab] = useState<'today' | 'days' | 'to-schedule'>('today');
 
+  // Hover-close guard: a drag inside the Today grid (mousedown move/resize,
+  // slot-create, or native HTML5 all-day chip drag) fires pointerleave on this
+  // panel, which would arm the 260ms hover-close timer and yank the panel away
+  // mid-drag. Hold the close open while any interaction is active.
+  const pointerInside = useRef(false);
+  const interactCount = useRef(0);
+  const nativeDragging = useRef(false);
+  const [interacting, setInteracting] = useState(false);
+
+  const handlePointerEnter = useCallback(() => {
+    pointerInside.current = true;
+    onHoverEnter?.();
+  }, [onHoverEnter]);
+
+  const handlePointerLeave = useCallback((e?: React.PointerEvent) => {
+    pointerInside.current = false;
+    // A pressed mouse button means a mousedown-drag (block move/resize,
+    // slot-create) is in flight — don't arm the hover-close timer.
+    if (e && e.buttons !== 0) return;
+    if (interactCount.current > 0 || nativeDragging.current) return;
+    onHoverLeave?.();
+  }, [onHoverLeave]);
+
+  const handleInteractChange = useCallback((active: boolean) => {
+    interactCount.current = Math.max(0, interactCount.current + (active ? 1 : -1));
+    const any = interactCount.current > 0;
+    setInteracting(any);
+    // Starting an interaction cancels an armed close; ending re-arms it only
+    // if the pointer really left (pointerenter cancels again when the panel is
+    // back under the cursor).
+    if (any) onHoverEnter?.();
+    else if (!pointerInside.current && !nativeDragging.current) onHoverLeave?.();
+  }, [onHoverEnter, onHoverLeave]);
+
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
@@ -67,6 +101,33 @@ export default function CalendarRailPreview({
     document.addEventListener('keydown', onKeyDown);
     return () => document.removeEventListener('keydown', onKeyDown);
   }, [onClose]);
+
+  // Native HTML5 drags (all-day chips) don't fire pointerenter to cancel the
+  // close timer, so track them explicitly: hold open on dragstart, release on
+  // dragend/drop. The document-level listeners catch drags cancelled outside.
+  useEffect(() => {
+    const onDragStart = () => {
+      nativeDragging.current = true;
+      setInteracting(true);
+      onHoverEnter?.();
+    };
+    const onEnd = () => {
+      if (!nativeDragging.current) return;
+      nativeDragging.current = false;
+      if (interactCount.current === 0) {
+        setInteracting(false);
+        if (!pointerInside.current) onHoverLeave?.();
+      }
+    };
+    document.addEventListener('dragstart', onDragStart);
+    document.addEventListener('dragend', onEnd);
+    document.addEventListener('drop', onEnd);
+    return () => {
+      document.removeEventListener('dragstart', onDragStart);
+      document.removeEventListener('dragend', onEnd);
+      document.removeEventListener('drop', onEnd);
+    };
+  }, [onHoverEnter, onHoverLeave]);
 
   const todayKey = useMemo(() => planDateKey(), []);
   const today = useMemo(() => new Date(), []);
@@ -111,8 +172,9 @@ export default function CalendarRailPreview({
       <div
         className="inbox-slider-panel sh-view fixed left-2 right-2 top-14 bottom-4 z-50 flex flex-col overflow-hidden rounded-[14px] border border-[var(--sh-hair)] bg-[var(--surface)] md:left-[76px] md:right-auto md:top-3 md:bottom-3 md:w-[520px]"
         style={{ boxShadow: '0 18px 50px rgba(10, 10, 10, 0.16), 0 2px 8px rgba(10, 10, 10, 0.06)' }}
-        onPointerEnter={onHoverEnter}
-        onPointerLeave={onHoverLeave}
+        onPointerEnter={handlePointerEnter}
+        onPointerLeave={handlePointerLeave}
+        data-interacting={interacting || undefined}
       >
         {/* Header — same row as inbox hover */}
         <div className="flex items-center gap-2.5 px-5 pb-3 pt-4">
@@ -163,7 +225,7 @@ export default function CalendarRailPreview({
         <div className={`min-h-0 flex-1 ${tab === 'today' ? 'overflow-hidden' : 'overflow-y-auto'}`}>
           {tab === 'today' ? (
             <div className="cal-hover-day">
-              <DayCalendar date={todayKey} today={todayKey} onDateChange={() => {}} />
+              <DayCalendar date={todayKey} today={todayKey} onDateChange={() => {}} onInteractChange={handleInteractChange} />
             </div>
           ) : isLoading && allTasks.length === 0 ? (
             <div className="px-5 py-8 text-[13px] text-[var(--sh-ink-3)]">Loading…</div>
