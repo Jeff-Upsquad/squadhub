@@ -10,7 +10,7 @@ import { getUserRoleIds } from '../../utils/roles';
 import { PARTNER_USER_TYPES } from '@squadhub/shared';
 import { spawnRoutineInstance } from '../../services/routineSpawner';
 import { todayIST } from '../../utils/ist';
-import { logTaskTimeEntry, ensureAssigneeOnTimeLogged, addDailyWorkSeconds, overlapsWorkBlockRun } from '../../utils/taskTime';
+import { logTaskTimeEntry, ensureAssigneeOnTimeLogged, addDailyWorkSeconds, overlapsWorkBlockRun, consolidateContiguousEntries } from '../../utils/taskTime';
 import { getExcludedTaskIds } from '../../utils/taskViewReporting';
 import { logTaskActivity, type TaskActivityEvent } from '../../utils/taskActivity';
 import { getUserSkillLevel, checkLoggedTimeChange } from '../../utils/skills';
@@ -964,7 +964,7 @@ router.get('/tasks/my-time-entries', async (req: Request, res: Response) => {
         ? (childrenByRun.get(e.work_block_run_id) || [])
         : undefined,
     }));
-    res.json({ success: true, data });
+    res.json({ success: true, data: consolidateContiguousEntries(data) });
   } catch (err) {
     console.error('Get my time entries error:', err);
     res.status(500).json({ success: false, error: 'Internal server error' });
@@ -1089,9 +1089,10 @@ router.get('/tasks/:id/time-entries', async (req: Request, res: Response) => {
       : { data: [] as any[] };
     const byId = new Map<string, any>((users || []).map((u: any) => [u.id, u]));
 
+    const mapped = rows.map((e) => ({ ...e, user: byId.get(e.user_id) ?? null }));
     res.json({
       success: true,
-      data: rows.map((e) => ({ ...e, user: byId.get(e.user_id) ?? null })),
+      data: consolidateContiguousEntries(mapped),
     });
   } catch (err) {
     console.error('Get task time entries error:', err);

@@ -448,6 +448,17 @@ async function cleanupOrphans(kind: string, validIds: string[]): Promise<number>
   return stale.length;
 }
 
+/** Remove page-review tasks whose send disappeared with a deleted page/doc. */
+export async function cleanupKnowledgeReviewOrphans(): Promise<number> {
+  const { data: recipients, error } = await supabaseAdmin
+    .from('lms_task_send_recipients')
+    .select('id, send:lms_task_sends(source_kind)');
+  if (error) throw error;
+  return cleanupOrphans('knowledge', (recipients || [])
+    .filter((row: any) => row.send?.source_kind === 'knowledge')
+    .map((row: any) => row.id));
+}
+
 export async function reconcileAllMirrors(): Promise<{ meetings: number; courses: number; resources: number }> {
   // Meetings: all currently scheduled.
   const { data: meetings } = await supabaseAdmin
@@ -464,7 +475,7 @@ export async function reconcileAllMirrors(): Promise<{ meetings: number; courses
   const { data: recips } = await supabaseAdmin
     .from('lms_task_send_recipients')
     .select('id, send:lms_task_sends(source_kind)');
-  const recipByKind: Record<string, string[]> = { course: [], sop: [], post: [] };
+  const recipByKind: Record<string, string[]> = { course: [], sop: [], post: [], knowledge: [] };
   for (const r of recips || []) {
     const kind = (r as any).send?.source_kind as string | undefined;
     if (kind && recipByKind[kind]) recipByKind[kind].push((r as any).id);
@@ -486,6 +497,7 @@ export async function reconcileAllMirrors(): Promise<{ meetings: number; courses
   await cleanupOrphans('course', [...assignmentIds, ...recipByKind.course]);
   await cleanupOrphans('sop', recipByKind.sop);
   await cleanupOrphans('post', recipByKind.post);
+  await cleanupOrphans('knowledge', recipByKind.knowledge);
 
   return { meetings: meetingIds.length, courses: assignmentIds.length, resources: (recips || []).length };
 }

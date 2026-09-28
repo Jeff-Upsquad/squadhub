@@ -238,3 +238,96 @@ async function upsertDailySummary(
       });
   }
 }
+
+/**
+ * Consolidate contiguous time entries for the same task, user, and source.
+ * Merges adjacent segments where the gap between the previous entry's stopped_at
+ * and the next entry's started_at is <= 5 seconds (or slight overlap up to 5s).
+ * Combines durations, extends the time range, and merges work_block children.
+ */
+export function consolidateContiguousEntries<
+  T extends {
+    id?: string;
+    task_id: string;
+    user_id?: string;
+    started_at: string;
+    stopped_at: string;
+    duration_seconds: number;
+    source?: string;
+    work_block_run_id?: string | null;
+    note?: string | null;
+    children?: any[];
+    [key: string]: any;
+  }
+>(entries: T[]): T[] {
+  if (!entries || entries.length <= 1) return entries || [];
+
+  // Sort chronologically ascending to merge forward
+  const sorted = [...entries].sort(
+    (a, b) => new Date(a.started_at).getTime() - new Date(b.started_at).getTime()
+  );
+
+  const merged: T[] = [];
+
+  for (const entry of sorted) {
+    if (merged.length === 0) {
+      merged.push({ ...entry });
+      continue;
+    }
+
+    const prev = merged[merged.length - 1];
+
+    const sameTask = prev.task_id === entry.task_id;
+    const sameUser = !prev.user_id || !entry.user_id || prev.user_id === entry.user_id;
+    const sameSource = (prev.source || 'timer') === (entry.source || 'timer');
+    const sameRun = (prev.work_block_run_id ?? null) === (entry.work_block_run_id ?? null);
+    const sameNote = (prev.note ?? null) === (entry.note ?? null);
+    const bothPositive = prev.duration_seconds > 0 && entry.duration_seconds > 0;
+
+    if (sameTask && sameUser && sameSource && sameRun && sameNote && bothPositive) {
+      const prevEnd = new Date(prev.stopped_at).getTime();
+      const currStart = new Date(entry.started_at).getTime();
+      const currEnd = new Date(entry.stopped_at).getTime();
+
+      // Contiguous or overlapping (currStart <= prevEnd + 5s)
+      if (currStart <= prevEnd + 5000) {
+        if (currEnd > prevEnd) {
+          prev.stopped_at = entry.stopped_at;
+          // If strictly contiguous (currStart >= prevEnd - 1s), add full duration
+          if (currStart >= prevEnd - 1000) {
+            prev.duration_seconds += entry.duration_seconds;
+          } else {
+            // Overlapping duplicate chunk: add only the non-overlapping portion
+            const addedSec = Math.max(0, Math.round((currEnd - prevEnd) / 1000));
+            prev.duration_seconds += addedSec;
+          }
+        }
+
+        // Combine work-block children if present
+        if (entry.children && entry.children.length > 0) {
+          const childMap = new Map<string, { task_id: string; title: string; seconds: number; completed: boolean }>();
+          for (const c of prev.children || []) childMap.set(c.task_id, { ...c });
+          for (const c of entry.children) {
+            const existing = childMap.get(c.task_id);
+            if (existing) {
+              existing.seconds += c.seconds || 0;
+              existing.completed = existing.completed || c.completed;
+            } else {
+              childMap.set(c.task_id, { ...c });
+            }
+          }
+          prev.children = Array.from(childMap.values()).sort((a, b) => b.seconds - a.seconds);
+        }
+        continue;
+      }
+    }
+
+    merged.push({ ...entry });
+  }
+
+  // Restore descending order (newest first)
+  return merged.sort(
+    (a, b) => new Date(b.started_at).getTime() - new Date(a.started_at).getTime()
+  );
+}
+

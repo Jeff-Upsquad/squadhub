@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { LmsAccessLevel, LmsAssignment, LmsItem, LmsLesson } from '@squadhub/shared';
-import { useLmsItem, useStartAssignment, useCompleteLesson, useOpenSopTasks, type OpenSopTask } from '../../../hooks/useLms';
+import { useLmsItem, useStartAssignment, useCompleteLesson, useOpenSopTasks, useOpenKnowledgeTasks, type OpenSopTask } from '../../../hooks/useLms';
 import { useUpdateTask } from '../../../hooks/useTasks';
 import { useStartEditDraft } from '../../../hooks/useLmsCollab';
 import BlockRenderer from './blocks/BlockRenderer';
@@ -58,6 +58,7 @@ export default function LearningItemView({
   const start = useStartAssignment();
   const completeTask = useUpdateTask(null);
   const { data: openSopTasks } = useOpenSopTasks();
+  const { data: openKnowledgeTasks } = useOpenKnowledgeTasks();
   const startEdit = useStartEditDraft();
   const [activeLessonId, setActiveLessonId] = useState<string | null>(initialLessonId ?? null);
   const [editing, setEditing] = useState<{ draftItemId: string; isClone: boolean; lessonId?: string | null } | null>(null);
@@ -85,8 +86,8 @@ export default function LearningItemView({
   const lessons = useMemo(() => item?.lessons || [], [item]);
   const completedSet = useMemo(() => new Set(assignment?.completed_lesson_ids || []), [assignment]);
   const itemTasks = useMemo(
-    () => (openSopTasks || []).filter((task) => task.item_id === itemId),
-    [openSopTasks, itemId],
+    () => ((isKnowledge ? openKnowledgeTasks : openSopTasks) || []).filter((task) => task.item_id === itemId),
+    [isKnowledge, openKnowledgeTasks, openSopTasks, itemId],
   );
   const taskCountByLesson = useMemo(() => {
     const counts = new Map<string, number>();
@@ -230,9 +231,10 @@ export default function LearningItemView({
         </div>
       )}
 
-      {isSop && activeTasks.length > 0 && (
+      {(isSop || isKnowledge) && activeTasks.length > 0 && (
         <SopTaskBar
           tasks={activeTasks}
+          knowledge={isKnowledge}
           completing={completeTask.isPending}
           onComplete={(taskId) => completeTask.mutate({ id: taskId, status: 'done' })}
         />
@@ -319,8 +321,9 @@ export default function LearningItemView({
   );
 }
 
-function SopTaskBar({ tasks, completing, onComplete }: {
+function SopTaskBar({ tasks, knowledge, completing, onComplete }: {
   tasks: OpenSopTask[];
+  knowledge: boolean;
   completing: boolean;
   onComplete: (taskId: string) => void;
 }) {
@@ -345,7 +348,7 @@ function SopTaskBar({ tasks, completing, onComplete }: {
         onClick={() => onComplete(task.task_id)}
         className="shrink-0 rounded-[7px] bg-amber-900 px-3 py-1.5 text-[11.5px] font-semibold text-white transition hover:bg-amber-950 disabled:cursor-wait disabled:opacity-60"
       >
-        {completing ? 'Completing…' : 'Mark complete'}
+        {completing ? 'Completing…' : knowledge ? 'Mark reviewed' : 'Mark complete'}
       </button>
     </div>
   );

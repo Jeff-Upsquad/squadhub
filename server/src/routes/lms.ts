@@ -164,12 +164,13 @@ router.get('/my-due', async (req: Request, res: Response) => {
 // back to their item/page target. This is the single source for Resources
 // badges and the completion bar inside the SOP reader.
 // ------------------------------------------------------------
-router.get('/my-open-sop-tasks', async (req: Request, res: Response) => {
+router.get(['/my-open-sop-tasks', '/my-open-knowledge-tasks'], async (req: Request, res: Response) => {
   try {
+    const sourceKind = req.path.includes('knowledge') ? 'knowledge' : 'sop';
     const { data: tasks, error: taskError } = await supabaseAdmin
       .from('tasks')
       .select('id, title, due_date, source_id, status')
-      .eq('source_kind', 'sop')
+      .eq('source_kind', sourceKind)
       .eq('source_user_id', req.userId!)
       .not('status', 'in', '(done,closed,cancelled)')
       .order('due_date', { ascending: true, nullsFirst: false });
@@ -200,7 +201,7 @@ router.get('/my-open-sop-tasks', async (req: Request, res: Response) => {
     const data = (tasks || []).flatMap((task: any) => {
       const recipient: any = recipientById.get(task.source_id);
       const send = recipient?.send;
-      if (!send || send.source_kind !== 'sop') return [];
+      if (!send || send.source_kind !== sourceKind) return [];
       return [{
         task_id: task.id,
         title: task.title,
@@ -215,7 +216,7 @@ router.get('/my-open-sop-tasks', async (req: Request, res: Response) => {
 
     res.json({ success: true, data });
   } catch (err) {
-    console.error('List open SOP tasks error:', err);
+    console.error('List open resource tasks error:', err);
     res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });
@@ -472,7 +473,7 @@ router.get('/task-target', async (req: Request, res: Response) => {
     }
 
     // Resource send mirrors: source_kind = 'course' | 'sop' | 'post', source_id = recipient id.
-    if (['course', 'sop', 'post'].includes(kind || '') && sourceId) {
+    if (['course', 'sop', 'post', 'knowledge'].includes(kind || '') && sourceId) {
       const { data: recipient } = await supabaseAdmin
         .from('lms_task_send_recipients')
         .select('id, user_id, send:lms_task_sends(id, item_id, scope, lesson_id, section_anchor, section_label)')
@@ -562,11 +563,11 @@ router.get('/items/:id', async (req: Request, res: Response) => {
 
     // Inactive lessons are hidden from every learner-facing view (admins manage
     // them in the admin editor). Audience filtering below further narrows these.
-    let lessons = (await supabaseAdmin
-      .from('lms_lessons')
-      .select('*')
-      .eq('item_id', itemId)
-      .eq('is_active', true)
+    const lessonQuery = supabaseAdmin.from('lms_lessons').select('*').eq('item_id', itemId);
+    // The designated reviewer needs to inspect new draft pages before they go
+    // live. Everyone else continues to see only published pages.
+    let lessons = (await (item.track === 'knowledge' && accessLevel === 'admin'
+      ? lessonQuery : lessonQuery.eq('is_active', true))
       .order('position', { ascending: true })).data || [];
 
     // Apply lesson-level audience for real learners. Admins previewing an item
