@@ -16,6 +16,7 @@ function invalidateTaskLists(qc: QueryClient, listId: string | null, opts?: { de
   qc.invalidateQueries({ queryKey: ['my-tasks'] });
   qc.invalidateQueries({ queryKey: ['my-tasks-summary'] });
   qc.invalidateQueries({ queryKey: ['lms-open-sop-tasks'] });
+  qc.invalidateQueries({ queryKey: ['lms-open-knowledge-tasks'] });
   qc.invalidateQueries({ queryKey: ['emergency-tasks'] });
   // When a Work date is edited inside the open task panel, the calendar refresh
   // is deferred until the panel closes (DayCalendar / DayPlannerView refetch on

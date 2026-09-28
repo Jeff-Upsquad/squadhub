@@ -37,6 +37,7 @@ export interface SecondaryCardsResult {
   courses: SecondaryCardData;
   sops: SecondaryCardData;
   posts: SecondaryCardData;
+  knowledge: SecondaryCardData;
   workOverdue: SecondaryCardData;
 }
 
@@ -70,7 +71,7 @@ export function useSecondaryCards(): SecondaryCardsResult {
     const empty: SecondaryCardData = { items: [], isLoading };
     if (!data) return {
       urgent: empty, recordings: empty, meetings: empty, calls: empty,
-      courses: empty, sops: empty, posts: empty, workOverdue: empty,
+      courses: empty, sops: empty, posts: empty, knowledge: empty, workOverdue: empty,
     };
 
     // Union every bucket (these cards are lenses over ALL my tasks, not the
@@ -92,7 +93,7 @@ export function useSecondaryCards(): SecondaryCardsResult {
         kind,
         task: t,
         open: async () => {
-          if (t.source_kind === 'course' || t.source_kind === 'sop' || t.source_kind === 'post') {
+          if (t.source_kind === 'course' || t.source_kind === 'sop' || t.source_kind === 'post' || t.source_kind === 'knowledge') {
             try {
               const res = await api.get(`/lms/task-target?task_id=${t.id}`);
               const target = res.data.data as { item_id: string; lesson_id: string | null; section_anchor: string | null };
@@ -123,7 +124,7 @@ export function useSecondaryCards(): SecondaryCardsResult {
         // SOP acknowledgements must be completed while reading the SOP. The
         // Home panel remains a navigation surface and deliberately has no
         // completion checkbox for these rows.
-        toggleDone: t.source_kind === 'sop'
+        toggleDone: t.source_kind === 'sop' || t.source_kind === 'knowledge'
           ? undefined
           : () => updateTask.mutate({ id: t.id, status: 'done' }),
       };
@@ -175,6 +176,7 @@ export function useSecondaryCards(): SecondaryCardsResult {
       courses: { items: sourceCard('course'), isLoading },
       sops: { items: sourceCard('sop'), isLoading },
       posts: { items: sourceCard('post'), isLoading },
+      knowledge: { items: sourceCard('knowledge'), isLoading },
       workOverdue: { items: workOverdue, isLoading },
     };
   }, [data, isLoading, tz, setActiveTask, setPeekTask, setActiveSecondaryCard, updateTask, setLearningTarget]);

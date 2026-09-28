@@ -1899,7 +1899,7 @@ export default function TaskDetailPanel({
                   style={{ border: 'none', borderRadius: 0, marginBottom: 0 }}
                 >
                 {/* Resource source — mirrored tasks link back to their page/section. */}
-                {(task.source_kind === 'course' || task.source_kind === 'sop' || task.source_kind === 'post') && (
+                {(task.source_kind === 'course' || task.source_kind === 'sop' || task.source_kind === 'post' || task.source_kind === 'knowledge') && (
                   <div className="td-settings-row" data-half="false" style={{ gridColumn: '1 / -1', cursor: 'default' }}>
                     <span className="k">{META_ICONS.Type}Resource</span>
                     <span className="v">
@@ -1909,7 +1909,7 @@ export default function TaskDetailPanel({
                         className="td-prop-chip"
                         style={{ cursor: 'pointer', background: 'var(--surface-alt)', color: 'var(--sh-ink)' }}
                       >
-                        Open {task.source_kind === 'sop' ? 'SOP' : task.source_kind === 'course' ? 'Course' : 'Post'} ↗
+                        Open {task.source_kind === 'sop' ? 'SOP' : task.source_kind === 'course' ? 'Course' : task.source_kind === 'knowledge' ? 'Knowledge Doc' : 'Post'} ↗
                       </button>
                     </span>
                   </div>

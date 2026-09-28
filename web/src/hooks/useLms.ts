@@ -53,6 +53,18 @@ export function useOpenSopTasks() {
   });
 }
 
+export function useOpenKnowledgeTasks() {
+  return useQuery<OpenSopTask[]>({
+    queryKey: ['lms-open-knowledge-tasks'],
+    queryFn: async () => {
+      const res = await api.get('/lms/my-open-knowledge-tasks');
+      return res.data.data;
+    },
+    staleTime: 30_000,
+    refetchInterval: 60_000,
+  });
+}
+
 export function useLmsCategories() {
   return useQuery<LmsCategory[]>({
     queryKey: ['lms-categories'],

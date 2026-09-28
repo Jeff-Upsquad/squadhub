@@ -1,4 +1,5 @@
-import { reconcileAllMirrors } from '../services/taskMirror';
+import { cleanupKnowledgeReviewOrphans, reconcileAllMirrors } from '../services/taskMirror';
+import { reconcileKnowledgeReviews } from '../services/knowledgeReviewTasks';
 
 /**
  * Task-mirror cron: keeps mirrored Course/Meeting tasks in step with their
@@ -10,7 +11,8 @@ import { reconcileAllMirrors } from '../services/taskMirror';
 export function startTaskMirrorCron(): void {
   // Boot backfill — delayed a few seconds so startup isn't blocked.
   setTimeout(() => {
-    reconcileAllMirrors()
+    reconcileKnowledgeReviews()
+      .then(() => reconcileAllMirrors())
       .then((r) =>
         console.log(
           `[Task Mirror Cron] Boot reconcile: ${r.meetings} meeting(s), ${r.courses} course(s)`,
@@ -18,6 +20,14 @@ export function startTaskMirrorCron(): void {
       )
       .catch((err) => console.error('[Task Mirror Cron] Boot reconcile failed:', err));
   }, 8000);
+
+  // Edits from either editor, bots, or direct database writes enter the same
+  // queue; a short sweep coalesces saves from an active editing session.
+  setInterval(() => {
+    reconcileKnowledgeReviews().then(() => cleanupKnowledgeReviewOrphans()).catch((err) =>
+      console.error('[Task Mirror Cron] Knowledge review reconcile failed:', err),
+    );
+  }, 30_000);
 
   // Daily drift sweep.
   const DAY_MS = 24 * 60 * 60 * 1000;
