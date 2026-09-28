@@ -11010,7 +11010,7 @@ html[data-theme="noir"] .inbox-slider-panel {
 /* ── Log time: editing a logged entry in place ── */
 .tp-recent-edit { display: inline-flex; align-items: center; justify-content: center; }
 /* Room for the whole edit form (its Save row) without scrolling inside the list. */
-.tp-recent:has(.tp-edit) { max-height: 320px; }
+.tp-recent:has(.tp-edit) { max-height: 380px; }
 .tp-recent-lvl { text-transform: none; letter-spacing: -0.01em; font-weight: 600; }
 .tp-edit {
   list-style: none;
