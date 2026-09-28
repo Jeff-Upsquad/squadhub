@@ -32,7 +32,8 @@ export interface SectionRef {
 
 // Home-card bucket for an item, from its (kind, track). SOP track wins; a
 // learning course → 'course'; a learning post → 'post'.
-export function sourceKindForItem(item: { kind: string; track: string }): 'course' | 'sop' | 'post' {
+export function sourceKindForItem(item: { kind: string; track: string }): 'course' | 'sop' | 'post' | 'knowledge' {
+  if (item.track === 'knowledge') return 'knowledge';
   if (item.track === 'sop') return 'sop';
   return item.kind === 'course' ? 'course' : 'post';
 }
@@ -170,10 +171,11 @@ export async function createSend(params: CreateSendParams): Promise<{ sendId: st
 export async function resendSend(sendId: string): Promise<{ recipientCount: number }> {
   const { data: send } = await supabaseAdmin
     .from('lms_task_sends')
-    .select('id, item_id, title, scope, source_kind, version, picked_principals, created_by')
+    .select('id, item_id, title, scope, source_kind, version, picked_principals, created_by, knowledge_review_key')
     .eq('id', sendId)
     .maybeSingle();
   if (!send) throw new Error('Send not found');
+  if ((send as any).knowledge_review_key) throw new Error('Knowledge reviews are managed automatically');
 
   const principals: Principal[] = ((send as any).picked_principals || []).map((p: any) => ({
     type: p.type,
@@ -217,6 +219,9 @@ export async function autoResendForItem(itemId: string, changedLessonId?: string
 // Unsend: delete the recipients' mirror tasks, then the send (cascade removes
 // recipients).
 export async function deleteSend(sendId: string): Promise<void> {
+  const { data: send } = await supabaseAdmin.from('lms_task_sends')
+    .select('knowledge_review_key').eq('id', sendId).maybeSingle();
+  if ((send as any)?.knowledge_review_key) throw new Error('Knowledge reviews are managed automatically');
   const { data: recipients } = await supabaseAdmin
     .from('lms_task_send_recipients')
     .select('id')
@@ -235,6 +240,7 @@ export async function listSendsForItem(itemId: string): Promise<any[]> {
     .from('lms_task_sends')
     .select('*')
     .eq('item_id', itemId)
+    .is('knowledge_review_key', null)
     .order('created_at', { ascending: false });
   if (!sends?.length) return [];
 

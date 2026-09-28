@@ -78,7 +78,7 @@ export default function SendTaskModal({ itemId, itemTitle, itemKind, itemTrack, 
   const headings = useMemo(() => extractHeadings(activeLesson?.blocks), [activeLesson]);
   const activeHeading = headings.find((h) => h.anchor === sectionAnchor) || null;
 
-  const kindWord = itemTrack === 'sop' ? 'SOP' : isCourse ? 'Course' : 'Post';
+  const kindWord = itemTrack === 'knowledge' ? 'Knowledge Doc' : itemTrack === 'sop' ? 'SOP' : isCourse ? 'Course' : 'Post';
 
   const derivedTitle = useMemo(() => {
     if (scope === 'item') return itemTitle;

@@ -45,6 +45,9 @@ const SopIcon = () => (
 const PostIcon = () => (
   <svg {...icoProps}><path d="M14 3v4a1 1 0 0 0 1 1h4" /><path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2Z" /><path d="M9 12h6M9 16h6" /></svg>
 );
+const KnowledgeIcon = () => (
+  <svg {...icoProps}><path d="M14 3v4a1 1 0 0 0 1 1h4" /><path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2Z" /><path d="m9 14 2 2 4-4" /></svg>
+);
 
 // A card spec resolves a data source (the hook result) to display chrome. To
 // add a card, add it to useSecondaryCards and one entry here.
@@ -63,7 +66,7 @@ export interface SecondaryCardConfig {
 export default function SecondaryCardRow() {
   const setActiveSecondaryCard = usePMStore((s) => s.setActiveSecondaryCard);
   const activeSecondaryCard = usePMStore((s) => s.activeSecondaryCard);
-  const { urgent, recordings, meetings, calls, courses, sops, posts, workOverdue } = useSecondaryCards();
+  const { urgent, recordings, meetings, calls, courses, sops, posts, knowledge, workOverdue } = useSecondaryCards();
 
   const cards: SecondaryCardConfig[] = [
     { key: 'urgent', name: 'Urgent', eyebrow: 'Priority: urgent', icon: <UrgentIcon />, data: urgent },
@@ -74,6 +77,7 @@ export default function SecondaryCardRow() {
     { key: 'courses', name: 'Courses', eyebrow: 'From Resources', icon: <CourseIcon />, data: courses },
     { key: 'sops', name: 'SOPs', eyebrow: 'From Resources', icon: <SopIcon />, data: sops },
     { key: 'posts', name: 'Posts', eyebrow: 'From Resources', icon: <PostIcon />, data: posts },
+    { key: 'knowledge', name: 'Knowledge Doc', eyebrow: 'Needs your review', icon: <KnowledgeIcon />, data: knowledge },
   ];
 
   const visible = cards.filter((c) => c.data.items.length > 0);
