@@ -727,19 +727,37 @@ router.get('/tasks/my', async (req: Request, res: Response) => {
 
     // "In progress today" — tasks the caller has logged time on today (in their
     // tz), via ANY entry: real timer sessions or manual "Time logged" edits.
-    // Pulls recent time entries and keeps those whose started_at lands on
+    // Pulls recent time entries and keeps those whose started_at or created_at lands on
     // todayStr, most-recently-worked first. Full task objects (assignees, dates,
     // parents) so the Home list renders these rows identically to the focus list.
     const { data: recentEntries } = await supabaseAdmin
       .from('task_time_entries')
-      .select('task_id, started_at, source')
+      .select('task_id, started_at, created_at, source')
       .eq('user_id', req.userId!)
       .order('started_at', { ascending: false })
-      .limit(300);
+      .limit(500);
+
+    const { data: activeWbRuns } = await supabaseAdmin
+      .from('work_block_runs')
+      .select('task_id, started_at')
+      .eq('user_id', req.userId!)
+      .is('ended_at', null);
+
     const workedTodayIds: string[] = [];
     const seenWorked = new Set<string>();
+
+    for (const run of activeWbRuns || []) {
+      const id = (run as any).task_id as string;
+      if (id && !seenWorked.has(id)) {
+        seenWorked.add(id);
+        workedTodayIds.push(id);
+      }
+    }
+
     for (const e of recentEntries || []) {
-      if (toTzDay((e as any).started_at) !== todayStr) continue;
+      const entryStartedDay = toTzDay((e as any).started_at);
+      const entryCreatedDay = toTzDay((e as any).created_at);
+      if (entryStartedDay !== todayStr && entryCreatedDay !== todayStr) continue;
       const id = (e as any).task_id as string;
       if (seenWorked.has(id)) continue;
       seenWorked.add(id);
@@ -766,7 +784,21 @@ router.get('/tasks/my', async (req: Request, res: Response) => {
             return true;
           });
         }
-        workedExtras = await hydrateSubtasks(await hydrateParents(await hydrateLists(await hydrateAssignees(preFiltered))));
+        workedExtras = await hydrateSubtasks(await hydrateLabels(await hydrateParents(await hydrateMultiHomeGroups(await hydrateLists(await hydrateAssignees(preFiltered))))));
+
+        const extraSpaceIds = Array.from(new Set(workedExtras.map((t: any) => t.space?.id).filter(Boolean)))
+          .filter((sId) => !spaceIds.includes(sId));
+        if (extraSpaceIds.length > 0) {
+          const { data: extraSpaceStatuses } = await supabaseAdmin
+            .from('space_statuses')
+            .select('space_id, name, category')
+            .in('space_id', extraSpaceIds as string[]);
+          for (const s of extraSpaceStatuses || []) {
+            if ((s as any).category === 'done' || (s as any).category === 'closed') {
+              doneStatusKeys.add(`${(s as any).space_id}::${String((s as any).name).toLowerCase()}`);
+            }
+          }
+        }
       }
       const workedById = new Map<string, any>([
         ...have,

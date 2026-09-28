@@ -129,35 +129,61 @@ export default function TodayList() {
   // until the row's transitionend clears it via unmarkFading. See TodayRow.
   const tasks = useRetainFading(rawTasks, fadingTaskIds);
 
+  const { data: activeWB } = useActiveWorkBlockRun();
+  const timers = usePMStore((s) => s.timers);
+  const timerSegmentStart = usePMStore((s) => s.timerSegmentStart);
+
   // "In progress today" — tasks the user has logged time on today (computed
-  // server-side, full task objects, most-recently-worked first). These render
-  // as their own section ABOVE the focus list and are pulled out of the focus
-  // sections below so a worked task never shows up twice.
-  const rawInProgress: Task[] = useMemo(
-    () => (data?.in_progress_today ?? []).filter((t) => !isTaskCompleted(t)),
-    [data],
-  );
+  // server-side, full task objects, most-recently-worked first) plus any task
+  // actively being timed right now. These render as their own section ABOVE the
+  // focus list and are pulled out of the focus/evening/night sections below so
+  // a worked task appears in In Progress and never shows up twice.
+  const rawInProgress: Task[] = useMemo(() => {
+    const list = [...(data?.in_progress_today ?? [])];
+    const seen = new Set(list.map((t) => t.id));
+
+    // Also include any task currently being timed if not already in the list
+    if (activeWB?.task && !seen.has(activeWB.task.id)) {
+      const found = rawTasks.find((t) => t.id === activeWB.task.id);
+      if (found && !isTaskCompleted(found)) {
+        list.unshift(found);
+        seen.add(activeWB.task.id);
+      }
+    }
+    for (const rt of timers) {
+      if (!seen.has(rt.taskId)) {
+        const found = rawTasks.find((t) => t.id === rt.taskId);
+        if (found && !isTaskCompleted(found)) {
+          list.unshift(found);
+          seen.add(rt.taskId);
+        }
+      }
+    }
+
+    return list.filter((t) => !isTaskCompleted(t));
+  }, [data, activeWB?.task, timers, rawTasks]);
   const inProgressTasks = useRetainFading(rawInProgress, fadingTaskIds);
   const inProgressIds = useMemo(() => new Set(inProgressTasks.map((t) => t.id)), [inProgressTasks]);
 
   // Split the focus list into the main list plus the manual Evening / Night
-  // triage buckets that render as their own sections below it. Tasks already in
-  // the "In progress today" section are excluded here to avoid duplicates,
-  // UNLESS they have been assigned a bucket (Evening/Night) — those flow into
-  // their bucket section instead.
-  const focusTasks = useMemo(() => tasks.filter((t) => {
-    if (!inProgressIds.has(t.id)) return true;
-    return !!effectiveFocusBucket(t, focusBuckets, recurringFocusBuckets);
-  }), [tasks, inProgressIds, focusBuckets, recurringFocusBuckets]);
-  const mainTasks = useMemo(() => focusTasks.filter((t) => !effectiveFocusBucket(t, focusBuckets, recurringFocusBuckets)), [focusTasks, focusBuckets, recurringFocusBuckets]);
-  const eveningTasks = useMemo(() => focusTasks.filter((t) => effectiveFocusBucket(t, focusBuckets, recurringFocusBuckets) === 'evening'), [focusTasks, focusBuckets, recurringFocusBuckets]);
-  const nightTasks = useMemo(() => focusTasks.filter((t) => effectiveFocusBucket(t, focusBuckets, recurringFocusBuckets) === 'night'), [focusTasks, focusBuckets, recurringFocusBuckets]);
-
-  // In-progress tasks that have NOT been assigned a bucket — these stay in the
-  // "In progress today" card. Those with a bucket flow into Evening/Night below.
-  const unbucketedInProgress = useMemo(
-    () => inProgressTasks.filter((t) => !effectiveFocusBucket(t, focusBuckets, recurringFocusBuckets)),
-    [inProgressTasks, focusBuckets, recurringFocusBuckets],
+  // triage buckets that render as their own sections below it. Any task that is
+  // in progress today appears in the "In progress today" section above and is
+  // excluded here to avoid duplicates.
+  const focusTasks = useMemo(
+    () => tasks.filter((t) => !inProgressIds.has(t.id)),
+    [tasks, inProgressIds],
+  );
+  const mainTasks = useMemo(
+    () => focusTasks.filter((t) => !effectiveFocusBucket(t, focusBuckets, recurringFocusBuckets)),
+    [focusTasks, focusBuckets, recurringFocusBuckets],
+  );
+  const eveningTasks = useMemo(
+    () => focusTasks.filter((t) => effectiveFocusBucket(t, focusBuckets, recurringFocusBuckets) === 'evening'),
+    [focusTasks, focusBuckets, recurringFocusBuckets],
+  );
+  const nightTasks = useMemo(
+    () => focusTasks.filter((t) => effectiveFocusBucket(t, focusBuckets, recurringFocusBuckets) === 'night'),
+    [focusTasks, focusBuckets, recurringFocusBuckets],
   );
 
   const groupBy = usePMStore((s) => s.todayListGroupBy);
@@ -177,14 +203,13 @@ export default function TodayList() {
   // timer is actually running so the figures advance live without a permanent
   // 1s interval.
   const { data: timeEntries } = useMyTimeEntries();
-  const timers = usePMStore((s) => s.timers);
-  const timerSegmentStart = usePMStore((s) => s.timerSegmentStart);
   const [nowTick, setNowTick] = useState(() => Date.now());
   useEffect(() => {
-    if (!timers.length) return;
+    const isWbRunning = !!activeWB && !activeWB.run.ended_at;
+    if (!timers.length && !isWbRunning) return;
     const id = setInterval(() => setNowTick(Date.now()), 1000);
     return () => clearInterval(id);
-  }, [timers.length]);
+  }, [timers.length, activeWB]);
   const { secondsTodayByTask, totalTodaySeconds } = useMemo(() => {
     // Net seconds tracked today per task. We sum the SIGNED duration of every
     // entry — real timer sessions AND negative manual "Time logged" corrections
@@ -208,6 +233,13 @@ export default function TodayList() {
         for (const rt of timers) net.set(rt.taskId, (net.get(rt.taskId) || 0) + live);
       }
     }
+    if (activeWB?.task?.id && activeWB.run?.started_at && !activeWB.run.ended_at) {
+      const wbStart = new Date(activeWB.run.started_at).getTime();
+      const liveWb = Math.max(0, Math.floor((nowTick - wbStart) / 1000));
+      if (liveWb > 0) {
+        net.set(activeWB.task.id, (net.get(activeWB.task.id) || 0) + liveWb);
+      }
+    }
     const map = new Map<string, number>();
     let total = 0;
     for (const [taskId, secs] of net) {
@@ -216,7 +248,7 @@ export default function TodayList() {
       total += clamped;
     }
     return { secondsTodayByTask: map, totalTodaySeconds: total };
-  }, [timeEntries, today, timers, timerSegmentStart, nowTick]);
+  }, [timeEntries, today, timers, timerSegmentStart, nowTick, activeWB]);
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -320,12 +352,12 @@ export default function TodayList() {
 
   return (
     <>
-    {view === 'list' && !isLoading && !isError && inProgressTasks.length > 0 && unbucketedInProgress.length > 0 && (
+    {view === 'list' && !isLoading && !isError && inProgressTasks.length > 0 && (
       <div className="hm-card hm-inprogress-card">
         <div className="hm-card-head">
           <span className="hm-live-dot" aria-hidden="true" />
           <h3>In progress today</h3>
-          <span className="hm-count">· {unbucketedInProgress.length}</span>
+          <span className="hm-count">· {inProgressTasks.length}</span>
           <span className="hm-tracked-total" title="Total time tracked today">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" />
@@ -334,7 +366,7 @@ export default function TodayList() {
           </span>
         </div>
         <div className="hm-list">
-          {unbucketedInProgress.map((t) => (
+          {inProgressTasks.map((t) => (
             <TodayRow key={t.id} task={t} onOpen={openTask} secondsToday={secondsTodayByTask.get(t.id) || 0} />
           ))}
         </div>
