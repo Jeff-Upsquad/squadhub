@@ -10,6 +10,7 @@ import { canActorDm, isDmParticipant, loadDmActor, otherDmParticipantIds } from 
 import { deleteR2Object } from '../r2';
 import { config } from '../config';
 import { BOT_COLUMNS, runBotReply } from '../services/squadBots';
+import { getOrCreateBotUser } from '../services/squadBotChannels';
 
 const router = Router();
 
@@ -298,11 +299,16 @@ router.post('/', requireAuth, async (req: Request, res: Response) => {
           .maybeSingle();
 
         const parentMeta = parentMsg?.metadata as any;
+        // Closed threads stay silent (reopen to resume). Finalized/handed-off
+        // doubts also stay silent — guidance is already queued.
+        const threadClosed = !!parentMeta?.is_closed;
+        const doubtHandled = parentMeta?.status && parentMeta.status !== 'open';
         if (
           parentMsg &&
           parentMeta?.kind === 'bot_doubt' &&
           parentMeta.doubt_id &&
           parentMeta.bot_id &&
+          !threadClosed &&
           parentMsg.sender_id !== req.userId &&
           body.content &&
           body.content.trim()
@@ -342,12 +348,31 @@ router.post('/', requireAuth, async (req: Request, res: Response) => {
 
                 // Post bot acknowledgment reply in the thread
                 const botReplyContent = "Got it! I've saved this guidance and queued the reply to send to the candidate.";
+                let ackBotSenderId = parentMsg.sender_id;
+                try {
+                  const { data: ackChannel } = await supabaseAdmin
+                    .from('channels')
+                    .select('workspace_id')
+                    .eq('id', parentMsg.channel_id)
+                    .maybeSingle();
+                  const { data: ackBot } = await supabaseAdmin
+                    .from('squad_bots')
+                    .select('id, slug, internal_name, public_name')
+                    .eq('id', parentMeta.bot_id)
+                    .maybeSingle();
+                  if (ackBot && ackChannel?.workspace_id) {
+                    const ackBotUser = await getOrCreateBotUser(ackBot as any, ackChannel.workspace_id);
+                    if (ackBotUser?.id) ackBotSenderId = ackBotUser.id;
+                  }
+                } catch {
+                  // fall back to the parent sender
+                }
                 const { data: botReply } = await supabaseAdmin
                   .from('messages')
                   .insert({
                     channel_id: parentMsg.channel_id,
                     parent_message_id: parentMsg.id,
-                    sender_id: parentMsg.sender_id,
+                    sender_id: ackBotSenderId,
                     content: botReplyContent,
                     type: 'text',
                   })
@@ -368,9 +393,10 @@ router.post('/', requireAuth, async (req: Request, res: Response) => {
                 console.error('[messages] resolve_squad_bot_doubt error:', rpcErr);
               }
             }
-          } else {
+          } else if (!doubtHandled) {
             // Conversational mode: the user is having a discussion with the bot.
             // Bot responds to questions, searches, or requests for more details.
+            // Skipped when the doubt is already instructed/taken over/completed.
             const { data: bot } = await supabaseAdmin
               .from('squad_bots')
               .select(BOT_COLUMNS)
@@ -437,12 +463,28 @@ router.post('/', requireAuth, async (req: Request, res: Response) => {
             }
 
             if (botReplyText) {
+              let convoBotSenderId = parentMsg.sender_id;
+              try {
+                if (bot && (bot as any).slug) {
+                  const { data: convoChannel } = await supabaseAdmin
+                    .from('channels')
+                    .select('workspace_id')
+                    .eq('id', parentMsg.channel_id)
+                    .maybeSingle();
+                  if (convoChannel?.workspace_id) {
+                    const convoBotUser = await getOrCreateBotUser(bot as any, convoChannel.workspace_id);
+                    if (convoBotUser?.id) convoBotSenderId = convoBotUser.id;
+                  }
+                }
+              } catch {
+                // fall back to the parent sender
+              }
               const { data: botReply } = await supabaseAdmin
                 .from('messages')
                 .insert({
                   channel_id: parentMsg.channel_id,
                   parent_message_id: parentMsg.id,
-                  sender_id: parentMsg.sender_id,
+                  sender_id: convoBotSenderId,
                   content: botReplyText,
                   type: 'text',
                 })

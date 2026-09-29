@@ -110,6 +110,7 @@ describe('bot questions and channel authority', () => {
   it('marks a bot doubt conversation as closed and emits updates', async () => {
     result({ id: channelId, squad_bot_id: botId }); // access channel
     result({ id: 'msg-1', channel_id: channelId, metadata: { kind: 'bot_doubt', doubt_id: doubtId } }); // select parent message
+    result({ id: doubtId, bot_id: botId }); // verify doubt belongs to channel bot
     const update = result({ id: 'msg-1', metadata: { kind: 'bot_doubt', doubt_id: doubtId, is_closed: true } }); // update parent message
     result({ id: doubtId }); // update squad_bot_doubts
     result({ display_name: 'Jeff' }); // select user
