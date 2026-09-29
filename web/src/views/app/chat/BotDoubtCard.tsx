@@ -14,6 +14,9 @@ type BotDoubtMeta = {
   status: 'open' | 'instructed' | 'executing' | 'taken_over' | 'completed' | 'failed' | string;
   instruction?: string | null;
   outcome_note?: string | null;
+  is_closed?: boolean;
+  closed_at?: string | null;
+  closed_by?: string | null;
 };
 
 const STATUS_CONFIG: Record<string, { label: string; badgeCls: string; dotCls: string }> = {
@@ -82,11 +85,43 @@ export default function BotDoubtCard({
   const outcomeNote = meta?.outcome_note;
   const savedInstruction = meta?.instruction;
 
+  const isClosed = !!meta?.is_closed;
+  const [finalizeOpen, setFinalizeOpen] = useState(false);
+  const [finalizeText, setFinalizeText] = useState(savedInstruction || '');
+
   const statusInfo = STATUS_CONFIG[status] || {
     label: status,
     badgeCls: 'bg-muted/30 text-foreground-muted border-border',
     dotCls: 'bg-foreground-muted',
   };
+
+  const closeMutation = useMutation({
+    mutationFn: (closed: boolean) =>
+      api.post(`/bot-channels/${channelId}/doubts/${doubtId}/close`, { closed }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['messages'] });
+      qc.invalidateQueries({ queryKey: ['thread', message.id] });
+    },
+    onError: (err: any) => {
+      console.error('Toggle closed failed:', err);
+    },
+  });
+
+  const finalizeMutation = useMutation({
+    mutationFn: (instruction: string) =>
+      api.post(`/bot-channels/${channelId}/doubts/${doubtId}/resolve`, {
+        mode: 'instruct',
+        instruction: instruction.trim(),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['messages'] });
+      qc.invalidateQueries({ queryKey: ['thread', message.id] });
+      setFinalizeOpen(false);
+    },
+    onError: (err: any) => {
+      console.error('Finalize guidance failed:', err);
+    },
+  });
 
   const takeoverMutation = useMutation({
     mutationFn: () =>
@@ -109,14 +144,33 @@ export default function BotDoubtCard({
 
   return (
     <div className="mt-2.5 max-w-xl rounded-xl border border-divider/70 bg-surface/50 p-3.5 shadow-xs backdrop-blur-xs transition-colors hover:border-divider">
-      {/* Top row: Status pill */}
+      {/* Top row: Status pill + Closed toggle */}
       <div className="flex items-center justify-between gap-2">
-        <span
-          className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] font-medium ${statusInfo.badgeCls}`}
-        >
-          <span className={`h-1.5 w-1.5 rounded-full ${statusInfo.dotCls}`} />
-          {statusInfo.label}
-        </span>
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <span
+            className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] font-medium ${statusInfo.badgeCls}`}
+          >
+            <span className={`h-1.5 w-1.5 rounded-full ${statusInfo.dotCls}`} />
+            {statusInfo.label}
+          </span>
+          {isClosed && (
+            <span className="inline-flex items-center gap-1 rounded-full border border-divider/60 bg-surface px-2 py-0.5 text-[10px] font-semibold text-foreground-muted">
+              ✓ Closed
+            </span>
+          )}
+        </div>
+
+        {doubtId && (
+          <button
+            type="button"
+            disabled={closeMutation.isPending}
+            onClick={() => closeMutation.mutate(!isClosed)}
+            className="inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] font-medium text-foreground-muted hover:bg-surface-alt hover:text-foreground transition-colors cursor-pointer border border-divider/40"
+            title={isClosed ? 'Reopen this conversation' : 'Mark this conversation as closed'}
+          >
+            <span>{isClosed ? 'Reopen conversation' : 'Mark as closed'}</span>
+          </button>
+        )}
       </div>
 
       {/* Context collapsible section */}
@@ -164,7 +218,7 @@ export default function BotDoubtCard({
         </div>
       )}
 
-      {/* The Three Action Buttons */}
+      {/* The Action Buttons */}
       <div className="mt-3 flex flex-wrap items-center gap-2 pt-1 border-t border-divider/40">
         {/* Button 1: Open source */}
         {source && (
@@ -179,19 +233,31 @@ export default function BotDoubtCard({
           </button>
         )}
 
-        {/* Button 2: Tell bot what to do */}
+        {/* Button 2: Tell bot what to do (fixed readable colors) */}
         {!inThread && onOpenThread && (
           <button
             type="button"
             onClick={onOpenThread}
-            className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors cursor-pointer ${
+            className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-colors cursor-pointer ${
               status === 'open'
-                ? 'bg-foreground text-background hover:opacity-90 shadow-2xs'
+                ? 'bg-foreground text-surface hover:opacity-90 shadow-2xs'
                 : 'border border-divider bg-surface text-foreground hover:bg-surface-alt'
             }`}
-            title="Open a thread chat with the bot to give instructions"
+            title="Open a thread chat with the bot to discuss or give instructions"
           >
             <span>💬 Tell bot what to do</span>
+          </button>
+        )}
+
+        {/* Button: Finalize guidance inside thread */}
+        {inThread && status === 'open' && doubtId && (
+          <button
+            type="button"
+            onClick={() => setFinalizeOpen(true)}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-foreground px-2.5 py-1.5 text-xs font-semibold text-surface hover:opacity-90 shadow-2xs transition-colors cursor-pointer"
+            title="Save guidance and queue reply to candidate"
+          >
+            <span>💡 Finalize guidance</span>
           </button>
         )}
 
@@ -214,6 +280,48 @@ export default function BotDoubtCard({
         <p className="mt-2 text-xs text-rose-600 dark:text-rose-400">
           {(takeoverMutation.error as any)?.response?.data?.error || 'Could not take over conversation'}
         </p>
+      )}
+
+      {/* Finalize guidance modal */}
+      {finalizeOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-md rounded-xl border border-divider bg-surface p-4 shadow-xl">
+            <h4 className="text-base font-bold text-foreground">Finalize guidance</h4>
+            <p className="mt-1 text-xs text-foreground-muted">
+              Save this guidance for Squad Bot and queue the reply to send to the candidate.
+            </p>
+            <textarea
+              className="mt-3 w-full rounded-lg border border-divider bg-surface-alt/50 p-2.5 text-xs text-foreground placeholder:text-foreground-dim focus:outline-none focus:ring-1 focus:ring-foreground"
+              rows={3}
+              placeholder="e.g. Ask him to share a screenshot of the error..."
+              value={finalizeText}
+              onChange={(e) => setFinalizeText(e.target.value)}
+              autoFocus
+            />
+            {finalizeMutation.isError && (
+              <p className="mt-2 text-xs text-rose-600 dark:text-rose-400">
+                {(finalizeMutation.error as any)?.response?.data?.error || 'Could not save guidance'}
+              </p>
+            )}
+            <div className="mt-3 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setFinalizeOpen(false)}
+                className="rounded-lg px-3 py-1.5 text-xs font-medium text-foreground-muted hover:bg-surface-alt transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={finalizeMutation.isPending || !finalizeText.trim()}
+                onClick={() => finalizeMutation.mutate(finalizeText)}
+                className="rounded-lg bg-foreground px-3 py-1.5 text-xs font-semibold text-surface hover:opacity-90 transition-opacity disabled:opacity-50"
+              >
+                {finalizeMutation.isPending ? 'Saving…' : 'Save & queue reply'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

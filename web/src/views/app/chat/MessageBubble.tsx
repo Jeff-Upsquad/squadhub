@@ -1051,6 +1051,79 @@ function ChatMessageBubble({ message, onOpenThread, inThread, grouped: rawGroupe
     return `linear-gradient(135deg, hsl(${h} 70% 55%), hsl(${(h + 40) % 360} 65% 45%))`;
   }, [sender, message.sender_id]);
 
+  const isBotDoubt = message.metadata?.kind === 'bot_doubt';
+  const isClosed = isBotDoubt && !!message.metadata?.is_closed;
+
+  if (isClosed && !inThread) {
+    const doubtId = message.metadata?.doubt_id as string | undefined;
+    const channelId = message.channel_id;
+
+    return (
+      <div
+        className={`group relative mx-4 my-1 flex items-center justify-between gap-3 rounded-lg border border-divider/60 bg-surface-alt/40 px-3 py-1.5 text-xs text-foreground-muted shadow-2xs backdrop-blur-xs transition hover:border-divider hover:bg-surface-alt/80 hover:text-foreground cursor-pointer ${
+          highlighted ? 'sqc-msg--highlight' : ''
+        }`}
+        data-message-id={message.id}
+        onClick={onOpenThread}
+        title="Closed bot doubt — click to view thread"
+      >
+        <div className="flex items-center gap-2 min-w-0 flex-1">
+          <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-500/15 text-emerald-600 dark:text-emerald-400">
+            <svg className="h-3 w-3" viewBox="0 0 20 20" fill="currentColor">
+              <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+            </svg>
+          </span>
+          <span className="rounded bg-surface px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-foreground-muted border border-divider/40 shrink-0">
+            Closed
+          </span>
+          <span className="font-semibold text-foreground truncate shrink-0 max-w-[120px]">
+            {sender?.display_name || 'Squad Bot'}
+          </span>
+          <span className="text-divider-subtle shrink-0">•</span>
+          <span className="truncate text-foreground-muted flex-1 min-w-0">
+            {message.content || (message.metadata?.question as string) || 'Bot doubt'}
+          </span>
+        </div>
+
+        <div className="flex items-center gap-2.5 shrink-0 text-[11px]">
+          {replyCount > 0 && (
+            <span className="inline-flex items-center gap-1 font-medium text-foreground-muted">
+              💬 {replyCount} {replyCount === 1 ? 'reply' : 'replies'}
+            </span>
+          )}
+          {lastReplyAt && (
+            <span className="hidden sm:inline text-foreground-muted/70">
+              {fmtReplyTime(lastReplyAt)}
+            </span>
+          )}
+          {doubtId && channelId && (
+            <button
+              type="button"
+              onClick={async (e) => {
+                e.stopPropagation();
+                try {
+                  await api.post(`/bot-channels/${channelId}/doubts/${doubtId}/close`, { closed: false });
+                  queryClient.invalidateQueries({ queryKey: ['messages'] });
+                  queryClient.invalidateQueries({ queryKey: ['thread', message.id] });
+                } catch (err) {
+                  console.error('Failed to reopen:', err);
+                }
+              }}
+              className="opacity-0 group-hover:opacity-100 rounded px-1.5 py-0.5 text-[11px] font-medium text-foreground-muted hover:bg-surface hover:text-foreground transition border border-divider/40"
+              title="Reopen this conversation"
+            >
+              Reopen
+            </button>
+          )}
+          <span className="inline-flex items-center gap-1 rounded bg-surface/70 px-2 py-0.5 text-xs font-medium text-foreground hover:bg-surface shadow-2xs transition">
+            <span>View</span>
+            <span className="text-[10px]">↗</span>
+          </span>
+        </div>
+      </div>
+    );
+  }
+
   const cls =
     'sqc-msg' +
     (isGrouped ? ' is-grouped' : '') +
