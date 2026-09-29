@@ -374,6 +374,20 @@ export default function ThreadPanel({ parentId, channelId, kind, onClose, embedd
       </div>
 
       {/* Guidance banner for open bot doubt */}
+      {isBotDoubt && isClosed && (
+        <div className="mx-4 mb-2 flex items-center justify-between gap-2 rounded-lg border border-divider/60 bg-surface-alt/50 px-3 py-2 text-xs">
+          <span className="text-foreground-muted">
+            ✓ This conversation is closed. Reopen to resume chatting with Squad Bot.
+          </span>
+          <button
+            type="button"
+            onClick={toggleCloseDoubt}
+            className="shrink-0 rounded-md border border-divider bg-surface px-2.5 py-1 text-xs font-semibold text-foreground hover:bg-surface-alt transition cursor-pointer"
+          >
+            Reopen
+          </button>
+        </div>
+      )}
       {isBotDoubt && doubtStatus === 'open' && !isClosed && (
         <div className="mx-4 mb-2 flex items-center justify-between gap-2 rounded-lg border border-blue-500/20 bg-blue-500/5 px-3 py-2 text-xs">
           <span className="text-foreground-muted">
@@ -382,7 +396,9 @@ export default function ThreadPanel({ parentId, channelId, kind, onClose, embedd
           <button
             type="button"
             onClick={() => {
-              setFinalizeText(replies.length > 0 ? (replies[replies.length - 1].content || '') : '');
+              // Prefill from the last teammate message, not the bot's reply.
+              const lastHuman = [...replies].reverse().find((m) => m.sender_id !== root?.sender_id && (m.content || '').trim() && !m.content?.startsWith('🔒') && !m.content?.startsWith('🔓'));
+              setFinalizeText(lastHuman?.content || '');
               setFinalizeOpen(true);
             }}
             className="shrink-0 rounded-md bg-foreground px-2.5 py-1 text-xs font-semibold text-surface shadow-2xs hover:opacity-90 transition cursor-pointer"
@@ -399,7 +415,7 @@ export default function ThreadPanel({ parentId, channelId, kind, onClose, embedd
         channelId={channelId}
         kind={kind}
         parentMessageId={parentId}
-        placeholder={root?.metadata?.kind === 'bot_doubt' ? 'Chat with Squad Bot… (ask to search, check details, or guide)' : 'Reply…'}
+        placeholder={isClosed ? 'This conversation is closed — reopen to resume…' : root?.metadata?.kind === 'bot_doubt' ? 'Chat with Squad Bot… (ask to search, check details, or guide)' : 'Reply…'}
         onSend={() => queryClient.invalidateQueries({ queryKey })}
       />
 

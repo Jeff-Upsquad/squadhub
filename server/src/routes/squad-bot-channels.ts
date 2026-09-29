@@ -51,6 +51,7 @@ router.post('/:channelId/doubts/:doubtId/resolve', async (req, res) => {
       const { data: parentMsg } = await supabaseAdmin
         .from('messages')
         .select('id, channel_id, sender_id, metadata')
+        .eq('channel_id', channel.id)
         .contains('metadata', { doubt_id: id })
         .maybeSingle();
 
@@ -169,10 +170,22 @@ router.post('/:channelId/doubts/:doubtId/close', async (req, res) => {
     const { data: parentMsg } = await supabaseAdmin
       .from('messages')
       .select('id, channel_id, metadata')
+      .eq('channel_id', channel.id)
       .contains('metadata', { doubt_id: doubtId })
       .maybeSingle();
 
     if (!parentMsg) {
+      res.status(404).json({ error: 'Conversation not found' });
+      return;
+    }
+
+    // Ensure the doubt belongs to this channel's bot (no cross-bot closes).
+    const { data: doubtRow } = await supabaseAdmin
+      .from('squad_bot_doubts')
+      .select('id, bot_id')
+      .eq('id', doubtId)
+      .maybeSingle();
+    if (doubtRow && doubtRow.bot_id !== channel.squad_bot_id) {
       res.status(404).json({ error: 'Conversation not found' });
       return;
     }
@@ -194,16 +207,18 @@ router.post('/:channelId/doubts/:doubtId/close', async (req, res) => {
 
     if (updateErr) throw updateErr;
 
-    // Defensively attempt to update squad_bot_doubts table
-    try {
-      await supabaseAdmin
-        .from('squad_bot_doubts')
-        .update({
-          ...(closed ? { closed_at: new Date().toISOString(), closed_by: req.userId } : { closed_at: null, closed_by: null }),
-        })
-        .eq('id', doubtId);
-    } catch {
-      // safe fallback if columns not yet in DB
+    // Persist close state on the doubt row (columns added in
+    // 20260929180000_bot_doubt_closed.sql).
+    const { error: doubtCloseErr } = await supabaseAdmin
+      .from('squad_bot_doubts')
+      .update(
+        closed
+          ? { closed_at: new Date().toISOString(), closed_by: req.userId }
+          : { closed_at: null, closed_by: null },
+      )
+      .eq('id', doubtId);
+    if (doubtCloseErr) {
+      console.warn('[squad-bot-channels] doubt close-state sync failed:', doubtCloseErr.message);
     }
 
     const io = req.app.get('io');

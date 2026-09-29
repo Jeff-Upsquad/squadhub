@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import type { Message } from '@squadhub/shared';
 import api from '../../../services/api';
@@ -88,6 +88,12 @@ export default function BotDoubtCard({
   const isClosed = !!meta?.is_closed;
   const [finalizeOpen, setFinalizeOpen] = useState(false);
   const [finalizeText, setFinalizeText] = useState(savedInstruction || '');
+
+  // savedInstruction arrives with the message payload — keep the draft in sync
+  // until the user opens the modal and starts typing.
+  useEffect(() => {
+    if (!finalizeOpen) setFinalizeText(savedInstruction || '');
+  }, [savedInstruction, finalizeOpen]);
 
   const statusInfo = STATUS_CONFIG[status] || {
     label: status,
@@ -250,7 +256,7 @@ export default function BotDoubtCard({
         )}
 
         {/* Button: Finalize guidance inside thread */}
-        {inThread && status === 'open' && doubtId && (
+        {inThread && status === 'open' && !isClosed && doubtId && (
           <button
             type="button"
             onClick={() => setFinalizeOpen(true)}
@@ -279,6 +285,11 @@ export default function BotDoubtCard({
       {takeoverMutation.isError && (
         <p className="mt-2 text-xs text-rose-600 dark:text-rose-400">
           {(takeoverMutation.error as any)?.response?.data?.error || 'Could not take over conversation'}
+        </p>
+      )}
+      {closeMutation.isError && (
+        <p className="mt-2 text-xs text-rose-600 dark:text-rose-400">
+          {(closeMutation.error as any)?.response?.data?.error || 'Could not update conversation status'}
         </p>
       )}
 
