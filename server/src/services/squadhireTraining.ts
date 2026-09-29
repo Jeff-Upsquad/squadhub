@@ -41,8 +41,8 @@ function squadhireUrl(path: string = SYNC_PATH): string | null {
  * squadhire_audience flag; every knowledge-track item goes (it's what Squad
  * Bot answers from).
  */
-export function isSquadhireSynced(item: { squadhire_audience?: boolean | null; track?: string | null } | null | undefined): boolean {
-  return item?.squadhire_audience === true || item?.track === 'knowledge';
+export function isSquadhireSynced(item: { squadhire_audience?: boolean | null; squadhire_agency_audience?: boolean | null; track?: string | null } | null | undefined): boolean {
+  return item?.squadhire_audience === true || item?.squadhire_agency_audience === true || item?.track === 'knowledge';
 }
 
 /** Fire a sync without making the caller wait or fail on it. */
@@ -75,7 +75,7 @@ export function syncContentToSquadhire(itemId: string | null): void {
     try {
       const { data } = await supabaseAdmin
         .from('lms_items')
-        .select('squadhire_audience, track')
+        .select('squadhire_audience, squadhire_agency_audience, track')
         .eq('id', itemId)
         .maybeSingle();
       if (!isSquadhireSynced(data as any)) {
@@ -98,7 +98,7 @@ export async function deliver(itemId: string): Promise<void> {
 
   const { data: item } = await supabaseAdmin
     .from('lms_items')
-    .select('id, kind, track, title, summary, icon, cover_image_url, status, squadhire_audience, knowledge_categories, origin_item_id')
+    .select('id, kind, track, title, summary, icon, cover_image_url, status, squadhire_audience, squadhire_agency_audience, knowledge_categories, origin_item_id')
     .eq('id', itemId)
     .maybeSingle();
   if (!item || item.origin_item_id) return;
@@ -122,7 +122,7 @@ export async function deliver(itemId: string): Promise<void> {
   } else {
     // Not (or no longer) talent-facing. Still tell SquadHire, so an item that
     // had the flag removed disappears for talents instead of lingering.
-    const visible = item.squadhire_audience === true && item.status === 'published';
+    const visible = (item.squadhire_audience === true || item.squadhire_agency_audience === true) && item.status === 'published';
     endpoint = squadhireUrl()!;
     payload = {
       id: item.id,
@@ -133,6 +133,7 @@ export async function deliver(itemId: string): Promise<void> {
       icon: item.icon ?? null,
       cover_image_url: item.cover_image_url ?? null,
       visible,
+      audiences: { talent: item.squadhire_audience === true, agency: item.squadhire_agency_audience === true },
       pages: visible ? await loadPages(itemId) : [],
     };
   }

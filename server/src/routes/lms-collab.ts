@@ -195,6 +195,7 @@ const itemPatchSchema = z.object({
   // Deliver this item to SquadHire as talent training. Who it reaches there
   // and what it unlocks stays a SquadHire admin decision.
   squadhire_audience: z.boolean().optional(),
+  squadhire_agency_audience: z.boolean().optional(),
 });
 
 router.patch('/items/:id', async (req: Request, res: Response) => {
@@ -203,7 +204,7 @@ router.patch('/items/:id', async (req: Request, res: Response) => {
     if (!(await gate(itemId, req.userId!, 'admin', res))) return;
     const body = itemPatchSchema.parse(req.body);
     const patch: Record<string, any> = {};
-    for (const k of ['title', 'summary', 'cover_image_url', 'category_id', 'squadhire_audience'] as const) {
+    for (const k of ['title', 'summary', 'cover_image_url', 'category_id', 'squadhire_audience', 'squadhire_agency_audience'] as const) {
       if ((body as any)[k] !== undefined) patch[k] = (body as any)[k];
     }
     patch.updated_at = new Date().toISOString();
@@ -211,7 +212,7 @@ router.patch('/items/:id', async (req: Request, res: Response) => {
     if (error) { res.status(500).json({ success: false, error: error.message }); return; }
     // Push on any content edit, and on the flag being turned off, so removing
     // the audience actually withdraws the course from talents.
-    if ((data as any)?.squadhire_audience || body.squadhire_audience === false) {
+    if (isSquadhireSynced(data as any) || body.squadhire_audience === false || body.squadhire_agency_audience === false) {
       syncItemToSquadhire(itemId);
     }
     res.json({ success: true, data });
