@@ -151,6 +151,20 @@ export default function LmsEditor({ draftItemId, isClone, initialLessonId, onExi
               SquadHire talents
             </label>
           )}
+          {!isClone && !isKnowledge && (
+            <label
+              className="flex items-center gap-1.5 rounded-md border border-[var(--sh-hair)] bg-white px-2.5 py-1 text-[12px] font-medium text-[var(--sh-ink-2)]"
+              title="Publish this to SquadHire agencies as agency training."
+            >
+              <input
+                type="checkbox"
+                checked={!!item.squadhire_agency_audience}
+                onChange={(e) => m.patchItem.mutate({ squadhire_agency_audience: e.target.checked })}
+                className="accent-[var(--sh-ink)]"
+              />
+              SquadHire agencies
+            </label>
+          )}
           {!isClone && item.status === 'published' ? (
             <button
               onClick={() => { if (confirm('Unpublish this content? Users keep access to already-assigned content.')) m.unpublish.mutate(); }}

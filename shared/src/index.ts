@@ -3272,6 +3272,8 @@ export interface LmsItem {
   // who it reaches there and what it unlocks; publishing here only sends the
   // content.
   squadhire_audience?: boolean;
+  /** Delivered to SquadHire agency training when true. */
+  squadhire_agency_audience?: boolean;
   squadhire_synced_at?: string | null;
   squadhire_last_error?: string | null;
   // Knowledge track only: 'general' | 'tech' | SquadHire talent category slugs.

@@ -64,6 +64,20 @@ describe('syncContentToSquadhire', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  it('delivers an agency-only document without exposing it to talents', async () => {
+    tableRows.lms_items = [{
+      id: 'agency-item', kind: 'post', track: 'learning', title: 'Training Program Agencies',
+      status: 'published', squadhire_audience: false, squadhire_agency_audience: true,
+    }];
+    tableRows.lms_lessons = [];
+    await deliver('agency-item');
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, { body: string }];
+    expect(url).toBe('https://squadhire.example.com/api/integrations/squadhub/training/sync');
+    expect(JSON.parse(init.body)).toMatchObject({
+      id: 'agency-item', visible: true, audiences: { talent: false, agency: true },
+    });
+  });
+
   it('pushes once for a burst of saves on a flagged item', async () => {
     tableRows.lms_items = [
       {
