@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { requireAuth } from '../middleware/auth';
 import { checkResourceAccess, meetsAccessLevel } from '../middleware/permissions';
 import { supabaseAdmin } from '../supabase';
-import { decisionSchema } from '../services/squadBotChannels';
+import { decisionSchema, getOrCreateBotUser } from '../services/squadBotChannels';
 
 const router = Router();
 router.use(requireAuth);
@@ -17,7 +17,7 @@ async function access(req: Request, res: Response, write = false) {
   if (!level || (write && !meetsAccessLevel(level, 'commenter'))) {
     res.status(403).json({ error: 'Channel access required' }); return null;
   }
-  const { data, error } = await supabaseAdmin.from('channels').select('id, squad_bot_id').eq('id', id.data).is('deleted_at', null).maybeSingle();
+  const { data, error } = await supabaseAdmin.from('channels').select('id, squad_bot_id, workspace_id').eq('id', id.data).is('deleted_at', null).maybeSingle();
   if (error) throw error;
   if (!data?.squad_bot_id) { res.status(404).json({ error: 'Bot channel not found' }); return null; }
   return { ...data, can_respond: meetsAccessLevel(level, 'commenter'), can_invite: meetsAccessLevel(level, 'manager') };
@@ -50,7 +50,7 @@ router.post('/:channelId/doubts/:doubtId/resolve', async (req, res) => {
     try {
       const { data: parentMsg } = await supabaseAdmin
         .from('messages')
-        .select('id, channel_id, metadata')
+        .select('id, channel_id, sender_id, metadata')
         .contains('metadata', { doubt_id: id })
         .maybeSingle();
 
@@ -106,6 +106,46 @@ router.post('/:channelId/doubts/:doubtId/resolve', async (req, res) => {
               io.to(channel.id).emit('thread_reply', takeoverMsg);
             }
           }
+        } else if (decision.mode === 'instruct') {
+          // Post bot acknowledgment reply in the thread
+          const botReplyContent = "Got it! I've saved this guidance and queued the reply to send to the candidate.";
+          let botUserId = parentMsg.sender_id;
+          try {
+            const { data: bot } = await supabaseAdmin
+              .from('squad_bots')
+              .select('id, slug, internal_name, public_name')
+              .eq('id', channel.squad_bot_id)
+              .maybeSingle();
+            if (bot && channel.workspace_id) {
+              const botUser = await getOrCreateBotUser(bot, channel.workspace_id);
+              if (botUser?.id) botUserId = botUser.id;
+            }
+          } catch (botUserErr) {
+            console.warn('[squad-bot-channels] bot user lookup fallback:', botUserErr);
+          }
+
+          const { data: botReply } = await supabaseAdmin
+            .from('messages')
+            .insert({
+              channel_id: channel.id,
+              parent_message_id: parentMsg.id,
+              sender_id: botUserId,
+              content: botReplyContent,
+              type: 'text',
+            })
+            .select('*, sender:users!sender_id(id, display_name, avatar_url)')
+            .single();
+
+          if (botReply) {
+            await supabaseAdmin.from('message_threads').insert({
+              parent_message_id: parentMsg.id,
+              reply_message_id: botReply.id,
+            });
+            if (io) {
+              io.to(channel.id).emit('new_message', botReply);
+              io.to(channel.id).emit('thread_reply', botReply);
+            }
+          }
         }
       }
     } catch (syncErr) {
@@ -115,4 +155,104 @@ router.post('/:channelId/doubts/:doubtId/resolve', async (req, res) => {
     res.json({ success: true, data });
   } catch (e) { res.status(e instanceof z.ZodError ? 400 : 500).json({ error: 'Could not save the response' }); }
 });
+
+router.post('/:channelId/doubts/:doubtId/close', async (req, res) => {
+  try {
+    const channel = await access(req, res, true);
+    if (!channel) return;
+    const doubtId = z.string().uuid().parse(req.params.doubtId);
+    const closeSchema = z.object({
+      closed: z.boolean().default(true),
+    });
+    const { closed } = closeSchema.parse(req.body ?? {});
+
+    const { data: parentMsg } = await supabaseAdmin
+      .from('messages')
+      .select('id, channel_id, metadata')
+      .contains('metadata', { doubt_id: doubtId })
+      .maybeSingle();
+
+    if (!parentMsg) {
+      res.status(404).json({ error: 'Conversation not found' });
+      return;
+    }
+
+    const currentMeta = (parentMsg.metadata as any) || {};
+    const updatedMeta = {
+      ...currentMeta,
+      is_closed: closed,
+      closed_at: closed ? new Date().toISOString() : null,
+      closed_by: closed ? req.userId : null,
+    };
+
+    const { data: updatedParent, error: updateErr } = await supabaseAdmin
+      .from('messages')
+      .update({ metadata: updatedMeta })
+      .eq('id', parentMsg.id)
+      .select('*, sender:users!sender_id(id, display_name, avatar_url)')
+      .single();
+
+    if (updateErr) throw updateErr;
+
+    // Defensively attempt to update squad_bot_doubts table
+    try {
+      await supabaseAdmin
+        .from('squad_bot_doubts')
+        .update({
+          ...(closed ? { closed_at: new Date().toISOString(), closed_by: req.userId } : { closed_at: null, closed_by: null }),
+        })
+        .eq('id', doubtId);
+    } catch {
+      // safe fallback if columns not yet in DB
+    }
+
+    const io = req.app.get('io');
+    if (io && updatedParent) {
+      io.to(channel.id).emit('message_updated', updatedParent);
+    }
+
+    // Post notice in the thread
+    try {
+      const { data: user } = await supabaseAdmin
+        .from('users')
+        .select('display_name')
+        .eq('id', req.userId!)
+        .single();
+      const userName = user?.display_name || 'A teammate';
+      const noticeContent = closed
+        ? `🔒 ${userName} marked this conversation as closed.`
+        : `🔓 ${userName} reopened this conversation.`;
+
+      const { data: noticeMsg } = await supabaseAdmin
+        .from('messages')
+        .insert({
+          channel_id: channel.id,
+          parent_message_id: parentMsg.id,
+          sender_id: req.userId!,
+          content: noticeContent,
+          type: 'text',
+        })
+        .select('*, sender:users!sender_id(id, display_name, avatar_url)')
+        .single();
+
+      if (noticeMsg) {
+        await supabaseAdmin.from('message_threads').insert({
+          parent_message_id: parentMsg.id,
+          reply_message_id: noticeMsg.id,
+        });
+        if (io) {
+          io.to(channel.id).emit('new_message', noticeMsg);
+          io.to(channel.id).emit('thread_reply', noticeMsg);
+        }
+      }
+    } catch (noticeErr) {
+      console.warn('[squad-bot-channels] close notice error:', noticeErr);
+    }
+
+    res.json({ success: true, data: { is_closed: closed } });
+  } catch (e) {
+    res.status(e instanceof z.ZodError ? 400 : 500).json({ error: 'Could not update conversation status' });
+  }
+});
+
 export default router;

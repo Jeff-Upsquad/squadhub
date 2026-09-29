@@ -183,6 +183,45 @@ export default function ThreadPanel({ parentId, channelId, kind, onClose, embedd
   const replies: Message[] = threadRes?.data?.replies || [];
   const openConvertToTask = useConvertToTaskStore((s) => s.open);
 
+  const isBotDoubt = root?.metadata?.kind === 'bot_doubt';
+  const isClosed = isBotDoubt && !!root?.metadata?.is_closed;
+  const doubtId = root?.metadata?.doubt_id as string | undefined;
+  const doubtStatus = (root?.metadata?.status as string) || 'open';
+
+  const [finalizeOpen, setFinalizeOpen] = useState(false);
+  const [finalizeText, setFinalizeText] = useState('');
+  const [finalizing, setFinalizing] = useState(false);
+
+  const toggleCloseDoubt = async () => {
+    if (!doubtId) return;
+    try {
+      await api.post(`/bot-channels/${channelId}/doubts/${doubtId}/close`, { closed: !isClosed });
+      queryClient.invalidateQueries({ queryKey: ['messages'] });
+      queryClient.invalidateQueries({ queryKey });
+    } catch (err) {
+      console.error('Failed to toggle close:', err);
+    }
+  };
+
+  const finalizeGuidance = async () => {
+    if (!doubtId || !finalizeText.trim() || finalizing) return;
+    setFinalizing(true);
+    try {
+      await api.post(`/bot-channels/${channelId}/doubts/${doubtId}/resolve`, {
+        mode: 'instruct',
+        instruction: finalizeText.trim(),
+      });
+      queryClient.invalidateQueries({ queryKey: ['messages'] });
+      queryClient.invalidateQueries({ queryKey });
+      setFinalizeOpen(false);
+      setFinalizeText('');
+    } catch (err) {
+      console.error('Failed to finalize guidance:', err);
+    } finally {
+      setFinalizing(false);
+    }
+  };
+
   // Drag a file anywhere over the thread panel to stage it on the reply composer
   // (mirrors the main ChatPanel behaviour).
   const composerRef = useRef<MessageComposerHandle>(null);
@@ -271,6 +310,20 @@ export default function ThreadPanel({ parentId, channelId, kind, onClose, embedd
           )}
         </div>
         <div className="flex shrink-0 items-center gap-1">
+        {isBotDoubt && doubtId && (
+          <button
+            type="button"
+            onClick={toggleCloseDoubt}
+            className={`rounded-[6px] px-2 py-1 text-[12px] font-semibold transition-colors border border-divider/40 ${
+              isClosed
+                ? 'bg-slate-500/10 text-slate-600 dark:text-slate-400 hover:bg-slate-500/20'
+                : 'text-foreground-muted hover:bg-surface-alt hover:text-foreground'
+            }`}
+            title={isClosed ? 'Reopen this conversation' : 'Mark conversation as closed'}
+          >
+            {isClosed ? 'Closed · Reopen' : 'Mark as closed'}
+          </button>
+        )}
         {root && (
           <button
             type="button"
@@ -320,6 +373,25 @@ export default function ThreadPanel({ parentId, channelId, kind, onClose, embedd
         ))}
       </div>
 
+      {/* Guidance banner for open bot doubt */}
+      {isBotDoubt && doubtStatus === 'open' && !isClosed && (
+        <div className="mx-4 mb-2 flex items-center justify-between gap-2 rounded-lg border border-blue-500/20 bg-blue-500/5 px-3 py-2 text-xs">
+          <span className="text-foreground-muted">
+            Chatting with Squad Bot. When ready, finalize guidance to queue the reply.
+          </span>
+          <button
+            type="button"
+            onClick={() => {
+              setFinalizeText(replies.length > 0 ? (replies[replies.length - 1].content || '') : '');
+              setFinalizeOpen(true);
+            }}
+            className="shrink-0 rounded-md bg-foreground px-2.5 py-1 text-xs font-semibold text-surface shadow-2xs hover:opacity-90 transition cursor-pointer"
+          >
+            💡 Finalize guidance
+          </button>
+        </div>
+      )}
+
       <TypingIndicator users={typingUsers} />
       {/* Composer (posts with parent_message_id) */}
       <MessageComposer
@@ -327,9 +399,46 @@ export default function ThreadPanel({ parentId, channelId, kind, onClose, embedd
         channelId={channelId}
         kind={kind}
         parentMessageId={parentId}
-        placeholder={root?.metadata?.kind === 'bot_doubt' ? 'Tell the bot what to do…' : 'Reply…'}
+        placeholder={root?.metadata?.kind === 'bot_doubt' ? 'Chat with Squad Bot… (ask to search, check details, or guide)' : 'Reply…'}
         onSend={() => queryClient.invalidateQueries({ queryKey })}
       />
+
+      {/* Finalize guidance modal */}
+      {finalizeOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-md rounded-xl border border-divider bg-surface p-4 shadow-xl">
+            <h4 className="text-base font-bold text-foreground">Finalize guidance</h4>
+            <p className="mt-1 text-xs text-foreground-muted">
+              Save this guidance for Squad Bot and queue the reply to send to the candidate.
+            </p>
+            <textarea
+              className="mt-3 w-full rounded-lg border border-divider bg-surface-alt/50 p-2.5 text-xs text-foreground placeholder:text-foreground-dim focus:outline-none focus:ring-1 focus:ring-foreground"
+              rows={3}
+              placeholder="e.g. Ask him to share a screenshot of the error..."
+              value={finalizeText}
+              onChange={(e) => setFinalizeText(e.target.value)}
+              autoFocus
+            />
+            <div className="mt-3 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setFinalizeOpen(false)}
+                className="rounded-lg px-3 py-1.5 text-xs font-medium text-foreground-muted hover:bg-surface-alt transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={finalizing || !finalizeText.trim()}
+                onClick={finalizeGuidance}
+                className="rounded-lg bg-foreground px-3 py-1.5 text-xs font-semibold text-surface hover:opacity-90 transition-opacity disabled:opacity-50"
+              >
+                {finalizing ? 'Saving…' : 'Save & queue reply'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

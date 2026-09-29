@@ -244,6 +244,9 @@ export interface MessageMetadata {
   status?: string;
   instruction?: string | null;
   outcome_note?: string | null;
+  is_closed?: boolean;
+  closed_at?: string | null;
+  closed_by?: string | null;
   [key: string]: unknown;
 }
 

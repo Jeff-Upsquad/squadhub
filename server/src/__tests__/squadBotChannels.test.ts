@@ -107,4 +107,20 @@ describe('bot questions and channel authority', () => {
     result({ squad_bot_id:botId, workspace_id:'workspace' }); result({ user_type, status }); result(member ? { user_id:'person' } : null);
     expect(await eligibleBotChannelMember(channelId,'person')).toBe(expected);
   });
+  it('marks a bot doubt conversation as closed and emits updates', async () => {
+    result({ id: channelId, squad_bot_id: botId }); // access channel
+    result({ id: 'msg-1', channel_id: channelId, metadata: { kind: 'bot_doubt', doubt_id: doubtId } }); // select parent message
+    const update = result({ id: 'msg-1', metadata: { kind: 'bot_doubt', doubt_id: doubtId, is_closed: true } }); // update parent message
+    result({ id: doubtId }); // update squad_bot_doubts
+    result({ display_name: 'Jeff' }); // select user
+    result({ id: 'msg-notice' }); // insert notice
+    const res = await post(`/channels/${channelId}/doubts/${doubtId}/close`, { closed: true });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as any;
+    expect(body.success).toBe(true);
+    expect(body.data.is_closed).toBe(true);
+    expect(update.update).toHaveBeenCalledWith(expect.objectContaining({
+      metadata: expect.objectContaining({ is_closed: true }),
+    }));
+  });
 });

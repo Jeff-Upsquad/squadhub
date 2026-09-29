@@ -9,6 +9,7 @@ import { isSupportChannel, isSupportAgent, userOwnsSupportTicketRoot } from '../
 import { canActorDm, isDmParticipant, loadDmActor, otherDmParticipantIds } from '../utils/dmAccess';
 import { deleteR2Object } from '../r2';
 import { config } from '../config';
+import { BOT_COLUMNS, runBotReply } from '../services/squadBots';
 
 const router = Router();
 
@@ -287,12 +288,12 @@ router.post('/', requireAuth, async (req: Request, res: Response) => {
       }
     }
 
-    // If replying in a bot doubt thread, record instructions and acknowledge
+    // If replying in a bot doubt thread, have a conversation with the bot unless explicitly finalizing
     if (body.parent_message_id) {
       try {
         const { data: parentMsg } = await supabaseAdmin
           .from('messages')
-          .select('id, channel_id, metadata, sender_id')
+          .select('id, channel_id, content, metadata, sender_id')
           .eq('id', body.parent_message_id)
           .maybeSingle();
 
@@ -306,43 +307,143 @@ router.post('/', requireAuth, async (req: Request, res: Response) => {
           body.content &&
           body.content.trim()
         ) {
-          if (parentMeta.status === 'open') {
-            const { data: resolved, error: rpcErr } = await supabaseAdmin.rpc('resolve_squad_bot_doubt', {
-              p_id: parentMeta.doubt_id,
-              p_bot_id: parentMeta.bot_id,
-              p_user_id: req.userId,
-              p_mode: 'instruct',
-              p_instruction: body.content.trim(),
-            });
+          const trimmed = body.content.trim();
+          const isExplicitFinalize = trimmed.startsWith('/finalize') || trimmed.startsWith('/instruct');
 
-            if (!rpcErr && resolved) {
-              const updatedMeta = {
-                ...parentMeta,
-                status: 'instructed',
-                instruction: body.content.trim(),
-              };
+          if (isExplicitFinalize && parentMeta.status === 'open') {
+            const finalInstruction = trimmed.replace(/^(\/finalize|\/instruct)\s*/i, '').trim();
+            if (finalInstruction) {
+              const { data: resolved, error: rpcErr } = await supabaseAdmin.rpc('resolve_squad_bot_doubt', {
+                p_id: parentMeta.doubt_id,
+                p_bot_id: parentMeta.bot_id,
+                p_user_id: req.userId,
+                p_mode: 'instruct',
+                p_instruction: finalInstruction,
+              });
 
-              const { data: updatedParent } = await supabaseAdmin
-                .from('messages')
-                .update({ metadata: updatedMeta })
-                .eq('id', parentMsg.id)
-                .select('*, sender:users!sender_id(id, display_name, avatar_url)')
-                .single();
+              if (!rpcErr && resolved) {
+                const updatedMeta = {
+                  ...parentMeta,
+                  status: 'instructed',
+                  instruction: finalInstruction,
+                };
 
-              const room = body.channel_id || body.dm_conversation_id || parentMsg.channel_id;
-              if (io && updatedParent && room) {
-                io.to(room).emit('message_updated', updatedParent);
+                const { data: updatedParent } = await supabaseAdmin
+                  .from('messages')
+                  .update({ metadata: updatedMeta })
+                  .eq('id', parentMsg.id)
+                  .select('*, sender:users!sender_id(id, display_name, avatar_url)')
+                  .single();
+
+                const room = body.channel_id || body.dm_conversation_id || parentMsg.channel_id;
+                if (io && updatedParent && room) {
+                  io.to(room).emit('message_updated', updatedParent);
+                }
+
+                // Post bot acknowledgment reply in the thread
+                const botReplyContent = "Got it! I've saved this guidance and queued the reply to send to the candidate.";
+                const { data: botReply } = await supabaseAdmin
+                  .from('messages')
+                  .insert({
+                    channel_id: parentMsg.channel_id,
+                    parent_message_id: parentMsg.id,
+                    sender_id: parentMsg.sender_id,
+                    content: botReplyContent,
+                    type: 'text',
+                  })
+                  .select('*, sender:users!sender_id(id, display_name, avatar_url)')
+                  .single();
+
+                if (botReply) {
+                  await supabaseAdmin.from('message_threads').insert({
+                    parent_message_id: parentMsg.id,
+                    reply_message_id: botReply.id,
+                  });
+                  if (io && room) {
+                    io.to(room).emit('new_message', botReply);
+                    io.to(room).emit('thread_reply', botReply);
+                  }
+                }
+              } else if (rpcErr) {
+                console.error('[messages] resolve_squad_bot_doubt error:', rpcErr);
               }
+            }
+          } else {
+            // Conversational mode: the user is having a discussion with the bot.
+            // Bot responds to questions, searches, or requests for more details.
+            const { data: bot } = await supabaseAdmin
+              .from('squad_bots')
+              .select(BOT_COLUMNS)
+              .eq('id', parentMeta.bot_id)
+              .maybeSingle();
 
-              // Post bot acknowledgment reply in the thread
-              const botReplyContent = "Got it! I've saved this guidance and queued the reply to send to the candidate.";
+            let botReplyText = '';
+            if (bot) {
+              try {
+                // Fetch recent messages in this thread for conversational context
+                const { data: recentThreadMsgs } = await supabaseAdmin
+                  .from('messages')
+                  .select('id, sender_id, content')
+                  .eq('parent_message_id', parentMsg.id)
+                  .order('created_at', { ascending: true })
+                  .limit(30);
+
+                const chatMessages: Array<{ role: 'user' | 'assistant'; content: string }> = [
+                  {
+                    role: 'assistant',
+                    content: `I've raised a question/doubt from a candidate conversation:\nQuestion: ${parentMeta.question || parentMsg.content || ''}\nContext: ${parentMeta.context || 'None'}\nSource URL: ${parentMeta.source_url || 'None'}`,
+                  },
+                ];
+
+                if (recentThreadMsgs && recentThreadMsgs.length > 0) {
+                  for (const m of recentThreadMsgs) {
+                    if (!m.content) continue;
+                    chatMessages.push({
+                      role: m.sender_id === parentMsg.sender_id ? 'assistant' : 'user',
+                      content: m.content,
+                    });
+                  }
+                }
+
+                const aiResult = await runBotReply(
+                  bot as any,
+                  {
+                    messages: chatMessages,
+                    context: [
+                      `Original Question / Doubt: ${parentMeta.question || ''}`,
+                      `Conversation Context: ${parentMeta.context || ''}`,
+                      `Source: ${parentMeta.source_url || ''}`,
+                      'Internal teammate guidance: You are talking internally with a teammate in SquadHub. They are asking you questions, checking details, or helping formulate guidance. Answer concisely and practically. If they instruct you to search or ask the candidate something, explain what you found or confirm the next steps. When they agree on the final answer, remind them they can finalize guidance to queue the reply.',
+                    ]
+                      .filter(Boolean)
+                      .join('\n\n'),
+                  },
+                  { source: 'app', status: bot.status || 'live' }
+                );
+                botReplyText = aiResult.text;
+              } catch (aiErr: any) {
+                console.warn('[messages] bot AI conversation error, falling back:', aiErr?.message);
+                const lower = trimmed.toLowerCase();
+                if (lower.includes('search') || lower.includes('look up') || lower.includes('find') || lower.includes('check')) {
+                  botReplyText = `I'm checking our knowledge base and records for: "${trimmed}". Based on the context (${parentMeta.context ? parentMeta.context.slice(0, 120) + '…' : 'provided'}), let me know if you would like me to ask the candidate for more specifics, or click "Finalize guidance" to send the reply.`;
+                } else if (lower.includes('ask') || lower.includes('screenshot') || lower.includes('details') || lower.includes('question')) {
+                  botReplyText = `Understood. I can ask the candidate for those specifics or clarification. When you're ready to proceed with this guidance, click "Finalize guidance" to queue the reply.`;
+                } else {
+                  botReplyText = `Got your direction: "${trimmed}". We can continue refining this, or click "Finalize guidance" whenever you are ready to queue the reply to the candidate.`;
+                }
+              }
+            } else {
+              botReplyText = `Understood: "${trimmed}". When you are ready to send this instruction to the candidate, click "Finalize guidance".`;
+            }
+
+            if (botReplyText) {
               const { data: botReply } = await supabaseAdmin
                 .from('messages')
                 .insert({
                   channel_id: parentMsg.channel_id,
                   parent_message_id: parentMsg.id,
                   sender_id: parentMsg.sender_id,
-                  content: botReplyContent,
+                  content: botReplyText,
                   type: 'text',
                 })
                 .select('*, sender:users!sender_id(id, display_name, avatar_url)')
@@ -353,13 +454,12 @@ router.post('/', requireAuth, async (req: Request, res: Response) => {
                   parent_message_id: parentMsg.id,
                   reply_message_id: botReply.id,
                 });
+                const room = body.channel_id || body.dm_conversation_id || parentMsg.channel_id;
                 if (io && room) {
                   io.to(room).emit('new_message', botReply);
                   io.to(room).emit('thread_reply', botReply);
                 }
               }
-            } else if (rpcErr) {
-              console.error('[messages] resolve_squad_bot_doubt error:', rpcErr);
             }
           }
         }
