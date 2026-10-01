@@ -7,9 +7,11 @@ import { useAuthStore } from '../../../stores/authStore';
 import { useUpdateTask } from '../../../hooks/useTasks';
 import { useFocusTask } from '../../../hooks/useDayPlanner';
 import { useTaskTypes } from '../../../hooks/useTaskTypes';
-import { useActiveWorkBlockRun, useRecordWorkBlockCompletion } from '../../../hooks/useWorkBlocks';
+import { useActiveWorkBlockRun, useStopWorkBlockRun, useRecordWorkBlockCompletion } from '../../../hooks/useWorkBlocks';
+import { useParallelTimers } from '../../../hooks/useParallelTimers';
 import { useActiveGroupRun, useRecordGroupRunCompletion } from '../../../hooks/useGroupRuns';
 import { isTaskFocused, isTaskCompleted } from '../../../lib/taskGrouping';
+import { formatTracked } from '../../../lib/formatDuration';
 import { avatarColor, initialOf, formatWhen, nextQuickDate, statusIsComplete } from './taskHelpers';
 import AssigneePicker from './AssigneePicker';
 import NoAssigneeCompleteDialog from './NoAssigneeCompleteDialog';
@@ -49,6 +51,8 @@ export default function TaskRow({
   const { activeTaskId, setActiveTask, selectedTasks, toggleTaskSelection, fadingTaskIds, markFading, unmarkFading, timers } = usePMStore();
   const focusTask = useFocusTask();
   const { data: activeWB } = useActiveWorkBlockRun();
+  const stopWBRun = useStopWorkBlockRun();
+  const { requestStartTimer, stopTimer } = useParallelTimers();
   // Per-row timer indicator: live ticking elapsed for whichever timer this row
   // owns (a running parallel per-task timer OR a work-block run on this task).
   // Updates once per second only when a relevant timer is active.
@@ -78,6 +82,34 @@ export default function TaskRow({
     || null;
   const isWorkBlock = resolvedTaskType?.key === 'work_block';
   const [expanded, setExpanded] = useState(false);
+
+  // Time tracked on this task: baseline seconds from task.time_tracked plus
+  // live elapsed time if currently being timed.
+  const totalTrackedSeconds = (task.time_tracked || 0) + (isTiming ? tickElapsed : 0);
+  const trackedText = totalTrackedSeconds > 0 ? (formatTracked(totalTrackedSeconds) || '<1m') : null;
+
+  const onTimerClick = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (isWorkBlockRun && activeWB) {
+      try {
+        await stopWBRun.mutateAsync({ run_id: activeWB.run.id, task_id: task.id });
+      } catch (err) {
+        console.error('Failed to stop work-block run:', err);
+      }
+      return;
+    }
+    if (isPerTaskTimer) {
+      await stopTimer(task.id);
+      return;
+    }
+    await requestStartTimer({
+      taskId: task.id,
+      taskTitle: task.title,
+      listId: effectiveListId || '',
+      baseTracked: task.time_tracked || 0,
+      isWorkBlock,
+    });
+  };
 
   // Track in-flight quick-date values so rapid clicks read the most recent sent
   // value rather than the stale React Query cache. Cleared when the cache
@@ -263,6 +295,7 @@ export default function TaskRow({
         data-fading={isFading}
         data-dimmed={dimmed || undefined}
         data-type={isWorkBlock ? 'work_block' : undefined}
+        data-tracking={isTiming || undefined}
         style={depth > 0 ? { paddingLeft: 20 + depth * 22 } : undefined}
       >
         {/* Checkbox — toggles done */}
@@ -369,13 +402,12 @@ export default function TaskRow({
             )}
             {isTiming && (
               <span
-                className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-semibold tabular-nums"
+                className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-semibold tabular-nums shrink-0"
                 style={{
                   background: isWorkBlockRun
                     ? 'color-mix(in oklch, #8b5cf6 18%, transparent)'
                     : 'rgba(16, 185, 129, 0.15)',
                   color: isWorkBlockRun ? '#7c3aed' : '#047857',
-                  flexShrink: 0,
                 }}
                 title={isWorkBlockRun ? 'Work-block run in progress' : 'Timer running'}
               >
@@ -392,6 +424,15 @@ export default function TaskRow({
                 {fmtClock(tickElapsed)}
               </span>
             )}
+            {trackedText && (
+              <span
+                className="lv-tracked"
+                data-live={isTiming || undefined}
+                title={isTiming ? `Tracked: ${trackedText} (timer active)` : `Tracked: ${trackedText}`}
+              >
+                {trackedText}
+              </span>
+            )}
             <FocusStarButton
               active={isFocused}
               variant="list"
@@ -399,6 +440,29 @@ export default function TaskRow({
               stopPropagation
               onToggle={(focused) => focusTask.mutate({ id: task.id, focused })}
             />
+            {canEdit && (
+              <button
+                type="button"
+                className="lv-timer-btn"
+                data-active={isTiming || undefined}
+                aria-label={isTiming ? 'Stop timer' : 'Start timer'}
+                title={isTiming ? 'Stop timer' : 'Start timer'}
+                onClick={onTimerClick}
+              >
+                {isTiming ? (
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                    <rect x="6" y="6" width="12" height="12" rx="2" />
+                  </svg>
+                ) : (
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <line x1="9.5" y1="2.5" x2="14.5" y2="2.5" />
+                    <line x1="12" y1="2.5" x2="12" y2="5" />
+                    <circle cx="12" cy="14" r="7.5" />
+                    <line x1="12" y1="14" x2="14.5" y2="11.5" />
+                  </svg>
+                )}
+              </button>
+            )}
             {visibleTags.map((t) => (
               <span
                 key={t.id}

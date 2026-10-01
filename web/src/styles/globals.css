@@ -3691,6 +3691,33 @@ body.sb-resizing { user-select: none; -webkit-user-select: none; cursor: col-res
   background: #2962ff;
   border-radius: 0 2px 2px 0;
 }
+/* Running timer highlight on list view rows — mirrors .hm-home .hm-task[data-tracking="true"] */
+.lv-canvas .lv-card .lv-row[data-tracking="true"],
+.lv-card .lv-card-body .lv-row[data-tracking="true"],
+.lv-card .lv-row[data-tracking="true"],
+.lv-row[data-tracking="true"] {
+  background: color-mix(in srgb, var(--hm-accent, #39C66B) 9%, transparent) !important;
+  box-shadow: inset 3px 0 0 var(--hm-accent, #39C66B) !important;
+}
+.lv-canvas .lv-card .lv-row[data-tracking="true"]:hover,
+.lv-card .lv-card-body .lv-row[data-tracking="true"]:hover,
+.lv-card .lv-row[data-tracking="true"]:hover,
+.lv-row[data-tracking="true"]:hover {
+  background: color-mix(in srgb, var(--hm-accent, #39C66B) 14%, transparent) !important;
+}
+.lv-canvas .lv-card .lv-row[data-tracking="true"][data-type="work_block"],
+.lv-card .lv-card-body .lv-row[data-tracking="true"][data-type="work_block"],
+.lv-card .lv-row[data-tracking="true"][data-type="work_block"],
+.lv-row[data-tracking="true"][data-type="work_block"] {
+  background: color-mix(in oklch, #8b5cf6 10%, transparent) !important;
+  box-shadow: inset 3px 0 0 #8b5cf6 !important;
+}
+.lv-canvas .lv-card .lv-row[data-tracking="true"][data-type="work_block"]:hover,
+.lv-card .lv-card-body .lv-row[data-tracking="true"][data-type="work_block"]:hover,
+.lv-card .lv-row[data-tracking="true"][data-type="work_block"]:hover,
+.lv-row[data-tracking="true"][data-type="work_block"]:hover {
+  background: color-mix(in oklch, #8b5cf6 16%, transparent) !important;
+}
 .lv-card .lv-cell {
   border-left: 1px solid var(--sh-hair-3);
   height: 100%;
@@ -3888,6 +3915,58 @@ body.sb-resizing { user-select: none; -webkit-user-select: none; cursor: col-res
     transition: none;
   }
   .focus-star-burst { display: none; }
+}
+
+/* Start / stop timer button on list view rows — hidden until row hover, kept visible
+   and accented while this task is the one being timed. Mirrors .hm-home .hm-task .hm-timer-btn */
+.lv-timer-btn {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border-radius: 4px;
+  background: transparent;
+  border: none;
+  color: var(--sh-ink-4);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.12s ease, color 0.12s ease, background 0.12s ease;
+  flex-shrink: 0;
+}
+.lv-row:hover .lv-timer-btn,
+.lv-timer-btn:focus-visible,
+.lv-timer-btn[data-active] {
+  opacity: 1;
+}
+.lv-timer-btn:hover {
+  background: var(--sh-hair-3);
+  color: var(--hm-accent, #39C66B);
+}
+.lv-timer-btn[data-active] {
+  color: var(--hm-accent, #39C66B);
+}
+@media (hover: none) {
+  .lv-row .lv-timer-btn { opacity: 1; }
+}
+
+/* Tracked time chip on list view rows — mirrors .hm-home .hm-task .hm-tracked */
+.lv-tracked {
+  font-family: 'Inter', sans-serif;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: color-mix(in srgb, var(--sh-ink) 55%, transparent);
+  background: color-mix(in srgb, var(--sh-ink) 7%, transparent);
+  border-radius: 999px;
+  padding: 1px 7px;
+  white-space: nowrap;
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+  line-height: 16px;
+}
+.lv-tracked[data-live] {
+  color: var(--hm-accent, #39C66B);
+  background: color-mix(in srgb, var(--hm-accent, #39C66B) 14%, transparent);
 }
 
 /* More button (6th column) */
