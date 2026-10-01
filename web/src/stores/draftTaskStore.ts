@@ -11,6 +11,9 @@ export type SerializableDraft = {
   priority: TaskPriority;
   assignee_ids: string[];
   work_date: string | null;
+  work_end_date?: string | null;
+  logged_time?: string;
+  timer_seconds?: number;
   start_date: string | null;
   due_date: string | null;
   task_type_id: string | null;

@@ -9,6 +9,7 @@ import { checkResourceAccess, meetsAccessLevel, requirePermission, isWorkspaceAd
 import { getUserRoleIds } from '../../utils/roles';
 import { PARTNER_USER_TYPES } from '@squadhub/shared';
 import { spawnRoutineInstance } from '../../services/routineSpawner';
+import { validateWorkRange } from '../../utils/taskWorkRange';
 import { todayIST } from '../../utils/ist';
 import { logTaskTimeEntry, ensureAssigneeOnTimeLogged, addDailyWorkSeconds, overlapsWorkBlockRun, consolidateContiguousEntries } from '../../utils/taskTime';
 import { getExcludedTaskIds } from '../../utils/taskViewReporting';
@@ -47,6 +48,8 @@ const createSchema = z.object({
   assignee_ids: z.array(z.string().uuid()).optional(),
   time_estimate: z.number().int().min(0).nullable().optional(),
   start_timer: z.boolean().optional(),
+  initial_logged_seconds: z.number().int().min(0).max(31536000).optional(),
+  initial_time_source: z.enum(['manual', 'timer']).optional(),
   metadata: z.record(z.string(), z.any()).optional(),
   recurrence: recurrenceSchema.nullable().optional(),
   tag_id: z.string().uuid().optional(),
@@ -1587,6 +1590,7 @@ router.post('/tasks/:id/companion-timer/claim', async (req: Request, res: Respon
 router.post('/tasks', async (req: Request, res: Response) => {
   try {
     const body = createSchema.parse(req.body);
+    validateWorkRange(body.work_date, body.metadata?.work_end_date);
 
     const userLevel = await checkResourceAccess(req.userId!, 'list', body.list_id);
     if (!userLevel || !meetsAccessLevel(userLevel, 'member')) {
@@ -1711,6 +1715,25 @@ router.post('/tasks', async (req: Request, res: Response) => {
       return;
     }
 
+    // Log creation-time work through the same history/reporting path as task timers.
+    if (body.initial_logged_seconds) {
+      const startedAt = new Date(Date.now() - body.initial_logged_seconds * 1000).toISOString();
+      const withinBlock = await overlapsWorkBlockRun(req.userId!, startedAt, new Date().toISOString());
+      const logged = await logTaskTimeEntry({
+        taskId: task.id, userId: req.userId!, startedAt,
+        durationSeconds: body.initial_logged_seconds,
+        source: body.initial_time_source || 'manual', skipDailySummary: withinBlock,
+      });
+      if (!logged.ok) {
+        // No time entry was written: remove the new task so retry cannot duplicate it.
+        await supabaseAdmin.from('tasks').delete().eq('id', task.id);
+        res.status(500).json({ success: false, error: `Could not save logged time: ${logged.error}` });
+        return;
+      }
+      task.time_tracked = body.initial_logged_seconds;
+      if (!task.assignee_ids?.length) task.assignee_ids = [req.userId!];
+    }
+
     // If the brand-new routine already fires today, materialise today's copy
     // immediately so the user sees it without waiting for the midnight cron.
     if (body.recurrence && taskRecurrenceOccursOn(body.recurrence as TaskRecurrence, todayIST())) {
@@ -1814,6 +1837,11 @@ router.put('/tasks/:id', async (req: Request, res: Response) => {
       .select('time_estimate, list_id, title, description, status, priority, due_date, work_date, start_date, task_type_id, assignee_ids, recurrence, metadata, parent_task_id')
       .eq('id', id)
       .single();
+    validateWorkRange(
+      body.work_date !== undefined ? body.work_date : prior?.work_date,
+      body.metadata !== undefined ? body.metadata.work_end_date : prior?.metadata?.work_end_date,
+    );
+
     const priorEstimate: number | null = (prior as any)?.time_estimate ?? null;
     const estimateListId: string | null = (prior as any)?.list_id ?? null;
 

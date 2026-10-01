@@ -24,7 +24,8 @@ import { showToast } from '../../../components/Toast';
 import { usePanelFileDrop } from './usePanelFileDrop';
 import { inputTimeToMinute, type Recurrence } from '../../../utils/workBlockRecurrence';
 import EstimatePopover from '../../../components/pm/EstimatePopover';
-import { formatDuration } from '../../../lib/timeDuration';
+import { useParallelTimers } from '../../../hooks/useParallelTimers';
+import { formatDuration, parseDuration } from '../../../lib/timeDuration';
 import AddEntrySplitButton from './AddEntrySplitButton';
 import { useIsMobile } from '../../../hooks/useIsMobile';
 
@@ -187,6 +188,9 @@ type Draft = {
   priority: TaskPriority;
   assignee_ids: string[];
   work_date: string | null;
+  work_end_date: string | null;
+  logged_time: string;
+  timer_seconds: number;
   start_date: string | null;
   due_date: string | null;
   task_type_id: string | null;
@@ -206,6 +210,9 @@ function makeDraft(defaultStatus: string | undefined): Draft {
     priority: 'none',
     assignee_ids: [],
     work_date: null,
+    work_end_date: null,
+    logged_time: '',
+    timer_seconds: 0,
     start_date: null,
     due_date: null,
     task_type_id: null,
@@ -228,6 +235,9 @@ function isDraftNonEmpty(d: Draft): boolean {
     d.checklists.length > 0 ||
     d.pendingFiles.length > 0 ||
     d.work_date !== null ||
+    d.work_end_date !== null ||
+    d.logged_time.trim().length > 0 ||
+    d.timer_seconds > 0 ||
     d.start_date !== null ||
     d.due_date !== null ||
     d.time_estimate !== null ||
@@ -376,11 +386,25 @@ export default function TaskCreatePanel({
   const [draft, setDraft] = useState<Draft>(() => {
     if (initialDraft) {
       // Older persisted drafts predate recurrence and subtask sections.
-      return { recurrence: null, subtaskSections: [], ...initialDraft, pendingFiles: [] };
+      return { ...makeDraft(initialStatus), ...initialDraft, pendingFiles: [] };
     }
     return makeDraft(initialStatus);
   });
   const [mounted, setMounted] = useState(false);
+  const { requestStartTimer, timers } = useParallelTimers();
+  const [draftTimerStartedAt, setDraftTimerStartedAt] = useState<number | null>(null);
+  const [timerNow, setTimerNow] = useState(Date.now());
+  useEffect(() => {
+    if (draftTimerStartedAt == null) return;
+    const interval = window.setInterval(() => setTimerNow(Date.now()), 1000);
+    return () => window.clearInterval(interval);
+  }, [draftTimerStartedAt]);
+  const draftTimerSeconds = draft.timer_seconds + (draftTimerStartedAt == null ? 0 : Math.max(0, Math.floor((timerNow - draftTimerStartedAt) / 1000)));
+  const captureTimerSeconds = () => draft.timer_seconds + (draftTimerStartedAt == null ? 0 : Math.max(0, Math.floor((Date.now() - draftTimerStartedAt) / 1000)));
+  const loggedMinutes = draft.logged_time.trim() ? parseDuration(draft.logged_time) : 0;
+  const invalidLoggedTime = loggedMinutes == null || loggedMinutes < 0 || loggedMinutes > 525600;
+  const invalidWorkRange = !!(draft.work_date && draft.work_end_date && Date.parse(draft.work_end_date) < Date.parse(draft.work_date));
+
 
   // When the task type resolves (or changes) normalize draft.status.
   // - task_type='task': status must be a TASK_STATUS_CATALOG key (default 'open')
@@ -423,6 +447,8 @@ export default function TaskCreatePanel({
   const [assigneePickerOpen, setAssigneePickerOpen] = useState(false);
   const [assigneeAnchorRect, setAssigneeAnchorRect] = useState<DOMRect | null>(null);
   const [workDateOpen, setWorkDateOpen] = useState(false);
+  const [workEndDateOpen, setWorkEndDateOpen] = useState(false);
+  const [workEndDateAnchor, setWorkEndDateAnchor] = useState<DOMRect | null>(null);
   const [workDateAnchor, setWorkDateAnchor] = useState<DOMRect | null>(null);
   const [startDateOpen, setStartDateOpen] = useState(false);
   const [startDateAnchor, setStartDateAnchor] = useState<DOMRect | null>(null);
@@ -515,6 +541,8 @@ export default function TaskCreatePanel({
   const canSubmit = draft.title.trim().length > 0
     && !!effectiveListId
     && !submitting
+    && !invalidLoggedTime
+    && !invalidWorkRange
     && (!isDesignTask || draft.description.trim().length > 0);
 
   // A pre-filled draft (e.g. a calendar slot's work date + estimate) that the
@@ -539,13 +567,13 @@ export default function TaskCreatePanel({
     // resuming that draft creates a duplicate. The panel closes itself once
     // the create resolves (handleSubmit -> onClose).
     if (submitting) return;
-    if (isDraftNonEmpty(draft) && !isUntouchedPrefill()) {
+    if ((isDraftNonEmpty(draft) || draftTimerStartedAt != null) && (!isUntouchedPrefill() || draftTimerStartedAt != null)) {
       // If resuming an existing draft, remove the old version first
       if (initialDraft?._draftId) {
         useDraftTaskStore.getState().removeDraft(initialDraft._draftId);
       }
       const { pendingFiles, ...serializable } = draft;
-      useDraftTaskStore.getState().saveDraft(serializable, selectedSpaceId, effectiveListId);
+      useDraftTaskStore.getState().saveDraft({ ...serializable, timer_seconds: captureTimerSeconds() }, selectedSpaceId, effectiveListId);
       showToast('Draft saved');
     } else if (initialDraft?._draftId) {
       // Draft was emptied out — remove the old one
@@ -573,7 +601,7 @@ export default function TaskCreatePanel({
 
   const handleSubmit = async () => {
     const title = draft.title.trim();
-    if (!title || !effectiveListId) return;
+    if (!canSubmit || !title || !effectiveListId) return;
     setSubmitting(true);
     try {
       // Build design metadata if this is a design task
@@ -594,7 +622,12 @@ export default function TaskCreatePanel({
         metadata = { ...(metadata || {}), subtask_sections: draft.subtaskSections };
       }
 
+      metadata = { ...(metadata || {}), work_end_date: draft.work_end_date };
+      const initialSeconds = captureTimerSeconds() + (loggedMinutes || 0) * 60;
       const newTask = await createTask.mutateAsync({
+        time_estimate: draft.time_estimate,
+        initial_logged_seconds: initialSeconds || undefined,
+        initial_time_source: loggedMinutes ? 'manual' : 'timer',
         title,
         description: draft.description.trim() || undefined,
         status: draft.status,
@@ -631,6 +664,14 @@ export default function TaskCreatePanel({
         }
       }
 
+      if (draftTimerStartedAt != null) {
+        try {
+          await requestStartTimer({ taskId: newTask.id, taskTitle: newTask.title, listId: newTask.list_id,
+            baseTracked: newTask.time_tracked || 0, isWorkBlock: currentType?.key === 'work_block' });
+        } catch {
+          showToast('Task and logged time saved. Start the timer from the task panel to continue.');
+        }
+      }
       // Subtasks
       for (const st of draft.subtasks) {
         try {
@@ -715,6 +756,7 @@ export default function TaskCreatePanel({
       onClose();
     } catch (err) {
       console.error('Failed to create task:', err);
+      showToast((err as any)?.response?.data?.error || 'Could not create task. Your draft is still here.');
     } finally {
       setSubmitting(false);
     }
@@ -881,7 +923,7 @@ export default function TaskCreatePanel({
           </div>
         )}
         {/* Top bar */}
-        <div className="td-head td-head-luma flex items-center gap-2 shrink-0">
+        <div className="td-head td-head-luma td-create-head flex items-center gap-2 shrink-0">
           <button
             type="button"
             onClick={handleClose}
@@ -956,7 +998,7 @@ export default function TaskCreatePanel({
               </span>
             )
           )}
-          <span className="text-[11.5px] text-[color:var(--sh-ink-4)] font-medium tracking-[0.01em]">
+          <span className="td-create-label text-[11.5px] text-[color:var(--sh-ink-4)] font-medium tracking-[0.01em]">
             {isDesignTask ? (isVideoTask ? 'NEW VIDEO TASK' : 'NEW DESIGN TASK') : 'NEW TASK'}
           </span>
           <div className="flex-1" />
@@ -982,6 +1024,7 @@ export default function TaskCreatePanel({
             className="td-pill-btn"
             style={{ opacity: 0.6 }}
             title="Discard"
+            disabled={submitting}
           >
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <polyline points="3 6 5 6 21 6" />
@@ -989,6 +1032,36 @@ export default function TaskCreatePanel({
               <path d="M10 11v6M14 11v6" />
               <path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2" />
             </svg>
+          </button>
+          <button
+            type="button"
+            className="td-pill-btn"
+            data-running={draftTimerStartedAt != null ? 'true' : undefined}
+            aria-label={draftTimerStartedAt == null ? 'Start timer' : 'Pause timer'}
+            title={draftTimerStartedAt == null && timers.length > 0
+              ? 'Stop your active task timer before timing this draft'
+              : draftTimerStartedAt == null ? 'Start timer' : 'Pause timer · continues after creation'}
+            disabled={submitting || (draftTimerStartedAt == null && timers.length > 0)}
+            style={{ padding: '0 8px', flexShrink: 0, fontVariantNumeric: 'tabular-nums' }}
+            onClick={() => {
+              if (draftTimerStartedAt != null) {
+                setDraft(d => ({ ...d, timer_seconds: captureTimerSeconds() }));
+                setDraftTimerStartedAt(null);
+              } else {
+                const now = Date.now(); setTimerNow(now); setDraftTimerStartedAt(now);
+              }
+            }}
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              {draftTimerStartedAt != null
+                ? <><rect x="6" y="4" width="4" height="16" rx="1" /><rect x="14" y="4" width="4" height="16" rx="1" /></>
+                : <path d="M7 4.8c0-.8.9-1.3 1.6-.9l11 7.2c.7.4.7 1.4 0 1.8l-11 7.2c-.7.4-1.6-.1-1.6-.9z" />}
+            </svg>
+            {(draftTimerStartedAt != null || draftTimerSeconds > 0) && (
+              <span style={{ fontSize: 11 }}>
+                {Math.floor(draftTimerSeconds / 3600).toString().padStart(2, '0')}:{Math.floor(draftTimerSeconds / 60 % 60).toString().padStart(2, '0')}:{(draftTimerSeconds % 60).toString().padStart(2, '0')}
+              </span>
+            )}
           </button>
           <button
             type="button"
@@ -1009,7 +1082,7 @@ export default function TaskCreatePanel({
         {/* Scrollable body */}
         <div className="td-scroll flex-1 overflow-y-auto px-6 pt-3 pb-8">
           {/* Title row */}
-          <div className="td-title-row flex items-start gap-3" style={{ marginBottom: 14 }}>
+          <div className="td-title-row td-create-title flex items-start gap-3" style={{ marginBottom: 14 }}>
             <span
               className="mt-[6px] td-checkbox-lg shrink-0"
               data-done="false"
@@ -1414,42 +1487,30 @@ export default function TaskCreatePanel({
                 </span>
               </div>
 
-              {/* Work date */}
-              <div
-                data-td="work" className="td-settings-row td-date-row"
-                data-half="true"
-                style={{ cursor: 'pointer' }}
-                onClick={(e) => {
-                  setWorkDateAnchor((e.currentTarget as HTMLElement).getBoundingClientRect());
-                  setWorkDateOpen(v => !v);
-                }}
-              >
-                <span className="k">{META_ICONS.WorkDate}Work date</span>
+              {/* Work range — same paired presentation as Start → Due. */}
+              <div className="td-settings-row td-dates-cell" data-half="true" data-td="work" style={{ cursor: 'default' }}>
+                <span className="k">{META_ICONS.WorkDate}Work dates</span>
                 <span className="v">
-                  <span className="td-date-text">
-                    {draft.work_date ? (
-                      formatDueRelative(draft.work_date).text
-                    ) : (
-                      <span className="td-prop-empty">Set date</span>
-                    )}
-                  </span>
-                  <button
-                    type="button"
-                    className="td-date-today-btn"
+                  <button type="button" className="td-date-half"
+                    data-empty={draft.work_date ? undefined : 'true'}
+                    aria-label="Work start date"
+                    title={draft.work_date ? `Work start ${formatDueRelative(draft.work_date).text}` : 'Set work start date'}
                     onClick={(e) => {
-                      e.stopPropagation();
-                      const next = nextQuickDate(draft.work_date);
-                      setDraft((d) => ({ ...d, work_date: next }));
-                    }}
-                    aria-label="Set work date to today / tomorrow"
-                    title="Click: today · Click again: tomorrow"
-                  >
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
-                      <line x1="16" y1="2" x2="16" y2="6" />
-                      <line x1="8" y1="2" x2="8" y2="6" />
-                      <line x1="3" y1="10" x2="21" y2="10" />
-                    </svg>
+                      setWorkDateAnchor(e.currentTarget.getBoundingClientRect());
+                      setWorkDateOpen(v => !v);
+                    }}>
+                    {draft.work_date ? formatDueRelative(draft.work_date).text : 'Start'}
+                  </button>
+                  <span className="td-date-arrow" aria-hidden>→</span>
+                  <button type="button" className="td-date-half"
+                    data-empty={draft.work_end_date ? undefined : 'true'}
+                    aria-label="Work end date"
+                    title={draft.work_end_date ? `Work end ${formatDueRelative(draft.work_end_date).text}` : 'Set work end date'}
+                    onClick={(e) => {
+                      setWorkEndDateAnchor(e.currentTarget.getBoundingClientRect());
+                      setWorkEndDateOpen(v => !v);
+                    }}>
+                    {draft.work_end_date ? formatDueRelative(draft.work_end_date).text : 'End'}
                   </button>
                 </span>
               </div>
@@ -1603,6 +1664,18 @@ export default function TaskCreatePanel({
                   )}
                 </span>
               </div>
+
+              <div className="td-settings-row" data-half="true" data-td="time">
+                <span className="k">{META_ICONS.Estimate}Time logged</span>
+                <span className="v" style={{ flexWrap: 'wrap' }}>
+                  <input aria-label="Time logged" placeholder="e.g. 1h 30m" value={draft.logged_time}
+                    disabled={submitting} aria-invalid={invalidLoggedTime}
+                    onChange={(e) => setDraft(d => ({ ...d, logged_time: e.target.value }))}
+                    style={{ width: 110, background: 'var(--surface-alt)', color: 'inherit', border: '1px solid var(--sh-hair-3)', borderRadius: 6, padding: '5px 8px' }} />
+                  {invalidLoggedTime && <span role="alert" style={{ color: 'var(--danger, #ef4444)', fontSize: 12 }}>Enter a positive duration, e.g. 30m or 1h.</span>}
+                </span>
+              </div>
+              {invalidWorkRange && <div role="alert" style={{ gridColumn: '1 / -1', padding: 12, color: 'var(--danger, #ef4444)' }}>Work end date must be on or after work start date.</div>}
 
               {/* Estimate — same shorthand popover as the task detail panel */}
               <div
@@ -2120,6 +2193,16 @@ export default function TaskCreatePanel({
           anchorRect={assigneeAnchorRect}
           onChange={(ids) => setDraft((d) => ({ ...d, assignee_ids: ids }))}
           onClose={() => setAssigneePickerOpen(false)}
+        />
+      )}
+
+      {workEndDateOpen && (
+        <DatePicker
+          anchorRect={workEndDateAnchor}
+          mode="datetime"
+          value={draft.work_end_date}
+          onClose={() => setWorkEndDateOpen(false)}
+          onChange={(next) => setDraft((d) => ({ ...d, work_end_date: next }))}
         />
       )}
 

@@ -162,6 +162,9 @@ export function useCreateTask(listId: string | null) {
   return useMutation({
     mutationFn: async (body: {
       title: string;
+      time_estimate?: number | null;
+      initial_logged_seconds?: number;
+      initial_time_source?: 'manual' | 'timer';
       status?: string;
       priority?: string;
       description?: string;
@@ -183,6 +186,10 @@ export function useCreateTask(listId: string | null) {
     onSuccess: (data, vars) => {
       const targetListId = vars.list_id || listId;
       invalidateTaskLists(qc, targetListId);
+      if (vars.initial_logged_seconds) {
+        qc.invalidateQueries({ queryKey: ['task-time-entries'] });
+        qc.invalidateQueries({ queryKey: ['folder-time-summary'] });
+      }
       qc.invalidateQueries({ queryKey: ['notifications', 'unread-count'] });
       qc.invalidateQueries({ queryKey: ['notifications', 'list'] });
       if (vars.parent_task_id) {
