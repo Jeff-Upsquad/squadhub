@@ -1,3 +1,4 @@
+import { showToast } from '../../../components/Toast';
 import { useState, useEffect, useMemo, useRef, useCallback, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { useQueryClient, useQuery } from '@tanstack/react-query';
@@ -177,7 +178,7 @@ function formatDueRelative(iso: string | null | undefined): { text: string; acce
 
 // ── Activity feed rendering ────────────────────────────────────────────────
 const ACTIVITY_FIELD_LABEL: Record<string, string> = {
-  due_date: 'due date', work_date: 'work date', start_date: 'start date',
+  due_date: 'due date', work_date: 'work start date', start_date: 'start date',
 };
 
 function fmtEstimate(m: unknown): string {
@@ -389,8 +390,7 @@ export default function TaskDetailPanel({
 
   // Track in-flight quick-date values so rapid clicks read the most recent
   // sent value rather than the stale React Query cache.
-  const pendingDates = useRef<{ work?: string | null; start?: string | null; due?: string | null }>({});
-  useEffect(() => { pendingDates.current.work = undefined; }, [task?.work_date]);
+  const pendingDates = useRef<{ start?: string | null; due?: string | null }>({});
   useEffect(() => { pendingDates.current.start = undefined; }, [task?.start_date]);
   useEffect(() => { pendingDates.current.due = undefined; }, [task?.due_date]);
   const deleteTask = useDeleteTask(listId);
@@ -515,6 +515,8 @@ export default function TaskDetailPanel({
   const [labelPickerOpen, setLabelPickerOpen] = useState(false);
   const [labelAnchorRect, setLabelAnchorRect] = useState<DOMRect | null>(null);
   const [workDateOpen, setWorkDateOpen] = useState(false);
+  const [workEndDateOpen, setWorkEndDateOpen] = useState(false);
+  const [workEndDateAnchor, setWorkEndDateAnchor] = useState<DOMRect | null>(null);
   const [workDateAnchor, setWorkDateAnchor] = useState<DOMRect | null>(null);
   const [startDateOpen, setStartDateOpen] = useState(false);
   const [startDateAnchor, setStartDateAnchor] = useState<DOMRect | null>(null);
@@ -2109,50 +2111,33 @@ export default function TaskDetailPanel({
                 </div>
 
                 <div className="td-m-group" data-td-group="plan">
-                {/* Work date */}
-                <div
-                  className="td-settings-row td-date-row"
-                  data-half="true"
-                  data-td="work"
-                  style={{ cursor: canEdit ? 'pointer' : 'default' }}
-                  onClick={canEdit ? (e) => {
-                    setWorkDateAnchor((e.currentTarget as HTMLElement).getBoundingClientRect());
-                    setWorkDateOpen(v => !v);
-                  } : undefined}
-                >
-                  <span className="k">{META_ICONS.WorkDate}Work date</span>
-                  <span className="v">
-                    <span className="td-date-text">
-                      {task.work_date ? (
-                        isMobile ? formatPlanDate(task.work_date) : formatDueRelative(task.work_date).text
-                      ) : (
-                        <span className="td-prop-empty">Set date</span>
-                      )}
-                    </span>
-                    {canEdit && (
-                      <button
-                        type="button"
-                        className="td-date-today-btn"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          const cur = pendingDates.current.work !== undefined ? pendingDates.current.work : task.work_date;
-                          const next = nextQuickDate(cur);
-                          pendingDates.current.work = next;
-                          updateTask.mutate({ id: task.id, work_date: next } as any);
-                        }}
-                        aria-label="Set work date to today / tomorrow"
-                        title="Click: today · Click again: tomorrow"
-                      >
-                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                          <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
-                          <line x1="16" y1="2" x2="16" y2="6" />
-                          <line x1="8" y1="2" x2="8" y2="6" />
-                          <line x1="3" y1="10" x2="21" y2="10" />
-                        </svg>
-                      </button>
-                    )}
-                  </span>
-                </div>
+              {/* Work range — same paired presentation as Start → Due. */}
+              <div className="td-settings-row td-dates-cell" data-half="true" data-td="work" style={{ cursor: 'default' }}>
+                <span className="k">{META_ICONS.WorkDate}Work dates</span>
+                <span className="v">
+                  <button type="button" className="td-date-half" disabled={!canEdit}
+                    data-empty={task.work_date ? undefined : 'true'}
+                    aria-label="Work start date"
+                    title={task.work_date ? `Work start ${formatDueRelative(task.work_date).text}` : 'Set work start date'}
+                    onClick={(e) => {
+                      setWorkDateAnchor(e.currentTarget.getBoundingClientRect());
+                      setWorkDateOpen(v => !v);
+                    }}>
+                    {task.work_date ? formatDueRelative(task.work_date).text : 'Start'}
+                  </button>
+                  <span className="td-date-arrow" aria-hidden>→</span>
+                  <button type="button" className="td-date-half" disabled={!canEdit}
+                    data-empty={task.metadata?.work_end_date ? undefined : 'true'}
+                    aria-label="Work end date"
+                    title={task.metadata?.work_end_date ? `Work end ${formatDueRelative(task.metadata?.work_end_date).text}` : 'Set work end date'}
+                    onClick={(e) => {
+                      setWorkEndDateAnchor(e.currentTarget.getBoundingClientRect());
+                      setWorkEndDateOpen(v => !v);
+                    }}>
+                    {task.metadata?.work_end_date ? formatDueRelative(task.metadata?.work_end_date).text : 'End'}
+                  </button>
+                </span>
+              </div>
 
                 {/* Dates — desktop folds Start + Due into one "Start → Due" row;
                     each half opens its own picker. Mobile keeps separate rows. */}
@@ -3086,12 +3071,32 @@ export default function TaskDetailPanel({
         />
       )}
 
+      {workEndDateOpen && task && (
+        <DatePicker
+          anchorRect={workEndDateAnchor}
+          mode="datetime"
+          value={task.metadata?.work_end_date ?? null}
+          onClose={() => setWorkEndDateOpen(false)}
+          onChange={(next) => {
+            if (next && task.work_date && Date.parse(next) < Date.parse(task.work_date)) {
+              showToast('Work end date must be on or after work start date'); return;
+            }
+            updateTask.mutate({ id: task.id, metadata: { ...task.metadata, work_end_date: next } });
+          }}
+        />
+      )}
+
       {workDateOpen && task && (
         <DatePicker
           anchorRect={workDateAnchor}
           value={task.work_date}
           mode="datetime"
-          onChange={(next) => updateTask.mutate({ id: task.id, work_date: next })}
+          onChange={(next) => {
+            if (next && task.metadata?.work_end_date && Date.parse(next) > Date.parse(task.metadata.work_end_date)) {
+              showToast('Work start date must be on or before work end date'); return;
+            }
+            updateTask.mutate({ id: task.id, work_date: next });
+          }}
           onClose={() => setWorkDateOpen(false)}
         />
       )}

@@ -669,6 +669,8 @@ export interface WhiteboardData {
 }
 
 export interface TaskMetadata {
+  /** End of the planned work range; work_date remains its start. */
+  work_end_date?: string | null;
   format?: string;
   audience?: string;
   tone?: string;
