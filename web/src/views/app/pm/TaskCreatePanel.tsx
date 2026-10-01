@@ -442,7 +442,26 @@ export default function TaskCreatePanel({
   const focusTask = useFocusTask();
   const filePickerRef = useRef<HTMLInputElement>(null);
   const checklistInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
+  const subtaskInputRef = useRef<HTMLInputElement | null>(null);
+  const justOpenedDraftSubtaskRef = useRef(false);
   const isMobile = useIsMobile();
+
+  useEffect(() => {
+    if (newSubtaskTitle !== null) {
+      const frame = window.requestAnimationFrame(() => {
+        subtaskInputRef.current?.focus();
+        subtaskInputRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      });
+      const timer = window.setTimeout(() => {
+        justOpenedDraftSubtaskRef.current = false;
+      }, 200);
+      return () => {
+        window.cancelAnimationFrame(frame);
+        window.clearTimeout(timer);
+      };
+    }
+    justOpenedDraftSubtaskRef.current = false;
+  }, [newSubtaskTitle !== null]);
   // Desktop collapsibles — v3 parity with TaskDetailPanel: collapsible Details
   // card + collapsible tray sections. Mobile keeps the legacy open layout.
   const [detailsCollapsed, setDetailsCollapsed] = useState(false);
@@ -727,9 +746,12 @@ export default function TaskCreatePanel({
     setNewSubtaskTitle('');
   };
 
-  const startDraftSubtask = () => {
+  const startDraftSubtask = (e?: React.SyntheticEvent) => {
+    e?.preventDefault();
+    setCollapsedSecs((prev) => ({ ...prev, subtasks: false }));
     const lastSection = draft.subtaskSections.at(-1);
     setNewSubtaskSectionId(lastSection?.id || null);
+    justOpenedDraftSubtaskRef.current = true;
     setNewSubtaskTitle('');
   };
 
@@ -771,7 +793,9 @@ export default function TaskCreatePanel({
     window.requestAnimationFrame(() => checklistInputRefs.current[checklistId]?.focus());
   };
 
-  const startDraftChecklistItem = () => {
+  const startDraftChecklistItem = (e?: React.SyntheticEvent) => {
+    e?.preventDefault();
+    setCollapsedSecs((prev) => ({ ...prev, checklist: false }));
     const existing = draft.checklists.at(-1);
     if (existing) {
       focusDraftChecklistItem(existing.id);
@@ -1856,6 +1880,7 @@ export default function TaskCreatePanel({
             )}
             {newSubtaskTitle !== null ? (
               <input
+                ref={subtaskInputRef}
                 autoFocus
                 value={newSubtaskTitle}
                 onChange={(e) => setNewSubtaskTitle(e.target.value)}
@@ -1868,7 +1893,10 @@ export default function TaskCreatePanel({
                     setNewSubtaskTitle(null);
                   }
                 }}
-                onBlur={() => addDraftSubtask(newSubtaskTitle, false)}
+                onBlur={() => {
+                  if (justOpenedDraftSubtaskRef.current) return;
+                  addDraftSubtask(newSubtaskTitle, false);
+                }}
                 placeholder="Subtask title, Enter to add"
                 className="w-full bg-transparent px-3.5 py-2.5 text-[13.5px] outline-none"
                 style={{ borderTop: '1px solid var(--sh-hair-3)' }}
@@ -1877,6 +1905,10 @@ export default function TaskCreatePanel({
               <button
                 type="button"
                 className="td-subtask-add-row"
+                onPointerDown={(e) => {
+                  e.preventDefault();
+                  startDraftSubtask(e);
+                }}
                 onClick={startDraftSubtask}
               >
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
