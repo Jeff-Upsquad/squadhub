@@ -244,7 +244,12 @@ function renderActivity(e: ActivityForRender): { icon: string; body: React.React
     case 'created': return { icon: '○', body: line('created the task') };
     case 'comment': return { icon: '○', body: line('commented') };
     case 'subtask_added': return { icon: '◇', body: line('added subtask', entityName(e.new_value)) };
-    case 'assignee_added': return { icon: '◉', body: line('assigned', entityName(e.new_value)) };
+    case 'assignee_added': return {
+      icon: '◉',
+      body: (e.new_value as { source?: string } | null)?.source === 'time_tracked'
+        ? line('was added as an assignee from time tracked')
+        : line('assigned', entityName(e.new_value)),
+    };
     case 'assignee_removed': return { icon: '◎', body: line('unassigned', entityName(e.old_value)) };
     case 'label_added': return { icon: '◆', body: line('added label', entityName(e.new_value)) };
     case 'label_removed': return { icon: '◇', body: line('removed label', entityName(e.old_value)) };

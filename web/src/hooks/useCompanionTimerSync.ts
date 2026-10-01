@@ -3,6 +3,9 @@ import { useQueryClient } from '@tanstack/react-query';
 import api from '../services/api';
 import { usePMStore, MAX_PARALLEL_TIMERS } from '../stores/pmStore';
 import { flushTimerShares } from './useParallelTimers';
+import { offerWorkTimer } from '../services/timerMode';
+import { useWorkspaceStore } from '../stores/workspaceStore';
+import { useAuthStore } from '../stores/authStore';
 
 interface PendingCompanionTimer {
   id: string;
@@ -49,6 +52,11 @@ export function useCompanionTimerSync(userId: string | undefined) {
               qc.invalidateQueries({ queryKey: ['my-tasks'] });
               qc.invalidateQueries({ queryKey: ['tasks'] });
               qc.invalidateQueries({ queryKey: ['new-tasks'] });
+              const userType = useAuthStore.getState().user?.user_type;
+              await offerWorkTimer(qc, {
+                workspaceId: useWorkspaceStore.getState().currentWorkspace?.id,
+                context: userType === 'partner' || userType === 'partner_employee' ? 'partners' : 'teammates',
+              });
             }
           } catch (err) {
             // One inaccessible or already-claimed task must not hold up the rest.
