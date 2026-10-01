@@ -1,5 +1,9 @@
 import { useQueryClient, type QueryClient } from '@tanstack/react-query';
 import api from '../services/api';
+import { useWorkspaceStore } from '../stores/workspaceStore';
+import { useIsPartner } from './useUserType';
+import { useTimerPromptStore } from '../stores/timerPromptStore';
+import { offerWorkTimer } from '../services/timerMode';
 import { usePMStore, MAX_PARALLEL_TIMERS } from '../stores/pmStore';
 import type { PendingTimerStart, TimerShare } from '../stores/pmStore';
 import {
@@ -91,6 +95,9 @@ export type StartTimerResult = 'started' | 'conflict' | 'noop';
 // identical no matter where the click happened.
 export function useParallelTimers() {
   const qc = useQueryClient();
+  const workspaceId = useWorkspaceStore((s) => s.currentWorkspace?.id);
+  const isPartner = useIsPartner();
+  const context = isPartner ? 'partners' : 'teammates';
   const timers = usePMStore((s) => s.timers);
   const activeWorkBlock = useActiveWorkBlockRun();
   const startWorkBlockRun = useStartWorkBlockRun();
@@ -111,8 +118,10 @@ export function useParallelTimers() {
   // it (e.g. via the companion app's complete-on-add) are never logged
   // against the block.
   const startWorkBlockTarget = async (target: PendingTimerStart): Promise<boolean> => {
+    if (useTimerPromptStore.getState().prompt) return false;
     if (wbRun && wbRun.task.id === target.taskId) return false;
     try {
+      await offerWorkTimer(qc, { workspaceId, context });
       const run = await startWorkBlockRun.mutateAsync({ task_id: target.taskId });
       for (const t of timers) {
         if (t.taskId !== target.taskId) openTaskTime.mutate({ run_id: run.id, task_id: t.taskId });
@@ -127,7 +136,10 @@ export function useParallelTimers() {
   // Start without the conflict gate — the fast path when nothing is running,
   // and the dialog's "add as secondary" confirm.
   const startTimer = async (target: PendingTimerStart): Promise<boolean> => {
+    if (useTimerPromptStore.getState().prompt) return false;
     if (target.isWorkBlock) return startWorkBlockTarget(target);
+    if (usePMStore.getState().timers.some((t) => t.taskId === target.taskId)) return false;
+    await offerWorkTimer(qc, { workspaceId, context });
     const res = usePMStore
       .getState()
       .startParallelTimer(target.taskId, target.taskTitle, target.listId, target.baseTracked);

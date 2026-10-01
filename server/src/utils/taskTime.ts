@@ -1,5 +1,6 @@
 import { supabaseAdmin } from '../supabase';
 import { IST_OFFSET_MS } from './ist';
+import { logTaskActivity } from './taskActivity';
 import { isTaskExcludedFromTimeReports } from './taskViewReporting';
 
 export type LogTaskTimeSource = 'timer' | 'manual' | 'work_block';
@@ -156,10 +157,23 @@ export async function ensureAssigneeOnTimeLogged(
   currentAssigneeIds: string[] | null,
 ): Promise<void> {
   if (!currentAssigneeIds || currentAssigneeIds.length === 0) {
-    await supabaseAdmin
+    // Attribute self-assignment to the logger. The assignment trigger skips
+    // notifying the actor, so this automatic fallback creates no notification.
+    // Re-check in the UPDATE to preserve an assignee added since the caller read.
+    const { data, error } = await supabaseAdmin
       .from('tasks')
-      .update({ assignee_ids: [userId] })
-      .eq('id', taskId);
+      .update({ assignee_ids: [userId], last_modified_by: userId })
+      .eq('id', taskId)
+      .or('assignee_ids.is.null,assignee_ids.eq.{}')
+      .select('id');
+    if (error || !data?.length) return;
+
+    const { data: user } = await supabaseAdmin
+      .from('users').select('display_name, email').eq('id', userId).maybeSingle();
+    await logTaskActivity(taskId, userId, [{
+      event_type: 'assignee_added',
+      new_value: { id: userId, name: user?.display_name || user?.email || 'Unknown', source: 'time_tracked' },
+    }]);
   }
 }
 
