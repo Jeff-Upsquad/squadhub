@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useQueries } from '@tanstack/react-query';
 import api from '../../../services/api';
 import { useSpaces, useSpace } from '../../../hooks/useSpaces';
@@ -53,7 +53,10 @@ export default function ListPickerCombobox({
   renderTrigger,
   open: openProp,
   onOpenChange,
+  anchorRect,
 }: {
+  /** Viewport anchor for pickers opened from a row action. */
+  anchorRect?: DOMRect | null;
   workspaceId: string;
   selectedListId: string | null;
   selectedListName?: string | null;
@@ -89,6 +92,42 @@ export default function ListPickerCombobox({
   });
   const containerRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
+  const popupRef = useRef<HTMLDivElement>(null);
+  const [placement, setPlacement] = useState({ top: 0, left: 0, width: 340, maxHeight: 424 });
+
+  useLayoutEffect(() => {
+    if (!open || !anchorRect) return;
+    const update = () => {
+      const margin = 8;
+      const gap = 4;
+      const width = Math.min(340, Math.max(0, window.innerWidth - margin * 2));
+      const below = Math.max(0, window.innerHeight - margin - anchorRect.bottom - gap);
+      const above = Math.max(0, anchorRect.top - gap - margin);
+      const popup = popupRef.current;
+      const header = popup?.firstElementChild as HTMLElement | null;
+      const list = popup?.lastElementChild as HTMLElement | null;
+      // Measure the contents rather than the constrained panel so expanding a
+      // space or resizing the window can restore the available height.
+      const desiredHeight = Math.min((header?.offsetHeight || 64) + Math.min(list?.scrollHeight || 360, 360) + 2, 424);
+      const opensAbove = below < desiredHeight && above > below;
+      const maxHeight = Math.min(424, opensAbove ? above : below, window.innerHeight - margin * 2);
+      const height = Math.min(desiredHeight, maxHeight);
+      setPlacement({
+        top: Math.max(margin, Math.min(opensAbove ? anchorRect.top - gap - height : anchorRect.bottom + gap, window.innerHeight - margin - height)),
+        left: Math.max(margin, Math.min(anchorRect.left, window.innerWidth - margin - width)),
+        width,
+        maxHeight,
+      });
+    };
+    update();
+    const observer = new ResizeObserver(update);
+    if (popupRef.current) observer.observe(popupRef.current);
+    window.addEventListener('resize', update);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', update);
+    };
+  }, [open, anchorRect]);
 
   // Close on outside click
   useEffect(() => {
@@ -170,11 +209,12 @@ export default function ListPickerCombobox({
 
       {open && (
         <div
-          className="absolute left-0 top-full z-[100] mt-1 w-[340px] overflow-hidden rounded-xl border shadow-xl"
-          style={{ borderColor: 'var(--sh-hair)', background: 'var(--surface)' }}
+          ref={popupRef}
+          className={`${anchorRect ? 'fixed flex flex-col' : 'absolute left-0 top-full mt-1 w-[340px]'} z-[100] overflow-hidden rounded-xl border shadow-xl`}
+          style={{ borderColor: 'var(--sh-hair)', background: 'var(--surface)', ...(anchorRect ? placement : {}) }}
           onMouseDown={(e) => e.stopPropagation()}
         >
-          <div className="p-3">
+          <div className="shrink-0 p-3">
             <div
               className="flex items-center gap-2 rounded-md border px-2 py-1.5"
               style={{ borderColor: 'var(--sh-hair)', background: 'var(--surface)' }}
@@ -194,7 +234,7 @@ export default function ListPickerCombobox({
             </div>
           </div>
 
-          <div className="max-h-[360px] overflow-y-auto px-2 pb-3">
+          <div className="min-h-0 max-h-[360px] overflow-y-auto overscroll-contain px-2 pb-3">
             {searching ? (
               <SearchResults
                 spaces={spaces || []}

@@ -475,8 +475,9 @@ export default function NewTaskRow({
         />
       )}
       {editor === 'movelist' && workspaceId && anchorRect && typeof document !== 'undefined' && createPortal(
-        <div style={{ position: 'fixed', top: anchorRect.bottom + 4, left: Math.min(anchorRect.left, window.innerWidth - 352), zIndex: 100 }}>
+        <div>
           <ListPickerCombobox
+            anchorRect={anchorRect}
             workspaceId={workspaceId}
             selectedListId={primaryListId}
             selectedListName={listName || null}
@@ -493,8 +494,9 @@ export default function NewTaskRow({
         document.body,
       )}
       {editor === 'addlist' && workspaceId && anchorRect && typeof document !== 'undefined' && createPortal(
-        <div style={{ position: 'fixed', top: anchorRect.bottom + 4, left: Math.min(anchorRect.left, window.innerWidth - 352), zIndex: 100 }}>
+        <div>
           <ListPickerCombobox
+            anchorRect={anchorRect}
             workspaceId={workspaceId}
             selectedListId={null}
             selectedListName={null}
