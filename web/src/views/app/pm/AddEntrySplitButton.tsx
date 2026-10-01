@@ -23,6 +23,15 @@ export default function AddEntrySplitButton({
 }: Props) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
+  const lastAddRef = useRef(0);
+
+  const handleAdd = (e?: React.SyntheticEvent) => {
+    if (disabled) return;
+    const now = Date.now();
+    if (now - lastAddRef.current < 250) return;
+    lastAddRef.current = now;
+    onAdd();
+  };
 
   useEffect(() => {
     if (!open) return undefined;
@@ -45,7 +54,12 @@ export default function AddEntrySplitButton({
       <button
         type="button"
         className="td-entry-split-main"
-        onClick={onAdd}
+        onPointerDown={(e) => {
+          if (disabled) return;
+          e.preventDefault();
+          handleAdd(e);
+        }}
+        onClick={handleAdd}
         disabled={disabled}
       >
         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden>
@@ -71,6 +85,11 @@ export default function AddEntrySplitButton({
           <button
             type="button"
             role="menuitem"
+            onPointerDown={(e) => {
+              e.preventDefault();
+              setOpen(false);
+              onAddSection();
+            }}
             onClick={() => {
               setOpen(false);
               onAddSection();

@@ -524,6 +524,12 @@ export default function TaskDetailPanel({
   const [newSubtaskSectionId, setNewSubtaskSectionId] = useState<string | null>(null);
   const [checklistFocusId, setChecklistFocusId] = useState<string | null>(null);
   const checklistInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
+  const subtaskInputRef = useRef<HTMLInputElement | null>(null);
+  const justOpenedSubtaskRef = useRef(false);
+  const subtaskSectionInputRef = useRef<HTMLInputElement | null>(null);
+  const justOpenedSubtaskSectionRef = useRef(false);
+  const checklistTitleInputRef = useRef<HTMLInputElement | null>(null);
+  const justOpenedChecklistTitleRef = useRef(false);
   const [mounted, setMounted] = useState(false);
   const [mainCelebrating, setMainCelebrating] = useState(false);
   const [celebratingSubtaskId, setCelebratingSubtaskId] = useState<string | null>(null);
@@ -539,6 +545,11 @@ export default function TaskDetailPanel({
 
   useEffect(() => {
     if (!effectiveTaskId) { setMounted(false); return undefined; }
+    setNewSubtaskTitle(null);
+    setNewSubtaskSectionTitle(null);
+    setNewSubtaskSectionId(null);
+    setNewChecklistTitle(null);
+    setChecklistFocusId(null);
     // Defer one tick so the initial off-screen transform paints before the
     // mounted state flips — keeps the slide-in animation visible.
     const id = window.setTimeout(() => setMounted(true), 0);
@@ -551,11 +562,63 @@ export default function TaskDetailPanel({
       const input = checklistInputRefs.current[checklistFocusId];
       if (input) {
         input.focus();
+        input.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
         setChecklistFocusId(null);
       }
     });
     return () => window.cancelAnimationFrame(id);
   }, [checklistFocusId, checklists]);
+
+  useEffect(() => {
+    if (newSubtaskTitle !== null) {
+      const frame = window.requestAnimationFrame(() => {
+        subtaskInputRef.current?.focus();
+        subtaskInputRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      });
+      const timer = window.setTimeout(() => {
+        justOpenedSubtaskRef.current = false;
+      }, 200);
+      return () => {
+        window.cancelAnimationFrame(frame);
+        window.clearTimeout(timer);
+      };
+    }
+    justOpenedSubtaskRef.current = false;
+  }, [newSubtaskTitle !== null]);
+
+  useEffect(() => {
+    if (newSubtaskSectionTitle !== null) {
+      const frame = window.requestAnimationFrame(() => {
+        subtaskSectionInputRef.current?.focus();
+        subtaskSectionInputRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      });
+      const timer = window.setTimeout(() => {
+        justOpenedSubtaskSectionRef.current = false;
+      }, 200);
+      return () => {
+        window.cancelAnimationFrame(frame);
+        window.clearTimeout(timer);
+      };
+    }
+    justOpenedSubtaskSectionRef.current = false;
+  }, [newSubtaskSectionTitle !== null]);
+
+  useEffect(() => {
+    if (newChecklistTitle !== null) {
+      const frame = window.requestAnimationFrame(() => {
+        checklistTitleInputRef.current?.focus();
+        checklistTitleInputRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      });
+      const timer = window.setTimeout(() => {
+        justOpenedChecklistTitleRef.current = false;
+      }, 200);
+      return () => {
+        window.cancelAnimationFrame(frame);
+        window.clearTimeout(timer);
+      };
+    }
+    justOpenedChecklistTitleRef.current = false;
+  }, [newChecklistTitle !== null]);
 
   useEffect(() => {
     if (!effectiveTaskId) return undefined;
@@ -938,7 +1001,9 @@ export default function TaskDetailPanel({
     setNewSubtaskTitle('');
   };
 
-  const startSubtask = () => {
+  const startSubtask = (e?: React.SyntheticEvent) => {
+    e?.preventDefault();
+    setCollapsedSecs((prev) => ({ ...prev, subtasks: false }));
     const rawSections = task?.metadata?.subtask_sections;
     const lastSection = Array.isArray(rawSections) ? rawSections.at(-1) : null;
     setNewSubtaskSectionId(
@@ -946,18 +1011,53 @@ export default function TaskDetailPanel({
         ? (lastSection as { id: string }).id
         : null,
     );
+    justOpenedSubtaskRef.current = true;
     setNewSubtaskTitle('');
   };
 
-  const startChecklistItem = () => {
+  const startChecklistItem = (e?: React.SyntheticEvent) => {
+    e?.preventDefault();
+    setCollapsedSecs((prev) => ({ ...prev, checklist: false }));
     const existing = checklists?.at(-1);
     if (existing) {
       setChecklistFocusId(existing.id);
       return;
     }
-    createChecklist.mutate('Checklist', {
-      onSuccess: (created) => setChecklistFocusId(created.id),
+    const tempId = `temp-cl-${Date.now()}`;
+    setChecklistFocusId(tempId);
+    createChecklist.mutate({ title: 'Checklist', id: tempId }, {
+      onSuccess: (created) => {
+        setNewItemDrafts((prev) => {
+          if (prev[tempId]) {
+            const { [tempId]: draftVal, ...rest } = prev;
+            return { ...rest, [created.id]: draftVal };
+          }
+          return prev;
+        });
+      },
     });
+  };
+
+  const submitNewChecklistTitle = (rawTitle: string) => {
+    const t = rawTitle.trim();
+    if (t) {
+      const tempId = `temp-cl-${Date.now()}`;
+      setNewChecklistTitle(null);
+      setChecklistFocusId(tempId);
+      createChecklist.mutate({ title: t, id: tempId }, {
+        onSuccess: (created) => {
+          setNewItemDrafts((prev) => {
+            if (prev[tempId]) {
+              const { [tempId]: draftVal, ...rest } = prev;
+              return { ...rest, [created.id]: draftVal };
+            }
+            return prev;
+          });
+        },
+      });
+    } else {
+      setNewChecklistTitle(null);
+    }
   };
 
   const handleCopyLink = async () => {
@@ -2412,7 +2512,9 @@ export default function TaskDetailPanel({
                     sectionLabel="Create subtask section"
                     onAdd={startSubtask}
                     onAddSection={() => {
+                      setCollapsedSecs((prev) => ({ ...prev, subtasks: false }));
                       setNewSubtaskTitle(null);
+                      justOpenedSubtaskSectionRef.current = true;
                       setNewSubtaskSectionTitle('');
                     }}
                     disabled={newSubtaskTitle !== null || newSubtaskSectionTitle !== null}
@@ -2435,6 +2537,7 @@ export default function TaskDetailPanel({
                   ))}
                   {canEdit && newSubtaskSectionTitle !== null && (
                     <input
+                      ref={subtaskSectionInputRef}
                       autoFocus
                       value={newSubtaskSectionTitle}
                       onChange={(e) => setNewSubtaskSectionTitle(e.target.value)}
@@ -2448,6 +2551,7 @@ export default function TaskDetailPanel({
                         }
                       }}
                       onBlur={(e) => {
+                        if (justOpenedSubtaskSectionRef.current) return;
                         if (e.currentTarget.dataset.cancel === 'true') setNewSubtaskSectionTitle(null);
                         else addSubtaskSection(newSubtaskSectionTitle);
                       }}
@@ -2457,6 +2561,7 @@ export default function TaskDetailPanel({
                   )}
                   {canEdit && newSubtaskTitle !== null ? (
                     <input
+                      ref={subtaskInputRef}
                       autoFocus
                       value={newSubtaskTitle}
                       onChange={(e) => setNewSubtaskTitle(e.target.value)}
@@ -2469,7 +2574,10 @@ export default function TaskDetailPanel({
                           setNewSubtaskTitle(null);
                         }
                       }}
-                      onBlur={() => addSubtask(newSubtaskTitle, false)}
+                      onBlur={() => {
+                        if (justOpenedSubtaskRef.current) return;
+                        addSubtask(newSubtaskTitle, false);
+                      }}
                       placeholder="Subtask title, Enter to add"
                       className="w-full bg-transparent px-3.5 py-2.5 text-[13.5px] outline-none"
                       style={{ borderTop: '1px solid var(--sh-hair-3)' }}
@@ -2478,6 +2586,10 @@ export default function TaskDetailPanel({
                     <button
                       type="button"
                       className="td-subtask-add-row"
+                      onPointerDown={(e) => {
+                        e.preventDefault();
+                        startSubtask(e);
+                      }}
                       onClick={startSubtask}
                     >
                       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
@@ -2508,7 +2620,11 @@ export default function TaskDetailPanel({
                     label="Add checklist"
                     sectionLabel="Create checklist section"
                     onAdd={startChecklistItem}
-                    onAddSection={() => setNewChecklistTitle('')}
+                    onAddSection={() => {
+                      setCollapsedSecs((prev) => ({ ...prev, checklist: false }));
+                      justOpenedChecklistTitleRef.current = true;
+                      setNewChecklistTitle('');
+                    }}
                     compact
                   />
                 )}
@@ -2517,30 +2633,18 @@ export default function TaskDetailPanel({
               {secOpen('checklist') && (<>
               {canEdit && newChecklistTitle !== null && (
                 <input
+                  ref={checklistTitleInputRef}
                   autoFocus
                   value={newChecklistTitle}
                   onChange={(e) => setNewChecklistTitle(e.target.value)}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') {
-                      const t = newChecklistTitle.trim();
-                      if (t) createChecklist.mutate(t, {
-                        onSuccess: (created) => {
-                          setNewChecklistTitle(null);
-                          setChecklistFocusId(created.id);
-                        },
-                      });
-                      else setNewChecklistTitle(null);
+                      submitNewChecklistTitle(newChecklistTitle);
                     } else if (e.key === 'Escape') setNewChecklistTitle(null);
                   }}
                   onBlur={() => {
-                    const t = newChecklistTitle.trim();
-                    if (t) createChecklist.mutate(t, {
-                      onSuccess: (created) => {
-                        setNewChecklistTitle(null);
-                        setChecklistFocusId(created.id);
-                      },
-                    });
-                    else setNewChecklistTitle(null);
+                    if (justOpenedChecklistTitleRef.current) return;
+                    submitNewChecklistTitle(newChecklistTitle);
                   }}
                   placeholder="Checklist name, Enter to create"
                   className="mb-2 w-full rounded-lg border bg-transparent px-3 py-1.5 text-[13px] outline-none"
