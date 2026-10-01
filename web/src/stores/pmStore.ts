@@ -55,10 +55,11 @@ export interface TimerState {
   baseTracked: number;
 }
 
-// Parallel timers: 1 primary + up to 3 secondary. `timers[0]` is always the
+// Parallel timers: 1 primary + up to 5 secondary. `timers[0]` is always the
 // earliest-started running timer — that's the primary by definition; when it
 // stops, the next-earliest secondary is promoted implicitly.
-export const MAX_PARALLEL_TIMERS = 4;
+export const MAX_SECONDARY_TIMERS = 5;
+export const MAX_PARALLEL_TIMERS = MAX_SECONDARY_TIMERS + 1;
 
 // One task's slice of a closed timer segment. Wall-clock time between two
 // timer start/stop events is divided evenly among every timer that was running

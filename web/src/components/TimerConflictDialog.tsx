@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { usePMStore, MAX_PARALLEL_TIMERS } from '../stores/pmStore';
+import { usePMStore, MAX_PARALLEL_TIMERS, MAX_SECONDARY_TIMERS } from '../stores/pmStore';
 import { useParallelTimers } from '../hooks/useParallelTimers';
 import { formatClock } from '../lib/formatDuration';
 
@@ -74,7 +74,7 @@ export default function TimerConflictDialog() {
           </div>
 
           {timers.length > 0 && (
-            <div className="mb-3 overflow-hidden rounded-xl border" style={{ borderColor: 'var(--sh-hair)' }}>
+            <div className="mb-3 max-h-[260px] overflow-y-auto rounded-xl border" style={{ borderColor: 'var(--sh-hair)' }}>
               {timers.map((t, i) => (
                 <div
                   key={t.taskId}
@@ -150,7 +150,7 @@ export default function TimerConflictDialog() {
             {noneLeft ? (
               <>It becomes the primary timer.</>
             ) : atMax ? (
-              <>Maximum of 3 secondary timers reached — stop one of the running timers first.</>
+              <>Maximum of {MAX_SECONDARY_TIMERS} secondary timers reached — stop one of the running timers first.</>
             ) : (
               <>as a secondary timer? While timers run in parallel, tracked time is split evenly between them.</>
             )}
