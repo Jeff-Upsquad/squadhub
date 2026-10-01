@@ -391,7 +391,7 @@ export default function TaskCreatePanel({
     return makeDraft(initialStatus);
   });
   const [mounted, setMounted] = useState(false);
-  const { requestStartTimer, timers } = useParallelTimers();
+  const { requestStartTimer } = useParallelTimers();
   const [draftTimerStartedAt, setDraftTimerStartedAt] = useState<number | null>(null);
   const [timerNow, setTimerNow] = useState(Date.now());
   useEffect(() => {
@@ -1038,10 +1038,8 @@ export default function TaskCreatePanel({
             className="td-pill-btn"
             data-running={draftTimerStartedAt != null ? 'true' : undefined}
             aria-label={draftTimerStartedAt == null ? 'Start timer' : 'Pause timer'}
-            title={draftTimerStartedAt == null && timers.length > 0
-              ? 'Stop your active task timer before timing this draft'
-              : draftTimerStartedAt == null ? 'Start timer' : 'Pause timer · continues after creation'}
-            disabled={submitting || (draftTimerStartedAt == null && timers.length > 0)}
+            title={draftTimerStartedAt == null ? 'Start timer' : 'Pause timer · continues after creation'}
+            disabled={submitting}
             style={{ padding: '0 8px', flexShrink: 0, fontVariantNumeric: 'tabular-nums' }}
             onClick={() => {
               if (draftTimerStartedAt != null) {
