@@ -5,6 +5,7 @@ import { config } from '../../config';
 import { supabaseAdmin } from '../../supabase';
 import { logCardEvent } from '../../utils/cardEvents';
 import { clientViewRemoteEventSchema, logClientViewRemoteEvent } from '../../utils/squadhireClientViewEvents';
+import { talentNoticeSchema } from '../../utils/squadhireTalentNotice';
 import { endActiveAssignmentTermsForCard } from '../../utils/assignmentTerms';
 import { lockAcceptedBidPrice } from '../../utils/lockAcceptedBidPrice';
 import { ensureSquadhireTalentProvisioned } from '../../utils/squadhireTalentSession';
@@ -89,19 +90,6 @@ const groupMeetNoticeSchema = z
       talent_user_id: z.string().uuid(),
       email: z.string().email(),
     })).min(1),
-  })
-  .strict();
-
-// One-off SquadHire notice for a talent (application approved / rejected).
-// Addressed by email because the talent may not hold a SquadHub account yet —
-// unknown emails are skipped, not errors.
-const talentNoticeSchema = z
-  .object({
-    kind: z.enum(['application_approved', 'application_rejected']),
-    title: z.string().min(1).max(200),
-    body: z.string().max(1000).optional().default(''),
-    route: z.string().max(200).optional().default('/notifications'),
-    emails: z.array(z.string().email()).min(1).max(50),
   })
   .strict();
 
