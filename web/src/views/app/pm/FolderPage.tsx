@@ -6,7 +6,7 @@ import { usePMStore } from '../../../stores/pmStore';
 import { useSpace, useReorderLists } from '../../../hooks/useSpaces';
 import { useIsMobile } from '../../../hooks/useIsMobile';
 import TaskGroupCard from './TaskGroupCard';
-import { GROUP_BY_OPTIONS, groupTasks, partitionByCompletion, buildFocusTodayGroup, isTaskCompleted, isTaskUpcoming, sortByCreationOrder, type GroupBy } from '../../../lib/taskGrouping';
+import { GROUP_BY_OPTIONS, groupTasks, partitionByCompletion, buildFocusTodayGroup, isTaskCompleted, isTaskUpcoming, nestSubtasks, filterWithSubtasks, sortByCreationOrder, type GroupBy } from '../../../lib/taskGrouping';
 import MinimalGroupFilterBar from '../../../components/pm/MinimalGroupFilterBar';
 import ViewSearchInput from '../../../components/pm/ViewSearchInput';
 import ContainerChatButton from '../../../components/pm/ContainerChatButton';
@@ -71,7 +71,7 @@ export default function FolderPage({ folderId: propFolderId }: { folderId?: stri
     queries: lists.map((l) => ({
       queryKey: ['folder-tasks', activeFolderId, l.id],
       queryFn: async () => {
-        const res = await api.get(`/pm/tasks?list_id=${l.id}`);
+        const res = await api.get(`/pm/tasks?list_id=${l.id}&include_subtasks=true`);
         return { listId: l.id, listName: l.name, tasks: (res.data.data || []) as Task[] };
       },
       enabled: !!activeFolderId,
@@ -81,11 +81,11 @@ export default function FolderPage({ folderId: propFolderId }: { folderId?: stri
   const isLoading = taskQueries.some((q) => q.isLoading || q.isFetching);
 
   // Live per-list OPEN task counts for the list chips (completed/closed
-  // excluded, matching how the view itself partitions tasks).
+  // and subtasks excluded, matching how the view itself partitions tasks).
   const listCounts = useMemo(() => {
     const m: Record<string, number> = {};
     for (const q of taskQueries) {
-      if (q.data) m[q.data.listId] = q.data.tasks.filter((t) => !isTaskCompleted(t)).length;
+      if (q.data) m[q.data.listId] = q.data.tasks.filter((t) => !isTaskCompleted(t) && !t.parent_task_id).length;
     }
     return m;
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -115,23 +115,32 @@ export default function FolderPage({ folderId: propFolderId }: { folderId?: stri
     const m: Record<string, number> = {};
     for (const q of taskQueries) {
       if (!q.data) continue;
-      m[q.data.listId] = q.data.tasks.filter((t) => !isTaskCompleted(t) && isTaskUpcoming(t, tz)).length;
+      m[q.data.listId] = q.data.tasks.filter((t) => !isTaskCompleted(t) && !t.parent_task_id && isTaskUpcoming(t, tz)).length;
     }
     return m;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [taskQueries.map((q) => q.dataUpdatedAt).join('|'), tz]);
 
+  const tasksAfterPills = useMemo(() => {
+    if (listFilter === 'all') return allTasks;
+    return allTasks.filter((t) => t.list?.id === listFilter);
+  }, [allTasks, listFilter]);
+
+  const nestedTasks = useMemo(() => nestSubtasks(tasksAfterPills), [tasksAfterPills]);
+
   const filteredTasks = useMemo(() => {
     // Default order is creation order (oldest first) so a newly added task
     // lands at the bottom of its group. Explicit group-by buckets only reorder
     // the groups themselves — tasks stay in creation order within each group.
-    let arr = sortByCreationOrder(allTasks);
-    if (listFilter !== 'all') arr = arr.filter((t) => t.list?.id === listFilter);
-    arr = filterTasks(arr, filters, tz);
     const q = searchQuery.trim().toLowerCase();
-    if (q) arr = arr.filter((t) => t.title.toLowerCase().includes(q));
-    return arr;
-  }, [allTasks, listFilter, filters, tz, searchQuery]);
+    const matches = (t: Task): boolean => {
+      if (filterTasks([t], filters, tz).length === 0) return false;
+      if (q && !t.title.toLowerCase().includes(q)) return false;
+      return true;
+    };
+    let arr = filterWithSubtasks(nestedTasks, matches);
+    return sortByCreationOrder(arr);
+  }, [nestedTasks, filters, tz, searchQuery]);
 
   const optionSourceTasks = useMemo(
     () => (listFilter === 'all' ? allTasks : allTasks.filter((t) => t.list?.id === listFilter)),
@@ -153,14 +162,17 @@ export default function FolderPage({ folderId: propFolderId }: { folderId?: stri
   const upcomingTasks = useMemo(() => {
     const hasDateFilter = (filters.dueDate?.length ?? 0) > 0 || (filters.workDate?.length ?? 0) > 0;
     if (!hasDateFilter) return sortByCreationOrder(openTasks.filter((t) => isTaskUpcoming(t, tz)));
-    let arr = sortByCreationOrder(allTasks);
-    if (listFilter !== 'all') arr = arr.filter((t) => t.list?.id === listFilter);
-    arr = filterTasks(arr, { ...filters, dueDate: undefined, workDate: undefined }, tz);
+    const noDateFilters = { ...filters, dueDate: undefined, workDate: undefined };
     const q = searchQuery.trim().toLowerCase();
-    if (q) arr = arr.filter((t) => t.title.toLowerCase().includes(q));
-    const { open } = partitionByCompletion(arr, fadingTaskIds);
+    const matches = (t: Task): boolean => {
+      if (filterTasks([t], noDateFilters, tz).length === 0) return false;
+      if (q && !t.title.toLowerCase().includes(q)) return false;
+      return true;
+    };
+    const base = filterWithSubtasks(nestedTasks, matches);
+    const { open } = partitionByCompletion(base, fadingTaskIds);
     return sortByCreationOrder(open.filter((t) => isTaskUpcoming(t, tz)));
-  }, [allTasks, listFilter, filters, tz, searchQuery, openTasks, fadingTaskIds]);
+  }, [nestedTasks, filters, tz, searchQuery, openTasks, fadingTaskIds]);
 
   const upcomingIds = useMemo(() => new Set(upcomingTasks.map((t) => t.id)), [upcomingTasks]);
 
@@ -198,7 +210,7 @@ export default function FolderPage({ folderId: propFolderId }: { folderId?: stri
     return <ClientFolderReport folder={folder} />;
   }
 
-  const totalCount = allTasks.length;
+  const totalCount = allTasks.filter((t) => !t.parent_task_id).length;
   const visibleCount = filteredTasks.length - openTasks.filter((t) => upcomingIds.has(t.id)).length + upcomingTasks.length;
   const noopStatusChange = () => {};
 

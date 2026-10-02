@@ -299,6 +299,7 @@ export default function TaskRow({
         data-dimmed={dimmed || undefined}
         data-type={isWorkBlock ? 'work_block' : undefined}
         data-tracking={isTiming || undefined}
+        data-depth={depth > 0 ? depth : undefined}
         style={depth > 0 ? { paddingLeft: 20 + depth * 22 } : undefined}
       >
         {/* Checkbox — toggles done */}
@@ -334,12 +335,13 @@ export default function TaskRow({
               <button
                 type="button"
                 onClick={(e) => { e.stopPropagation(); setExpanded(v => !v); }}
-                className="shrink-0 text-[color:var(--sh-ink-4)] hover:text-[color:var(--sh-ink)] transition"
+                className="shrink-0 p-1 -m-1 rounded text-[color:var(--sh-ink-4)] hover:text-[color:var(--sh-ink)] hover:bg-[var(--sh-hair-3)] transition flex items-center justify-center"
                 aria-label={expanded ? 'Collapse subtasks' : 'Expand subtasks'}
+                title={expanded ? 'Collapse subtasks' : `Subtasks · ${task.subtasks!.filter(isTaskCompleted).length}/${task.subtasks!.length} done (click to toggle)`}
               >
                 <svg
-                  width="10"
-                  height="10"
+                  width="11"
+                  height="11"
                   viewBox="0 0 24 24"
                   fill="none"
                   stroke="currentColor"
@@ -383,6 +385,15 @@ export default function TaskRow({
               />
             )}
             <span className="lv-title">{task.title}</span>
+            {hasSubtasks && (
+              <span
+                onClick={(e) => { e.stopPropagation(); setExpanded(v => !v); }}
+                className="shrink-0 text-[10.5px] font-semibold tabular-nums text-[color:var(--sh-ink-4)] hover:text-[color:var(--sh-ink)] cursor-pointer rounded-full px-1.5 py-0.5 bg-[var(--sh-hair-3)] hover:bg-[var(--sh-hair-2)] transition"
+                title={`${task.subtasks!.filter(isTaskCompleted).length} of ${task.subtasks!.length} subtasks done · click to ${expanded ? 'collapse' : 'expand'}`}
+              >
+                {task.subtasks!.filter(isTaskCompleted).length}/{task.subtasks!.length}
+              </span>
+            )}
             {task.recurring_parent_id && (
               <svg
                 width="12"
@@ -659,7 +670,7 @@ export default function TaskRow({
           onStatusChange={_onStatusChange}
           depth={depth + 1}
           canEdit={canEdit}
-          listId={listId}
+          listId={listId || (sub as any).list_id || sub.list?.id || ''}
         />
       ))}
 

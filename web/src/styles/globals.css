@@ -3673,6 +3673,21 @@ body.sb-resizing { user-select: none; -webkit-user-select: none; cursor: col-res
   border-top: 1px solid var(--sh-hair-3) !important;
 }
 .lv-card .lv-row:first-child { border-top: none; }
+.lv-canvas .lv-card .lv-row[data-depth="1"],
+.lv-card .lv-card-body .lv-row[data-depth="1"],
+.lv-card .lv-row[data-depth="1"] {
+  padding-left: 36px !important;
+}
+.lv-canvas .lv-card .lv-row[data-depth="2"],
+.lv-card .lv-card-body .lv-row[data-depth="2"],
+.lv-card .lv-row[data-depth="2"] {
+  padding-left: 56px !important;
+}
+.lv-canvas .lv-card .lv-row[data-depth="3"],
+.lv-card .lv-card-body .lv-row[data-depth="3"],
+.lv-card .lv-row[data-depth="3"] {
+  padding-left: 76px !important;
+}
 /* Collapse the row's vertical space while it fades off so siblings reflow
    immediately — no empty-row gap left behind during the slide. Matches
    specificity of the card-row !important rule above. */
