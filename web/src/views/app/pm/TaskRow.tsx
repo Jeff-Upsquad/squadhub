@@ -20,6 +20,9 @@ import DatePicker from './DatePicker';
 import PriorityPicker, { PRIORITY_META } from './PriorityPicker';
 import SopBreachReportModal from '../../../components/sop/SopBreachReportModal';
 import SopFlagDetailModal from '../../../components/sop/SopFlagDetailModal';
+import { GoalTaskFlag } from '../goals/GoalIntegration';
+import { useGoalsUI } from '../goals/goalsStore';
+import GoalIcon from '../goals/GoalIcons';
 import FocusStarButton from '../../../components/pm/FocusStarButton';
 
 function fmtClock(seconds: number): string {
@@ -440,6 +443,7 @@ export default function TaskRow({
               stopPropagation
               onToggle={(focused) => focusTask.mutate({ id: task.id, focused })}
             />
+            <GoalTaskFlag taskId={task.id} />
             {canEdit && (
               <button
                 type="button"
@@ -628,6 +632,12 @@ export default function TaskRow({
             <>
               <div className="fixed inset-0 z-10" onClick={() => setMoreOpen(false)} />
               <div className="sh-float absolute right-0 top-full z-20 mt-1 w-48 overflow-hidden rounded-lg border bg-[var(--surface)] shadow-lg" style={{ borderColor: 'var(--sh-hair)' }}>
+                <button
+                  onClick={(e) => { e.stopPropagation(); setMoreOpen(false); useGoalsUI.getState().pickGoalFor(task.id); }}
+                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-[12.5px] text-[var(--sh-ink)] hover:bg-[var(--sh-hair-3)]"
+                >
+                  <GoalIcon name="flag" size={13} /> Add to a goal
+                </button>
                 <button
                   onClick={() => { setMoreOpen(false); setShowReport(true); }}
                   className="flex w-full items-center gap-2 px-3 py-2 text-left text-[12.5px] text-[var(--sh-ink)] hover:bg-[var(--sh-hair-3)]"

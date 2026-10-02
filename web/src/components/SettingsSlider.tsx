@@ -1,4 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
+import { useGoalsUI } from '../views/app/goals/goalsStore';
+import GoalIcon from '../views/app/goals/GoalIcons';
 import { createPortal } from 'react-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../services/api';
@@ -357,6 +359,24 @@ export default function SettingsSlider({ type, id, name, description, spaceId, f
             )}
           </div>
         </div>
+
+        {(type === 'folder' || type === 'list') && (
+          <div className="border-t border-[#E2E8F0] pt-4">
+            <button
+              type="button"
+              onClick={() => useGoalsUI.getState().setConnectSource({ type, id, name })}
+              className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-[var(--sh-hair-3)]"
+            >
+              <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-[var(--sh-hair-3)] text-[var(--sh-ink-2)]">
+                <GoalIcon name="flag" size={16} />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block text-[13px] font-semibold text-[var(--sh-ink)]">Count toward a goal</span>
+                <span className="block text-xs text-[var(--sh-ink-3)]">Every task in this {type}, now and later, adds to a goal’s progress</span>
+              </span>
+            </button>
+          </div>
+        )}
 
         {type === 'folder' && <SubscriptionCardSection folderId={id} />}
 

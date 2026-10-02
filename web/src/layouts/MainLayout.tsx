@@ -66,6 +66,9 @@ import ClientSubscriptionCards from '../views/app/client/ClientSubscriptionCards
 import ClientJobCards from '../views/app/client/ClientJobCards';
 import ClientDesignDashboard from '../views/app/pm/client-design/ClientDesignDashboard';
 import Home from '../views/app/home/Home';
+import GoalsView from '../views/app/goals/GoalsView';
+import { GoalsHost } from '../views/app/goals/GoalIntegration';
+import { useGoalsUI } from '../views/app/goals/goalsStore';
 import GlobalTaskDetailPanel from '../views/app/home/GlobalTaskDetailPanel';
 import GlobalTaskPeekPanel from '../views/app/home/GlobalTaskPeekPanel';
 import ChatSidePanel from '../views/app/chat/ChatSidePanel';
@@ -108,7 +111,7 @@ import { canonicalKey, buildHomeSnapshot, type TabSnapshot } from '../lib/tabSna
 
 // ---- Types ----
 export type ActiveSection = 'home' | 'cal' | 'docs' | 'teams' | 'apps' | 'learning' | 'more';
-export type HomeView = 'hub' | 'chat' | 'tasks' | 'inbox' | 'my-tasks' | 'checkin' | 'checkin-partners' | 'check-ins' | 'candidates' | 'time-management' | 'sales-leads' | 'leads' | 'support-admin' | 'cashbook' | 'opportunities' | 'subscription-cards' | 'job-cards' | 'day-planner' | 'routines' | 'clips' | 'meetings' | 'partner-payments' | 'teamchat-crm' | 'teamchat-shcrm';
+export type HomeView = 'hub' | 'chat' | 'tasks' | 'inbox' | 'my-tasks' | 'goals' | 'checkin' | 'checkin-partners' | 'check-ins' | 'candidates' | 'time-management' | 'sales-leads' | 'leads' | 'support-admin' | 'cashbook' | 'opportunities' | 'subscription-cards' | 'job-cards' | 'day-planner' | 'routines' | 'clips' | 'meetings' | 'partner-payments' | 'teamchat-crm' | 'teamchat-shcrm';
 type RailPreviewKey = 'home' | 'inbox' | 'tasks' | 'docs' | 'cal' | 'apps' | 'learning' | 'more';
 
 const RAIL_PREVIEW_TARGETS: Record<RailPreviewKey, { section: ActiveSection; homeView?: HomeView }> = {
@@ -939,6 +942,18 @@ export default function MainLayout() {
     window.__pendingInboxNotificationId = notificationId;
   };
 
+  // Goals surfaces outside this component (Home's goals panel, a standalone
+  // goal tab's "Back to Goals") ask for the Goals page through the goals store.
+  const goalsViewRequest = useGoalsUI((s) => s.goalsViewRequest);
+  const goalOverlayOpen = useGoalsUI((s) => !!(s.openGoalId || s.create || s.pickForTaskId || s.connectSource));
+  const [appliedGoalsViewRequest, setAppliedGoalsViewRequest] = useState(0);
+  useEffect(() => {
+    if (!goalsViewRequest) return;
+    setActiveSection('home');
+    setHomeView('goals');
+    setAppliedGoalsViewRequest(goalsViewRequest);
+  }, [goalsViewRequest]);
+
   // Deep link handler — desktop companion / browser notification clicks, plus
   // in-app links (e.g. a converted task's "Open original" link), which arrive
   // via DEEP_LINK_EVENT instead of a page load.
@@ -949,8 +964,11 @@ export default function MainLayout() {
       const openInbox = params.get('open_inbox');
       const openMessage = params.get('open_message');
       const openResource = params.get('open_resource');
+      const openGoal = params.get('open_goal');
       const conv = params.get('conv');
-      if (openResource) {
+      if (openGoal) {
+        useGoalsUI.getState().openGoal(openGoal);
+      } else if (openResource) {
         useLearningStore.getState().setLearningTarget({
           itemId: openResource,
           lessonId: params.get('resource_page'),
@@ -1492,6 +1510,7 @@ export default function MainLayout() {
     // Home section views.
     if (hv === 'inbox') return <InboxView setHomeView={setHomeView} />;
     if (hv === 'my-tasks') return <MyTasksView />;
+    if (hv === 'goals') return <GoalsView />;
     if (hv === 'day-planner') return <DayPlannerView />;
     if (hv === 'routines') return <RoutinesView />;
     if (hv === 'chat') {
@@ -1607,6 +1626,7 @@ export default function MainLayout() {
         <TimerConflictDialog />
         <TimerModeDialog />
         <GlobalTaskDetailPanel />
+        <GoalsHost />
         <ChatSidePanel />
         <GroupRunDetailPanel />
         <GlobalMeetingPanel />
@@ -2073,6 +2093,7 @@ export default function MainLayout() {
 
       {/* Global task detail panel — opens from any view when activeTaskId is set */}
       <GlobalTaskDetailPanel />
+      <GoalsHost />
 
       {/* Container chat side panel — wide slide-over opened by a list/folder/space
           header's "Chat" button, hosting that container's linked channel. */}
@@ -2143,7 +2164,7 @@ export default function MainLayout() {
       <ToastContainer />
 
       {/* Admin-triggered Feature Tips (coachmarks / "what's new" cards) */}
-      <FeatureTipOverlay />
+      <FeatureTipOverlay paused={goalOverlayOpen || homeView === 'goals' || goalsViewRequest !== appliedGoalsViewRequest} />
 
       {/* Workspace search palette */}
       {searchOpen && currentWorkspace && (

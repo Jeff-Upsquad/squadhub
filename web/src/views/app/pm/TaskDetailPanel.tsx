@@ -53,6 +53,9 @@ import {
 import { useParallelTimers } from '../../../hooks/useParallelTimers';
 import { useLearningStore } from '../../../stores/learningStore';
 import { useIsMobile } from '../../../hooks/useIsMobile';
+import { GoalTaskFlag } from '../goals/GoalIntegration';
+import { useGoalsUI } from '../goals/goalsStore';
+import GoalIcon from '../goals/GoalIcons';
 import FocusStarButton from '../../../components/pm/FocusStarButton';
 import EstimatePopover from '../../../components/pm/EstimatePopover';
 import LogTimePopover from '../../../components/pm/LogTimePopover';
@@ -1253,6 +1256,7 @@ export default function TaskDetailPanel({
                 className="td-m-hero-icon"
                 onToggle={(focused) => focusTask.mutate({ id: task.id, focused })}
               />
+              <GoalTaskFlag taskId={task.id} size={19} className="td-m-hero-icon" />
               <button type="button" className="td-m-hero-icon" aria-label="Copy link" onClick={handleCopyLink}>
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71" /><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71" /></svg>
               </button>
@@ -1264,6 +1268,9 @@ export default function TaskDetailPanel({
                   <>
                     <div className="fixed inset-0 z-10" onClick={() => setMoreMenuOpen(false)} />
                     <div className="sh-float absolute right-0 top-full z-20 mt-1 w-44 overflow-hidden rounded-lg border shadow-lg" style={{ borderColor: 'var(--sh-hair)', background: 'var(--surface)' }}>
+                      <button onClick={() => { setMoreMenuOpen(false); useGoalsUI.getState().pickGoalFor(task.id); }} className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm" style={{ color: 'var(--sh-ink)' }}>
+                        <GoalIcon name="flag" size={14} /> Add to a goal
+                      </button>
                       {canEdit && workspaceId && (
                         <button onClick={() => { setMoreMenuOpen(false); setMovePickerOpen(true); }} className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm" style={{ color: 'var(--sh-ink)' }}>Move to another list</button>
                       )}
@@ -1432,12 +1439,15 @@ export default function TaskDetailPanel({
           })()}
           <div className="flex-1" />
           {task && (
-            <FocusStarButton
-              active={isFocused}
-              variant="panel"
-              className="td-nav-btn td-focus-star"
-              onToggle={(focused) => focusTask.mutate({ id: task.id, focused })}
-            />
+            <>
+              <FocusStarButton
+                active={isFocused}
+                variant="panel"
+                className="td-nav-btn td-focus-star"
+                onToggle={(focused) => focusTask.mutate({ id: task.id, focused })}
+              />
+              <GoalTaskFlag taskId={task.id} size={16} className="td-nav-btn" />
+            </>
           )}
           <button type="button" onClick={handleCopyLink} className="td-nav-btn" title="Copy link">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
@@ -1496,6 +1506,11 @@ export default function TaskDetailPanel({
                       style={{ color: 'oklch(0.55 0.18 25)' }}
                     >
                       Delete task
+                    </button>
+                  )}
+                  {task && (
+                    <button onClick={() => { setMoreMenuOpen(false); useGoalsUI.getState().pickGoalFor(task.id); }} className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-[var(--sh-hair-3)]">
+                      <GoalIcon name="flag" size={14} /> Add to a goal
                     </button>
                   )}
                   <div className="border-t border-[var(--sh-hair)]" />

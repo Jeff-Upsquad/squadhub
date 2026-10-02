@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAddTaskToLists, useUpdateTask } from '../../../hooks/useTasks';
 import { useReviewTask, type NewTask } from '../../../hooks/useNewTasks';
+import { GoalTaskFlag } from '../goals/GoalIntegration';
 import { useFocusTask } from '../../../hooks/useDayPlanner';
 import { isTaskFocused } from '../../../lib/taskGrouping';
 import { usePMStore } from '../../../stores/pmStore';
@@ -315,6 +316,7 @@ export default function NewTaskRow({
           >
             {isFocused ? '★' : '☆'}
           </button>
+          <GoalTaskFlag taskId={task.id} />
           <div className="nt-task-text">
             {isSubtask && t.parent_task && (
               <button

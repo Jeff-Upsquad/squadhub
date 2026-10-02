@@ -15,6 +15,12 @@ import type { ReactNode } from 'react';
 // Outline is the resting state, filled the selected one (Icons.Outlined.* /
 // Icons.Rounded.* in MainTabs.kt).
 export const MIcon = {
+  goals: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round">
+      <path d="M5.5 21V3.5" />
+      <path d="M5.5 4.5c4.5-2.6 8 2.6 13 0v8.5c-5 2.6-8.5-2.6-13 0" />
+    </svg>
+  ),
   homeOutline: (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round">
       <path d="M3.6 10.4 12 3.9l8.4 6.5V19a1.6 1.6 0 0 1-1.6 1.6h-3.5v-4.9a3.3 3.3 0 0 0-6.6 0v4.9H5.2A1.6 1.6 0 0 1 3.6 19z" />

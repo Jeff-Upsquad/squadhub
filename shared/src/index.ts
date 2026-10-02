@@ -4882,3 +4882,5 @@ export interface SquadBotActivityReport {
   activity: SquadBotActivity[];
   summary: Array<{ job_id: string; completed: number; failed: number; skipped: number; drafted: number }>;
 }
+
+export * from './goals';
