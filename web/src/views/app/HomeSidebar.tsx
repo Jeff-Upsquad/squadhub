@@ -689,6 +689,18 @@ export default function HomeSidebar({
             active={homeView === 'my-tasks'}
             onClick={() => onChangeView('my-tasks')}
           />
+          {/* Goals — outcomes tracked through linked tasks (sits right below My Tasks). */}
+          <NavItem
+            icon={
+              <svg className="h-[14px] w-[14px] shrink-0" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+                <path d="M5.5 21V3.5" />
+                <path d="M5.5 4.5c4.5-2.6 8 2.6 13 0v8.5c-5 2.6-8.5-2.6-13 0" />
+              </svg>
+            }
+            label="Goals"
+            active={homeView === 'goals'}
+            onClick={() => onChangeView('goals')}
+          />
           {isPartner && (
             <PartnerOpportunitiesLink
               active={homeView === 'opportunities'}

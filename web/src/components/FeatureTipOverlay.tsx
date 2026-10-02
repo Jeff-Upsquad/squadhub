@@ -23,7 +23,9 @@ import { useTipAnchor } from '../hooks/useTipAnchor';
 
 const POP_W = 300;
 
-export default function FeatureTipOverlay() {
+export default function FeatureTipOverlay({ paused = false }: { paused?: boolean }) {
+  const pausedRef = useRef(paused);
+  pausedRef.current = paused;
   const tip = useCurrentTip();
   const queryClient = useQueryClient();
   const [guided, setGuided] = useState(false);
@@ -43,7 +45,7 @@ export default function FeatureTipOverlay() {
   const step = steps[i] ?? null;
   const isLast = i >= lastIndex;
 
-  const { rect, found } = useTipAnchor(step?.target_anchor ?? null, !!tip && !!step);
+  const { rect, found } = useTipAnchor(step?.target_anchor ?? null, !!tip && !!step && !paused);
 
   // Restart at the first step whenever a different tip becomes current.
   useEffect(() => {
@@ -54,14 +56,16 @@ export default function FeatureTipOverlay() {
   // Publish the spotlighted anchor so other components can react (e.g. the Apps
   // module reveals its hover-only star while it is the target).
   useEffect(() => {
-    featureTipStore.setActiveAnchor(step?.target_anchor ?? null);
+    featureTipStore.setActiveAnchor(paused ? null : step?.target_anchor ?? null);
     return () => featureTipStore.setActiveAnchor(null);
-  }, [step?.target_anchor]);
+  }, [step?.target_anchor, paused]);
 
   // Tours auto-navigate to each step's screen as it becomes active, so the
   // coachmark can resolve without the user hunting for "Show me".
   useEffect(() => {
-    if (!tip || !isTour) return;
+    // Keep the tour mounted while a focused surface is open. Resuming it must
+    // not replay navigation and pull the user away from their selected screen.
+    if (pausedRef.current || !tip || !isTour) return;
     if (step?.target_view) {
       featureTipStore.requestNavigate(step.target_view);
       setGuided(true);
@@ -110,7 +114,7 @@ export default function FeatureTipOverlay() {
 
   // Esc dismisses (snooze) — non-blocking. Focus the primary action on open.
   useEffect(() => {
-    if (!tip) return;
+    if (!tip || paused) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') doDismiss();
     };
@@ -121,9 +125,9 @@ export default function FeatureTipOverlay() {
       clearTimeout(t);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tip?.id, tip?.revision, i, busy]);
+  }, [tip?.id, tip?.revision, i, busy, paused]);
 
-  if (!tip || !step) return null;
+  if (!tip || !step || paused) return null;
 
   const hasAnchor = !!step.target_anchor;
   const coachmark = hasAnchor && found && !!rect;

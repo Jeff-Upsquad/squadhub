@@ -1,6 +1,8 @@
+import { useState } from 'react';
 import { usePMStore } from '../../../stores/pmStore';
 import { useSecondaryCards, type SecondaryCardData } from '../../../hooks/useSecondaryCards';
 import SecondaryCardPanel from './SecondaryCardPanel';
+import { HomeGoalsChip, HomeGoalsPanel, useGoalsInMotion } from '../goals/GoalIntegration';
 
 const icoProps = {
   width: 12,
@@ -82,11 +84,15 @@ export default function SecondaryCardRow() {
 
   const visible = cards.filter((c) => c.data.items.length > 0);
   const activeCard = cards.find((c) => c.key === activeSecondaryCard) || null;
+  // Goals join the row while at least one goal has started and isn't done.
+  const goalsInMotion = useGoalsInMotion();
+  const [goalsOpen, setGoalsOpen] = useState(false);
+  const goalsPanel = <HomeGoalsPanel goals={goalsInMotion} open={goalsOpen && goalsInMotion.length > 0} onClose={() => setGoalsOpen(false)} />;
 
-  if (visible.length === 0) {
+  if (visible.length === 0 && goalsInMotion.length === 0) {
     // Still render the panel so an open card can close cleanly if its last item
     // was just completed; the panel returns null when nothing is active.
-    return <SecondaryCardPanel card={activeCard} />;
+    return <><SecondaryCardPanel card={activeCard} />{goalsPanel}</>;
   }
 
   return (
@@ -115,9 +121,11 @@ export default function SecondaryCardRow() {
             </div>
           );
         })}
+        <HomeGoalsChip goals={goalsInMotion} onOpen={() => setGoalsOpen(true)} />
       </div>
 
       <SecondaryCardPanel card={activeCard} />
+      {goalsPanel}
     </>
   );
 }

@@ -15,6 +15,7 @@ const VIEW_LABELS: Record<string, string> = {
   hub: 'Home',
   inbox: 'Inbox',
   'my-tasks': 'My Tasks',
+  'goals': 'Goals',
   'day-planner': 'Day Planner',
   routines: 'Routines',
   opportunities: 'Opportunities',
@@ -104,6 +105,7 @@ function TabIcon({ s }: { s: TabSnapshot }) {
   }
   // home dashboards / sections — a couple of recognizable ones, else a dot grid.
   if (s.homeView === 'inbox') return svg(<><path d="M3 13V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v8" /><path d="M3 13h5l2 3h4l2-3h5v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /></>);
+  if (s.homeView === 'goals') return svg(<path d="M5 21V3m0 1c5-4 9 4 15 0v10c-6 4-10-4-15 0" />);
   if (s.homeView === 'my-tasks') return svg(<><circle cx="12" cy="12" r="9" /><path d="m8.5 12.5 2.5 2.5 4.5-5" /></>);
   if (s.section === 'cal') return svg(<><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M3 10h18M8 3v4M16 3v4" /></>);
   if (s.section === 'docs') return svg(<><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z" /><path d="M14 3v6h6" /></>);

@@ -10,6 +10,7 @@ import { flushTimerShares } from './useParallelTimers';
 // (List, Folder, Space, My Tasks, Emergency, Day Planner) refresh after a
 // mutation without requiring the user to reload.
 function invalidateTaskLists(qc: QueryClient, listId: string | null, opts?: { deferDayPlans?: boolean }) {
+  void qc.invalidateQueries({ queryKey: ['goals'] });
   qc.invalidateQueries({ queryKey: ['tasks', listId] });
   qc.invalidateQueries({ queryKey: ['folder-tasks'] });
   qc.invalidateQueries({ queryKey: ['space-tasks'] });

@@ -201,15 +201,17 @@ router.get('/search', async (req: Request, res: Response) => {
     // Escape ILIKE wildcards in user input
     const safeQ = q.replace(/[\\%_]/g, (m) => `\\${m}`);
 
-    const { data: matches, error } = await supabaseAdmin
+    let taskQuery = supabaseAdmin
       .from('tasks')
-      .select('id, title, status, priority, due_date, display_number, list_id, parent_task_id, created_at')
+      .select('id, title, status, priority, due_date, work_date, work_end_date:metadata->>work_end_date, start_date, assignee_ids, display_number, list_id, parent_task_id, created_at')
       .in('list_id', accessibleListIds)
-      .is('parent_task_id', null)
       .is('recurrence', null)
       .ilike('title', `%${safeQ}%`)
       .order('created_at', { ascending: false })
       .limit(limit);
+    // Goal linking can target subtasks too; everything else searches top-level tasks.
+    if (req.query.include_subtasks !== 'true') taskQuery = taskQuery.is('parent_task_id', null);
+    const { data: matches, error } = await taskQuery;
 
     if (error) {
       console.error('[pm/search] tasks query error:', error);
@@ -256,13 +258,15 @@ router.get('/search', async (req: Request, res: Response) => {
       new Set(Object.values(listInfoById).map((l) => l.space_id)),
     );
     let spaceNameById: Record<string, string> = {};
+    const spaceColorById: Record<string, string | null> = {};
     if (spaceIdsNeeded.length > 0) {
       const { data: spaceInfos } = await supabaseAdmin
         .from('spaces')
-        .select('id, name')
+        .select('id, name, color')
         .in('id', spaceIdsNeeded);
       for (const s of (spaceInfos || []) as any[]) {
         spaceNameById[s.id] = s.name;
+        spaceColorById[s.id] = s.color ?? null;
       }
     }
 
@@ -297,6 +301,11 @@ router.get('/search', async (req: Request, res: Response) => {
         category,
         priority: t.priority,
         due_date: t.due_date,
+        work_date: t.work_date ?? null,
+        work_end_date: t.work_end_date ?? null,
+        start_date: t.start_date ?? null,
+        assignee_ids: t.assignee_ids || [],
+        parent_task_id: t.parent_task_id ?? null,
         display_number: t.display_number ?? null,
         list_id: t.list_id,
         list_name: list?.name || null,
@@ -304,6 +313,7 @@ router.get('/search', async (req: Request, res: Response) => {
         folder_name: list?.folder_id ? folderNameById[list.folder_id] || null : null,
         space_id: spaceId,
         space_name: spaceId ? spaceNameById[spaceId] || null : null,
+        space_color: spaceId ? spaceColorById[spaceId] ?? null : null,
       };
     });
 

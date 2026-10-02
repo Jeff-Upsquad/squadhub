@@ -89,6 +89,7 @@ export default function MobileMore({
         <>
           <MGroupHead title="Workspace" />
           <MRow icon={MIcon.tasks} title="My Tasks" onClick={() => onOpen({ kind: 'view', view: 'my-tasks', title: 'My Tasks' })} />
+          <MRow icon={MIcon.goals} title="Goals" onClick={() => onOpen({ kind: 'view', view: 'goals', title: 'Goals' })} />
           <MRow icon={MIcon.calendar} title="Calendar" onClick={() => onOpen({ kind: 'section', section: 'cal', title: 'Calendar' })} />
           <MRow icon={MIcon.planner} title="Day Planner" onClick={() => onOpen({ kind: 'view', view: 'day-planner', title: 'Day Planner' })} />
           <MRow icon={MIcon.clock} title="Routines" onClick={() => onOpen({ kind: 'view', view: 'routines', title: 'Routines' })} />

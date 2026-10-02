@@ -38,6 +38,7 @@ import MobileMore, { MobileSettings, type MoreTarget } from './MobileMore';
 import MobileWorkLocked from './MobileWorkLocked';
 import MobileCreateSheet from './MobileCreateSheet';
 import MobileTour, { hasSeenMobileTour } from './MobileTour';
+import { useGoalsUI } from '../views/app/goals/goalsStore';
 import { MAvatar, MIcon, MRow } from './MobileKit';
 import AppVersionsFooter from './AppVersions';
 import type { OpenTarget } from './useMobileSpaces';
@@ -165,6 +166,7 @@ export default function MobileShell({
   // for the FAB, which starts with no space chosen).
   const [creating, setCreating] = useState<{ preset: OpenTarget | null } | null>(null);
   const [tourOpen, setTourOpen] = useState(() => !hasSeenMobileTour(user?.id));
+  const goalOpen = useGoalsUI((s) => !!(s.openGoalId || s.create || s.pickForTaskId || s.connectSource));
 
   // Live mirrors of the two pieces of state the popstate listener needs; it's
   // registered once, so it can't close over their current values.
@@ -556,7 +558,7 @@ export default function MobileShell({
           Work placeholder render neither [data-tour="tabbar"] nor the FAB, so an
           ungated tour would spotlight nothing, centre a tall card with its
           Next/Skip buttons below the fold, and block every tap behind it. */}
-      {tourOpen && !onSection && tab === 'home' && !creating && surface === 'work' && !(isPartner && workLocked) && (
+      {tourOpen && !goalOpen && !onSection && tab === 'home' && !creating && surface === 'work' && !(isPartner && workLocked) && (
         <MobileTour
           userId={user?.id}
           audience={isClient ? 'client' : isPartner ? 'partner' : 'internal'}
