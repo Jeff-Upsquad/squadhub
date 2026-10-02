@@ -4,7 +4,7 @@ import { useWorkspaceStore } from '../../stores/workspaceStore';
 import { useWorkspaceSearch, type SearchTask } from '../../hooks/useWorkspaceSearch';
 import type { HomeView } from '../../layouts/MainLayout';
 
-type ResultKind = 'space' | 'folder' | 'list' | 'task' | 'channel' | 'member' | 'chat_message';
+type ResultKind = 'space' | 'folder' | 'list' | 'task' | 'channel' | 'member' | 'chat_message' | 'description';
 
 interface ResultBase {
   key: string;
@@ -28,7 +28,8 @@ interface ListResult extends ResultBase {
   listId: string;
 }
 interface TaskResult extends ResultBase {
-  kind: 'task';
+  kind: 'task' | 'description';
+  preview?: string;
   task: SearchTask;
   done: boolean;
 }
@@ -91,6 +92,12 @@ function CategoryIcon({ kind }: { kind: ResultKind }) {
           <path d="m8.5 12.5 2.5 2.5 4.5-5" />
         </svg>
       );
+    case 'description':
+      return (
+        <svg className={cls} fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+          <path d="M6 3h9l3 3v15H6zM9 10h6M9 14h6M9 18h4" />
+        </svg>
+      );
     case 'channel':
       return (
         <svg className={cls} fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
@@ -122,6 +129,7 @@ const SECTION_LABEL: Record<SectionKey, string> = {
   folder: 'Folders',
   list: 'Lists',
   task: 'Tasks',
+  description: 'Description',
   'task-completed': 'Completed',
   channel: 'Channels',
   member: 'People',
@@ -155,7 +163,7 @@ export default function SearchPalette({ workspaceId, onClose, setHomeView }: Sea
   const setActiveChannel = useWorkspaceStore((s) => s.setActiveChannel);
   const requestMessageJump = useWorkspaceStore((s) => s.requestMessageJump);
 
-  const { spaces, folders, lists, tasks, channels, members, messages, isLoading } = useWorkspaceSearch(
+  const { spaces, folders, lists, tasks, descriptions, channels, members, messages, isLoading } = useWorkspaceSearch(
     workspaceId,
     query,
   );
@@ -208,17 +216,24 @@ export default function SearchPalette({ workspaceId, onClose, setHomeView }: Sea
       (done ? doneTasks : openTasks).push(tr);
     }
     out.push(...openTasks, ...doneTasks);
+    for (const t of descriptions) {
+      const text = (t.description || '').replace(/\s+/g, ' ').trim();
+      const matchIndex = text.toLowerCase().indexOf(query.trim().toLowerCase());
+      const start = Math.max(0, matchIndex - 25);
+      const excerpt = text.slice(start, start + 160);
+      out.push({
+        key: `description:${t.id}`,
+        kind: 'description',
+        label: t.title,
+        hint: [t.space_name, t.folder_name, t.list_name].filter(Boolean).join(' › ') || undefined,
+        preview: `${start > 0 ? '…' : ''}${excerpt}${start + 160 < text.length ? '…' : ''}`,
+        task: t,
+        done: t.category ? t.category === 'done' || t.category === 'closed'
+          : ['done', 'closed', 'cancelled'].includes(String(t.status || '').toLowerCase().trim()),
+      });
+    }
     for (const c of channels) {
       out.push({ key: `channel:${c.id}`, kind: 'channel', label: `#${c.name}`, channelId: c.id });
-    }
-    for (const m of members) {
-      out.push({
-        key: `member:${m.id}`,
-        kind: 'member',
-        label: m.display_name,
-        hint: m.email,
-        memberId: m.id,
-      });
     }
     for (const msg of messages) {
       const convId = msg.channel_id || msg.dm_conversation_id;
@@ -236,8 +251,17 @@ export default function SearchPalette({ workspaceId, onClose, setHomeView }: Sea
         parentId: msg.parent_message_id,
       });
     }
+    for (const m of members) {
+      out.push({
+        key: `member:${m.id}`,
+        kind: 'member',
+        label: m.display_name,
+        hint: m.email,
+        memberId: m.id,
+      });
+    }
     return out;
-  }, [spaces, folders, lists, tasks, channels, members, messages]);
+  }, [spaces, folders, lists, tasks, descriptions, channels, members, messages, query]);
 
   useEffect(() => {
     setActiveIndex(0);
@@ -268,6 +292,7 @@ export default function SearchPalette({ workspaceId, onClose, setHomeView }: Sea
         setActiveList(r.listId);
         setHomeView('tasks');
         break;
+      case 'description':
       case 'task': {
         const t = r.task;
         if (t.space_id) setActiveSpace(t.space_id);
@@ -325,7 +350,7 @@ export default function SearchPalette({ workspaceId, onClose, setHomeView }: Sea
   // Group flat results back by section for rendered headings (but keep the same
   // indices). Completed tasks form a distinct "Completed" section after open tasks.
   const groupedSections: { section: SectionKey; items: { result: Result; index: number }[] }[] = useMemo(() => {
-    const order: SectionKey[] = ['space', 'folder', 'list', 'task', 'task-completed', 'channel', 'chat_message', 'member'];
+    const order: SectionKey[] = ['space', 'folder', 'list', 'task', 'task-completed', 'description', 'channel', 'chat_message', 'member'];
     const map = new Map<SectionKey, { result: Result; index: number }[]>();
     flatResults.forEach((r, idx) => {
       const sk = sectionKeyFor(r);
@@ -366,7 +391,7 @@ export default function SearchPalette({ workspaceId, onClose, setHomeView }: Sea
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={onKeyDown}
-            placeholder="Search spaces, lists, tasks, messages, people…"
+            placeholder="Search spaces, lists, tasks, descriptions, messages, people…"
             className="flex-1 bg-transparent text-[14px] text-[var(--sh-ink)] outline-none placeholder:text-[var(--sh-ink-4)]"
           />
           <button
@@ -422,14 +447,23 @@ export default function SearchPalette({ workspaceId, onClose, setHomeView }: Sea
                       >
                         <CategoryIcon kind={iconKind} />
                       </span>
-                      <span className={`truncate${isCompletedSection ? ' line-through opacity-70' : ''}`}>
-                        {result.label}
-                      </span>
-                      {result.hint && (
-                        <span className="ml-auto truncate pl-3 text-[11.5px] text-[var(--sh-ink-4)]">
-                          {result.hint}
+                      <span className="min-w-0 flex-1">
+                        <span className="flex items-center gap-2">
+                          <span className={`min-w-0 flex-1 truncate${isCompletedSection || (result.kind === 'description' && result.done) ? ' line-through opacity-70' : ''}`}>
+                            {result.label}
+                          </span>
+                          {result.hint && (
+                            <span className="ml-auto max-w-[45%] truncate text-[11.5px] text-[var(--sh-ink-4)]">
+                              {result.hint}
+                            </span>
+                          )}
                         </span>
-                      )}
+                        {result.kind === 'description' && result.preview && (
+                          <span className="mt-0.5 block truncate text-[11.5px] text-[var(--sh-ink-4)]">
+                            {result.preview}
+                          </span>
+                        )}
+                      </span>
                     </button>
                   );
                 })}

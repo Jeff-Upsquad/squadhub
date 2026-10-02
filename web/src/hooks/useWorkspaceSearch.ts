@@ -27,6 +27,7 @@ export type SearchList = {
 export type SearchTask = {
   id: string;
   title: string;
+  description: string | null;
   status: string | null;
   // space_status category for the task's status ('todo' | 'active' | 'done' |
   // 'closed'), resolved server-side by joining space_statuses. Null when the
@@ -148,13 +149,16 @@ export function useWorkspaceSearch(workspaceId: string | undefined, query: strin
       .slice(0, PER_CATEGORY_LIMIT);
   }, [members, lowerQ, q]);
 
-  const tasksQuery = useQuery<SearchTask[]>({
-    queryKey: ['pm-search', workspaceId, debouncedQ],
+  const tasksQuery = useQuery<{ tasks: SearchTask[]; descriptions: SearchTask[] }>({
+    queryKey: ['pm-search', workspaceId, debouncedQ, 'descriptions'],
     queryFn: async () => {
       const res = await api.get('/pm/search', {
-        params: { workspace_id: workspaceId, q: debouncedQ, limit: PER_CATEGORY_LIMIT },
+        params: { workspace_id: workspaceId, q: debouncedQ, limit: PER_CATEGORY_LIMIT, include_descriptions: true },
       });
-      return (res.data?.data?.tasks || []) as SearchTask[];
+      return {
+        tasks: (res.data?.data?.tasks || []) as SearchTask[],
+        descriptions: (res.data?.data?.descriptions || []) as SearchTask[],
+      };
     },
     enabled: !!workspaceId && debouncedQ.length > 0,
     staleTime: 30_000,
@@ -179,7 +183,8 @@ export function useWorkspaceSearch(workspaceId: string | undefined, query: strin
     spaces: filteredSpaces,
     folders: filteredFolders,
     lists: filteredLists,
-    tasks: tasksQuery.data ?? [],
+    tasks: tasksQuery.data?.tasks ?? [],
+    descriptions: tasksQuery.data?.descriptions ?? [],
     channels: filteredChannels,
     members: filteredMembers,
     messages: messagesQuery.data ?? [],

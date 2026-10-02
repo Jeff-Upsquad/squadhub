@@ -26,7 +26,7 @@ async function isAdminInWorkspace(userId: string, workspaceId: string): Promise<
 }
 
 // GET /pm/search?workspace_id=xxx&q=...&limit=25
-// Workspace-wide task title search, scoped to lists the user can access.
+// Workspace-wide task title and optional description search, scoped to lists the user can access.
 router.get('/search', async (req: Request, res: Response) => {
   try {
     const workspaceId = req.query.workspace_id as string;
@@ -40,11 +40,12 @@ router.get('/search', async (req: Request, res: Response) => {
     }
 
     if (q.length < 1) {
-      res.json({ success: true, data: { tasks: [] } });
+      res.json({ success: true, data: { tasks: [], descriptions: [] } });
       return;
     }
 
     const userId = req.userId!;
+    const includeDescriptions = req.query.include_descriptions === 'true';
 
     // 1. All non-deleted spaces in this workspace
     const { data: workspaceSpaces, error: spacesErr } = await supabaseAdmin
@@ -56,7 +57,7 @@ router.get('/search', async (req: Request, res: Response) => {
 
     const workspaceSpaceIds = (workspaceSpaces || []).map((s: any) => s.id);
     if (workspaceSpaceIds.length === 0) {
-      res.json({ success: true, data: { tasks: [] } });
+      res.json({ success: true, data: { tasks: [], descriptions: [] } });
       return;
     }
 
@@ -193,35 +194,45 @@ router.get('/search', async (req: Request, res: Response) => {
     }
 
     if (accessibleListIds.length === 0) {
-      res.json({ success: true, data: { tasks: [] } });
+      res.json({ success: true, data: { tasks: [], descriptions: [] } });
       return;
     }
 
-    // 3. Search task titles within accessible lists
-    // Escape ILIKE wildcards in user input
+    // 3. Search each field independently so title matches cannot crowd out
+    // description matches. Both queries use the same accessible-list scope.
     const safeQ = q.replace(/[\\%_]/g, (m) => `\\${m}`);
-
-    let taskQuery = supabaseAdmin
-      .from('tasks')
-      .select('id, title, status, priority, due_date, work_date, work_end_date:metadata->>work_end_date, start_date, assignee_ids, display_number, list_id, parent_task_id, created_at')
-      .in('list_id', accessibleListIds)
-      .is('recurrence', null)
-      .ilike('title', `%${safeQ}%`)
-      .order('created_at', { ascending: false })
-      .limit(limit);
-    // Goal linking can target subtasks too; everything else searches top-level tasks.
-    if (req.query.include_subtasks !== 'true') taskQuery = taskQuery.is('parent_task_id', null);
-    const { data: matches, error } = await taskQuery;
-
+    const taskFields = 'id, title, description, status, priority, due_date, work_date, work_end_date:metadata->>work_end_date, start_date, assignee_ids, display_number, list_id, parent_task_id, created_at';
+    const searchField = (field: 'title' | 'description') => {
+      let query = supabaseAdmin
+        .from('tasks')
+        .select(taskFields)
+        .in('list_id', accessibleListIds)
+        .is('recurrence', null)
+        .ilike(field, `%${safeQ}%`)
+        .order('created_at', { ascending: false })
+        .limit(limit);
+      // Preserve title-search behavior for existing callers. Description search
+      // also finds subtasks, and selection opens their owning task details.
+      if (field === 'title' && req.query.include_subtasks !== 'true') {
+        query = query.is('parent_task_id', null);
+      }
+      return query;
+    };
+    const [titleResult, descriptionResult] = await Promise.all([
+      searchField('title'),
+      includeDescriptions ? searchField('description') : Promise.resolve({ data: [], error: null }),
+    ]);
+    const error = titleResult.error || descriptionResult.error;
     if (error) {
       console.error('[pm/search] tasks query error:', error);
-      console.error('[pm/search] accessibleListIds count:', accessibleListIds.length);
       res.status(500).json({ success: false, error: error.message });
       return;
     }
+    const matches = titleResult.data || [];
+    const descriptionMatches = descriptionResult.data || [];
 
     // 4. Enrich with list/folder/space names for breadcrumbs
-    const matchedListIds = Array.from(new Set((matches || []).map((t: any) => t.list_id)));
+    const matchedListIds = Array.from(new Set([...matches, ...descriptionMatches].map((t: any) => t.list_id)));
     let listInfoById: Record<
       string,
       { id: string; name: string; folder_id: string | null; space_id: string }
@@ -287,7 +298,7 @@ router.get('/search', async (req: Request, res: Response) => {
       }
     }
 
-    const enriched = (matches || []).map((t: any) => {
+    const enrich = (t: any) => {
       const list = listInfoById[t.list_id];
       const spaceId = list?.space_id || null;
       const category =
@@ -297,6 +308,7 @@ router.get('/search', async (req: Request, res: Response) => {
       return {
         id: t.id,
         title: t.title,
+        description: t.description ?? null,
         status: t.status,
         category,
         priority: t.priority,
@@ -315,9 +327,9 @@ router.get('/search', async (req: Request, res: Response) => {
         space_name: spaceId ? spaceNameById[spaceId] || null : null,
         space_color: spaceId ? spaceColorById[spaceId] ?? null : null,
       };
-    });
+    };
 
-    res.json({ success: true, data: { tasks: enriched } });
+    res.json({ success: true, data: { tasks: matches.map(enrich), descriptions: descriptionMatches.map(enrich) } });
   } catch (err) {
     console.error('GET /pm/search error:', err);
     res.status(500).json({ success: false, error: 'Internal server error' });
