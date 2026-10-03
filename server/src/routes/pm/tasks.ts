@@ -1611,6 +1611,83 @@ router.post('/tasks/:id/companion-timer/claim', async (req: Request, res: Respon
   }
 });
 
+// POST /pm/tasks/:id/companion-timer/start — announce a mobile timer start AFTER
+// task creation so the web app can pick it up via GET /pm/companion-timers.
+// Creation-time `start_timer` only covers timers started at creation; the
+// mobile detail-screen stopwatch starts later and is otherwise local-only,
+// which is why those timers never appeared on web. Merges into metadata so
+// existing keys (e.g. work_end_date) are preserved.
+router.post('/tasks/:id/companion-timer/start', async (req: Request, res: Response) => {
+  try {
+    const id = req.params.id as string;
+    const { data: task, error } = await supabaseAdmin
+      .from('tasks')
+      .select('id, list_id, metadata')
+      .eq('id', id)
+      .maybeSingle();
+    if (error) throw error;
+    if (!task) {
+      res.status(404).json({ success: false, error: 'Task not found' });
+      return;
+    }
+    const level = await checkResourceAccess(req.userId!, 'list', (task as any).list_id);
+    if (!level || !meetsAccessLevel(level, 'member')) {
+      res.status(403).json({ success: false, error: 'Member access required to track time' });
+      return;
+    }
+    const startedAt = new Date().toISOString();
+    const metadata = { ...((task as any)?.metadata || {}), companion_timer_pending: true, companion_timer_started_at: startedAt };
+    const { error: updateError } = await supabaseAdmin
+      .from('tasks')
+      .update({ metadata })
+      .eq('id', id);
+    if (updateError) throw updateError;
+    res.json({ success: true, data: { id, started_at: startedAt } });
+  } catch (err) {
+    console.error('Start companion timer error:', err);
+    res.status(500).json({ success: false, error: 'Could not start the task timer' });
+  }
+});
+
+// POST /pm/tasks/:id/companion-timer/cancel — withdraw a pending handoff when
+// the mobile timer stops before the web app claims it. Idempotent: succeeds
+// even if nothing was pending (e.g. web already claimed it).
+router.post('/tasks/:id/companion-timer/cancel', async (req: Request, res: Response) => {
+  try {
+    const id = req.params.id as string;
+    const { data: task, error } = await supabaseAdmin
+      .from('tasks')
+      .select('id, list_id, metadata')
+      .eq('id', id)
+      .maybeSingle();
+    if (error) throw error;
+    if (!task) {
+      res.status(404).json({ success: false, error: 'Task not found' });
+      return;
+    }
+    const level = await checkResourceAccess(req.userId!, 'list', (task as any).list_id);
+    if (!level || !meetsAccessLevel(level, 'member')) {
+      res.status(403).json({ success: false, error: 'Member access required to track time' });
+      return;
+    }
+    const metadata = (task as any)?.metadata || {};
+    if (metadata.companion_timer_pending || typeof metadata.companion_timer_started_at === 'string') {
+      const nextMetadata = { ...metadata };
+      delete nextMetadata.companion_timer_pending;
+      delete nextMetadata.companion_timer_started_at;
+      const { error: updateError } = await supabaseAdmin
+        .from('tasks')
+        .update({ metadata: nextMetadata })
+        .eq('id', id);
+      if (updateError) throw updateError;
+    }
+    res.json({ success: true, data: { id } });
+  } catch (err) {
+    console.error('Cancel companion timer error:', err);
+    res.status(500).json({ success: false, error: 'Could not cancel the task timer' });
+  }
+});
+
 // POST /pm/tasks — requires member access on the list
 router.post('/tasks', async (req: Request, res: Response) => {
   try {
