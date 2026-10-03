@@ -5,6 +5,7 @@ import {
   useWorkBlock,
   useActiveWorkBlockRun,
   usePatchWorkBlockConfig,
+  useUpsertWorkBlockConfig,
   useLinkTaskToWorkBlock,
   useUnlinkTaskFromWorkBlock,
   type WorkBlockRun,
@@ -59,7 +60,7 @@ function ScheduleEditor({
   const [startTime, setStartTime] = useState(minuteToInputTime(initial.start_minute));
   const [endTime, setEndTime] = useState(minuteToInputTime(initial.end_minute === 1440 ? 1439 : initial.end_minute));
   const [recurrence, setRecurrence] = useState<Recurrence>(initial.recurrence);
-  const patch = usePatchWorkBlockConfig();
+  const upsert = useUpsertWorkBlockConfig();
   const save = () => {
     const sm = inputTimeToMinute(startTime);
     const em = inputTimeToMinute(endTime);
@@ -67,8 +68,8 @@ function ScheduleEditor({
       // Surface inline rather than alert — the disabled save button does this.
       return;
     }
-    patch.mutate(
-      { task_id: taskId, patch: { start_minute: sm, end_minute: em, recurrence } },
+    upsert.mutate(
+      { task_id: taskId, config: { start_minute: sm, end_minute: em, recurrence } },
       { onSuccess: () => onClose() },
     );
   };
@@ -169,10 +170,10 @@ function ScheduleEditor({
         <button
           type="button"
           onClick={save}
-          disabled={!canSave || patch.isPending}
+          disabled={!canSave || upsert.isPending}
           className="rounded bg-[color:var(--sh-ink)] px-3 py-1 text-[12px] font-medium text-[color:var(--surface)] disabled:opacity-40"
         >
-          {patch.isPending ? 'Saving…' : 'Save'}
+          {upsert.isPending ? 'Saving…' : 'Save'}
         </button>
       </div>
     </div>
