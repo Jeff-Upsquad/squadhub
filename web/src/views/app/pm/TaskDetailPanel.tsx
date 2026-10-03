@@ -49,7 +49,10 @@ import {
   useActiveWorkBlockRun,
   useRecordWorkBlockCompletion,
   useOpenWorkBlockTaskTime,
+  useUpsertWorkBlockConfig,
 } from '../../../hooks/useWorkBlocks';
+import { useFolder } from '../../../hooks/useFolderTasks';
+import { isDesignStatusListName } from '../../../lib/designSpaceLists';
 import { useParallelTimers } from '../../../hooks/useParallelTimers';
 import { useLearningStore } from '../../../stores/learningStore';
 import { useIsMobile } from '../../../hooks/useIsMobile';
@@ -682,6 +685,54 @@ export default function TaskDetailPanel({
 
   const customFields: TaskTypeField[] = currentType?.fields || [];
   const customValues = ((task?.metadata as TaskMetadata | undefined)?.custom || {}) as Record<string, unknown>;
+
+  const { data: folderData } = useFolder(folderId ?? null);
+  const isTemplateSpace = !!folderData?.client_space_template_id;
+  const isSpecializedType = currentType?.key === 'design_task' || currentType?.key === 'video_edit_task';
+  const isDesignStatusList = isDesignStatusListName(listName || '');
+  const isSystemManagedTask = !!task?.source_kind || !!task?.recurring_parent_id;
+
+  // Task type changing is enabled in normal lists, but not in spaces (template spaces / design & video spaces)
+  const canChangeType = !!canEdit && !isTemplateSpace && !isSpecializedType && !isDesignStatusList && !isSystemManagedTask;
+
+  const selectableTypes = useMemo(() => {
+    if (!taskTypes) return [];
+    return taskTypes.filter((t) =>
+      t.is_enabled !== false &&
+      !['course', 'routine', 'design_task', 'video_edit_task', 'meeting', 'knowledge_review'].includes(t.key)
+    );
+  }, [taskTypes]);
+
+  const upsertWb = useUpsertWorkBlockConfig();
+
+  const handleTypeChange = async (newType: TaskType) => {
+    if (!task || newType.id === (task as any).task_type_id) return;
+
+    try {
+      await updateTask.mutateAsync({ id: task.id, task_type_id: newType.id } as any);
+
+      // If transitioning to work_block, initialize default work block config if none exists
+      if (newType.key === 'work_block') {
+        try {
+          await upsertWb.mutateAsync({
+            task_id: task.id,
+            config: {
+              start_minute: 9 * 60,
+              end_minute: 10 * 60,
+              recurrence: { kind: 'none' },
+            },
+          });
+          qc.invalidateQueries({ queryKey: ['work-block', task.id] });
+          qc.invalidateQueries({ queryKey: ['day-plans'] });
+        } catch (err) {
+          console.warn('Could not auto-create work block schedule:', err);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to change task type:', err);
+      showToast('Failed to change task type');
+    }
+  };
 
   function updateCustomField(key: string, value: unknown) {
     if (!task) return;
@@ -2037,12 +2088,23 @@ export default function TaskDetailPanel({
                   </div>
                 )}
                 <div className="td-m-group" data-td-group="status">
-                {/* Type — read-only; resolved from the cached useTaskTypes() list
-                    since /pm/tasks/:id doesn't hydrate the task_type join */}
-                <div className="td-settings-row" data-half="true" data-td="type" style={{ cursor: 'default' }}>
+                {/* Type — editable in normal lists, read-only in spaces / specialized tasks */}
+                <div
+                  className="td-settings-row"
+                  data-half="true"
+                  data-td="type"
+                  style={{ cursor: canChangeType && selectableTypes.length > 1 ? 'pointer' : 'default' }}
+                >
                   <span className="k">{META_ICONS.Type}Type</span>
                   <span className="v">
-                    {displayType ? (
+                    {canChangeType && selectableTypes.length > 1 ? (
+                      <TaskTypePicker
+                        taskTypes={selectableTypes}
+                        current={displayType}
+                        canEdit={canEdit}
+                        onChange={handleTypeChange}
+                      />
+                    ) : displayType ? (
                       <span
                         className="td-prop-chip"
                         style={{
@@ -3619,6 +3681,126 @@ function SpaceStatusPicker({
               >
                 <span className="td-dot" style={{ background: s.color }} />
                 {s.name}
+              </button>
+            ))}
+          </div>
+        </>,
+        document.body,
+      )}
+    </>
+  );
+}
+
+function TaskTypePicker({
+  taskTypes,
+  current,
+  canEdit,
+  onChange,
+}: {
+  taskTypes: TaskType[];
+  current: TaskType | null;
+  canEdit: boolean;
+  onChange: (t: TaskType) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const btnRef = useRef<HTMLButtonElement>(null);
+  const popRef = useRef<HTMLDivElement>(null);
+  const [rect, setRect] = useState<DOMRect | null>(null);
+
+  const toggle = useCallback(() => {
+    if (!canEdit) return;
+    if (open) { setOpen(false); return; }
+    if (btnRef.current) setRect(btnRef.current.getBoundingClientRect());
+    setOpen(true);
+  }, [open, canEdit]);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (popRef.current?.contains(e.target as Node)) return;
+      if (btnRef.current?.contains(e.target as Node)) return;
+      setOpen(false);
+    };
+    window.addEventListener('mousedown', onDown);
+    return () => window.removeEventListener('mousedown', onDown);
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    const reposition = () => {
+      if (btnRef.current) setRect(btnRef.current.getBoundingClientRect());
+    };
+    window.addEventListener('scroll', reposition, true);
+    window.addEventListener('resize', reposition);
+    return () => {
+      window.removeEventListener('scroll', reposition, true);
+      window.removeEventListener('resize', reposition);
+    };
+  }, [open]);
+
+  const popStyle = useMemo<React.CSSProperties>(() => {
+    if (!rect) return { visibility: 'hidden' as const };
+    const maxH = 280;
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const openUp = spaceBelow < 180 && rect.top > spaceBelow;
+    return {
+      position: 'fixed',
+      top: openUp ? Math.max(8, rect.top - maxH - 4) : rect.bottom + 4,
+      left: Math.min(rect.left, window.innerWidth - 220),
+      width: 200,
+      maxHeight: maxH,
+      zIndex: 9999,
+      borderColor: 'var(--sh-hair)',
+      background: 'var(--surface)',
+    };
+  }, [rect]);
+
+  return (
+    <>
+      <button
+        ref={btnRef}
+        type="button"
+        onClick={canEdit ? toggle : undefined}
+        className="td-prop-chip"
+        style={{
+          cursor: canEdit ? 'pointer' : 'default',
+          background: current?.color
+            ? `color-mix(in oklch, ${current.color} 14%, transparent)`
+            : 'var(--surface-alt)',
+          color: current?.color || 'var(--sh-ink-3)',
+        }}
+      >
+        <span className="dot" style={{ background: current?.color || 'var(--sh-ink-4)' }} />
+        {current?.name || '—'}
+        {canEdit && (
+          <svg className="ml-1 opacity-50" width="10" height="10" viewBox="0 0 20 20" fill="currentColor">
+            <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
+          </svg>
+        )}
+      </button>
+      {open && typeof document !== 'undefined' && createPortal(
+        <>
+          <div className="fixed inset-0" style={{ zIndex: 9998 }} onClick={() => setOpen(false)} />
+          <div
+            ref={popRef}
+            className="overflow-y-auto rounded-xl border shadow-lg py-1"
+            style={popStyle}
+          >
+            {taskTypes.map((t) => (
+              <button
+                key={t.id}
+                type="button"
+                onClick={() => {
+                  onChange(t);
+                  setOpen(false);
+                }}
+                className={`flex w-full items-center gap-2 px-3 py-2 text-left text-[13px] hover:bg-[color:var(--sh-hair-3)] ${
+                  current?.id === t.id ? 'bg-[color:var(--sh-hair-3)] font-medium' : ''
+                }`}
+              >
+                <span className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: t.color }} />
+                <span className="flex-1 text-[color:var(--sh-ink)]">{t.name}</span>
+                {t.is_default && <span className="text-[10px] text-[color:var(--sh-ink-4)]">Default</span>}
               </button>
             ))}
           </div>
