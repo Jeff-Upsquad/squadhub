@@ -256,7 +256,7 @@ export default function TodayList() {
     const id = setInterval(() => setNowTick(Date.now()), 1000);
     return () => clearInterval(id);
   }, [timers.length, activeWB]);
-  const { secondsTodayByTask, totalTodaySeconds } = useMemo(() => {
+  const { secondsTodayByTask, totalTodaySeconds, liveByTask } = useMemo(() => {
     // Net seconds tracked today per task. We sum the SIGNED duration of every
     // entry — real timer sessions AND negative manual "Time logged" corrections
     // — so this uses the same signed accounting as the task's own logged total
@@ -272,11 +272,17 @@ export default function TodayList() {
     }
     // Live add-on per running task = its equal split of the CURRENT segment
     // only — earlier segments were already flushed into today's entries above,
-    // so this can't double-count.
+    // so this can't double-count. Tracked separately in liveByTask so rows can
+    // show TOTAL Time logged (task.time_tracked + live) while the header keeps
+    // showing today-only.
+    const liveByTask = new Map<string, number>();
     if (timers.length && timerSegmentStart != null) {
       const live = Math.max(0, Math.floor((nowTick - timerSegmentStart) / 1000 / timers.length));
       if (live > 0) {
-        for (const rt of timers) net.set(rt.taskId, (net.get(rt.taskId) || 0) + live);
+        for (const rt of timers) {
+          net.set(rt.taskId, (net.get(rt.taskId) || 0) + live);
+          liveByTask.set(rt.taskId, (liveByTask.get(rt.taskId) || 0) + live);
+        }
       }
     }
     if (activeWB?.task?.id && activeWB.run?.started_at && !activeWB.run.ended_at) {
@@ -284,6 +290,7 @@ export default function TodayList() {
       const liveWb = Math.max(0, Math.floor((nowTick - wbStart) / 1000));
       if (liveWb > 0) {
         net.set(activeWB.task.id, (net.get(activeWB.task.id) || 0) + liveWb);
+        liveByTask.set(activeWB.task.id, (liveByTask.get(activeWB.task.id) || 0) + liveWb);
       }
     }
     const map = new Map<string, number>();
@@ -293,7 +300,7 @@ export default function TodayList() {
       map.set(taskId, clamped);
       total += clamped;
     }
-    return { secondsTodayByTask: map, totalTodaySeconds: total };
+    return { secondsTodayByTask: map, totalTodaySeconds: total, liveByTask };
   }, [timeEntries, today, timers, timerSegmentStart, nowTick, activeWB]);
 
   useEffect(() => {
@@ -360,11 +367,11 @@ export default function TodayList() {
           onToggle={() => toggleGroupedExpanded(item.key)}
           onOpenContainer={openContainer}
           renderChild={(t) => (
-            <TodayRow key={t.id} task={t} onOpen={openTask} secondsToday={secondsTodayByTask.get(t.id) || 0} isInProgress={inProgressIds.has(t.id)} />
+            <TodayRow key={t.id} task={t} onOpen={openTask} secondsToday={secondsTodayByTask.get(t.id) || 0} liveSecs={liveByTask.get(t.id) || 0} isInProgress={inProgressIds.has(t.id)} />
           )}
         />
       ) : (
-        <TodayRow key={item.id} task={item} onOpen={openTask} secondsToday={secondsTodayByTask.get(item.id) || 0} isInProgress={inProgressIds.has(item.id)} />
+        <TodayRow key={item.id} task={item} onOpen={openTask} secondsToday={secondsTodayByTask.get(item.id) || 0} liveSecs={liveByTask.get(item.id) || 0} isInProgress={inProgressIds.has(item.id)} />
       ),
     );
 
@@ -413,7 +420,7 @@ export default function TodayList() {
         </div>
         <div className="hm-list">
           {unbucketedInProgress.map((t) => (
-            <TodayRow key={t.id} task={t} onOpen={openTask} secondsToday={secondsTodayByTask.get(t.id) || 0} isInProgress />
+            <TodayRow key={t.id} task={t} onOpen={openTask} secondsToday={secondsTodayByTask.get(t.id) || 0} liveSecs={liveByTask.get(t.id) || 0} isInProgress />
           ))}
         </div>
       </div>
@@ -636,7 +643,7 @@ function BucketSection({
   );
 }
 
-function TodayRow({ task: t, onOpen, secondsToday = 0, isInProgress = false }: { task: Task; onOpen: (id: string) => void; secondsToday?: number; isInProgress?: boolean }) {
+function TodayRow({ task: t, onOpen, secondsToday = 0, liveSecs = 0, isInProgress = false }: { task: Task; onOpen: (id: string) => void; secondsToday?: number; liveSecs?: number; isInProgress?: boolean }) {
   const updateTask = useUpdateTask(null);
   const setFocusBucket = usePMStore((s) => s.setFocusBucket);
   const ownBucket = usePMStore((s) => s.focusBuckets[t.id]);
@@ -869,11 +876,24 @@ function TodayRow({ task: t, onOpen, secondsToday = 0, isInProgress = false }: {
           {whenText}
         </span>
       )}
-      {secondsToday > 0 && (
-        <span className="hm-tracked" data-live={isTracking || undefined} title="Tracked today">
-          {formatTracked(secondsToday)}
-        </span>
-      )}
+      {(() => {
+        // Show TOTAL Time logged (all days + live running), not just today's
+        // slice — matches the task detail's "Time logged" and the list view.
+        const totalSecs = (t.time_tracked || 0) + liveSecs;
+        if (totalSecs <= 0) return null;
+        const totalText = formatTracked(totalSecs) || '<1m';
+        const todayText = secondsToday > 0 ? formatTracked(secondsToday) : '';
+        const title = todayText && totalSecs !== secondsToday
+          ? `Time logged ${totalText} total · ${todayText} today`
+          : todayText
+            ? `Time logged ${totalText} · today`
+            : `Time logged ${totalText} total`;
+        return (
+          <span className="hm-tracked" data-live={isTracking || undefined} title={title}>
+            {totalText}
+          </span>
+        );
+      })()}
       <button
         type="button"
         className="hm-timer-btn"
