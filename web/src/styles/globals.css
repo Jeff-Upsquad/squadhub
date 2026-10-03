@@ -8826,10 +8826,14 @@ ol.sqc-list {
 }
 @media (prefers-reduced-motion: reduce) { .hm-home .hm-live-dot { animation: none; } }
 
-/* Per-row "tracked today" chip — sits just left of the assignee avatar. Turns
-   accent-green while this task's timer is live. */
+/* Per-row total Time logged chip — sits just left of the assignee avatar. Turns
+   accent-green while this task's timer is live. Tooltip breaks out today vs total. */
 .hm-home .hm-task .hm-tracked { font-family: 'Inter', sans-serif; font-size: 11px; font-weight: 600; color: color-mix(in srgb, var(--sh-ink) 55%, transparent); background: color-mix(in srgb, var(--sh-ink) 7%, transparent); border-radius: 999px; padding: 2px 8px; white-space: nowrap; flex: none; font-variant-numeric: tabular-nums; }
 .hm-home .hm-task .hm-tracked[data-live] { color: var(--hm-accent); background: color-mix(in srgb, var(--hm-accent) 14%, transparent); }
+/* Same total Time logged chip inside Home slide-over rows (DashboardTaskRow
+   meta line) — total across all days, accent-green while timing. */
+.hm-home .hmp-task .hm-tracked { font-family: 'Inter', sans-serif; font-size: 10.5px; font-weight: 600; color: color-mix(in srgb, var(--sh-ink) 55%, transparent); background: color-mix(in srgb, var(--sh-ink) 7%, transparent); border-radius: 999px; padding: 1px 7px; white-space: nowrap; flex: none; font-variant-numeric: tabular-nums; }
+.hm-home .hmp-task .hm-tracked[data-live] { color: var(--hm-accent); background: color-mix(in srgb, var(--hm-accent) 14%, transparent); }
 
 /* Total tracked today — right-aligned pill on the In progress header. */
 .hm-home .hm-inprogress-card .hm-tracked-total { margin-left: auto; display: inline-flex; align-items: center; gap: 5px; font-family: 'Inter', sans-serif; font-size: 12px; font-weight: 600; color: var(--hm-accent); background: color-mix(in srgb, var(--hm-accent) 12%, transparent); border-radius: 999px; padding: 3px 10px; font-variant-numeric: tabular-nums; }

@@ -11,6 +11,7 @@ import { useTaskTypes } from '../../../hooks/useTaskTypes';
 import { useActiveWorkBlockRun, useStopWorkBlockRun } from '../../../hooks/useWorkBlocks';
 import { computeSnoozeTargets } from '../../../hooks/useDayPlanner';
 import { useIsMobile } from '../../../hooks/useIsMobile';
+import { formatTracked } from '../../../lib/formatDuration';
 import { formatTaskDates } from '../pm/taskHelpers';
 import AssigneePicker from '../pm/AssigneePicker';
 import IncompleteItemsDialog from '../pm/IncompleteItemsDialog';
@@ -228,6 +229,22 @@ function DashboardTaskRowInner({
   const stopWBRun = useStopWorkBlockRun();
   const isWBRunForThisTask = !!activeWB && !activeWB.run.ended_at && activeWB.task.id === task.id;
   const isTiming = isTracking || isWBRunForThisTask;
+  // Live tick for the total Time logged chip (same pattern as the PM list
+  // rows) so a running timer advances the displayed total without a refetch.
+  const rowTimer = timers.find((x) => x.taskId === task.id) || null;
+  const [tickElapsed, setTickElapsed] = useState(0);
+  useEffect(() => {
+    if (!isTiming) { setTickElapsed(0); return; }
+    const startMs = rowTimer
+      ? (rowTimer.startedAt ?? Date.now())
+      : activeWB ? new Date(activeWB.run.started_at).getTime() : Date.now();
+    const tick = () => setTickElapsed(Math.max(0, Math.floor((Date.now() - startMs) / 1000)));
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [isTiming, rowTimer?.startedAt, activeWB?.run.started_at]);
+  const totalTrackedSecs = (task.time_tracked || 0) + (isTiming ? tickElapsed : 0);
+  const trackedText = totalTrackedSecs > 0 ? (formatTracked(totalTrackedSecs) || '<1m') : null;
   const [menuPos, setMenuPos] = useState<{ left: number; top: number } | null>(null);
   const moveRef = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -326,6 +343,15 @@ function DashboardTaskRowInner({
         <div className="meta">
           {isSubtask && parentTitle && <span>From: {parentTitle}</span>}
           <span className="when" data-overdue={isOverdue || undefined}>{whenText}</span>
+          {trackedText && (
+            <span
+              className="hm-tracked"
+              data-live={isTiming || undefined}
+              title={isTiming ? `Time logged ${trackedText} · timer running` : `Time logged ${trackedText} total`}
+            >
+              {trackedText}
+            </span>
+          )}
           {priorityLabel && (
             <span className="pri" data-urgent={task.priority === 'urgent' || undefined}>{priorityLabel}</span>
           )}
