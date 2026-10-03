@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import type { TaskTimeEntry } from '@squadhub/shared';
 import api from '../services/api';
+import { usePMStore } from '../stores/pmStore';
 
 export function useMyTimeEntries(enabled: boolean = true) {
   return useQuery<TaskTimeEntry[]>({
@@ -52,7 +53,10 @@ export function useCreateTaskTimeEntry() {
       });
       return res.data.data as TaskTimeEntry;
     },
-    onSuccess: (_data, vars) => invalidateTimeQueries(qc, vars.taskId),
+    onSuccess: (_data, vars) => {
+      usePMStore.getState().setFocusBucket(vars.taskId, null);
+      invalidateTimeQueries(qc, vars.taskId);
+    },
   });
 }
 

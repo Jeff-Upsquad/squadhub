@@ -34,13 +34,16 @@ export function focusBucketForMinute(minute: number): FocusBucket | null {
 // Resolve the section a task currently sits in: an explicit per-instance
 // assignment wins; otherwise a recurring task inherits its template's sticky
 // section so spawned copies reappear where the user last placed the routine.
+// In-progress tasks never inherit template buckets — they stay in In Progress.
 export function effectiveFocusBucket(
   task: { id: string; recurring_parent_id?: string | null },
   focusBuckets: Record<string, FocusBucket>,
   recurringFocusBuckets: Record<string, FocusBucket>,
+  isInProgress?: boolean,
 ): FocusBucket | undefined {
   const own = focusBuckets[task.id];
   if (own) return own;
+  if (isInProgress) return undefined;
   const parent = task.recurring_parent_id;
   if (parent && recurringFocusBuckets[parent]) return recurringFocusBuckets[parent];
   return undefined;
@@ -893,7 +896,7 @@ export const usePMStore = create<PMState>()(
         lastActiveSection: state.lastActiveSection,
         lastHomeView: state.lastHomeView,
       }),
-      version: 4,
+      version: 5,
       migrate: (persisted: unknown, fromVersion: number) => {
         let p = (persisted ?? {}) as Partial<PMState> & { timer?: TimerState | null };
         if (fromVersion < 2) {
@@ -908,6 +911,10 @@ export const usePMStore = create<PMState>()(
           const legacy = p.timer ?? null;
           p = { ...p, timers: legacy ? [legacy] : [], timerSegmentStart: legacy ? legacy.startedAt : null };
           delete p.timer;
+        }
+        if (fromVersion < 5) {
+          // Reset focusBuckets so tasks with logged time move up to In progress.
+          p = { ...p, focusBuckets: {} };
         }
         if (!p.pendingTimeSync) {
           p = { ...p, pendingTimeSync: [] };
