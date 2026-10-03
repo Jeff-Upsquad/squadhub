@@ -767,26 +767,13 @@ router.get('/tasks/my', async (req: Request, res: Response) => {
       workedTodayIds.push(id);
     }
 
-    // All open tasks assigned to caller with time tracked (> 0), excluding future work dates
-    for (const t of openTasks) {
-      if ((t as any).time_tracked && (t as any).time_tracked > 0) {
-        const workDay = toTzDay(t.work_date);
-        if (workDay && workDay > todayStr) continue;
-        if (!seenWorked.has(t.id)) {
-          seenWorked.add(t.id);
-          workedTodayIds.push(t.id);
-        }
-      }
-    }
-
-    // Other tasks the caller has time entries on (most-recently worked first)
-    for (const e of recentEntries || []) {
-      const id = (e as any).task_id as string;
-      if (id && !seenWorked.has(id)) {
-        seenWorked.add(id);
-        workedTodayIds.push(id);
-      }
-    }
+    // NOTE: In Progress is strictly "worked TODAY" (time entries logged today
+    // or a currently-active run). We deliberately do NOT pull in every task
+    // with historic time_tracked > 0 or every task ever worked: a task whose
+    // work_date is moved to a future date must surface in the Home Focus list
+    // (Forecast) when that date arrives — not stick in In Progress because it
+    // was worked on some earlier day. Only actual work logged on todayStr
+    // (re-)enters In Progress for that day.
     if (workedTodayIds.length > 0) {
       const have = new Map(tasks.map((t: any) => [t.id, t]));
       const missingWorked = workedTodayIds.filter((id) => !have.has(id));
