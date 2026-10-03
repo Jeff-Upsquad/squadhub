@@ -83,6 +83,9 @@ export async function flushPendingTimeSync(qc?: QueryClient): Promise<void> {
 export async function flushTimerShares(qc: QueryClient, shares: TimerShare[]): Promise<void> {
   const real = shares.filter((s) => s.seconds >= 1);
   if (!real.length) return;
+  for (const s of real) {
+    usePMStore.getState().setFocusBucket(s.taskId, null);
+  }
   usePMStore.getState().enqueueTimeShares(real);
   await flushPendingTimeSync(qc);
 }
@@ -123,6 +126,7 @@ export function useParallelTimers() {
     try {
       await offerWorkTimer(qc, { workspaceId, context });
       const run = await startWorkBlockRun.mutateAsync({ task_id: target.taskId });
+      usePMStore.getState().setFocusBucket(target.taskId, null);
       for (const t of timers) {
         if (t.taskId !== target.taskId) openTaskTime.mutate({ run_id: run.id, task_id: t.taskId });
       }
@@ -144,6 +148,7 @@ export function useParallelTimers() {
       .getState()
       .startParallelTimer(target.taskId, target.taskTitle, target.listId, target.baseTracked);
     if (!res) return false;
+    usePMStore.getState().setFocusBucket(target.taskId, null);
     if (wbRun && wbRun.task.id !== target.taskId) {
       openTaskTime.mutate({ run_id: wbRun.run.id, task_id: target.taskId });
     }

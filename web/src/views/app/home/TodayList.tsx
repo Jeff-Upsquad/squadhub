@@ -177,12 +177,17 @@ export default function TodayList() {
   const inProgressTasks = useRetainFading(rawInProgress, fadingTaskIds);
   const inProgressIds = useMemo(() => new Set(inProgressTasks.map((t) => t.id)), [inProgressTasks]);
 
+  // Check if a task is actively being timed right now (timer running or active work-block run).
+  // Actively timed tasks ALWAYS stay in "In progress today" at the top of the dashboard.
+  const isActivelyTimed = (id: string) =>
+    timers.some((rt) => rt.taskId === id) || (activeWB?.task?.id === id && !activeWB.run?.ended_at);
+
   // In-progress tasks that have NOT been assigned a bucket — these stay in the
   // "In progress today" card. Those with a bucket ('evening', 'night', 'focus') flow
-  // into their respective section below.
+  // into their respective section below. Any task actively running a timer always stays in In progress.
   const unbucketedInProgress = useMemo(
-    () => inProgressTasks.filter((t) => !effectiveFocusBucket(t, focusBuckets, recurringFocusBuckets)),
-    [inProgressTasks, focusBuckets, recurringFocusBuckets],
+    () => inProgressTasks.filter((t) => isActivelyTimed(t.id) || !effectiveFocusBucket(t, focusBuckets, recurringFocusBuckets, true)),
+    [inProgressTasks, focusBuckets, recurringFocusBuckets, timers, activeWB],
   );
 
   // Union of regular starred tasks + any in-progress tasks that have an explicit bucket.
@@ -190,8 +195,8 @@ export default function TodayList() {
     const list = [...tasks];
     const seen = new Set(list.map((t) => t.id));
     for (const t of inProgressTasks) {
-      if (!seen.has(t.id)) {
-        const b = effectiveFocusBucket(t, focusBuckets, recurringFocusBuckets);
+      if (!seen.has(t.id) && !isActivelyTimed(t.id)) {
+        const b = effectiveFocusBucket(t, focusBuckets, recurringFocusBuckets, true);
         if (b) {
           list.push(t);
           seen.add(t.id);
@@ -199,31 +204,32 @@ export default function TodayList() {
       }
     }
     return list;
-  }, [tasks, inProgressTasks, focusBuckets, recurringFocusBuckets]);
+  }, [tasks, inProgressTasks, focusBuckets, recurringFocusBuckets, timers, activeWB]);
 
   // Split the focus list into the main list plus the manual Evening / Night
   // triage buckets that render as their own sections below it. Any in-progress
   // task without a bucket stays in the "In progress today" section above.
   const focusTasks = useMemo(() => allFocusCandidates.filter((t) => {
-    const b = effectiveFocusBucket(t, focusBuckets, recurringFocusBuckets);
+    if (isActivelyTimed(t.id)) return false;
+    const b = effectiveFocusBucket(t, focusBuckets, recurringFocusBuckets, inProgressIds.has(t.id));
     if (!inProgressIds.has(t.id)) return true;
     return !!b;
-  }), [allFocusCandidates, inProgressIds, focusBuckets, recurringFocusBuckets]);
+  }), [allFocusCandidates, inProgressIds, focusBuckets, recurringFocusBuckets, timers, activeWB]);
 
   const mainTasks = useMemo(
     () => focusTasks.filter((t) => {
-      const b = effectiveFocusBucket(t, focusBuckets, recurringFocusBuckets);
+      const b = effectiveFocusBucket(t, focusBuckets, recurringFocusBuckets, inProgressIds.has(t.id));
       return !b || b === 'focus';
     }),
-    [focusTasks, focusBuckets, recurringFocusBuckets],
+    [focusTasks, focusBuckets, recurringFocusBuckets, inProgressIds],
   );
   const eveningTasks = useMemo(
-    () => focusTasks.filter((t) => effectiveFocusBucket(t, focusBuckets, recurringFocusBuckets) === 'evening'),
-    [focusTasks, focusBuckets, recurringFocusBuckets],
+    () => focusTasks.filter((t) => effectiveFocusBucket(t, focusBuckets, recurringFocusBuckets, inProgressIds.has(t.id)) === 'evening'),
+    [focusTasks, focusBuckets, recurringFocusBuckets, inProgressIds],
   );
   const nightTasks = useMemo(
-    () => focusTasks.filter((t) => effectiveFocusBucket(t, focusBuckets, recurringFocusBuckets) === 'night'),
-    [focusTasks, focusBuckets, recurringFocusBuckets],
+    () => focusTasks.filter((t) => effectiveFocusBucket(t, focusBuckets, recurringFocusBuckets, inProgressIds.has(t.id)) === 'night'),
+    [focusTasks, focusBuckets, recurringFocusBuckets, inProgressIds],
   );
 
   const groupBy = usePMStore((s) => s.todayListGroupBy);
@@ -636,8 +642,8 @@ function TodayRow({ task: t, onOpen, secondsToday = 0, isInProgress = false }: {
   const ownBucket = usePMStore((s) => s.focusBuckets[t.id]);
   const recurringFocusBuckets = usePMStore((s) => s.recurringFocusBuckets);
   // Effective section: an explicit per-instance bucket wins; a recurring task
-  // otherwise inherits its template's sticky section.
-  const bucket = ownBucket ?? (t.recurring_parent_id ? recurringFocusBuckets[t.recurring_parent_id] : undefined);
+  // otherwise inherits its template's sticky section (unless it's in progress today).
+  const bucket = ownBucket ?? (isInProgress ? undefined : (t.recurring_parent_id ? recurringFocusBuckets[t.recurring_parent_id] : undefined));
   const markFading = usePMStore((s) => s.markFading);
   const unmarkFading = usePMStore((s) => s.unmarkFading);
   const isFading = usePMStore((s) => s.fadingTaskIds.has(t.id));
@@ -926,6 +932,11 @@ function TodayRow({ task: t, onOpen, secondsToday = 0, isInProgress = false }: {
           style={{ left: menuPos.left, top: menuPos.top }}
           onClick={(e) => e.stopPropagation()}
         >
+          {isInProgress && bucket && (
+            <button type="button" role="menuitem" className="hm-bucket-menu-item" onClick={(e) => moveTo(e, null)}>
+              <span>Move to In progress</span>
+            </button>
+          )}
           {isInProgress && bucket !== 'focus' && (
             <button type="button" role="menuitem" className="hm-bucket-menu-item" onClick={(e) => moveTo(e, 'focus')}>
               <span>Move to Focus list</span>
@@ -934,11 +945,6 @@ function TodayRow({ task: t, onOpen, secondsToday = 0, isInProgress = false }: {
           {!isInProgress && (bucket === 'evening' || bucket === 'night') && (
             <button type="button" role="menuitem" className="hm-bucket-menu-item" onClick={(e) => moveTo(e, null)}>
               <span>Move to Focus list</span>
-            </button>
-          )}
-          {isInProgress && bucket === 'focus' && (
-            <button type="button" role="menuitem" className="hm-bucket-menu-item" onClick={(e) => moveTo(e, null)}>
-              <span>Move to In progress</span>
             </button>
           )}
           <button type="button" role="menuitem" className="hm-bucket-menu-item" data-active={bucket === 'evening'} onClick={(e) => moveTo(e, 'evening')}>

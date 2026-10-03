@@ -132,9 +132,13 @@ export function useStartWorkBlockRun() {
       const res = await api.post(`/pm/work-blocks/${vars.task_id}/runs`);
       return res.data?.data as WorkBlockRun;
     },
+    onSuccess: (_d, vars) => {
+      usePMStore.getState().setFocusBucket(vars.task_id, null);
+    },
     onSettled: (_d, _e, vars) => {
       qc.invalidateQueries({ queryKey: ['work-block', vars.task_id] });
       qc.invalidateQueries({ queryKey: ['work-block', 'active'] });
+      qc.invalidateQueries({ queryKey: ['my-tasks'] });
     },
   });
 }
@@ -145,6 +149,11 @@ export function useStopWorkBlockRun() {
     mutationFn: async (vars: { run_id: string; task_id: string }) => {
       const res = await api.patch(`/pm/work-blocks/runs/${vars.run_id}`);
       return res.data?.data as WorkBlockRun;
+    },
+    onSuccess: (_d, vars) => {
+      if (vars?.task_id) {
+        usePMStore.getState().setFocusBucket(vars.task_id, null);
+      }
     },
     onSettled: (_d, _e, vars) => {
       qc.invalidateQueries({ queryKey: ['work-block', vars.task_id] });
