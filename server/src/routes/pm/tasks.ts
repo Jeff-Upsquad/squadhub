@@ -766,6 +766,27 @@ router.get('/tasks/my', async (req: Request, res: Response) => {
       seenWorked.add(id);
       workedTodayIds.push(id);
     }
+
+    // All open tasks assigned to caller with time tracked (> 0), excluding future work dates
+    for (const t of openTasks) {
+      if ((t as any).time_tracked && (t as any).time_tracked > 0) {
+        const workDay = toTzDay(t.work_date);
+        if (workDay && workDay > todayStr) continue;
+        if (!seenWorked.has(t.id)) {
+          seenWorked.add(t.id);
+          workedTodayIds.push(t.id);
+        }
+      }
+    }
+
+    // Other tasks the caller has time entries on (most-recently worked first)
+    for (const e of recentEntries || []) {
+      const id = (e as any).task_id as string;
+      if (id && !seenWorked.has(id)) {
+        seenWorked.add(id);
+        workedTodayIds.push(id);
+      }
+    }
     if (workedTodayIds.length > 0) {
       const have = new Map(tasks.map((t: any) => [t.id, t]));
       const missingWorked = workedTodayIds.filter((id) => !have.has(id));
@@ -810,7 +831,11 @@ router.get('/tasks/my', async (req: Request, res: Response) => {
       buckets.in_progress_today = workedTodayIds
         .map((id) => workedById.get(id))
         .filter(Boolean)
-        .filter((t) => includeDone || !isTaskDone(t));
+        .filter((t) => includeDone || !isTaskDone(t))
+        .filter((t) => {
+          const workDay = toTzDay(t.work_date);
+          return !(workDay && workDay > todayStr);
+        });
     }
 
     res.json({ success: true, data: buckets });

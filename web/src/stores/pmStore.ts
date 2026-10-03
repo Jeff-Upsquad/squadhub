@@ -17,7 +17,7 @@ export type CalendarMode = 'month' | 'week' | '5day' | '4day' | 'day';
 // local midnight (see rolloverFocusBuckets); a recurring task's section is
 // instead remembered per recurrence template in `recurringFocusBuckets`, so
 // every freshly spawned copy reappears in the same section.
-export type FocusBucket = 'evening' | 'night';
+export type FocusBucket = 'evening' | 'night' | 'focus';
 
 // Local-clock thresholds (hour-of-day, 24h) for the two buckets.
 export const EVENING_START_HOUR = 15; // 3 PM

@@ -113,6 +113,8 @@ export type MyTasksBuckets = {
   // Tasks the caller has logged time on today (user tz), most-recent first.
   // Surfaced as the "In progress today" section above the Home focus list.
   in_progress_today: Task[];
+  day_planner?: Task[];
+  unscheduled?: Task[];
 };
 
 export function useMyTasks() {
