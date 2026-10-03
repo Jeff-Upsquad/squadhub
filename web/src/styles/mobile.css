@@ -1626,6 +1626,7 @@
     cursor: pointer;
   }
   .td-m-hero-icon[data-on='true'] { color: #f59e0b; }
+  .td-m-hero-icon[data-active='true'] { background: rgba(255, 255, 255, 0.16); color: #fff; }
   .td-m-hero-title {
     display: flex;
     align-items: flex-start;
