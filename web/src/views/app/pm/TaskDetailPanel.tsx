@@ -61,6 +61,7 @@ import EstimatePopover from '../../../components/pm/EstimatePopover';
 import LogTimePopover from '../../../components/pm/LogTimePopover';
 import { formatDuration } from '../../../lib/timeDuration';
 import AddEntrySplitButton from './AddEntrySplitButton';
+import TaskDetailMoreMenu from './TaskDetailMoreMenu';
 
 function formatTracked(seconds: number | null | undefined): string {
   if (!seconds) return '';
@@ -1261,30 +1262,33 @@ export default function TaskDetailPanel({
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71" /><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71" /></svg>
               </button>
               <div className="relative">
-                <button type="button" className="td-m-hero-icon" aria-label="More" onClick={() => setMoreMenuOpen((v) => !v)}>
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.6" /><circle cx="12" cy="12" r="1.6" /><circle cx="19" cy="12" r="1.6" /></svg>
+                <button
+                  type="button"
+                  className="td-m-hero-icon"
+                  data-active={moreMenuOpen}
+                  aria-label="More actions"
+                  aria-haspopup="menu"
+                  aria-expanded={moreMenuOpen}
+                  onClick={() => setMoreMenuOpen((v) => !v)}
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                    <circle cx="5" cy="12" r="1.6" />
+                    <circle cx="12" cy="12" r="1.6" />
+                    <circle cx="19" cy="12" r="1.6" />
+                  </svg>
                 </button>
-                {moreMenuOpen && (
-                  <>
-                    <div className="fixed inset-0 z-10" onClick={() => setMoreMenuOpen(false)} />
-                    <div className="sh-float absolute right-0 top-full z-20 mt-1 w-44 overflow-hidden rounded-lg border shadow-lg" style={{ borderColor: 'var(--sh-hair)', background: 'var(--surface)' }}>
-                      <button onClick={() => { setMoreMenuOpen(false); useGoalsUI.getState().pickGoalFor(task.id); }} className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm" style={{ color: 'var(--sh-ink)' }}>
-                        <GoalIcon name="flag" size={14} /> Add to a goal
-                      </button>
-                      {canEdit && workspaceId && (
-                        <button onClick={() => { setMoreMenuOpen(false); setMovePickerOpen(true); }} className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm" style={{ color: 'var(--sh-ink)' }}>Move to another list</button>
-                      )}
-                      {canEdit && workspaceId && (
-                        <button onClick={() => { setMoreMenuOpen(false); setAddPickerOpen(true); }} className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm" style={{ color: 'var(--sh-ink)' }}>Add to list</button>
-                      )}
-                      {canEdit && (
-                        <button onClick={() => { handleDelete(); setMoreMenuOpen(false); }} className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm" style={{ color: 'oklch(0.55 0.18 25)' }}>Delete task</button>
-                      )}
-                      <div className="border-t border-[var(--sh-hair)]" />
-                      <button onClick={() => { setMoreMenuOpen(false); setShowReport(true); }} className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50">🚩 Report SOP breach</button>
-                    </div>
-                  </>
-                )}
+                <TaskDetailMoreMenu
+                  open={moreMenuOpen}
+                  onClose={() => setMoreMenuOpen(false)}
+                  canEdit={canEdit}
+                  workspaceId={workspaceId}
+                  taskId={task?.id}
+                  onMoveToList={() => setMovePickerOpen(true)}
+                  onAddToList={() => setAddPickerOpen(true)}
+                  onDelete={handleDelete}
+                  onAddToGoal={() => task && useGoalsUI.getState().pickGoalFor(task.id)}
+                  onReportSop={() => setShowReport(true)}
+                />
               </div>
             </div>
             <div className="td-m-hero-title">
@@ -1456,68 +1460,34 @@ export default function TaskDetailPanel({
             </svg>
           </button>
           <div className="relative">
-            <button type="button" onClick={() => setMoreMenuOpen((v) => !v)} className="td-nav-btn" title="More">
+            <button
+              type="button"
+              onClick={() => setMoreMenuOpen((v) => !v)}
+              className="td-nav-btn"
+              data-active={moreMenuOpen}
+              title="More actions"
+              aria-label="More actions"
+              aria-haspopup="menu"
+              aria-expanded={moreMenuOpen}
+            >
               <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor">
                 <circle cx="5" cy="12" r="1.5" />
                 <circle cx="12" cy="12" r="1.5" />
                 <circle cx="19" cy="12" r="1.5" />
               </svg>
             </button>
-            {moreMenuOpen && (
-              <>
-                <div className="fixed inset-0 z-10" onClick={() => setMoreMenuOpen(false)} />
-                <div
-                  className="absolute right-0 top-full z-20 mt-1 w-44 overflow-hidden rounded-lg border shadow-lg"
-                  style={{ borderColor: 'var(--sh-hair)', background: 'var(--surface)' }}
-                >
-                  {canEdit && workspaceId && (
-                    <button
-                      onClick={() => { setMoreMenuOpen(false); setMovePickerOpen(true); }}
-                      className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-[color:var(--sh-hair-3)]"
-                      style={{ color: 'var(--sh-ink)' }}
-                    >
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-[color:var(--sh-ink-4)]">
-                        <path d="M5 9l-3 3 3 3" />
-                        <path d="M2 12h13" />
-                        <path d="M22 5v14a2 2 0 01-2 2h-6" />
-                      </svg>
-                      Move to another list
-                    </button>
-                  )}
-                  {canEdit && workspaceId && (
-                    <button
-                      onClick={() => { setMoreMenuOpen(false); setAddPickerOpen(true); }}
-                      className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-[color:var(--sh-hair-3)]"
-                      style={{ color: 'var(--sh-ink)' }}
-                    >
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-[color:var(--sh-ink-4)]">
-                        <path d="M9 11l3 3L22 4" />
-                        <path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11" />
-                        <line x1="19" y1="3" x2="19" y2="9" />
-                        <line x1="16" y1="6" x2="22" y2="6" />
-                      </svg>
-                      Add to list
-                    </button>
-                  )}
-                  {canEdit && (
-                    <button
-                      onClick={() => { handleDelete(); setMoreMenuOpen(false); }}
-                      className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-[color:var(--sh-hair-3)]"
-                      style={{ color: 'oklch(0.55 0.18 25)' }}
-                    >
-                      Delete task
-                    </button>
-                  )}
-                  {task && (
-                    <button onClick={() => { setMoreMenuOpen(false); useGoalsUI.getState().pickGoalFor(task.id); }} className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-[var(--sh-hair-3)]">
-                      <GoalIcon name="flag" size={14} /> Add to a goal
-                    </button>
-                  )}
-                  <div className="border-t border-[var(--sh-hair)]" />
-                  <button onClick={() => { setMoreMenuOpen(false); setShowReport(true); }} className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50">🚩 Report SOP breach</button>
-                </div>
-              </>
-            )}
+            <TaskDetailMoreMenu
+              open={moreMenuOpen}
+              onClose={() => setMoreMenuOpen(false)}
+              canEdit={canEdit}
+              workspaceId={workspaceId}
+              taskId={task?.id}
+              onMoveToList={() => setMovePickerOpen(true)}
+              onAddToList={() => setAddPickerOpen(true)}
+              onDelete={handleDelete}
+              onAddToGoal={() => task && useGoalsUI.getState().pickGoalFor(task.id)}
+              onReportSop={() => setShowReport(true)}
+            />
           </div>
           {task && canEdit && (
             isAnyRunningForThisTask ? (
