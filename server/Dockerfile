@@ -1,3 +1,9 @@
+# Supply the sibling core with --build-context squad_bots=../squad-bots/packages/core.
+FROM node:20-alpine AS squad-bots-core
+WORKDIR /squad-bots/packages/core
+COPY --from=squad_bots . .
+RUN npm install --legacy-peer-deps && npm run build
+
 FROM node:20-alpine AS builder
 WORKDIR /app
 
@@ -7,6 +13,7 @@ WORKDIR /app
 ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
 
 # Copy all package files for full workspace install
+COPY --from=squad-bots-core /squad-bots/packages/core /squad-bots/packages/core
 COPY package.json package-lock.json* ./
 COPY shared/package.json shared/
 COPY server/package.json server/
@@ -15,7 +22,7 @@ COPY admin/package.json admin/
 COPY ["desktop companion app/package.json", "desktop companion app/"]
 
 # Full install to ensure workspace symlinks are created
-RUN npm install
+RUN npm install --install-links --legacy-peer-deps
 
 # Copy source
 COPY shared/ shared/

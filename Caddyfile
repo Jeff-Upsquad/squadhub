@@ -31,6 +31,11 @@ squadhub.in {
 	}
 }
 
+bots.squadhub.in {
+	encode zstd gzip
+	reverse_proxy squad-bots:4020
+}
+
 admin.squadhub.in {
 	reverse_proxy admin:3001
 }

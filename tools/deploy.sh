@@ -64,7 +64,25 @@ cd /opt/squadhub
 BEFORE_SHA=$(git rev-parse HEAD)
 echo ""
 echo "Pulling latest from origin/main..."
-git pull origin main
+# Preserve VPS-only site blocks; validate the merge before touching live files.
+git fetch origin main
+CADDY_TMP=$(mktemp -d)
+cp Caddyfile "$CADDY_TMP/original"
+git show HEAD:Caddyfile > "$CADDY_TMP/base"
+git show origin/main:Caddyfile > "$CADDY_TMP/incoming"
+if ! git merge-file -p "$CADDY_TMP/original" "$CADDY_TMP/base" "$CADDY_TMP/incoming" > "$CADDY_TMP/merged"; then
+    echo "Caddyfile merge conflict; leaving production unchanged." >&2
+    rm -rf "$CADDY_TMP"
+    exit 1
+fi
+git restore -- Caddyfile
+if ! git pull --ff-only origin main; then
+    cp "$CADDY_TMP/original" Caddyfile
+    rm -rf "$CADDY_TMP"
+    exit 1
+fi
+cp "$CADDY_TMP/merged" Caddyfile
+rm -rf "$CADDY_TMP"
 AFTER_SHA=$(git rev-parse HEAD)
 echo "New VPS commit: ${AFTER_SHA:0:7}"
 
@@ -77,6 +95,13 @@ if [ "$BEFORE_SHA" = "$AFTER_SHA" ]; then
 fi
 
 CHANGED_FILES=$(git diff --name-only "$BEFORE_SHA" "$AFTER_SHA")
+# Build the same extracted core revision as CI.
+if [ -f squad-bots.ref ]; then
+    test -d /opt/squad-bots/.git || { echo 'Missing /opt/squad-bots checkout'; exit 1; }
+    test -z "$(git -C /opt/squad-bots status --porcelain --untracked-files=no)" || { echo 'Squad Bots checkout has local changes'; exit 1; }
+    git -C /opt/squad-bots fetch origin main
+    git -C /opt/squad-bots checkout --detach "$(cat squad-bots.ref)"
+fi
 echo ""
 echo "Changed files:"
 echo "$CHANGED_FILES"
@@ -97,6 +122,9 @@ if echo "$CHANGED_FILES" | grep -qE '^shared/'; then
     REBUILD_SERVER=true
     REBUILD_WEB=true
     REBUILD_ADMIN=true
+fi
+if echo "$CHANGED_FILES" | grep -qE '^squad-bots[.]ref$'; then
+    REBUILD_ALL=true
 fi
 if echo "$CHANGED_FILES" | grep -qE '^server/'; then
     REBUILD_SERVER=true

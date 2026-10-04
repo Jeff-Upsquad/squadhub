@@ -51,9 +51,12 @@ export default function AdminSquadBots() {
             Every AI bot in one place: turn them on or off, choose their AI, assign jobs, review activity, and manage their knowledge docs.
           </p>
         </div>
+        <div className="flex shrink-0 items-center gap-3">
+          <a href={process.env.NEXT_PUBLIC_SQUAD_BOTS_URL || 'http://localhost:3020'} target="_blank" rel="noreferrer" className="rounded-lg border border-divider px-4 py-2 text-sm font-medium text-foreground hover:bg-surface-alt">Open conversations ↗</a>
         <button onClick={() => setShowNewBot(true)} className="rounded-lg bg-ink px-4 py-2 text-sm font-medium text-white hover:bg-ink-hover">
           + New bot
         </button>
+        </div>
       </div>
 
       {/* Emergency stop */}
