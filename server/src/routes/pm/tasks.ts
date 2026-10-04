@@ -964,16 +964,29 @@ router.get('/tasks/emergency', async (req: Request, res: Response) => {
 // the Time Sheet panel. Sorted newest first; client groups by local date.
 router.get('/tasks/my-time-entries', async (req: Request, res: Response) => {
   try {
-    const { data: entries, error } = await supabaseAdmin
-      .from('task_time_entries')
-      .select('*')
-      .eq('user_id', req.userId!)
-      .order('started_at', { ascending: false })
-      .limit(500);
-
-    if (error) {
-      res.status(500).json({ success: false, error: error.message });
+    const range = z.object({
+      from: z.string().datetime({ offset: true }),
+      to: z.string().datetime({ offset: true }),
+      workspace_id: z.string().uuid(),
+    }).refine(({ from, to }) => Date.parse(to) > Date.parse(from)
+      && Date.parse(to) - Date.parse(from) <= 8 * 86400000);
+    const hasRange = req.query.from !== undefined || req.query.to !== undefined;
+    const parsed = hasRange ? range.safeParse(req.query) : null;
+    if (parsed && !parsed.success) {
+      res.status(400).json({ success: false, error: 'A valid workspace and date range of up to eight days are required' });
       return;
+    }
+    const entries: any[] = [];
+    for (let offset = 0; ; offset += 1000) {
+      let query = supabaseAdmin.from('task_time_entries').select('*')
+        .eq('user_id', req.userId!).order('started_at', { ascending: false })
+        .order('id', { ascending: true });
+      if (parsed?.success) query = query.eq('workspace_id', parsed.data.workspace_id)
+        .lt('started_at', parsed.data.to).gt('stopped_at', parsed.data.from);
+      const { data, error } = await query.range(offset, offset + (hasRange ? 999 : 499));
+      if (error) throw error;
+      entries.push(...(data || []));
+      if (!hasRange || !data || data.length < 1000) break;
     }
 
     const rows = entries || [];

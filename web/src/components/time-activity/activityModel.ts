@@ -1,0 +1,108 @@
+import type { TaskTimeEntry, TimerSession, WorkBlockChildEntry } from '@squadhub/shared';
+
+export type ActivityKind = 'work' | 'break' | 'no_work' | 'overtime' | 'block' | 'task';
+export interface Activity {
+  id: string;
+  kind: ActivityKind;
+  title: string;
+  start: number;
+  end: number;
+  seconds: number;
+  live?: boolean;
+  taskId?: string;
+  project?: string;
+  note?: string | null;
+  source?: string;
+  children?: WorkBlockChildEntry[];
+}
+export const KINDS: { kind: ActivityKind; label: string; color: string }[] = [
+  { kind: 'work', label: 'Work', color: '#4bc88d' },
+  { kind: 'break', label: 'Break', color: '#eeb85a' },
+  { kind: 'overtime', label: 'Overtime', color: '#ef8b70' },
+  { kind: 'block', label: 'Work blocks', color: '#ad92ed' },
+  { kind: 'task', label: 'Tasks', color: '#71a7ee' },
+  { kind: 'no_work', label: 'No work', color: '#9b9fab' },
+];
+// Attendance dates and office timing are defined in IST throughout SquadHub.
+export const TIME_ZONE = 'Asia/Kolkata';
+const IST_MS = 330 * 60000;
+export function dayKey(stamp: number = Date.now()) {
+  return new Date(stamp + IST_MS).toISOString().slice(0, 10);
+}
+export function dayStart(key: string) { return Date.parse(`${key}T00:00:00+05:30`); }
+export function shiftDay(key: string, amount: number) { return dayKey(dayStart(key) + amount * 86400000); }
+export function weekStart(key: string) {
+  const day = new Date(dayStart(key) + IST_MS).getUTCDay();
+  return shiftDay(key, -(day === 0 ? 6 : day - 1));
+}
+export function dateLabel(stamp: number, options: Intl.DateTimeFormatOptions) {
+  return new Intl.DateTimeFormat('en-US', { ...options, timeZone: TIME_ZONE }).format(stamp);
+}
+export function clock(stamp: number) { return dateLabel(stamp, { hour: 'numeric', minute: '2-digit' }); }
+export function duration(seconds: number) {
+  const mins = Math.floor(Math.max(0, seconds) / 60);
+  return mins >= 60 ? `${Math.floor(mins / 60)}h${mins % 60 ? ` ${mins % 60}m` : ''}` : mins ? `${mins}m` : seconds > 0 ? '<1m' : '0m';
+}
+export function isAttendance(kind: ActivityKind) { return ['work', 'break', 'no_work', 'overtime'].includes(kind); }
+
+/** Split at local midnight, then split work at each day's commitment. */
+export function attendanceActivities(sessions: TimerSession[], commitment: number, now: number): Activity[] {
+  const result: Activity[] = [];
+  const used = new Map<string, number>();
+  const labels = { work: 'Work session', break: 'Break', no_work: 'No work' };
+  for (const session of [...sessions].sort((a, b) => Date.parse(a.start_time) - Date.parse(b.start_time))) {
+    let start = Date.parse(session.start_time);
+    const end = session.end_time ? Date.parse(session.end_time) : now;
+    if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) continue;
+    while (start < end) {
+      const key = dayKey(start);
+      const stop = Math.min(end, dayStart(shiftDay(key, 1)));
+      const seconds = (stop - start) / 1000;
+      const prior = used.get(key) || 0;
+      const regular = session.timer_type === 'work' && commitment > 0
+        ? Math.max(0, Math.min(seconds, commitment - prior)) : seconds;
+      const add = (kind: ActivityKind, a: number, b: number) => {
+        if (b <= a) return;
+        result.push({ id: `${session.id}:${a}:${kind}`, kind, title: kind === 'overtime' ? 'Overtime' : labels[session.timer_type], start: a, end: b, seconds: (b - a) / 1000, live: !session.end_time && b === end, source: 'Attendance timer' });
+      };
+      add(session.timer_type, start, start + regular * 1000);
+      if (regular < seconds) add('overtime', start + regular * 1000, stop);
+      if (session.timer_type === 'work') used.set(key, prior + seconds);
+      start = stop;
+    }
+  }
+  return result;
+}
+export function taskActivities(entries: TaskTimeEntry[]): Activity[] {
+  return entries.filter(e => e.duration_seconds > 0).map(e => ({
+    id: `entry:${e.id}`, kind: e.source === 'work_block' ? 'block' : 'task',
+    title: e.task?.title || 'Archived task', start: Date.parse(e.started_at), end: Date.parse(e.stopped_at),
+    seconds: e.duration_seconds, taskId: e.task?.id, project: [e.task?.space?.name, e.task?.list?.name].filter(Boolean).join(' / '),
+    note: e.note, source: e.source === 'manual' ? 'Manually logged' : e.source === 'work_block' ? 'Work block timer' : 'Task timer', children: e.children,
+  }));
+}
+/** Keep credited task time (including parallel shares) distinct from elapsed wall time. */
+export function clipActivity(event: Activity, from: number, to: number): Activity | null {
+  if (!Number.isFinite(event.start) || !Number.isFinite(event.end) || event.end <= event.start) return null;
+  const start = Math.max(from, event.start), end = Math.min(to, event.end);
+  if (end <= start) return null;
+  return { ...event, start, end, seconds: event.seconds * (end - start) / (event.end - event.start) };
+}
+
+/** Interval partitioning keeps concurrent task timers independently selectable. */
+export function layoutActivities(events: Activity[]) {
+  const ordered = [...events].sort((a, b) => a.start - b.start || b.end - a.end);
+  const positioned: { event: Activity; column: number; columns: number }[] = [];
+  let cluster: typeof positioned = [], ends: number[] = [], clusterEnd = -Infinity;
+  const flush = () => { for (const item of cluster) item.columns = ends.length; cluster = []; ends = []; };
+  for (const event of ordered) {
+    if (event.start >= clusterEnd) flush();
+    let column = ends.findIndex(end => end <= event.start);
+    if (column === -1) column = ends.length;
+    ends[column] = event.end;
+    const item = { event, column, columns: 1 };
+    positioned.push(item); cluster.push(item); clusterEnd = Math.max(clusterEnd, event.end);
+  }
+  flush();
+  return positioned;
+}
