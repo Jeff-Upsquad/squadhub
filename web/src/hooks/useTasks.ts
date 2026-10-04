@@ -110,8 +110,9 @@ export type MyTasksBuckets = {
   upcoming: Task[];
   later: Task[];
   focused: Task[];
-  // Tasks the caller has logged time on today (user tz), most-recent first.
-  // Surfaced as the "In progress today" section above the Home focus list.
+  // Tasks with time tracked today or on previous days (user tz), most-recent first.
+  // Surfaced as the "In progress" section above the Home focus list.
+  // Header total stays today-only; upcoming work/start dates are excluded.
   in_progress_today: Task[];
   day_planner?: Task[];
   unscheduled?: Task[];
@@ -288,7 +289,7 @@ export function useUpdateTask(listId: string | null) {
         }
       }
 
-      // Patch my-tasks queries so the Home Focus list and In progress today
+      // Patch my-tasks queries so the Home Focus list and In progress
       // update instantly without waiting for the server roundtrip.
       for (const [key, data] of qc.getQueriesData({ queryKey: ['my-tasks'] })) {
         if (!data || typeof data !== 'object') continue;
