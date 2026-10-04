@@ -133,11 +133,13 @@ export default function TodayList() {
   const timers = usePMStore((s) => s.timers);
   const timerSegmentStart = usePMStore((s) => s.timerSegmentStart);
 
-  // "In progress today" — tasks the user has logged time on today (computed
-  // server-side, full task objects, most-recently-worked first) plus any task
-  // actively being timed right now. These render as their own section ABOVE the
-  // focus list and are pulled out of the focus/evening/night sections below so
-  // a worked task appears in In Progress and never shows up twice.
+  // "In progress" — tasks with time tracked today or on previous days
+  // (computed server-side, full task objects, most-recently-worked first) plus
+  // any task actively being timed right now. These render as their own section
+  // ABOVE the focus list and are pulled out of the focus/evening/night sections
+  // below so a worked task appears in In Progress and never shows up twice.
+  // The header total stays today-only (secondsTodayByTask). Tasks whose
+  // work_date or start_date is upcoming are excluded until that day arrives.
   const rawInProgress: Task[] = useMemo(() => {
     const list = [...(data?.in_progress_today ?? [])];
     const seen = new Set(list.map((t) => t.id));
@@ -172,18 +174,18 @@ export default function TodayList() {
       }
     }
 
-    return list.filter((t) => !isTaskCompleted(t) && !isFutureDay(t.work_date, tz));
+    return list.filter((t) => !isTaskCompleted(t) && !isFutureDay(t.work_date, tz) && !isFutureDay((t as unknown as { start_date?: string | null }).start_date, tz));
   }, [data, activeWB?.task, timers, tz]);
   const inProgressTasks = useRetainFading(rawInProgress, fadingTaskIds);
   const inProgressIds = useMemo(() => new Set(inProgressTasks.map((t) => t.id)), [inProgressTasks]);
 
   // Check if a task is actively being timed right now (timer running or active work-block run).
-  // Actively timed tasks ALWAYS stay in "In progress today" at the top of the dashboard.
+  // Actively timed tasks ALWAYS stay in "In progress" at the top of the dashboard.
   const isActivelyTimed = (id: string) =>
     timers.some((rt) => rt.taskId === id) || (activeWB?.task?.id === id && !activeWB.run?.ended_at);
 
   // In-progress tasks that have NOT been assigned a bucket — these stay in the
-  // "In progress today" card. Those with a bucket ('evening', 'night', 'focus') flow
+  // "In progress" card. Those with a bucket ('evening', 'night', 'focus') flow
   // into their respective section below. Any task actively running a timer always stays in In progress.
   const unbucketedInProgress = useMemo(
     () => inProgressTasks.filter((t) => isActivelyTimed(t.id) || !effectiveFocusBucket(t, focusBuckets, recurringFocusBuckets, true)),
@@ -208,7 +210,7 @@ export default function TodayList() {
 
   // Split the focus list into the main list plus the manual Evening / Night
   // triage buckets that render as their own sections below it. Any in-progress
-  // task without a bucket stays in the "In progress today" section above.
+  // task without a bucket stays in the "In progress" section above.
   const focusTasks = useMemo(() => allFocusCandidates.filter((t) => {
     if (isActivelyTimed(t.id)) return false;
     const b = effectiveFocusBucket(t, focusBuckets, recurringFocusBuckets, inProgressIds.has(t.id));
@@ -409,7 +411,7 @@ export default function TodayList() {
       <div className="hm-card hm-inprogress-card">
         <div className="hm-card-head">
           <span className="hm-live-dot" aria-hidden="true" />
-          <h3>In progress today</h3>
+          <h3>In progress</h3>
           <span className="hm-count">· {unbucketedInProgress.length}</span>
           <span className="hm-tracked-total" title="Total time tracked today">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">

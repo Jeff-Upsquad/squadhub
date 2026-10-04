@@ -728,17 +728,20 @@ router.get('/tasks/my', async (req: Request, res: Response) => {
       buckets.focused = [...fromExisting, ...filteredExtra];
     }
 
-    // "In progress today" — tasks the caller has logged time on today (in their
-    // tz), via ANY entry: real timer sessions or manual "Time logged" edits.
-    // Pulls recent time entries and keeps those whose started_at or created_at lands on
-    // todayStr, most-recently-worked first. Full task objects (assignees, dates,
+    // "In progress" — tasks the caller has time-tracked on today or any
+    // previous day, via ANY entry: real timer sessions or manual "Time logged"
+    // edits. Pulls recent time entries (most-recently-worked first, any date)
+    // plus currently-active runs. Full task objects (assignees, dates,
     // parents) so the Home list renders these rows identically to the focus list.
+    // The header total stays today-only (computed client-side from today's
+    // entries) — the list itself is history. Tasks whose work_date or
+    // start_date is upcoming (work start in the future) are excluded here.
     const { data: recentEntries } = await supabaseAdmin
       .from('task_time_entries')
       .select('task_id, started_at, created_at, source')
       .eq('user_id', req.userId!)
       .order('started_at', { ascending: false })
-      .limit(500);
+      .limit(2000);
 
     const { data: activeWbRuns } = await supabaseAdmin
       .from('work_block_runs')
@@ -746,37 +749,31 @@ router.get('/tasks/my', async (req: Request, res: Response) => {
       .eq('user_id', req.userId!)
       .is('ended_at', null);
 
-    const workedTodayIds: string[] = [];
+    const workedIds: string[] = [];
     const seenWorked = new Set<string>();
 
     for (const run of activeWbRuns || []) {
       const id = (run as any).task_id as string;
       if (id && !seenWorked.has(id)) {
         seenWorked.add(id);
-        workedTodayIds.push(id);
+        workedIds.push(id);
       }
     }
 
     for (const e of recentEntries || []) {
-      const entryStartedDay = toTzDay((e as any).started_at);
-      const entryCreatedDay = toTzDay((e as any).created_at);
-      if (entryStartedDay !== todayStr && entryCreatedDay !== todayStr) continue;
       const id = (e as any).task_id as string;
-      if (seenWorked.has(id)) continue;
+      if (!id || seenWorked.has(id)) continue;
       seenWorked.add(id);
-      workedTodayIds.push(id);
+      workedIds.push(id);
     }
 
-    // NOTE: In Progress is strictly "worked TODAY" (time entries logged today
-    // or a currently-active run). We deliberately do NOT pull in every task
-    // with historic time_tracked > 0 or every task ever worked: a task whose
-    // work_date is moved to a future date must surface in the Home Focus list
-    // (Forecast) when that date arrives — not stick in In Progress because it
-    // was worked on some earlier day. Only actual work logged on todayStr
-    // (re-)enters In Progress for that day.
-    if (workedTodayIds.length > 0) {
+    // NOTE: In Progress is "ever worked" (any time-tracked history), NOT just
+    // "worked TODAY". Only exclusion: a task whose work_date or start_date is
+    // in the future (upcoming work start) must not stick in In Progress — it
+    // surfaces in the Home Focus list (Forecast) when that date arrives.
+    if (workedIds.length > 0) {
       const have = new Map(tasks.map((t: any) => [t.id, t]));
-      const missingWorked = workedTodayIds.filter((id) => !have.has(id));
+      const missingWorked = workedIds.filter((id) => !have.has(id));
       let workedExtras: any[] = [];
       if (missingWorked.length > 0) {
         // The user has time entries on these, so they had access — no created_by
@@ -815,13 +812,16 @@ router.get('/tasks/my', async (req: Request, res: Response) => {
         ...have,
         ...workedExtras.map((t: any) => [t.id, t] as [string, any]),
       ]);
-      buckets.in_progress_today = workedTodayIds
+      buckets.in_progress_today = workedIds
         .map((id) => workedById.get(id))
         .filter(Boolean)
         .filter((t) => includeDone || !isTaskDone(t))
         .filter((t) => {
           const workDay = toTzDay(t.work_date);
-          return !(workDay && workDay > todayStr);
+          if (workDay && workDay > todayStr) return false;
+          const startDay = toTzDay(t.start_date);
+          if (startDay && startDay > todayStr) return false;
+          return true;
         });
     }
 
