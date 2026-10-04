@@ -12,8 +12,10 @@ import AssigneePicker from '../pm/AssigneePicker';
 import TaskStatusPicker from '../pm/TaskStatusPicker';
 import DatePicker from '../pm/DatePicker';
 import ListPickerCombobox from '../pm/ListPickerCombobox';
+import { useActiveWorkBlockRun } from '../../../hooks/useWorkBlocks';
 import EstimatePopover from '../../../components/pm/EstimatePopover';
 import { formatDuration } from '../../../lib/timeDuration';
+import { formatClock, formatTracked } from '../../../lib/formatDuration';
 
 // ---- small display helpers (mirrors DashboardTaskRow's avatar logic) ----
 function hashHue(input: string): number {
@@ -225,6 +227,28 @@ export default function NewTaskRow({
   const isFocused = isTaskFocused(task);
   const isSubtask = !!t.parent_task_id;
 
+  // Running-timer highlight + live total — mirrors TaskRow / DashboardTaskRow:
+  // a per-task parallel timer owned by this row, or an active work-block run
+  // on this task. Total = stored aggregate + live elapsed while timing.
+  const timers = usePMStore((s) => s.timers);
+  const { data: activeWB } = useActiveWorkBlockRun();
+  const rowTimer = timers.find((x) => x.taskId === task.id) || null;
+  const isWBRunForThisTask = !!activeWB && !activeWB.run.ended_at && activeWB.task.id === task.id;
+  const isTiming = !!rowTimer || isWBRunForThisTask;
+  const [tickElapsed, setTickElapsed] = useState(0);
+  useEffect(() => {
+    if (!isTiming) { setTickElapsed(0); return; }
+    const startMs = rowTimer
+      ? (rowTimer.startedAt ?? Date.now())
+      : activeWB ? new Date(activeWB.run.started_at).getTime() : Date.now();
+    const tick = () => setTickElapsed(Math.max(0, Math.floor((Date.now() - startMs) / 1000)));
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [isTiming, rowTimer?.startedAt, activeWB?.run.started_at]);
+  const totalTrackedSeconds = ((t.time_tracked as number | undefined) || 0) + (isTiming ? tickElapsed : 0);
+  const trackedText = totalTrackedSeconds > 0 ? (formatTracked(totalTrackedSeconds) || '<1m') : null;
+
   // Optimistically patch both queue caches so a cell updates instantly, then let the
   // server be the source of truth (a refetch may legitimately drop the row — e.g.
   // assigning a task I created hands it off and it leaves my queue).
@@ -285,7 +309,7 @@ export default function NewTaskRow({
   const checked = showReviewed ? !!task.reviewed : false;
 
   return (
-    <div className="nt-row" data-fading={fading || undefined} onTransitionEnd={onRowTransitionEnd}>
+    <div className="nt-row" data-fading={fading || undefined} data-tracking={isTiming || undefined} onTransitionEnd={onRowTransitionEnd}>
       <div className="nt-row-grid">
       {/* Review */}
       <div className="nt-cell nt-c-review">
@@ -331,6 +355,37 @@ export default function NewTaskRow({
             )}
             <button type="button" className="nt-title" title={`Open "${t.title}"`} onClick={() => setActiveTask(task.id)}>{t.title}</button>
             {breadcrumb && <div className="nt-breadcrumb" title={breadcrumb}>{breadcrumb}</div>}
+            {(isTiming || trackedText) && (
+              <div className="nt-timetrack">
+                {isTiming && (
+                  <span
+                    className="nt-live"
+                    title="Timer running"
+                  >
+                    <span className="relative inline-flex h-1.5 w-1.5">
+                      <span
+                        className="absolute inline-flex h-full w-full animate-ping rounded-full opacity-75"
+                        style={{ background: '#34d399' }}
+                      />
+                      <span
+                        className="relative inline-flex h-1.5 w-1.5 rounded-full"
+                        style={{ background: '#10b981' }}
+                      />
+                    </span>
+                    {formatClock(tickElapsed)}
+                  </span>
+                )}
+                {trackedText && (
+                  <span
+                    className="nt-tracked"
+                    data-live={isTiming || undefined}
+                    title={isTiming ? `Tracked: ${trackedText} (timer active)` : `Tracked: ${trackedText} total`}
+                  >
+                    {trackedText}
+                  </span>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </div>

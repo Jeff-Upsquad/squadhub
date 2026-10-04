@@ -9168,6 +9168,15 @@ ol.sqc-list {
 .nt-row { border-bottom: 1px solid var(--sh-hair-3); transition: opacity 0.42s ease, transform 0.42s cubic-bezier(0.4, 0, 0.7, 0.1); }
 .nt-row:hover .nt-row-grid { background: var(--sh-hair-3); }
 .nt-row[data-fading="true"] { opacity: 0; transform: translateX(46px); pointer-events: none; }
+/* Running timer highlight — mirrors .lv-row[data-tracking="true"] so a timer
+   started anywhere is visible in the review queue too. */
+.nt-row[data-tracking="true"] { background: color-mix(in srgb, var(--hm-accent, #39C66B) 9%, transparent); box-shadow: inset 3px 0 0 var(--hm-accent, #39C66B); }
+.nt-row[data-tracking="true"]:hover .nt-row-grid { background: color-mix(in srgb, var(--hm-accent, #39C66B) 14%, transparent); }
+/* Live timer pill + tracked-total chip under the title — mirrors .lv-tracked. */
+.nt-timetrack { display: flex; align-items: center; gap: 6px; margin-top: 3px; flex-wrap: wrap; }
+.nt-live { display: inline-flex; align-items: center; gap: 4px; border-radius: 999px; padding: 1px 7px; font-size: 10px; font-weight: 600; font-variant-numeric: tabular-nums; line-height: 16px; background: rgba(16, 185, 129, 0.15); color: #047857; white-space: nowrap; flex: none; }
+.nt-tracked { font-family: 'Inter', sans-serif; font-size: 10.5px; font-weight: 600; color: color-mix(in srgb, var(--sh-ink) 55%, transparent); background: color-mix(in srgb, var(--sh-ink) 7%, transparent); border-radius: 999px; padding: 1px 7px; white-space: nowrap; flex: none; font-variant-numeric: tabular-nums; line-height: 16px; }
+.nt-tracked[data-live] { color: var(--hm-accent, #39C66B); background: color-mix(in srgb, var(--hm-accent, #39C66B) 14%, transparent); }
 .nt-row-grid { min-height: 52px; }
 .nt-cell { min-width: 0; padding: 7px 4px; }
 
