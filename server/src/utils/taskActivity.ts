@@ -18,6 +18,10 @@ import { getWorkspaceIdForTask } from './labels';
 //   focus_set / focus_cleared                                        -> (no values)
 //   snooze_set (ISO string) / snooze_cleared                         -> new_value / (none)
 //   reviewed / unreviewed / comment_deleted / created               -> (no values)
+//   time_removed (deleted session)                                   -> old {duration_seconds, started_at, source}
+//   time_logged is VIRTUAL (never stored): read endpoint folds each
+//     task_time_entries row into {duration_seconds, started_at, stopped_at,
+//     source, note, edited} as new_value, ordered by stopped_at.
 //   checklist_added                                                  -> {id, title}
 //   checklist_renamed                                                -> old {id, title} / new {id, title}
 //   checklist_removed                                                -> {id, title} (old_value)
@@ -29,9 +33,12 @@ import { getWorkspaceIdForTask } from './labels';
 //
 // time_estimate is intentionally NOT logged here — it has its own audit table
 // (task_estimate_changes, migration 134) which the read endpoint folds into the
-// same feed, so logging it here too would double-count it. time_tracked writes
-// from the running timer go through PUT /pm/tasks/:id and are also NOT logged
-// (per-tick noise); only the manual "Logged" edit (PATCH /time-tracked) is.
+// same feed, so logging it here too would double-count it. Timer sessions live
+// in task_time_entries and are folded into the feed at read time as virtual
+// `time_logged` items (the running timer writes through PUT /pm/tasks/:id and
+// per-tick noise is still excluded); only the manual "Logged" edit
+// (PATCH /time-tracked), entry edits, and entry deletes write durable
+// task_activity rows (`field_change/time_tracked`, `time_removed`).
 export type TaskActivityEvent = {
   event_type: string;
   field?: string | null;

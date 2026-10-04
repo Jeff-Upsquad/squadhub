@@ -69,6 +69,7 @@ export async function flushPendingTimeSync(qc?: QueryClient): Promise<void> {
     qc.invalidateQueries({ queryKey: ['folder-time-summary'] });
     for (const taskId of successfulTaskIds) {
       qc.invalidateQueries({ queryKey: ['task', taskId] });
+      qc.invalidateQueries({ queryKey: ['task-activity', taskId] });
     }
   }
 }

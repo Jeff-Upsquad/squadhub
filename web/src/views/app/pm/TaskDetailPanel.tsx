@@ -232,6 +232,21 @@ function checklistName(v: unknown): string {
   return v == null ? 'none' : String(v);
 }
 
+// Virtual time_logged payload folded in by GET /pm/tasks/:id/activity:
+// {duration_seconds, started_at, stopped_at, source, note, edited}.
+function fmtClock(v: unknown): string {
+  if (!v) return '';
+  const d = new Date(String(v));
+  if (Number.isNaN(d.getTime())) return '';
+  return d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+}
+
+function timeSourceLabel(s: unknown): string {
+  if (s === 'manual') return 'manually';
+  if (s === 'work_block') return 'via work block';
+  return 'via timer';
+}
+
 type ActivityForRender = {
   event_type: string;
   field: string | null;
@@ -291,6 +306,37 @@ function renderActivity(e: ActivityForRender): { icon: string; body: React.React
     };
     case 'checklist_item_updated': return { icon: '○', body: line('updated checklist item', checklistName(e.new_value)) };
     case 'checklist_item_removed': return { icon: '－', body: line('removed checklist item', checklistName(e.old_value)) };
+    case 'time_logged': {
+      const v = (e.new_value || {}) as {
+        duration_seconds?: number; started_at?: string; stopped_at?: string;
+        source?: string; note?: string | null; edited?: boolean;
+      };
+      const dur = fmtSeconds(v.duration_seconds);
+      const start = fmtClock(v.started_at);
+      const stop = fmtClock(v.stopped_at);
+      const sameDay = v.started_at && v.stopped_at
+        ? new Date(v.started_at).toDateString() === new Date(v.stopped_at).toDateString()
+        : true;
+      // Manual total edits store started_at == stopped_at; show just the total.
+      const range = start && stop && v.started_at !== v.stopped_at
+        ? (sameDay ? `${start}–${stop}` : `${start} → ${stop}`)
+        : '';
+      const via = timeSourceLabel(v.source);
+      const edited = v.edited ? ' (edited)' : '';
+      const detail = [range, via].filter(Boolean).join(' · ') + edited;
+      const note = v.note ? ` — “${v.note}”` : '';
+      return {
+        icon: '◷',
+        body: (
+          <>{actor} {dim('logged')} <b>{dur}</b>{detail ? <> {dim(`(${detail})`)}</> : null}{note ? <span className="text-[color:var(--sh-ink-3)]">{note}</span> : null}</>
+        ),
+      };
+    }
+    case 'time_removed': {
+      const v = (e.old_value || {}) as { duration_seconds?: number; started_at?: string; source?: string };
+      const dur = fmtSeconds(v.duration_seconds);
+      return { icon: '◷', body: line(`removed ${dur} of logged time`) };
+    }
     case 'field_change': {
       const f = e.field || '';
       if (f === 'status') return { icon: '●', body: line('set status to', String(e.new_value ?? 'none')) };
