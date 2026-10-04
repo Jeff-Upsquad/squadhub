@@ -23,10 +23,12 @@ export function useTaskTimeEntries(taskId: string | null, enabled: boolean = tru
 }
 
 // Everything a logged entry touches: the per-task history, the task itself
-// (its `time_tracked` aggregate) and every list view that renders the task.
+// (its `time_tracked` aggregate), the Activity feed (which folds sessions in),
+// and every list view that renders the task.
 function invalidateTimeQueries(qc: ReturnType<typeof useQueryClient>, taskId: string) {
   qc.invalidateQueries({ queryKey: ['task-time-entries'] });
   qc.invalidateQueries({ queryKey: ['task', taskId] });
+  qc.invalidateQueries({ queryKey: ['task-activity', taskId] });
   qc.invalidateQueries({ queryKey: ['tasks'] });
   qc.invalidateQueries({ queryKey: ['folder-tasks'] });
   qc.invalidateQueries({ queryKey: ['space-tasks'] });

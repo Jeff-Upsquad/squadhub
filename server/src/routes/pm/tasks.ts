@@ -1286,6 +1286,17 @@ router.delete('/tasks/:id/time-entries/:entryId', async (req: Request, res: Resp
       }
     }
 
+    // The row is gone, so the folded time_logged item disappears too — leave a
+    // durable trace so the Activity feed still shows the removal.
+    await logTaskActivity(taskId, req.userId!, [{
+      event_type: 'time_removed',
+      old_value: {
+        duration_seconds: seconds,
+        started_at: (entry as any).started_at,
+        source: (entry as any).source ?? 'timer',
+      },
+    }]);
+
     res.json({ success: true, data: { id: entryId } });
   } catch (err) {
     console.error('Delete task time entry error:', err);
@@ -2724,11 +2735,14 @@ router.get('/tasks/:id/comments', async (req: Request, res: Response) => {
 });
 
 // GET /pm/tasks/:id/activity — the unified change history for a task (viewer
-// access). Merges three sources, newest-first:
+// access). Merges four sources, newest-first:
 //   1. task_activity rows (field changes, assignees, labels, move, attachments…)
 //   2. task_comments (each surfaced as an event_type='comment')
 //   3. task_estimate_changes (folded in as field_change/time_estimate so legacy
 //      estimate history pre-dating task_activity still appears)
+//   4. task_time_entries (each surfaced as event_type='time_logged' with
+//      {duration_seconds, started_at, stopped_at, source, note} so timer
+//      start/stop details appear in the feed without extra polling)
 // Actor display names are resolved here so the client renders without extra
 // lookups.
 router.get('/tasks/:id/activity', async (req: Request, res: Response) => {
@@ -2744,7 +2758,7 @@ router.get('/tasks/:id/activity', async (req: Request, res: Response) => {
       }
     }
 
-    const [activityRes, commentRes, estimateRes, taskRes] = await Promise.all([
+    const [activityRes, commentRes, estimateRes, taskRes, timeRes] = await Promise.all([
       supabaseAdmin
         .from('task_activity')
         .select('id, user_id, event_type, field, old_value, new_value, created_at')
@@ -2765,6 +2779,12 @@ router.get('/tasks/:id/activity', async (req: Request, res: Response) => {
         .select('created_by, created_at')
         .eq('id', taskId)
         .maybeSingle(),
+      supabaseAdmin
+        .from('task_time_entries')
+        .select('id, user_id, started_at, stopped_at, duration_seconds, source, note, edited_at, created_at')
+        .eq('task_id', taskId)
+        .order('stopped_at', { ascending: false })
+        .limit(50),
     ]);
 
     type FeedItem = {
@@ -2797,6 +2817,27 @@ router.get('/tasks/:id/activity', async (req: Request, res: Response) => {
         id: e.id, event_type: 'field_change', field: 'time_estimate',
         old_value: e.old_estimate ?? null, new_value: e.new_estimate ?? null,
         created_at: e.created_at, user_id: e.user_id ?? null,
+      });
+    }
+    // Timer / manual / work-block sessions. Surfaced as virtual feed items so
+    // the detail panel shows who logged how much and when (start → stop)
+    // without a second request. created_at is the stop time: that is when the
+    // work finished and when the feed should order it.
+    for (const t of ((timeRes as any)?.data || []) as any[]) {
+      if (!t || (t.duration_seconds ?? 0) <= 0) continue;
+      items.push({
+        id: `te_${t.id}`, event_type: 'time_logged', field: null,
+        old_value: null,
+        new_value: {
+          duration_seconds: t.duration_seconds,
+          started_at: t.started_at,
+          stopped_at: t.stopped_at,
+          source: t.source ?? 'timer',
+          note: t.note ?? null,
+          edited: !!t.edited_at,
+        },
+        created_at: t.stopped_at || t.started_at || t.created_at,
+        user_id: t.user_id ?? null,
       });
     }
 

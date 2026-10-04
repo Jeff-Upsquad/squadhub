@@ -161,6 +161,7 @@ export function useStopWorkBlockRun() {
       // Refresh task data so time_tracked updates without a manual reload
       qc.invalidateQueries({ queryKey: ['task', vars.task_id] });
       qc.invalidateQueries({ queryKey: ['task-time-entries', vars.task_id] });
+      qc.invalidateQueries({ queryKey: ['task-activity', vars.task_id] });
       qc.invalidateQueries({ queryKey: ['tasks'] });
       qc.invalidateQueries({ queryKey: ['folder-tasks'] });
       qc.invalidateQueries({ queryKey: ['space-tasks'] });
