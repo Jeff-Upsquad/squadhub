@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import type { TimerSession } from '@squadhub/shared';
-import { attendanceActivities, clipActivity, dayKey, dayStart, layoutActivities, layoutActivityGroups, weekStart, type Activity } from '../activityModel';
+import { attendanceActivities, clipActivity, combineTaskSegments, dayKey, dayStart, layoutActivities, layoutActivityGroups, weekStart, type Activity } from '../activityModel';
 const hour = 3600000;
 const start = dayStart('2026-10-04');
 function session(id: string, from: number, to: number | null, type: TimerSession['timer_type'] = 'work'): TimerSession {
@@ -75,4 +75,35 @@ test('ordinary overlaps stay separate, with grouping adapting to narrow lanes', 
   const narrow = layoutActivityGroups(events, 27 * 60000, 1);
   assert.equal(narrow.length, 1);
   assert.equal(narrow[0].events.length, 2);
+});
+
+test('split task timers count once per task and retain each credited segment', () => {
+  const segments = Array.from({ length: 103 }, (_, i) => ({ ...activity(`split-${i}`, start + (i + 1) * 60000, start + (i + 2) * 60000, 30), taskId: `task-${i % 11}` }));
+  const grouped = combineTaskSegments(segments);
+  assert.equal(grouped.length, 11);
+  assert.equal(grouped.reduce((sum, e) => sum + e.seconds, 0), 103 * 30);
+  assert.equal(grouped.reduce((sum, e) => sum + (e.segments?.length || 1), 0), 103);
+  assert.equal(combineTaskSegments(grouped).length, 11);
+});
+test('group clipping sums actual segments and excludes gaps instead of crediting the envelope', () => {
+  const grouped = combineTaskSegments([
+    { ...activity('first', start + hour, start + 2 * hour, 1800), taskId: 'a' },
+    { ...activity('second', start + 3 * hour, start + 4 * hour, 1200), taskId: 'a', live: true },
+  ])[0];
+  assert.equal(clipActivity(grouped, start + 2 * hour, start + 3 * hour), null);
+  assert.equal(clipActivity(grouped, start + 1.5 * hour, start + 3.5 * hour)?.seconds, 1500);
+  assert.equal(grouped.seconds, 3000);
+  assert.equal(grouped.live, true);
+});
+test('tasks stay separate by identity and IST day; attendance and work-block runs stay separate', () => {
+  const grouped = combineTaskSegments([
+    { ...activity('overnight', start + 23 * hour, start + 25 * hour), taskId: 'a' },
+    { ...activity('different', start + 23 * hour, start + 24 * hour), taskId: 'b', title: 'overnight' },
+    { ...activity('work', start, start + hour), kind: 'work' },
+    { ...activity('block-a', start, start + hour), taskId: 'block', kind: 'block' },
+    { ...activity('block-b', start + hour, start + 2 * hour), taskId: 'block', kind: 'block' },
+  ] as Activity[]);
+  assert.equal(grouped.length, 6);
+  assert.equal(grouped.filter(e => e.taskId === 'a').length, 2);
+  assert.equal(grouped.filter(e => e.kind === 'block').length, 2);
 });

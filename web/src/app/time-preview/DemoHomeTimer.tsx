@@ -36,7 +36,7 @@ function sampleTasks(): Activity[] {
   ];
   // Dense short sessions reproduce the crowding seen in real task timer history.
   for (let i = 0; i < 30; i++) {
-    result.push({ ...make(date, 1230 + i, 1231 + i, 'task', `Quick task ${i + 1}`, 'SquadHub / Development'), id: `sample:burst:${i}` });
+    result.push({ ...make(date, 1230 + i, 1231 + i, 'task', `Quick task ${i + 1}`, 'SquadHub / Development'), id: `sample:burst:${i}`, taskId: `sample:burst-task:${i % 5}` });
   }
   result.push(make(date, 1260, 1320, 'task', 'Create an ad targeting Kerala women', 'Marketing'));
   for (let i = 1; i <= 6; i++) {

@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode, type CSSProperties } from 'react';
 import { createPortal } from 'react-dom';
-import { KINDS, clipActivity, clock, dateLabel, dayKey, dayStart, duration, isAttendance, layoutActivityGroups, shiftDay, weekStart, type Activity, type ActivityKind } from './activityModel';
+import { KINDS, clipActivity, combineTaskSegments, clock, dateLabel, dayKey, dayStart, duration, isAttendance, layoutActivityGroups, shiftDay, weekStart, type Activity, type ActivityKind } from './activityModel';
 import './time-activity.css';
 
 type CalendarState = {
@@ -71,7 +71,7 @@ function CalendarData({ events, commitment, loading = false, error = false, onRe
     observer.observe(scroller.current);
     return () => observer.disconnect();
   }, [loading, error]);
-  const visibleEvents = useMemo(() => events.map(e => clipActivity(e, from, to)).filter((e): e is Activity => !!e), [events, from, to]);
+  const visibleEvents = useMemo(() => combineTaskSegments(events.map(e => clipActivity(e, from, to)).filter((e): e is Activity => !!e)), [events, from, to]);
   const group = visibleEvents.filter(e => groupIds.includes(e.id) && filters.includes(e.kind)).sort((a, b) => a.start - b.start || b.end - a.end);
   const selected = visibleEvents.find(e => e.id === selectedId);
   const totals = Object.fromEntries(KINDS.map(k => [k.kind, visibleEvents.filter(e => e.kind === k.kind).reduce((sum, e) => sum + e.seconds, 0)])) as Record<ActivityKind, number>;
@@ -90,7 +90,7 @@ function CalendarData({ events, commitment, loading = false, error = false, onRe
   const display = (event: Activity, top: number, height: number, left: string, width: string) => (
     <button key={event.id} className="ta-event" data-kind={event.kind} data-selected={event.id === selectedId} data-short={height < 43}
       style={{ top, height: Math.max(MIN_EVENT_HEIGHT, height - EVENT_GAP), left, width, '--event-color': KINDS.find(k => k.kind === event.kind)!.color } as CSSProperties}
-      onClick={() => setSelectedId(event.id === selectedId ? null : event.id)}
+      onClick={() => { setSelectedId(event.id === selectedId ? null : event.id); setGroupIds([]); }}
       aria-label={`${event.title}, ${clock(event.start)} to ${event.live ? 'now' : clock(event.end)}, ${duration(event.seconds)}`}
       title={`${event.title} · ${clock(event.start)}–${event.live ? 'now' : clock(event.end)} · ${duration(event.seconds)}`}>
       <span className="ta-event-title">{event.live && <i className="ta-live-dot" />}{event.title}</span>
@@ -161,6 +161,9 @@ function CalendarData({ events, commitment, loading = false, error = false, onRe
       {selected && <><div className="ta-detail-top"><i style={{ background: KINDS.find(k => k.kind === selected.kind)!.color }} /><strong>{selected.title}</strong><span>{duration(selected.seconds)}</span><button className="ta-icon-btn" onClick={() => setSelectedId(null)} aria-label="Dismiss session details"><Glyph name="close" /></button></div>
         <p>{clock(selected.start)} – {selected.live ? 'Now · tracking' : clock(selected.end)}<span>·</span>{selected.source}{selected.project && <><span>·</span>{selected.project}</>}</p>
         {selected.note && <p>{selected.note}</p>}
+        {!!selected.segments?.length && <details className="ta-segments"><summary>{selected.segments.length} time segments · {duration(selected.seconds)} tracked</summary>
+          {selected.segments.map(segment => <div key={`${segment.id}:${segment.start}`}><span>{clock(segment.start)} – {segment.live ? 'Now · tracking' : clock(segment.end)}<small>{segment.source}{segment.note ? ` · ${segment.note}` : ''}</small></span><b>{duration(segment.seconds)}</b></div>)}
+        </details>}
         {!!selected.children?.length && <div className="ta-children">{selected.children.map(c => <div key={c.task_id}><span>{c.completed ? '✓ ' : '↳ '}{c.title}</span><b>{duration(c.seconds)}</b></div>)}</div>}
         {selected.taskId && onOpenTask && <button className="ta-open-task" onClick={() => onOpenTask(selected.taskId!)}>Open task<Glyph name="arrow" /></button>}
       </>}

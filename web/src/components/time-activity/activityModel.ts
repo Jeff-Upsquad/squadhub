@@ -14,6 +14,7 @@ export interface Activity {
   note?: string | null;
   source?: string;
   children?: WorkBlockChildEntry[];
+  segments?: Activity[];
 }
 export const KINDS: { kind: ActivityKind; label: string; color: string }[] = [
   { kind: 'work', label: 'Work', color: '#4bc88d' },
@@ -77,7 +78,7 @@ export function taskActivities(entries: TaskTimeEntry[]): Activity[] {
   return entries.filter(e => e.duration_seconds > 0).map(e => ({
     id: `entry:${e.id}`, kind: e.source === 'work_block' ? 'block' : 'task',
     title: e.task?.title || 'Archived task', start: Date.parse(e.started_at), end: Date.parse(e.stopped_at),
-    seconds: e.duration_seconds, taskId: e.task?.id, project: [e.task?.space?.name, e.task?.list?.name].filter(Boolean).join(' / '),
+    seconds: e.duration_seconds, taskId: e.task_id, project: [e.task?.space?.name, e.task?.list?.name].filter(Boolean).join(' / '),
     note: e.note, source: e.source === 'manual' ? 'Manually logged' : e.source === 'work_block' ? 'Work block timer' : 'Task timer', children: e.children,
   }));
 }
@@ -86,7 +87,44 @@ export function clipActivity(event: Activity, from: number, to: number): Activit
   if (!Number.isFinite(event.start) || !Number.isFinite(event.end) || event.end <= event.start) return null;
   const start = Math.max(from, event.start), end = Math.min(to, event.end);
   if (end <= start) return null;
+  if (event.segments) {
+    const segments = event.segments.map(segment => clipActivity(segment, from, to)).filter((segment): segment is Activity => !!segment);
+    if (!segments.length) return null;
+    return { ...event, start: Math.min(...segments.map(s => s.start)), end: Math.max(...segments.map(s => s.end)), seconds: segments.reduce((sum, s) => sum + s.seconds, 0), segments, live: segments.some(s => s.live) };
+  }
   return { ...event, start, end, seconds: event.seconds * (end - start) / (event.end - event.start) };
+}
+
+/** Show one task entry per IST day, retaining the real segments and their credited time. */
+export function combineTaskSegments(events: Activity[]): Activity[] {
+  const grouped = new Map<string, Activity[]>();
+  const result: Activity[] = [];
+  for (const event of events) {
+    if (event.kind !== 'task' || !event.taskId) { result.push(event); continue; }
+    if (!Number.isFinite(event.start) || !Number.isFinite(event.end)) continue;
+    for (let stamp = event.start; stamp < event.end;) {
+      const date = dayKey(stamp), next = dayStart(shiftDay(date, 1));
+      const clipped = clipActivity(event, dayStart(date), next);
+      if (clipped) {
+        const key = `task-day:${event.taskId}:${date}`;
+        const segments = grouped.get(key) || [];
+        segments.push(...(clipped.segments || [clipped]));
+        grouped.set(key, segments);
+      }
+      stamp = next;
+    }
+  }
+  for (const [id, segments] of grouped) {
+    segments.sort((a, b) => a.start - b.start || a.end - b.end);
+    result.push({ ...segments[segments.length - 1], id,
+      start: segments[0].start, end: Math.max(...segments.map(s => s.end)),
+      seconds: segments.reduce((sum, s) => sum + s.seconds, 0), live: segments.some(s => s.live),
+      source: segments.length > 1 ? 'Task time' : segments[0].source,
+      note: segments.length > 1 ? null : segments[0].note,
+      segments: segments.length > 1 ? segments : undefined,
+    });
+  }
+  return result;
 }
 
 /** Interval partitioning keeps concurrent task timers independently selectable. */

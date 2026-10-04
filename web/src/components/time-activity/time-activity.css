@@ -159,3 +159,9 @@ html.dark .ta-panel, html[data-theme="noir"] .ta-panel {
   .ta-calendar[data-view="week"] .ta-event-title { font-size: 8px; }
   .ta-calendar[data-view="week"] .ta-event-time, .ta-calendar[data-view="week"] .ta-event-project, .ta-calendar[data-view="week"] .ta-event-badge { display: none; }
 }
+
+.ta-segments { margin: 8px 0; font-size: 10px; color: var(--ta-muted); }
+.ta-segments summary { cursor: pointer; color: var(--ta-ink); padding: 4px 0; }
+.ta-segments > div { display: flex; align-items: flex-start; gap: 10px; padding: 6px 0; border-top: 1px solid var(--ta-line); }
+.ta-segments small { display: block; margin-top: 2px; overflow-wrap: anywhere; }
+.ta-segments b { margin-left: auto; white-space: nowrap; font-weight: 500; }
