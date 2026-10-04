@@ -1197,12 +1197,18 @@ export default function TaskDetailPanel({
   const renderSubtaskRow = (st: any) => {
     const stDone = st.status === 'done' || st.status === 'closed' || st.status === 'cancelled';
     const stPerson = st.assignees?.[0];
+    // Highlight while a timer runs on this subtask — mirrors My Home rows
+    // (per-task timer OR work-block run on this subtask).
+    const isTracking =
+      timers.some((t) => t.taskId === st.id) ||
+      (activeWorkBlock.data?.task.id === st.id && !activeWorkBlock.data?.run.ended_at);
     return (
       <button
         key={st.id}
         type="button"
         className="td-subtask-row"
         data-done={stDone ? 'true' : 'false'}
+        data-tracking={isTracking || undefined}
         onClick={() => setActiveTask(st.id)}
       >
         <span
