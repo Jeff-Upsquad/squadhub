@@ -5,6 +5,8 @@
    ConfirmDialog's bg-orange-600) were never generated here — making those
    controls invisible. Scan the shared admin tree explicitly. */
 @source "../../../admin/src";
+/* Shared bot cards now live in the installed sibling package. */
+@source "../../../node_modules/@squad-bots/core/dist/ui";
 /* Google Fonts for Hub shell strings ('Inter' / 'Plus Jakarta Sans') load from
    app/layout.tsx <link>s — a CSS @import after Tailwind is invalid and was
    being dropped. next/font on <html> owns --font-jakarta / --font-inter. */
