@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import type { TimerSession } from '@squadhub/shared';
-import { attendanceActivities, clipActivity, combineTaskSegments, dayKey, dayStart, layoutActivities, layoutActivityGroups, weekStart, type Activity } from '../activityModel';
+import { attendanceActivities, clipActivity, combineTaskSegments, dayKey, dayStart, layoutActivities, weekStart, type Activity } from '../activityModel';
 const hour = 3600000;
 const start = dayStart('2026-10-04');
 function session(id: string, from: number, to: number | null, type: TimerSession['timer_type'] = 'work'): TimerSession {
@@ -55,28 +55,6 @@ test('short sequential entries reserve their visible footprint without changing 
   assert.deepEqual(layout.map(e => e.column), [0, 1, 2]);
   assert.deepEqual(layout.map(e => e.event.seconds), [60, 60, 60]);
 });
-test('dense bursts collapse into a selectable group and isolated entries retain full width', () => {
-  const burst = Array.from({ length: 30 }, (_, i) => activity(`burst-${i}`, i * 60000, (i + 1) * 60000));
-  const later = activity('later', 60 * 60000, 120 * 60000);
-  const groups = layoutActivityGroups([...burst, later], 27 * 60000, 3);
-  assert.equal(groups.length, 2);
-  assert.deepEqual(groups[0].events, burst);
-  assert.equal(groups[0].start, 0);
-  assert.equal(groups[0].end, 30 * 60000);
-  assert.equal(groups[0].columns, 1);
-  assert.deepEqual(groups[1].events, [later]);
-  assert.equal(groups[1].columns, 1);
-});
-test('ordinary overlaps stay separate, with grouping adapting to narrow lanes', () => {
-  const events = [activity('a', 0, hour), activity('b', 0, hour)];
-  const wide = layoutActivityGroups(events, 27 * 60000, 3);
-  assert.equal(wide.length, 2);
-  assert.deepEqual(wide.map(e => e.column), [0, 1]);
-  const narrow = layoutActivityGroups(events, 27 * 60000, 1);
-  assert.equal(narrow.length, 1);
-  assert.equal(narrow[0].events.length, 2);
-});
-
 test('split task timers count once per task and retain each credited segment', () => {
   const segments = Array.from({ length: 103 }, (_, i) => ({ ...activity(`split-${i}`, start + (i + 1) * 60000, start + (i + 2) * 60000, 30), taskId: `task-${i % 11}` }));
   const grouped = combineTaskSegments(segments);
@@ -106,4 +84,13 @@ test('tasks stay separate by identity and IST day; attendance and work-block run
   assert.equal(grouped.length, 6);
   assert.equal(grouped.filter(e => e.taskId === 'a').length, 2);
   assert.equal(grouped.filter(e => e.kind === 'block').length, 2);
+});
+
+test('eleven overlapping tasks remain eleven separate positioned cards with credited durations', () => {
+  const tasks = Array.from({ length: 11 }, (_, i) => ({ ...activity(`task-${i}`, start + 20 * hour, start + 21 * hour, 300), taskId: `task-${i}` }));
+  const layout = layoutActivities(combineTaskSegments(tasks), 27 * 60000);
+  assert.equal(layout.length, 11);
+  assert.deepEqual(layout.map(e => e.column), Array.from({ length: 11 }, (_, i) => i));
+  assert.ok(layout.every(e => e.columns === 11 && e.event.seconds === 300));
+  assert.ok(layout.every(e => e.event.start === start + 20 * hour && e.event.end === start + 21 * hour));
 });

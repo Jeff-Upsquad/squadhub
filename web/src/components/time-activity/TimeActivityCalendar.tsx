@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode, type CSSProperties } from 'react';
 import { createPortal } from 'react-dom';
-import { KINDS, clipActivity, combineTaskSegments, clock, dateLabel, dayKey, dayStart, duration, isAttendance, layoutActivityGroups, shiftDay, weekStart, type Activity, type ActivityKind } from './activityModel';
+import { KINDS, clipActivity, combineTaskSegments, clock, dateLabel, dayKey, dayStart, duration, isAttendance, layoutActivities, shiftDay, weekStart, type Activity, type ActivityKind } from './activityModel';
 import './time-activity.css';
 
 type CalendarState = {
@@ -61,7 +61,6 @@ function CalendarData({ events, commitment, loading = false, error = false, onRe
   const { date, setDate, view, setView, now, from, to, days } = useContext(CalendarContext)!;
   const [filters, setFilters] = useState<ActivityKind[]>(KINDS.map(k => k.kind));
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [groupIds, setGroupIds] = useState<string[]>([]);
   const [picker, setPicker] = useState(false);
   const scroller = useRef<HTMLDivElement>(null);
   const [calendarWidth, setCalendarWidth] = useState(850);
@@ -72,7 +71,6 @@ function CalendarData({ events, commitment, loading = false, error = false, onRe
     return () => observer.disconnect();
   }, [loading, error]);
   const visibleEvents = useMemo(() => combineTaskSegments(events.map(e => clipActivity(e, from, to)).filter((e): e is Activity => !!e)), [events, from, to]);
-  const group = visibleEvents.filter(e => groupIds.includes(e.id) && filters.includes(e.kind)).sort((a, b) => a.start - b.start || b.end - a.end);
   const selected = visibleEvents.find(e => e.id === selectedId);
   const totals = Object.fromEntries(KINDS.map(k => [k.kind, visibleEvents.filter(e => e.kind === k.kind).reduce((sum, e) => sum + e.seconds, 0)])) as Record<ActivityKind, number>;
   const work = totals.work + totals.overtime;
@@ -84,17 +82,30 @@ function CalendarData({ events, commitment, loading = false, error = false, onRe
     const hour = firstEvent ? (firstEvent.start - dayStart(dayKey(firstEvent.start))) / 3600000 : 9;
     if (scroller.current) scroller.current.scrollTop = Math.max(0, hour - .45) * HOUR_HEIGHT;
     setSelectedId(null);
-    setGroupIds([]);
   }, [from, to, loading, view]);
-  useEffect(() => { setGroupIds([]); setSelectedId(null); }, [filters]);
+  useEffect(() => { setSelectedId(null); }, [filters]);
+  const gutterWidth = typeof window !== 'undefined' && window.matchMedia('(max-width: 640px)').matches ? 48 : 64;
+  const attendanceWidth = Math.max(180, (calendarWidth - gutterWidth) * .38);
+  const dayLayouts = days.map(key => {
+    const start = dayStart(key);
+    const items = visibleEvents.filter(e => filters.includes(e.kind)).map(e => clipActivity(e, start, start + 86400000)).filter((e): e is Activity => !!e);
+    const lanes = view === 'day' ? [items.filter(e => isAttendance(e.kind)), items.filter(e => !isAttendance(e.kind))] : [items];
+    const layout = lanes.map(lane => layoutActivities(lane, (MIN_EVENT_HEIGHT + EVENT_GAP) / HOUR_HEIGHT * 3600000));
+    const columnCount = (lane: typeof layout[number]) => Math.max(1, ...lane.map(e => e.columns));
+    const widths = view === 'day'
+      ? [Math.max(attendanceWidth, columnCount(layout[0]) * 140), Math.max((calendarWidth - gutterWidth) * .62, columnCount(layout[1]) * 160)]
+      : [Math.max((calendarWidth - gutterWidth) / 7, columnCount(layout[0]) * 140)];
+    return { key, start, items, layout, widths, width: widths.reduce((sum, width) => sum + width, 0) };
+  });
+  const gridWidth = Math.max(calendarWidth, gutterWidth + dayLayouts.reduce((sum, day) => sum + day.width, 0));
   const display = (event: Activity, top: number, height: number, left: string, width: string) => (
     <button key={event.id} className="ta-event" data-kind={event.kind} data-selected={event.id === selectedId} data-short={height < 43}
       style={{ top, height: Math.max(MIN_EVENT_HEIGHT, height - EVENT_GAP), left, width, '--event-color': KINDS.find(k => k.kind === event.kind)!.color } as CSSProperties}
-      onClick={() => { setSelectedId(event.id === selectedId ? null : event.id); setGroupIds([]); }}
+      onClick={() => setSelectedId(event.id === selectedId ? null : event.id)}
       aria-label={`${event.title}, ${clock(event.start)} to ${event.live ? 'now' : clock(event.end)}, ${duration(event.seconds)}`}
       title={`${event.title} · ${clock(event.start)}–${event.live ? 'now' : clock(event.end)} · ${duration(event.seconds)}`}>
-      <span className="ta-event-title">{event.live && <i className="ta-live-dot" />}{event.title}</span>
-      {height >= 43 && <span className="ta-event-time">{clock(event.start)} – {event.live ? 'now' : clock(event.end)}<b>{duration(event.seconds)}</b></span>}
+      <span className="ta-event-title"><span>{event.live && <i className="ta-live-dot" />}{event.title}</span><b title="Logged time">{duration(event.seconds)}</b></span>
+      {height >= 43 && <span className="ta-event-time">{clock(event.start)} – {event.live ? 'now' : clock(event.end)}</span>}
       {height >= 78 && event.project && <span className="ta-event-project">{event.project}</span>}
       {height >= 105 && event.kind === 'block' && <span className="ta-event-badge">{event.children?.length || 0} tasks in this block</span>}
     </button>
@@ -120,36 +131,25 @@ function CalendarData({ events, commitment, loading = false, error = false, onRe
     </div>
     <div className="ta-filters" aria-label="Time type filters">{KINDS.map(k => <button key={k.kind} aria-pressed={filters.includes(k.kind)} onClick={() => setFilters(f => f.includes(k.kind) ? f.filter(v => v !== k.kind) : [...f, k.kind])}><i style={{ background: k.color }} />{k.label}</button>)}<span>IST · GMT+5:30</span></div>
     <div className="ta-calendar" data-view={view}>
-      <div className="ta-grid-head"><div className="ta-zone">IST</div>{days.map(key => <div key={key} className="ta-day-head" data-today={key === dayKey(now)}>
-        <button onClick={() => { setDate(key); setView('day'); }}><span>{dateLabel(dayStart(key), { weekday: view === 'day' ? 'long' : 'short' })}</span><b>{dateLabel(dayStart(key), { day: '2-digit' })}</b></button>
-        {view === 'day' ? <div className="ta-lane-labels"><span>ATTENDANCE</span><span>TASKS & WORK BLOCKS</span></div> : <small>{duration(visibleEvents.filter(e => dayKey(e.start) === key && (e.kind === 'work' || e.kind === 'overtime')).reduce((s, e) => s + e.seconds, 0))} worked</small>}
-      </div>)}</div>
+      {gridWidth > calendarWidth + 1 && <div className="ta-scroll-hint">↔ Scroll sideways to see all tasks</div>}
       {loading ? <div className="ta-state" role="status"><Glyph name="clock" /><strong>Loading your timeline…</strong><span>Gathering attendance, tasks and work blocks.</span></div>
         : error ? <div className="ta-state" role="alert"><strong>We couldn’t load all your time</strong><span>Please try again to see the complete timeline.</span><button className="ta-today" onClick={onRetry}>Try again</button></div>
-        : <div className="ta-grid-scroll" ref={scroller}>
-          <div className="ta-grid-body"><div className="ta-hours">{Array.from({ length: 24 }, (_, h) => <span key={h} style={{ top: h * HOUR_HEIGHT }}>{h === 0 ? '12 AM' : h < 12 ? `${h} AM` : h === 12 ? '12 PM' : `${h - 12} PM`}</span>)}</div>
-            {days.map(key => {
-              const start = dayStart(key);
-              const items = visibleEvents.filter(e => filters.includes(e.kind)).map(e => clipActivity(e, start, start + 86400000)).filter((e): e is Activity => !!e);
-              const lanes = view === 'day' ? [items.filter(e => isAttendance(e.kind)), items.filter(e => !isAttendance(e.kind))] : [items];
-              return <div className="ta-day-column" key={key}>
-                {lanes.map((lane, i) => <div className="ta-lane" key={i}>{layoutActivityGroups(lane,
-                  (MIN_EVENT_HEIGHT + EVENT_GAP) / HOUR_HEIGHT * 3600000, view === 'week' ? 1 : Math.max(1, Math.min(3, Math.floor((calendarWidth - 64) * (i === 0 ? .38 : .62) / 140)))).map(({ events: entries, start: entryStart, end, column, columns }) => {
-                    const top = (entryStart - start) / 3600000 * HOUR_HEIGHT;
-                    const height = (end - entryStart) / 3600000 * HOUR_HEIGHT;
-                    const left = `calc(${column / columns * 100}% + 5px)`, width = `calc(${100 / columns}% - 10px)`;
-                    if (entries.length === 1) return display(entries[0], top, height, left, width);
-                    const active = entries.every(e => groupIds.includes(e.id));
-                    return <button key={`group:${entries[0].id}`} className="ta-event ta-event-group" data-short={height < 43} data-selected={active}
-                      style={{ top, height: Math.max(MIN_EVENT_HEIGHT, height - EVENT_GAP), left, width, '--event-color': KINDS.find(k => k.kind === entries[0].kind)!.color } as CSSProperties}
-                      aria-expanded={active} aria-controls={active ? 'ta-group-details' : undefined}
-                      aria-label={`${entries.length} entries, ${clock(entryStart)} to ${clock(end)}. Show all entries`}
-                      onClick={() => { setGroupIds(active ? [] : entries.map(e => e.id)); setSelectedId(null); }}>
-                      <span className="ta-event-title">{entries.length} entries <span>· View all</span></span>
-                      {height >= 43 && <span className="ta-event-time">{clock(entryStart)} – {clock(end)}</span>}
-                      {height >= 78 && <span className="ta-group-preview">{entries.slice(0, 3).map(e => e.title).join(' · ')}{entries.length > 3 ? '…' : ''}</span>}
-                    </button>;
-                  })}</div>)}
+        : <div className="ta-grid-scroll" ref={scroller} tabIndex={0} aria-label="Time calendar. Scroll sideways to see overlapping tasks.">
+      <div className="ta-grid-head" style={{ width: gridWidth }}><div className="ta-zone">IST</div>{dayLayouts.map(({ key, width, widths }) => <div key={key} style={{ flex: `0 0 ${width}px` }} className="ta-day-head" data-today={key === dayKey(now)}>
+        <button onClick={() => { setDate(key); setView('day'); }}><span>{dateLabel(dayStart(key), { weekday: view === 'day' ? 'long' : 'short' })}</span><b>{dateLabel(dayStart(key), { day: '2-digit' })}</b></button>
+        {view === 'day' ? <div className="ta-lane-labels"><span style={{ width: widths[0] }}>ATTENDANCE</span><span style={{ flex: 1 }}>TASKS & WORK BLOCKS</span></div> : <small>{duration(visibleEvents.filter(e => dayKey(e.start) === key && (e.kind === 'work' || e.kind === 'overtime')).reduce((s, e) => s + e.seconds, 0))} worked</small>}
+      </div>)}</div>
+
+          <div className="ta-grid-body" style={{ width: gridWidth }}><div className="ta-hours">{Array.from({ length: 24 }, (_, h) => <span key={h} style={{ top: h * HOUR_HEIGHT }}>{h === 0 ? '12 AM' : h < 12 ? `${h} AM` : h === 12 ? '12 PM' : `${h - 12} PM`}</span>)}</div>
+            {dayLayouts.map(({ key, start, items, layout, widths, width }) => {
+              return <div className="ta-day-column" key={key} style={{ flex: `0 0 ${width}px` }}>
+                {layout.map((lane, i) => <div className="ta-lane" key={i} style={{ flex: `0 0 ${widths[i]}px` }}>{lane.map(({ event, column, columns }) => {
+                  const attendance = view === 'day' && i === 0;
+                  const columnWidth = attendance ? widths[i] / columns : view === 'week' ? 140 : 160;
+                  const cardWidth = columns === 1 ? Math.min(widths[i], attendance ? widths[i] : 360) : columnWidth;
+                  return display(event, (event.start - start) / 3600000 * HOUR_HEIGHT, (event.end - event.start) / 3600000 * HOUR_HEIGHT,
+                    `${column * columnWidth + 5}px`, `${cardWidth - 10}px`);
+                })}</div>)}
                 {key === dayKey(now) && <div className="ta-now" style={{ top: (now - start) / 3600000 * HOUR_HEIGHT }}><span>{clock(now)}</span><i /></div>}
                 {!items.length && <div className="ta-empty-day" style={{ top: 9 * HOUR_HEIGHT + 12 }}><Glyph name="clock" /><strong>{visibleEvents.length ? 'Nothing matches' : 'No time tracked'}</strong><span>{filters.length ? 'Your tracked sessions appear here.' : 'Select a time type above.'}</span></div>}
               </div>;
@@ -157,8 +157,8 @@ function CalendarData({ events, commitment, loading = false, error = false, onRe
           </div>
         </div>}
     </div>
-    {(selected || group.length > 0) && <div className="ta-detail" aria-live="polite">
-      {selected && <><div className="ta-detail-top"><i style={{ background: KINDS.find(k => k.kind === selected.kind)!.color }} /><strong>{selected.title}</strong><span>{duration(selected.seconds)}</span><button className="ta-icon-btn" onClick={() => setSelectedId(null)} aria-label="Dismiss session details"><Glyph name="close" /></button></div>
+    {selected && <div className="ta-detail" aria-live="polite">
+      <><div className="ta-detail-top"><i style={{ background: KINDS.find(k => k.kind === selected.kind)!.color }} /><strong>{selected.title}</strong><span>{duration(selected.seconds)}</span><button className="ta-icon-btn" onClick={() => setSelectedId(null)} aria-label="Dismiss session details"><Glyph name="close" /></button></div>
         <p>{clock(selected.start)} – {selected.live ? 'Now · tracking' : clock(selected.end)}<span>·</span>{selected.source}{selected.project && <><span>·</span>{selected.project}</>}</p>
         {selected.note && <p>{selected.note}</p>}
         {!!selected.segments?.length && <details className="ta-segments"><summary>{selected.segments.length} time segments · {duration(selected.seconds)} tracked</summary>
@@ -166,13 +166,7 @@ function CalendarData({ events, commitment, loading = false, error = false, onRe
         </details>}
         {!!selected.children?.length && <div className="ta-children">{selected.children.map(c => <div key={c.task_id}><span>{c.completed ? '✓ ' : '↳ '}{c.title}</span><b>{duration(c.seconds)}</b></div>)}</div>}
         {selected.taskId && onOpenTask && <button className="ta-open-task" onClick={() => onOpenTask(selected.taskId!)}>Open task<Glyph name="arrow" /></button>}
-      </>}
-      {group.length > 0 && <div id="ta-group-details">
-        <div className="ta-detail-top"><strong>{group.length} entries in this period</strong><button className="ta-icon-btn ta-group-close" aria-label="Dismiss grouped entries" onClick={() => { setGroupIds([]); setSelectedId(null); }}><Glyph name="close" /></button></div>
-        <div className="ta-group-list">{group.map(event => <button key={event.id} aria-pressed={selectedId === event.id} onClick={e => { setSelectedId(event.id); const detail = e.currentTarget.closest('.ta-detail'); if (detail) detail.scrollTop = 0; }}>
-          <i style={{ background: KINDS.find(k => k.kind === event.kind)!.color }} /><span>{event.title}<small>{clock(event.start)} – {event.live ? 'Now' : clock(event.end)}</small></span><b>{duration(event.seconds)}</b>
-        </button>)}</div>
-      </div>}
+      </>
     </div>}
     <footer className="ta-footer"><span>Task and block time can overlap with attendance.</span><span>Overtime = work beyond daily commitment</span></footer>
   </>;
