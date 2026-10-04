@@ -34,6 +34,11 @@ function sampleTasks(): Activity[] {
     make(date, 780, 807, 'task', 'Agency — review required features', 'SquadHire / Product'),
     make(date, 807, 827, 'task', 'GST filings checking', 'Accounts / Finance'),
   ];
+  // Dense short sessions reproduce the crowding seen in real task timer history.
+  for (let i = 0; i < 30; i++) {
+    result.push({ ...make(date, 1230 + i, 1231 + i, 'task', `Quick task ${i + 1}`, 'SquadHub / Development'), id: `sample:burst:${i}` });
+  }
+  result.push(make(date, 1260, 1320, 'task', 'Create an ad targeting Kerala women', 'Marketing'));
   for (let i = 1; i <= 6; i++) {
     const key = shiftDay(date, -i);
     result.push(make(key, 570, 675, 'block', 'Morning focus', 'SquadHub'), make(key, 810, 900, 'task', 'Booking engine', 'Squad CRM'), make(key, 930, 1020, 'task', 'Squad bots app', 'Squad Bot'));
