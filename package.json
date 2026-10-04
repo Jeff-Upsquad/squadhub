@@ -17,7 +17,10 @@
     "build:admin": "npm run build -w shared && npm run build -w admin",
     "check:shared-imports": "npm run check:shared-imports -w web",
     "lint": "npm run lint -w server && npm run lint -w web",
-    "clean": "rm -rf node_modules server/dist web/dist admin/dist shared/dist"
+    "clean": "rm -rf node_modules server/dist web/dist admin/dist shared/dist",
+    "sync:squad-bots": "node scripts/sync-squad-bots.mjs",
+    "predev": "npm run sync:squad-bots",
+    "prebuild": "npm run sync:squad-bots"
   },
   "devDependencies": {
     "concurrently": "^9.1.2",

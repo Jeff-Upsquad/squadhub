@@ -36,6 +36,8 @@ services:
     build:
       context: .
       dockerfile: server/Dockerfile
+      additional_contexts:
+        squad_bots: ../squad-bots/packages/core
     container_name: squadhub-server
     restart: unless-stopped
     expose:
@@ -90,6 +92,10 @@ services:
     build:
       context: .
       dockerfile: web/Dockerfile
+      args:
+        NEXT_PUBLIC_SQUAD_BOTS_URL: ${SQUAD_BOTS_URL:-https://bots.squadhub.in}
+      additional_contexts:
+        squad_bots: ../squad-bots/packages/core
     container_name: squadhub-web
     restart: unless-stopped
     expose:
@@ -107,6 +113,10 @@ services:
     build:
       context: .
       dockerfile: admin/Dockerfile
+      args:
+        NEXT_PUBLIC_SQUAD_BOTS_URL: ${SQUAD_BOTS_URL:-https://bots.squadhub.in}
+      additional_contexts:
+        squad_bots: ../squad-bots/packages/core
     container_name: squadhub-admin
     restart: unless-stopped
     expose:

@@ -1,0 +1,1 @@
+../../../squad-bots/database/migrations/20261004070000_squad_bot_characters_conversations.sql

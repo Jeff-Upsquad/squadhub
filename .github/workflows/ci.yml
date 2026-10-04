@@ -17,18 +17,53 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
+    defaults:
+      run:
+        working-directory: squadhub
+
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+        with:
+          path: squadhub
+
+      - name: Verify Squad Bots source configuration
+        env:
+          SQUAD_BOTS_REPOSITORY: ${{ vars.SQUAD_BOTS_REPOSITORY }}
+        run: |
+          if [ -z "$SQUAD_BOTS_REPOSITORY" ]; then
+            echo "Configure SQUAD_BOTS_REPOSITORY (owner/repo) to check out the extracted sibling core. See docs/squad-bots-extraction.md."
+            exit 1
+          fi
+
+      - name: Read pinned Squad Bots revision
+        id: bots-ref
+        run: echo "ref=$(cat squad-bots.ref)" >> "$GITHUB_OUTPUT"
+
+      - name: Check out Squad Bots
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: ${{ vars.SQUAD_BOTS_REPOSITORY }}
+          ref: ${{ steps.bots-ref.outputs.ref }}
+          ssh-key: ${{ secrets.SQUAD_BOTS_SSH_KEY }}
+          path: squad-bots
 
       - name: Set up Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.1.0
         with:
           node-version: 20
           cache: npm
+          cache-dependency-path: |
+            squadhub/package-lock.json
+            squad-bots/package-lock.json
+
+      - name: Build Squad Bots core
+        working-directory: squad-bots
+        run: npm ci --legacy-peer-deps && npm run build -w packages/core
 
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --install-links --legacy-peer-deps
 
       - name: Build shared
         run: npm run build -w shared
