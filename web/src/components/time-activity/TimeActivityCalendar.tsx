@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode, type CSSProperties } from 'react';
 import { createPortal } from 'react-dom';
-import { KINDS, clipActivity, clock, dateLabel, dayKey, dayStart, duration, isAttendance, layoutActivities, shiftDay, weekStart, type Activity, type ActivityKind } from './activityModel';
+import { KINDS, clipActivity, clock, dateLabel, dayKey, dayStart, duration, isAttendance, layoutActivityGroups, shiftDay, weekStart, type Activity, type ActivityKind } from './activityModel';
 import './time-activity.css';
 
 type CalendarState = {
@@ -10,6 +10,8 @@ type CalendarState = {
   now: number; from: number; to: number; days: string[];
 };
 const HOUR_HEIGHT = 60;
+const MIN_EVENT_HEIGHT = 24;
+const EVENT_GAP = 3;
 const CalendarContext = createContext<CalendarState | null>(null);
 function Glyph({ name }: { name: 'clock' | 'close' | 'left' | 'right' | 'expand' | 'calendar' | 'arrow' }) {
   const paths = { clock: <><circle cx="12" cy="12" r="8.5" /><path d="M12 7v5l3 2" /></>, close: <path d="m6 6 12 12M18 6 6 18" />, left: <path d="m14 5-7 7 7 7" />, right: <path d="m10 5 7 7-7 7" />, expand: <><path d="M8 3H3v5M16 21h5v-5M3 3l6 6m12 12-6-6" /></>, calendar: <><rect x="3" y="5" width="18" height="16" rx="3" /><path d="M7 3v4m10-4v4M3 11h18" /></>, arrow: <path d="M5 12h14m-5-5 5 5-5 5" /> };
@@ -59,9 +61,18 @@ function CalendarData({ events, commitment, loading = false, error = false, onRe
   const { date, setDate, view, setView, now, from, to, days } = useContext(CalendarContext)!;
   const [filters, setFilters] = useState<ActivityKind[]>(KINDS.map(k => k.kind));
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [groupIds, setGroupIds] = useState<string[]>([]);
   const [picker, setPicker] = useState(false);
   const scroller = useRef<HTMLDivElement>(null);
+  const [calendarWidth, setCalendarWidth] = useState(850);
+  useEffect(() => {
+    if (!scroller.current) return;
+    const observer = new ResizeObserver(([entry]) => setCalendarWidth(entry.contentRect.width));
+    observer.observe(scroller.current);
+    return () => observer.disconnect();
+  }, [loading, error]);
   const visibleEvents = useMemo(() => events.map(e => clipActivity(e, from, to)).filter((e): e is Activity => !!e), [events, from, to]);
+  const group = visibleEvents.filter(e => groupIds.includes(e.id) && filters.includes(e.kind)).sort((a, b) => a.start - b.start || b.end - a.end);
   const selected = visibleEvents.find(e => e.id === selectedId);
   const totals = Object.fromEntries(KINDS.map(k => [k.kind, visibleEvents.filter(e => e.kind === k.kind).reduce((sum, e) => sum + e.seconds, 0)])) as Record<ActivityKind, number>;
   const work = totals.work + totals.overtime;
@@ -73,10 +84,12 @@ function CalendarData({ events, commitment, loading = false, error = false, onRe
     const hour = firstEvent ? (firstEvent.start - dayStart(dayKey(firstEvent.start))) / 3600000 : 9;
     if (scroller.current) scroller.current.scrollTop = Math.max(0, hour - .45) * HOUR_HEIGHT;
     setSelectedId(null);
-  }, [from, to, loading]);
+    setGroupIds([]);
+  }, [from, to, loading, view]);
+  useEffect(() => { setGroupIds([]); setSelectedId(null); }, [filters]);
   const display = (event: Activity, top: number, height: number, left: string, width: string) => (
     <button key={event.id} className="ta-event" data-kind={event.kind} data-selected={event.id === selectedId} data-short={height < 43}
-      style={{ top, height: Math.max(19, height - 3), left, width, '--event-color': KINDS.find(k => k.kind === event.kind)!.color } as CSSProperties}
+      style={{ top, height: Math.max(MIN_EVENT_HEIGHT, height - EVENT_GAP), left, width, '--event-color': KINDS.find(k => k.kind === event.kind)!.color } as CSSProperties}
       onClick={() => setSelectedId(event.id === selectedId ? null : event.id)}
       aria-label={`${event.title}, ${clock(event.start)} to ${event.live ? 'now' : clock(event.end)}, ${duration(event.seconds)}`}
       title={`${event.title} · ${clock(event.start)}–${event.live ? 'now' : clock(event.end)} · ${duration(event.seconds)}`}>
@@ -120,9 +133,23 @@ function CalendarData({ events, commitment, loading = false, error = false, onRe
               const items = visibleEvents.filter(e => filters.includes(e.kind)).map(e => clipActivity(e, start, start + 86400000)).filter((e): e is Activity => !!e);
               const lanes = view === 'day' ? [items.filter(e => isAttendance(e.kind)), items.filter(e => !isAttendance(e.kind))] : [items];
               return <div className="ta-day-column" key={key}>
-                {lanes.map((lane, i) => <div className="ta-lane" key={i}>{layoutActivities(lane).map(({ event, column, columns }) => display(event,
-                  (event.start - start) / 3600000 * HOUR_HEIGHT, (event.end - event.start) / 3600000 * HOUR_HEIGHT,
-                  `calc(${column / columns * 100}% + 5px)`, `calc(${100 / columns}% - 10px)`))}</div>)}
+                {lanes.map((lane, i) => <div className="ta-lane" key={i}>{layoutActivityGroups(lane,
+                  (MIN_EVENT_HEIGHT + EVENT_GAP) / HOUR_HEIGHT * 3600000, view === 'week' ? 1 : Math.max(1, Math.min(3, Math.floor((calendarWidth - 64) * (i === 0 ? .38 : .62) / 140)))).map(({ events: entries, start: entryStart, end, column, columns }) => {
+                    const top = (entryStart - start) / 3600000 * HOUR_HEIGHT;
+                    const height = (end - entryStart) / 3600000 * HOUR_HEIGHT;
+                    const left = `calc(${column / columns * 100}% + 5px)`, width = `calc(${100 / columns}% - 10px)`;
+                    if (entries.length === 1) return display(entries[0], top, height, left, width);
+                    const active = entries.every(e => groupIds.includes(e.id));
+                    return <button key={`group:${entries[0].id}`} className="ta-event ta-event-group" data-short={height < 43} data-selected={active}
+                      style={{ top, height: Math.max(MIN_EVENT_HEIGHT, height - EVENT_GAP), left, width, '--event-color': KINDS.find(k => k.kind === entries[0].kind)!.color } as CSSProperties}
+                      aria-expanded={active} aria-controls={active ? 'ta-group-details' : undefined}
+                      aria-label={`${entries.length} entries, ${clock(entryStart)} to ${clock(end)}. Show all entries`}
+                      onClick={() => { setGroupIds(active ? [] : entries.map(e => e.id)); setSelectedId(null); }}>
+                      <span className="ta-event-title">{entries.length} entries <span>· View all</span></span>
+                      {height >= 43 && <span className="ta-event-time">{clock(entryStart)} – {clock(end)}</span>}
+                      {height >= 78 && <span className="ta-group-preview">{entries.slice(0, 3).map(e => e.title).join(' · ')}{entries.length > 3 ? '…' : ''}</span>}
+                    </button>;
+                  })}</div>)}
                 {key === dayKey(now) && <div className="ta-now" style={{ top: (now - start) / 3600000 * HOUR_HEIGHT }}><span>{clock(now)}</span><i /></div>}
                 {!items.length && <div className="ta-empty-day" style={{ top: 9 * HOUR_HEIGHT + 12 }}><Glyph name="clock" /><strong>{visibleEvents.length ? 'Nothing matches' : 'No time tracked'}</strong><span>{filters.length ? 'Your tracked sessions appear here.' : 'Select a time type above.'}</span></div>}
               </div>;
@@ -130,13 +157,19 @@ function CalendarData({ events, commitment, loading = false, error = false, onRe
           </div>
         </div>}
     </div>
-    {selected && <div className="ta-detail" aria-live="polite">
-      <><div className="ta-detail-top"><i style={{ background: KINDS.find(k => k.kind === selected.kind)!.color }} /><strong>{selected.title}</strong><span>{duration(selected.seconds)}</span><button className="ta-icon-btn" onClick={() => setSelectedId(null)} aria-label="Dismiss session details"><Glyph name="close" /></button></div>
+    {(selected || group.length > 0) && <div className="ta-detail" aria-live="polite">
+      {selected && <><div className="ta-detail-top"><i style={{ background: KINDS.find(k => k.kind === selected.kind)!.color }} /><strong>{selected.title}</strong><span>{duration(selected.seconds)}</span><button className="ta-icon-btn" onClick={() => setSelectedId(null)} aria-label="Dismiss session details"><Glyph name="close" /></button></div>
         <p>{clock(selected.start)} – {selected.live ? 'Now · tracking' : clock(selected.end)}<span>·</span>{selected.source}{selected.project && <><span>·</span>{selected.project}</>}</p>
         {selected.note && <p>{selected.note}</p>}
         {!!selected.children?.length && <div className="ta-children">{selected.children.map(c => <div key={c.task_id}><span>{c.completed ? '✓ ' : '↳ '}{c.title}</span><b>{duration(c.seconds)}</b></div>)}</div>}
         {selected.taskId && onOpenTask && <button className="ta-open-task" onClick={() => onOpenTask(selected.taskId!)}>Open task<Glyph name="arrow" /></button>}
-      </>
+      </>}
+      {group.length > 0 && <div id="ta-group-details">
+        <div className="ta-detail-top"><strong>{group.length} entries in this period</strong><button className="ta-icon-btn ta-group-close" aria-label="Dismiss grouped entries" onClick={() => { setGroupIds([]); setSelectedId(null); }}><Glyph name="close" /></button></div>
+        <div className="ta-group-list">{group.map(event => <button key={event.id} aria-pressed={selectedId === event.id} onClick={e => { setSelectedId(event.id); const detail = e.currentTarget.closest('.ta-detail'); if (detail) detail.scrollTop = 0; }}>
+          <i style={{ background: KINDS.find(k => k.kind === event.kind)!.color }} /><span>{event.title}<small>{clock(event.start)} – {event.live ? 'Now' : clock(event.end)}</small></span><b>{duration(event.seconds)}</b>
+        </button>)}</div>
+      </div>}
     </div>}
     <footer className="ta-footer"><span>Task and block time can overlap with attendance.</span><span>Overtime = work beyond daily commitment</span></footer>
   </>;
