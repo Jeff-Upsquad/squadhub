@@ -201,7 +201,7 @@ router.get('/search', async (req: Request, res: Response) => {
     // 3. Search each field independently so title matches cannot crowd out
     // description matches. Both queries use the same accessible-list scope.
     const safeQ = q.replace(/[\\%_]/g, (m) => `\\${m}`);
-    const taskFields = 'id, title, description, status, priority, due_date, work_date, work_end_date:metadata->>work_end_date, start_date, assignee_ids, display_number, list_id, parent_task_id, created_at';
+    const taskFields = 'id, title, description, status, priority, due_date, work_date, work_end_date:metadata->>work_end_date, start_date, assignee_ids, display_number, list_id, parent_task_id, created_at, updated_at';
     const searchField = (field: 'title' | 'description') => {
       let query = supabaseAdmin
         .from('tasks')
@@ -209,7 +209,10 @@ router.get('/search', async (req: Request, res: Response) => {
         .in('list_id', accessibleListIds)
         .is('recurrence', null)
         .ilike(field, `%${safeQ}%`)
-        .order('created_at', { ascending: false })
+        // Most recently added and updated first: updated_at is bumped by
+        // trg_tasks_updated_at on every update and defaults to now() on insert,
+        // so DESC covers both recency signals with one ordering.
+        .order('updated_at', { ascending: false })
         .limit(limit);
       // Preserve title-search behavior for existing callers. Description search
       // also finds subtasks, and selection opens their owning task details.
@@ -320,6 +323,8 @@ router.get('/search', async (req: Request, res: Response) => {
         parent_task_id: t.parent_task_id ?? null,
         display_number: t.display_number ?? null,
         list_id: t.list_id,
+        created_at: t.created_at ?? null,
+        updated_at: t.updated_at ?? null,
         list_name: list?.name || null,
         folder_id: list?.folder_id || null,
         folder_name: list?.folder_id ? folderNameById[list.folder_id] || null : null,

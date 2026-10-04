@@ -29,6 +29,19 @@ interface SearchHit {
   space_id: string | null;
   space_name: string | null;
   space_color?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+}
+
+/** Most-recent activity first: updated covers edits, created covers new tasks. */
+function recentTime(t: { updated_at?: string | null; created_at?: string | null } | { updatedAt?: unknown }): number {
+  const any = t as any;
+  const updated = any.updated_at ?? any.updatedAt ?? null;
+  const created = any.created_at ?? any.createdAt ?? null;
+  const u = updated ? Date.parse(updated) : NaN;
+  if (!Number.isNaN(u)) return u;
+  const c = created ? Date.parse(created) : NaN;
+  return Number.isNaN(c) ? 0 : c;
 }
 
 const isDone = (status: string, category?: string | null) => {
@@ -96,19 +109,34 @@ export function LinkTasksDialog({ goal, onClose }: { goal: Goal; onClose: () => 
   const suggestions = useMemo(() => {
     if (!mine) return [] as GoalTask[];
     const seen = new Set<string>();
-    const out: GoalTask[] = [];
+    const collected: Task[] = [];
     for (const b of ['focused', 'overdue', 'today', 'tomorrow', 'upcoming', 'later'] as const) {
       for (const t of mine[b] || []) {
         if (seen.has(t.id) || t.recurrence) continue;
         seen.add(t.id);
-        const g = asGoalTask(t);
-        if (!g.completed) out.push(g);
+        collected.push(t);
       }
     }
-    return out.slice(0, 14);
+    // Most recently added and updated first — not due-date bucket order.
+    collected.sort((a, b) => recentTime(b) - recentTime(a));
+    const out: GoalTask[] = [];
+    for (const t of collected) {
+      const g = asGoalTask(t);
+      if (!g.completed) {
+        out.push(g);
+        if (out.length >= 14) break;
+      }
+    }
+    return out;
   }, [mine]);
 
-  const results: GoalTask[] = query ? (search.data || []).map(asGoalTask) : suggestions;
+  const results: GoalTask[] = useMemo(() => {
+    if (!query) return suggestions;
+    // Server already orders by updated_at DESC; re-sort defensively so cached
+    // or mixed responses still show most recently added/updated first.
+    const hits = [...(search.data || [])].sort((a, b) => recentTime(b) - recentTime(a));
+    return hits.map(asGoalTask);
+  }, [query, search.data, suggestions]);
   const linked = new Map(goal.tasks.map((t) => [t.id, t]));
 
   useEffect(() => setActive(0), [query]);
