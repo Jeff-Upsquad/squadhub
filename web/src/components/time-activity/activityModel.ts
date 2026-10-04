@@ -145,27 +145,3 @@ export function layoutActivities(events: Activity[], minimumDuration = 0) {
   flush();
   return positioned;
 }
-
-/** Reserve the rendered footprint of short entries; collapse crowded clusters without losing entries. */
-export function layoutActivityGroups(events: Activity[], minimumDuration: number, maxColumns: number) {
-  const ordered = [...events].sort((a, b) => a.start - b.start || b.end - a.end || a.id.localeCompare(b.id));
-  const result: { events: Activity[]; start: number; end: number; column: number; columns: number }[] = [];
-  let cluster: Activity[] = [], clusterEnd = -Infinity;
-  const flush = () => {
-    if (!cluster.length) return;
-    const layout = layoutActivities(cluster, minimumDuration);
-    if (layout[0].columns > maxColumns) {
-      result.push({ events: cluster, start: cluster[0].start, end: Math.max(...cluster.map(e => e.end)), column: 0, columns: 1 });
-    } else {
-      result.push(...layout.map(({ event, column, columns }) => ({ events: [event], start: event.start, end: event.end, column, columns })));
-    }
-    cluster = [];
-  };
-  for (const event of ordered) {
-    if (event.start >= clusterEnd) flush();
-    cluster.push(event);
-    clusterEnd = Math.max(clusterEnd, event.end, event.start + minimumDuration);
-  }
-  flush();
-  return result;
-}
