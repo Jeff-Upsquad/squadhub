@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import GoalIcon from '../goals/GoalIcons';
+import { useGoalActions, useTaskGoals } from '../goals/goalsApi';
 
 interface TaskDetailMoreMenuProps {
   open: boolean;
@@ -33,6 +34,9 @@ export default function TaskDetailMoreMenu({
 }: TaskDetailMoreMenuProps) {
   const [mounted, setMounted] = useState(open);
   const [state, setState] = useState<'closed' | 'open'>(open ? 'open' : 'closed');
+  const taskGoals = useTaskGoals(taskId);
+  const actions = useGoalActions();
+  const directGoals = taskGoals.filter((g) => g.tasks.some((t) => t.id === taskId && t.direct));
 
   // Handle open / close animation timing
   useEffect(() => {
@@ -165,6 +169,30 @@ export default function TaskDetailMoreMenu({
             <span>Add to a goal</span>
           </button>
         )}
+
+        {/* One entry per goal this task was linked to directly. Auto-included
+            tasks (via a connected folder/list) can't be unlinked one by one. */}
+        {directGoals.map((g) => (
+          <button
+            key={g.id}
+            type="button"
+            role="menuitem"
+            className="td-more-menu-item group"
+            title={`Remove from “${g.name}”`}
+            onClick={() => {
+              onClose();
+              const link = g.tasks.find((t) => t.id === taskId);
+              if (link) void actions.unlinkTask(g.id, link).catch(() => undefined);
+            }}
+          >
+            <span className="td-item-icon">
+              <GoalIcon name="unlink" size={14} />
+            </span>
+            <span className="truncate">
+              {directGoals.length === 1 ? 'Remove from goal' : `Remove from “${g.name}”`}
+            </span>
+          </button>
+        ))}
 
         {/* Action divider */}
         <div className="td-more-menu-sep" role="separator" />
