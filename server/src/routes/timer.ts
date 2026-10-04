@@ -324,6 +324,44 @@ router.get('/active', async (req: Request, res: Response) => {
   }
 });
 
+// Bounded timestamp range, including sessions that cross a day boundary.
+const calendarRange = z.object({
+  workspace_id: z.string().uuid(),
+  context: z.string().max(80).default('default'),
+  from: z.string().datetime({ offset: true }),
+  to: z.string().datetime({ offset: true }),
+}).refine(({ from, to }) => {
+  const span = Date.parse(to) - Date.parse(from);
+  return span > 0 && span <= 8 * 86400000;
+}, 'Choose a range of up to eight days');
+
+router.get('/sessions', async (req: Request, res: Response) => {
+  const parsed = calendarRange.safeParse(req.query);
+  if (!parsed.success) {
+    res.status(400).json({ success: false, error: parsed.error.issues[0].message });
+    return;
+  }
+  try {
+    const { workspace_id, context, from, to } = parsed.data;
+    const sessions: any[] = [];
+    for (let offset = 0; ; offset += 1000) {
+      const { data, error } = await supabaseAdmin.from('timer_sessions')
+        .select('*').eq('user_id', req.userId!).eq('workspace_id', workspace_id)
+        .eq('context', context).lt('start_time', to)
+        .or(`end_time.gt.${from},end_time.is.null`)
+        .order('start_time', { ascending: true }).order('id', { ascending: true })
+        .range(offset, offset + 999);
+      if (error) throw error;
+      sessions.push(...(data || []));
+      if (!data || data.length < 1000) break;
+    }
+    res.json({ success: true, data: sessions });
+  } catch (err) {
+    console.error('Timer calendar error:', err);
+    res.status(500).json({ success: false, error: 'Could not load timer sessions' });
+  }
+});
+
 // GET /timer/stats — today's summary + active timer + weekly summaries
 router.get('/stats', async (req: Request, res: Response) => {
   try {

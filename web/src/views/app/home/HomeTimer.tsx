@@ -3,6 +3,7 @@ import type { TimerType } from '@squadhub/shared';
 import { useActiveTimer, useTimeStats, useStartTimer, useStopTimer } from '../../../hooks/useTimer';
 import { useWorkspaceStore } from '../../../stores/workspaceStore';
 import { useIsPartner } from '../../../hooks/useUserType';
+import TimeActivityPanel from '../../../components/time-activity/TimeActivityPanel';
 
 /**
  * Hero work-clock for My Home. Surfaces the SAME Work / Break / No-work timers
@@ -62,6 +63,7 @@ function CtrlIcon({ running }: { running: boolean }) {
 }
 
 export default function HomeTimer() {
+  const [calendarOpen, setCalendarOpen] = useState(false);
   const workspaceId = useWorkspaceStore((s) => s.currentWorkspace?.id);
   // Match the context the user's own Daily Check-In uses (MainLayout passes
   // 'partners'/'teammates'), so the home clock and the Check-In Time-Tracking
@@ -129,10 +131,11 @@ export default function HomeTimer() {
   const ringPct = Math.round(hasCommitment ? workPct : tracked > 0 ? (work / tracked) * 100 : 0);
 
   return (
+    <>
     <div className="hm-timer" data-state={activeType || 'idle'} style={{ '--tmr-pct': ringPct } as React.CSSProperties}>
-      <div className="hm-timer-ring" aria-hidden>
+      <button type="button" className="hm-timer-ring" onClick={() => setCalendarOpen(true)} title="View tracked time calendar" aria-label="View tracked time calendar" aria-haspopup="dialog" aria-expanded={calendarOpen}>
         <span className="pct">{ringPct}<small>%</small></span>
-      </div>
+      </button>
 
       <div className="hm-timer-body">
         {/* Readout — worked total · commitment + status · segmented day bar */}
@@ -185,5 +188,7 @@ export default function HomeTimer() {
         })}
       </div>
     </div>
+    {calendarOpen && <TimeActivityPanel workspaceId={workspaceId} context={scope.context} onClose={() => setCalendarOpen(false)} />}
+    </>
   );
 }

@@ -51,6 +51,7 @@ export function useStartTimer({ workspaceId, context }: TimerScope) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['timer-active', workspaceId, context] });
       qc.invalidateQueries({ queryKey: ['timer-stats', workspaceId, context] });
+      qc.invalidateQueries({ queryKey: ['timer-sessions', workspaceId, context] });
     },
   });
 }
@@ -63,6 +64,7 @@ export function useStopTimer({ workspaceId, context }: TimerScope) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['timer-active', workspaceId, context] });
       qc.invalidateQueries({ queryKey: ['timer-stats', workspaceId, context] });
+      qc.invalidateQueries({ queryKey: ['timer-sessions', workspaceId, context] });
     },
   });
 }
@@ -82,6 +84,7 @@ export function useUpdateTimerSession({ workspaceId, context }: TimerScope) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['timer-active', workspaceId, context] });
       qc.invalidateQueries({ queryKey: ['timer-stats', workspaceId, context] });
+      qc.invalidateQueries({ queryKey: ['timer-sessions', workspaceId, context] });
     },
   });
 }
@@ -94,6 +97,7 @@ export function useDeleteTimerSession({ workspaceId, context }: TimerScope) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['timer-active', workspaceId, context] });
       qc.invalidateQueries({ queryKey: ['timer-stats', workspaceId, context] });
+      qc.invalidateQueries({ queryKey: ['timer-sessions', workspaceId, context] });
     },
   });
 }

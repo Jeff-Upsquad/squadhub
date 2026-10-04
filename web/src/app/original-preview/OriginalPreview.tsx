@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import './original.css';
+import DemoHomeTimer from '../time-preview/DemoHomeTimer';
 
 type Variant = 'original' | 'frost' | 'noir';
 
@@ -169,7 +170,7 @@ function GoArrow() {
   );
 }
 
-export default function OriginalPreview() {
+export default function OriginalPreview({ timePreview = false }: { timePreview?: boolean }) {
   const [variant, setVariant] = useState<Variant>('original');
   useEffect(() => { setVariant(getInitial()); }, []);
 
@@ -183,14 +184,14 @@ export default function OriginalPreview() {
 
   return (
     <div className="op-root" data-variant={variant === 'original' ? undefined : variant}>
-      <div className="op-switcher" role="radiogroup" aria-label="Background variant">
+      {!timePreview && <div className="op-switcher" role="radiogroup" aria-label="Background variant">
         <span>Canvas</span>
         {(['original', 'frost', 'noir'] as const).map(v => (
           <button key={v} role="radio" aria-checked={variant === v} data-active={variant === v} onClick={() => pick(v)}>
             {v === 'original' ? 'Original #FBFBF9' : v === 'frost' ? 'Frost ❄ glass' : 'Noir ◑ blackish'}
           </button>
         ))}
-      </div>
+      </div>}
 
       <div className="op-shell">
         {/* Far-left rail — exact MainLayout classes */}
@@ -339,13 +340,13 @@ export default function OriginalPreview() {
                 <div className="hm-hero-row">
                   <div className="hm-hero-lede">
                     <div className="hm-eyebrow-row">
-                      <span className="hm-eyebrow">Thursday, Sep 10 · Week 37 · Q3</span>
+                      <span className="hm-eyebrow">{timePreview ? 'Sunday, Oct 4 · Week 41 · Q4' : 'Thursday, Sep 10 · Week 37 · Q3'}</span>
                     </div>
                     <h1 className="hm-greet">Good afternoon, Jeff<span className="dot">.</span></h1>
                     <p className="hm-sub">Keep the promise you made to yourself.</p>
                   </div>
                   <div className="hm-hero-aside">
-                    <div className="hm-timer" data-state="idle">
+                    {timePreview ? <DemoHomeTimer /> : <div className="hm-timer" data-state="idle">
                       <div className="hm-timer-meter">
                         <span className="worked">0m<em>worked</em></span>
                         <span className="hm-timer-bar"><span className="seg work" style={{ width: '0%' }} /></span>
@@ -359,7 +360,7 @@ export default function OriginalPreview() {
                         <span className="hm-timer-btn" data-type="break">▸ Break</span>
                         <span className="hm-timer-btn" data-type="no_work">▸ No work</span>
                       </div>
-                    </div>
+                    </div>}
                   </div>
                 </div>
               </div>
