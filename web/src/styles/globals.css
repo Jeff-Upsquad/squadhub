@@ -6246,9 +6246,17 @@ button.td-bcrumb:hover .name { color: var(--sh-ink); }
 .td-subtask-row[data-tracking="true"] {
   background: color-mix(in srgb, var(--hm-accent, #39C66B) 9%, transparent);
   box-shadow: inset 3px 0 0 var(--hm-accent, #39C66B);
+  animation: td-subtask-tracking-pulse 1.8s ease-in-out infinite;
 }
 .td-subtask-row[data-tracking="true"]:hover {
   background: color-mix(in srgb, var(--hm-accent, #39C66B) 14%, transparent);
+}
+@keyframes td-subtask-tracking-pulse {
+  0%, 100% { background-color: color-mix(in srgb, var(--hm-accent, #39C66B) 9%, transparent); }
+  50% { background-color: color-mix(in srgb, var(--hm-accent, #39C66B) 18%, transparent); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .td-subtask-row[data-tracking="true"] { animation: none; }
 }
 .td-subtask-row .title {
   font-size: 13.5px;
