@@ -450,8 +450,25 @@ const TASK_STATUS_BY_KEY: Record<string, TaskStatusDef> = TASK_STATUS_CATALOG.re
   {} as Record<string, TaskStatusDef>
 );
 
+// Managed overrides (admin > Status Groups > Task Workflow). The web app
+// registers the managed rows on load and the server on boot; every
+// getTaskStatusDef / getTaskStatusCategory call site then resolves managed
+// labels/colors/categories automatically, with the static catalog as
+// fallback. Deleted keys keep resolving statically so old tasks degrade
+// gracefully instead of showing raw keys.
+let TASK_STATUS_OVERRIDES: Record<string, TaskStatusDef> | null = null;
+
+export function registerTaskStatusDefs(defs: TaskStatusDef[]): void {
+  const next: Record<string, TaskStatusDef> = {};
+  for (const d of defs) {
+    if (d && d.key) next[d.key] = d;
+  }
+  TASK_STATUS_OVERRIDES = next;
+}
+
 export function getTaskStatusDef(key: string | null | undefined): TaskStatusDef | null {
   if (!key) return null;
+  if (TASK_STATUS_OVERRIDES && TASK_STATUS_OVERRIDES[key]) return TASK_STATUS_OVERRIDES[key];
   return TASK_STATUS_BY_KEY[key] || null;
 }
 
@@ -513,6 +530,27 @@ export interface StatusGroupStatus {
   is_default: boolean;
   category: StatusCategory;
   created_at?: string;
+  /** Stable identifier stored on tasks.status (task_workflow group). NULL for regular space statuses. Immutable once set. */
+  key?: string | null;
+  description?: string | null;
+  /** Picker section (mirrors TaskStatusGroup). NULL = unsectioned. */
+  section?: string | null;
+  section_label?: string | null;
+  section_emoji?: string | null;
+}
+
+/** Convert a managed task_workflow row into the catalog shape the picker renders. */
+export function statusGroupRowToTaskDef(r: StatusGroupStatus): TaskStatusDef {
+  return {
+    key: (r.key || '') as TaskStatusKey,
+    label: r.name,
+    description: r.description || '',
+    group: (r.section || 'not_started') as TaskStatusGroup,
+    groupLabel: r.section_label || r.section || 'Not Started',
+    groupEmoji: r.section_emoji || '',
+    category: r.category,
+    color: r.color,
+  };
 }
 
 export interface StatusGroup {

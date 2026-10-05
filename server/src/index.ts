@@ -347,6 +347,15 @@ server.listen(config.port, () => {
   console.log(`SquadHub server running on http://localhost:${config.port}`);
   console.log(`Environment: ${config.nodeEnv}`);
 
+  // Managed generic-task statuses: load the Task Workflow group into the
+  // shared override registry (non-blocking; static catalog is the fallback),
+  // then refresh every minute as a backstop for multi-instance deploys.
+  // Same-process admin edits reload immediately (see status-groups-admin).
+  import('./utils/statusGroups').then((m) => {
+    m.loadTaskStatusOverrides();
+    setInterval(() => { m.loadTaskStatusOverrides(); }, 60 * 1000);
+  }).catch((e) => console.error('[statusGroups] override loader failed:', e));
+
   // Start cron jobs. Gated by DISABLE_CRONS so a secondary/local instance run
   // against the shared database (e.g. a worktree dev server) doesn't
   // double-fire sweeps that send messages, notifications, or spawn routines.

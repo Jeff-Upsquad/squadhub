@@ -8,7 +8,14 @@ import {
   syncSpaceToGroup,
   upsertAssignment,
   spaceHasSeedStatuses,
+  loadTaskStatusOverrides,
 } from '../utils/statusGroups';
+
+// Fire-and-forget refresh of the shared Task Workflow override registry
+// (same-process admin edits take effect immediately; never throws).
+function refreshTaskOverrides() {
+  loadTaskStatusOverrides();
+}
 
 const router = Router();
 
@@ -39,6 +46,13 @@ const statusCreateSchema = z.object({
   color: z.string().max(16).optional(),
   category: z.enum(CATEGORIES).optional(),
   is_default: z.boolean().optional(),
+  // Task Workflow extras: key is the stable identifier stored on tasks
+  // (auto-slugified from name when omitted, immutable afterwards).
+  key: z.string().max(64).regex(slugRegex, 'Key must be lowercase letters, numbers and underscores').optional(),
+  description: z.string().max(500).nullable().optional(),
+  section: z.string().max(64).optional(),
+  section_label: z.string().max(100).nullable().optional(),
+  section_emoji: z.string().max(16).nullable().optional(),
 });
 
 const statusUpdateSchema = z.object({
@@ -46,6 +60,10 @@ const statusUpdateSchema = z.object({
   color: z.string().max(16).optional(),
   category: z.enum(CATEGORIES).optional(),
   is_default: z.boolean().optional(),
+  description: z.string().max(500).nullable().optional(),
+  section: z.string().max(64).optional(),
+  section_label: z.string().max(100).nullable().optional(),
+  section_emoji: z.string().max(16).nullable().optional(),
 });
 
 const reorderSchema = z.object({
@@ -64,6 +82,14 @@ async function getGroup(id: string) {
     .eq('id', id)
     .maybeSingle();
   return data as any;
+}
+
+function slugify(s: string): string {
+  return (s || 'status').toLowerCase()
+    .replace(/[^a-z0-9_\s]/g, '')
+    .trim()
+    .replace(/\s+/g, '_')
+    .replace(/^[^a-z]+/, '') || 'status';
 }
 
 function zodErr(err: unknown, res: Response) {
@@ -450,6 +476,7 @@ router.put('/:id/enabled', async (req: Request, res: Response) => {
       res.status(500).json({ success: false, error: error.message });
       return;
     }
+    refreshTaskOverrides();
     res.json({ success: true, data });
   } catch (err) {
     if (zodErr(err, res)) return;
@@ -506,6 +533,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
       res.status(500).json({ success: false, error: error.message });
       return;
     }
+    refreshTaskOverrides();
     res.json({ success: true });
   } catch (err) {
     console.error('Delete status group error:', err);
@@ -535,11 +563,16 @@ router.post('/:id/statuses', async (req: Request, res: Response) => {
       .from('status_group_statuses')
       .insert({
         group_id: (req.params.id as string),
+        key: body.key || slugify(body.name),
         name: body.name,
+        description: body.description ?? null,
         color: body.color || '#6b7280',
         category: body.category || 'todo',
         is_default: body.is_default ?? existing.length === 0,
         position: nextPos,
+        section: body.section || null,
+        section_label: body.section_label ?? null,
+        section_emoji: body.section_emoji ?? null,
       })
       .select()
       .single();
@@ -551,6 +584,7 @@ router.post('/:id/statuses', async (req: Request, res: Response) => {
       });
       return;
     }
+    refreshTaskOverrides();
     res.status(201).json({ success: true, data });
   } catch (err) {
     if (zodErr(err, res)) return;
@@ -574,6 +608,7 @@ router.put('/:id/statuses/reorder', async (req: Request, res: Response) => {
         return;
       }
     }
+    refreshTaskOverrides();
     res.json({ success: true });
   } catch (err) {
     if (zodErr(err, res)) return;
@@ -591,6 +626,11 @@ router.put('/:id/statuses/:statusId', async (req: Request, res: Response) => {
     if (body.color !== undefined) patch.color = body.color;
     if (body.category !== undefined) patch.category = body.category;
     if (body.is_default !== undefined) patch.is_default = body.is_default;
+    // Key is immutable (stored on tasks); description/sections are editable.
+    if (body.description !== undefined) patch.description = body.description;
+    if (body.section !== undefined) patch.section = body.section;
+    if (body.section_label !== undefined) patch.section_label = body.section_label;
+    if (body.section_emoji !== undefined) patch.section_emoji = body.section_emoji;
 
     const { data, error } = await supabaseAdmin
       .from('status_group_statuses')
@@ -607,6 +647,7 @@ router.put('/:id/statuses/:statusId', async (req: Request, res: Response) => {
       res.status(404).json({ success: false, error: 'Status not found' });
       return;
     }
+    refreshTaskOverrides();
     res.json({ success: true, data });
   } catch (err) {
     if (zodErr(err, res)) return;
@@ -636,6 +677,7 @@ router.delete('/:id/statuses/:statusId', async (req: Request, res: Response) => 
       res.status(500).json({ success: false, error: error.message });
       return;
     }
+    refreshTaskOverrides();
     res.json({ success: true });
   } catch (err) {
     console.error('Delete group status error:', err);

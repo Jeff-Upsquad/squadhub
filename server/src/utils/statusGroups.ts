@@ -1,4 +1,5 @@
 import { supabaseAdmin } from '../supabase';
+import { registerTaskStatusDefs, statusGroupRowToTaskDef } from '@squadhub/shared';
 
 /**
  * Status-group helpers shared by the admin routes and the PM creation hooks.
@@ -19,6 +20,45 @@ export async function getGroupStatuses(groupId: string) {
     .order('position', { ascending: true });
   if (error) throw new Error(error.message);
   return (data || []) as any[];
+}
+
+/** Fetch an enabled group by key with ordered statuses (null when missing/disabled). */
+export async function getGroupByKey(key: string) {
+  const { data: group } = await supabaseAdmin
+    .from('status_groups')
+    .select('*')
+    .eq('key', key)
+    .eq('is_enabled', true)
+    .maybeSingle();
+  if (!group) return null;
+  return {
+    ...(group as any),
+    statuses: await getGroupStatuses((group as any).id),
+  };
+}
+
+/**
+ * Load the managed Task Workflow rows into the shared override registry so
+ * server-side getTaskStatusDef / getTaskStatusCategory calls (board
+ * grouping, completion checks) resolve admin-managed values. Static
+ * catalog remains the fallback. Never throws — call sites degrade to the
+ * static catalog when the table is missing or unreachable.
+ */
+export async function loadTaskStatusOverrides(): Promise<void> {
+  try {
+    const group = await getGroupByKey('task_workflow');
+    const rows = group?.statuses || [];
+    // Empty registry when the group is missing/disabled so every call
+    // site falls back to the static catalog uniformly.
+    registerTaskStatusDefs(
+      [...rows]
+        .sort((a: any, b: any) => a.position - b.position)
+        .map((r: any) => statusGroupRowToTaskDef(r))
+        .filter((d) => !!d.key),
+    );
+  } catch (e) {
+    console.error('[statusGroups] task workflow override load failed:', e);
+  }
 }
 
 /** Clone a group's statuses into a space's space_statuses (replaces existing). */
