@@ -359,7 +359,8 @@ export default function TodayList() {
 
   // Render a section's rows, collapsing any tasks whose container has Group Tasks
   // ON into one expandable "Grouped tasks under {name}" row. Plain tasks render
-  // as normal TodayRows. (The "In progress today" section opts out — see below.)
+  // as normal TodayRows. All Home sections (In progress, Focus list, Evening, Night)
+  // share this grouped task rendering.
   const renderTaskRows = (list: Task[]) =>
     collapseGroupedTasks(list).map((item) =>
       isGroupedRow(item) ? (
@@ -421,11 +422,7 @@ export default function TodayList() {
             {formatTracked(totalTodaySeconds) || '0m'}
           </span>
         </div>
-        <div className="hm-list">
-          {unbucketedInProgress.map((t) => (
-            <TodayRow key={t.id} task={t} onOpen={openTask} secondsToday={secondsTodayByTask.get(t.id) || 0} liveSecs={liveByTask.get(t.id) || 0} isInProgress />
-          ))}
-        </div>
+        {renderTaskCollection(unbucketedInProgress)}
       </div>
     )}
     <div className="hm-card">
@@ -582,7 +579,7 @@ export default function TodayList() {
           tasks={eveningTasks}
           collapsed={!!focusBucketCollapsed.evening}
           onToggle={() => setFocusBucketCollapsed('evening', !focusBucketCollapsed.evening)}
-          renderRows={renderTaskRows}
+          renderCollection={renderTaskCollection}
         />
       )}
 
@@ -593,7 +590,7 @@ export default function TodayList() {
           tasks={nightTasks}
           collapsed={!!focusBucketCollapsed.night}
           onToggle={() => setFocusBucketCollapsed('night', !focusBucketCollapsed.night)}
-          renderRows={renderTaskRows}
+          renderCollection={renderTaskCollection}
         />
       )}
     </>
@@ -609,14 +606,14 @@ function BucketSection({
   tasks,
   collapsed,
   onToggle,
-  renderRows,
+  renderCollection,
 }: {
   title: string;
   hint: string;
   tasks: Task[];
   collapsed: boolean;
   onToggle: () => void;
-  renderRows: (list: Task[]) => React.ReactNode;
+  renderCollection: (list: Task[]) => React.ReactNode;
 }) {
   return (
     <div className="hm-card hm-bucket-card" data-collapsed={collapsed || undefined}>
@@ -637,11 +634,7 @@ function BucketSection({
         <span className="hm-count">· {tasks.length}</span>
         <span className="hm-bucket-hint">{hint}</span>
       </div>
-      {!collapsed && (
-        <div className="hm-list">
-          {renderRows(tasks)}
-        </div>
-      )}
+      {!collapsed && renderCollection(tasks)}
     </div>
   );
 }
