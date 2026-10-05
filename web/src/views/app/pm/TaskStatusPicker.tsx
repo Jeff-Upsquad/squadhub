@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
-  TASK_STATUS_CATALOG,
   getTaskStatusDef,
   type TaskStatusDef,
   type TaskStatusGroup,
   type TaskStatusKey,
 } from '@squadhub/shared';
+import { useTaskWorkflowCatalog, findTaskStatusDef } from '../../../hooks/useTaskWorkflowCatalog';
 
 const GROUP_ORDER: TaskStatusGroup[] = [
   'priority_urgency',
@@ -39,7 +39,12 @@ function groupCatalog(items: TaskStatusDef[]): Grouped[] {
     }
     g.items.push(d);
   }
-  return GROUP_ORDER.map((g) => byGroup.get(g)).filter((x): x is Grouped => !!x);
+  // Known sections first (stable order), then any admin-added sections.
+  const ordered = GROUP_ORDER.map((g) => byGroup.get(g)).filter((x): x is Grouped => !!x);
+  for (const [key, g] of byGroup) {
+    if (!GROUP_ORDER.includes(key)) ordered.push(g);
+  }
+  return ordered;
 }
 
 export default function TaskStatusPicker({
@@ -51,6 +56,7 @@ export default function TaskStatusPicker({
   onChange: (key: TaskStatusKey) => void;
   buttonClassName?: string;
 }) {
+  const { defs: catalog } = useTaskWorkflowCatalog();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [anchor, setAnchor] = useState<DOMRect | null>(null);
@@ -100,16 +106,18 @@ export default function TaskStatusPicker({
     setOpen(true);
   };
 
-  const current = getTaskStatusDef(value) || (value ? getTaskStatusDef(LEGACY_TO_KEY[value]) : null);
+  const current = findTaskStatusDef(catalog, value)
+    || getTaskStatusDef(value)
+    || (value ? getTaskStatusDef(LEGACY_TO_KEY[value]) : null);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return groupCatalog(TASK_STATUS_CATALOG);
-    const matched = TASK_STATUS_CATALOG.filter(
+    if (!q) return groupCatalog(catalog);
+    const matched = catalog.filter(
       (d) => d.label.toLowerCase().includes(q) || d.description.toLowerCase().includes(q)
     );
     return groupCatalog(matched);
-  }, [query]);
+  }, [query, catalog]);
 
   const pick = (key: TaskStatusKey) => {
     onChange(key);

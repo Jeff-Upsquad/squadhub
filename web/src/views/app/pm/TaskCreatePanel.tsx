@@ -409,6 +409,7 @@ export default function TaskCreatePanel({
 
   // When the task type resolves (or changes) normalize draft.status.
   // - task_type='task': status must be a TASK_STATUS_CATALOG key (default 'open')
+  //   (managed Task Workflow overrides resolve through getTaskStatusDef)
   // - other types: status must match a space_status.category (default first)
   useEffect(() => {
     const typeKey = (taskTypes?.find((t) => t.id === draft.task_type_id) as { key?: string } | undefined)?.key;

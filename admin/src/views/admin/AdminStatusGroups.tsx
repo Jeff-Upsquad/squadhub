@@ -291,20 +291,44 @@ function GroupMetaCard({ group, onChanged, onDelete }: { group: StatusGroup; onC
 // ============================================================
 // Statuses card
 // ============================================================
+const TASK_SECTIONS = [
+  { key: 'priority_urgency', label: 'Priority & Urgency', emoji: '⚡' },
+  { key: 'not_started', label: 'Not Started', emoji: '📥' },
+  { key: 'scheduled_queued', label: 'Scheduled / Queued', emoji: '📅' },
+  { key: 'in_motion', label: 'In Motion', emoji: '🏃' },
+  { key: 'routines', label: 'Routines', emoji: '🔁' },
+  { key: 'blocked_paused', label: 'Blocked / Paused', emoji: '⏸️' },
+  { key: 'done', label: 'Closed', emoji: '✅' },
+];
+
 function StatusesCard({ group, onChanged }: { group: StatusGroup; onChanged: () => void }) {
+  const isTaskWorkflow = group.key === 'task_workflow';
   const [name, setName] = useState('');
   const [color, setColor] = useState('#6b7280');
   const [category, setCategory] = useState<StatusCategory>('todo');
+  const [section, setSection] = useState('not_started');
+  const [description, setDescription] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
   const [editColor, setEditColor] = useState('#6b7280');
   const [editCategory, setEditCategory] = useState<StatusCategory>('todo');
+  const [editDescription, setEditDescription] = useState('');
+  const [editSection, setEditSection] = useState('not_started');
 
   const statuses: StatusGroupStatus[] = [...(group.statuses || [])].sort((a, b) => a.position - b.position);
 
   const create = useMutation({
-    mutationFn: () => api.post(`/admin/status-groups/${group.id}/statuses`, { name: name.trim(), color, category }),
-    onSuccess: () => { onChanged(); setName(''); },
+    mutationFn: () => {
+      const sec = TASK_SECTIONS.find((s) => s.key === section);
+      return api.post(`/admin/status-groups/${group.id}/statuses`, {
+        name: name.trim(), color, category,
+        description: description.trim() || null,
+        section: isTaskWorkflow ? section : undefined,
+        section_label: isTaskWorkflow ? sec?.label : undefined,
+        section_emoji: isTaskWorkflow ? sec?.emoji : undefined,
+      });
+    },
+    onSuccess: () => { onChanged(); setName(''); setDescription(''); },
     onError: (err: any) => alert(err?.response?.data?.error || 'Failed to add status'),
   });
   const update = useMutation({
@@ -337,50 +361,84 @@ function StatusesCard({ group, onChanged }: { group: StatusGroup; onChanged: () 
     <div className="rounded-xl border border-divider bg-surface p-4">
       <h3 className="mb-1 text-sm font-semibold">Statuses in this group ({statuses.length})</h3>
       <p className="mb-3 text-xs text-foreground-dim">Order controls the board column order. Category controls grouping (to-do / active / done / closed).</p>
+      {isTaskWorkflow && (
+        <p className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+          This group powers the status picker on every generic task. Keys (mono chips below) are stored on tasks
+          and can’t be changed — rename labels freely. Changes apply within about a minute.
+        </p>
+      )}
 
       <form
-        className="mb-3 flex flex-wrap items-center gap-2"
+        className="mb-3 space-y-2"
         onSubmit={(e) => { e.preventDefault(); if (name.trim()) create.mutate(); }}
       >
-        <input value={name} onChange={(e) => setName(e.target.value)} placeholder="New status name (e.g. For Review)" className="min-w-40 flex-1 rounded-lg border border-divider px-3 py-2 text-sm focus:border-ink focus:outline-none" />
-        <input type="color" value={color} onChange={(e) => setColor(e.target.value)} className="h-9 w-10 cursor-pointer rounded border border-divider" title="Status color" />
-        <select value={category} onChange={(e) => setCategory(e.target.value as StatusCategory)} className="rounded-lg border border-divider px-2 py-2 text-sm">
-          {(Object.keys(CATEGORY_LABELS) as StatusCategory[]).map((c) => (
-            <option key={c} value={c}>{CATEGORY_LABELS[c]}</option>
-          ))}
-        </select>
-        <button className="rounded-lg bg-ink px-3 py-2 text-sm font-medium text-white hover:opacity-90">Add</button>
+        <div className="flex flex-wrap items-center gap-2">
+          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="New status name (e.g. For Review)" className="min-w-40 flex-1 rounded-lg border border-divider px-3 py-2 text-sm focus:border-ink focus:outline-none" />
+          <input type="color" value={color} onChange={(e) => setColor(e.target.value)} className="h-9 w-10 cursor-pointer rounded border border-divider" title="Status color" />
+          <select value={category} onChange={(e) => setCategory(e.target.value as StatusCategory)} className="rounded-lg border border-divider px-2 py-2 text-sm">
+            {(Object.keys(CATEGORY_LABELS) as StatusCategory[]).map((c) => (
+              <option key={c} value={c}>{CATEGORY_LABELS[c]}</option>
+            ))}
+          </select>
+          {isTaskWorkflow && (
+            <select value={section} onChange={(e) => setSection(e.target.value)} className="rounded-lg border border-divider px-2 py-2 text-sm" title="Picker section">
+              {TASK_SECTIONS.map((s) => (
+                <option key={s.key} value={s.key}>{s.emoji} {s.label}</option>
+              ))}
+            </select>
+          )}
+          <button className="rounded-lg bg-ink px-3 py-2 text-sm font-medium text-white hover:opacity-90">Add</button>
+        </div>
+        <input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Description shown under the status in the picker (optional)" className="w-full rounded-lg border border-divider px-3 py-2 text-sm focus:border-ink focus:outline-none" />
       </form>
 
       <div className="space-y-1.5">
         {statuses.map((s, i) => (
-          <div key={s.id} className="flex items-center gap-2 rounded-lg border border-divider px-3 py-2">
-            <span className="h-3 w-3 shrink-0 rounded-full" style={{ background: s.color }} />
+          <div key={s.id} className="rounded-lg border border-divider px-3 py-2">
+            <div className="flex items-center gap-2">
+              <span className="h-3 w-3 shrink-0 rounded-full" style={{ background: s.color }} />
+              {editingId === s.id ? (
+                <>
+                  <input value={editName} onChange={(e) => setEditName(e.target.value)} className="min-w-0 flex-1 rounded border border-divider px-2 py-1 text-sm focus:border-ink focus:outline-none" />
+                  <input type="color" value={editColor} onChange={(e) => setEditColor(e.target.value)} className="h-7 w-8 cursor-pointer rounded border border-divider" />
+                  <select value={editCategory} onChange={(e) => setEditCategory(e.target.value as StatusCategory)} className="rounded border border-divider px-1 py-1 text-xs">
+                    {(Object.keys(CATEGORY_LABELS) as StatusCategory[]).map((c) => (
+                      <option key={c} value={c}>{CATEGORY_LABELS[c]}</option>
+                    ))}
+                  </select>
+                  {isTaskWorkflow && (
+                    <select value={editSection} onChange={(e) => setEditSection(e.target.value)} className="rounded border border-divider px-1 py-1 text-xs">
+                      {TASK_SECTIONS.map((sec) => (
+                        <option key={sec.key} value={sec.key}>{sec.emoji} {sec.label}</option>
+                      ))}
+                    </select>
+                  )}
+                  <button onClick={() => {
+                    const sec = TASK_SECTIONS.find((x) => x.key === editSection);
+                    update.mutate({ id: s.id, body: { name: editName.trim(), color: editColor, category: editCategory, description: editDescription.trim() || null, section: isTaskWorkflow ? editSection : undefined, section_label: isTaskWorkflow ? sec?.label : undefined, section_emoji: isTaskWorkflow ? sec?.emoji : undefined } });
+                  }} className="rounded bg-ink px-2 py-1 text-xs font-medium text-white">Save</button>
+                  <button onClick={() => setEditingId(null)} className="rounded border border-divider px-2 py-1 text-xs">Cancel</button>
+                </>
+              ) : (
+                <>
+                  <span className="min-w-0 flex-1 truncate text-sm font-medium">{s.name}</span>
+                  {s.key && <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] text-foreground-dim">{s.key}</code>}
+                  <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium text-foreground-dim">{CATEGORY_LABELS[s.category]}</span>
+                  {s.is_default && <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700">DEFAULT</span>}
+                  <button onClick={() => shift(i, -1)} disabled={i === 0} className="rounded px-1 text-foreground-dim hover:text-foreground disabled:opacity-30" title="Move up">↑</button>
+                  <button onClick={() => shift(i, 1)} disabled={i === statuses.length - 1} className="rounded px-1 text-foreground-dim hover:text-foreground disabled:opacity-30" title="Move down">↓</button>
+                  {!s.is_default && (
+                    <button onClick={() => update.mutate({ id: s.id, body: { is_default: true } })} className="rounded px-1 text-xs text-foreground-dim hover:text-foreground" title="Mark as default">★</button>
+                  )}
+                  <button onClick={() => { setEditingId(s.id); setEditName(s.name); setEditColor(s.color); setEditCategory(s.category); setEditDescription(s.description || ''); setEditSection(s.section || 'not_started'); }} className="rounded px-1 text-xs text-foreground-dim hover:text-foreground">Edit</button>
+                  <button onClick={() => { if (confirm(`Delete status “${s.name}”?${s.key ? ' Tasks already on this status will keep working and show the old label.' : ''}`)) remove.mutate(s.id); }} className="rounded px-1 text-xs text-red-500 hover:text-red-700">Delete</button>
+                </>
+              )}
+            </div>
             {editingId === s.id ? (
-              <>
-                <input value={editName} onChange={(e) => setEditName(e.target.value)} className="min-w-0 flex-1 rounded border border-divider px-2 py-1 text-sm focus:border-ink focus:outline-none" />
-                <input type="color" value={editColor} onChange={(e) => setEditColor(e.target.value)} className="h-7 w-8 cursor-pointer rounded border border-divider" />
-                <select value={editCategory} onChange={(e) => setEditCategory(e.target.value as StatusCategory)} className="rounded border border-divider px-1 py-1 text-xs">
-                  {(Object.keys(CATEGORY_LABELS) as StatusCategory[]).map((c) => (
-                    <option key={c} value={c}>{CATEGORY_LABELS[c]}</option>
-                  ))}
-                </select>
-                <button onClick={() => update.mutate({ id: s.id, body: { name: editName.trim(), color: editColor, category: editCategory } })} className="rounded bg-ink px-2 py-1 text-xs font-medium text-white">Save</button>
-                <button onClick={() => setEditingId(null)} className="rounded border border-divider px-2 py-1 text-xs">Cancel</button>
-              </>
+              <input value={editDescription} onChange={(e) => setEditDescription(e.target.value)} placeholder="Description shown under the status in the picker (optional)" className="mt-1.5 w-full rounded border border-divider px-2 py-1 text-xs focus:border-ink focus:outline-none" />
             ) : (
-              <>
-                <span className="min-w-0 flex-1 truncate text-sm font-medium">{s.name}</span>
-                <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium text-foreground-dim">{CATEGORY_LABELS[s.category]}</span>
-                {s.is_default && <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700">DEFAULT</span>}
-                <button onClick={() => shift(i, -1)} disabled={i === 0} className="rounded px-1 text-foreground-dim hover:text-foreground disabled:opacity-30" title="Move up">↑</button>
-                <button onClick={() => shift(i, 1)} disabled={i === statuses.length - 1} className="rounded px-1 text-foreground-dim hover:text-foreground disabled:opacity-30" title="Move down">↓</button>
-                {!s.is_default && (
-                  <button onClick={() => update.mutate({ id: s.id, body: { is_default: true } })} className="rounded px-1 text-xs text-foreground-dim hover:text-foreground" title="Mark as default">★</button>
-                )}
-                <button onClick={() => { setEditingId(s.id); setEditName(s.name); setEditColor(s.color); setEditCategory(s.category); }} className="rounded px-1 text-xs text-foreground-dim hover:text-foreground">Edit</button>
-                <button onClick={() => { if (confirm(`Delete status “${s.name}”?`)) remove.mutate(s.id); }} className="rounded px-1 text-xs text-red-500 hover:text-red-700">Delete</button>
-              </>
+              s.description && <p className="mt-0.5 truncate pl-5 text-xs text-foreground-dim">{s.description}</p>
             )}
           </div>
         ))}

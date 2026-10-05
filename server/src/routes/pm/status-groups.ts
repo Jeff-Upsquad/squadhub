@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { requireAuth } from '../../middleware/auth';
 import { supabaseAdmin } from '../../supabase';
-import { resolveEffectiveGroup, getGroupStatuses } from '../../utils/statusGroups';
+import { resolveEffectiveGroup, getGroupStatuses, getGroupByKey } from '../../utils/statusGroups';
 
 const router = Router();
 
@@ -45,6 +45,23 @@ router.get('/status-groups/effective', async (req: Request, res: Response) => {
     });
   } catch (err) {
     console.error('Effective status group error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// GET /pm/status-groups/by-key/:key — one enabled group + statuses.
+// Powers the generic-task picker (key 'task_workflow'), which renders the
+// managed group and falls back to the static catalog when unavailable.
+router.get('/status-groups/by-key/:key', async (req: Request, res: Response) => {
+  try {
+    const group = await getGroupByKey(req.params.key as string);
+    if (!group) {
+      res.status(404).json({ success: false, error: 'Status group not found' });
+      return;
+    }
+    res.json({ success: true, data: group });
+  } catch (err) {
+    console.error('Status group by-key error:', err);
     res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });
