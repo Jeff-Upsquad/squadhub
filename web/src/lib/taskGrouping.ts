@@ -1,4 +1,4 @@
-import type { Task } from '@squadhub/shared';
+import type { Task, TaskType } from '@squadhub/shared';
 import { getTaskStatusCategory } from '@squadhub/shared';
 
 // Sentinel for callers that genuinely have no fading state to thread through
@@ -7,7 +7,7 @@ import { getTaskStatusCategory } from '@squadhub/shared';
 // keep a task in its pre-fade bucket while the slide-out animation plays.
 export const EMPTY_FADING_MAP: ReadonlyMap<string, string> = new Map();
 
-export type GroupBy = 'none' | 'status' | 'work_date' | 'due_date' | 'priority' | 'space' | 'folder' | 'list' | 'label';
+export type GroupBy = 'none' | 'status' | 'work_date' | 'due_date' | 'priority' | 'task_type' | 'space' | 'folder' | 'list' | 'label';
 
 export const GROUP_BY_OPTIONS: { value: GroupBy; label: string }[] = [
   { value: 'none', label: 'None' },
@@ -15,6 +15,7 @@ export const GROUP_BY_OPTIONS: { value: GroupBy; label: string }[] = [
   { value: 'due_date', label: 'Due date' },
   { value: 'priority', label: 'Priority' },
   { value: 'status', label: 'Status' },
+  { value: 'task_type', label: 'Task type' },
   { value: 'space', label: 'Space' },
   { value: 'folder', label: 'Folder' },
   { value: 'list', label: 'List' },
@@ -27,6 +28,7 @@ export const LIST_GROUP_BY_OPTIONS: { value: GroupBy; label: string }[] = [
   { value: 'work_date', label: 'Work date' },
   { value: 'due_date', label: 'Due date' },
   { value: 'priority', label: 'Priority' },
+  { value: 'task_type', label: 'Task type' },
   { value: 'space', label: 'Space' },
   { value: 'folder', label: 'Folder' },
   { value: 'list', label: 'List' },
@@ -380,6 +382,62 @@ export function groupByLabel(tasks: Task[]): Group[] {
   return [...map.values()].sort((a, b) => (a.sort as string).localeCompare(b.sort as string));
 }
 
+// Group tasks by their task type. Resolves the type definition either from
+// joined task_type object or from the optional taskTypes list (by task_type_id
+// or task_type_key). Untyped tasks collect under "No task type" sorted last.
+export function groupByTaskType(tasks: Task[], taskTypes?: TaskType[]): Group[] {
+  const typeById = new Map<string, TaskType>();
+  const typeByKey = new Map<string, TaskType>();
+  if (taskTypes) {
+    for (const tt of taskTypes) {
+      if (tt.id) typeById.set(tt.id, tt);
+      if (tt.key) typeByKey.set(tt.key, tt);
+    }
+  }
+
+  const map = new Map<string, Group>();
+  for (const t of tasks) {
+    const rawType = (t as any).task_type;
+    const typeId = t.task_type_id || rawType?.id || null;
+    const typeKey = (t as any).task_type_key || rawType?.key || null;
+    const resolvedType = (typeId ? typeById.get(typeId) : null)
+      || (typeKey ? typeByKey.get(typeKey) : null)
+      || rawType
+      || null;
+
+    if (!resolvedType && !typeId && !typeKey) {
+      const k = '__none__';
+      if (!map.has(k)) {
+        map.set(k, { key: k, label: 'No task type', sort: Number.MAX_SAFE_INTEGER, tasks: [] });
+      }
+      map.get(k)!.tasks.push(t);
+      continue;
+    }
+
+    const key = resolvedType?.id || typeId || resolvedType?.key || typeKey || '__none__';
+    if (!map.has(key)) {
+      const label = resolvedType?.name || resolvedType?.key || 'No task type';
+      const color = resolvedType?.color || (t as any).task_type_color || undefined;
+      const sort = typeof resolvedType?.position === 'number' ? resolvedType.position : (label || '').toLowerCase();
+      map.set(key, {
+        key,
+        label,
+        color,
+        sort,
+        tasks: [],
+      });
+    }
+    map.get(key)!.tasks.push(t);
+  }
+
+  return [...map.values()].sort((a, b) => {
+    if (typeof a.sort === 'number' && typeof b.sort === 'number') return a.sort - b.sort;
+    if (typeof a.sort === 'number') return 1;
+    if (typeof b.sort === 'number') return -1;
+    return (a.sort as string).localeCompare(b.sort as string);
+  });
+}
+
 // `fadingMap` is REQUIRED so callers can't accidentally drop the snapshot when
 // `by === 'status'`. The other group-by paths don't read `task.status`, so the
 // value is unused for them — but the type guard keeps the call site honest.
@@ -388,6 +446,7 @@ export function groupTasks(
   by: GroupBy,
   tz: string,
   fadingMap: ReadonlyMap<string, string>,
+  taskTypes?: TaskType[],
 ): Group[] {
   switch (by) {
     case 'work_date':
@@ -398,6 +457,8 @@ export function groupTasks(
       return groupByPriority(tasks);
     case 'status':
       return groupByStatus(tasks, fadingMap);
+    case 'task_type':
+      return groupByTaskType(tasks, taskTypes);
     case 'space':
       return groupByNamedRef(tasks, (t) => t.space ?? null, 'No space');
     case 'folder':

@@ -238,6 +238,7 @@ export default function TodayList() {
   const setTodayListGroupBy = usePMStore((s) => s.setTodayListGroupBy);
   const view = usePMStore((s) => s.todayListView);
   const setTodayListView = usePMStore((s) => s.setTodayListView);
+  const { data: taskTypes } = useTaskTypes();
   const [menuOpen, setMenuOpen] = useState(false);
   const [mobileFocusExpanded, setMobileFocusExpanded] = useState(false);
   const anchorRef = useRef<HTMLDivElement>(null);
@@ -381,7 +382,7 @@ export default function TodayList() {
     if (groupBy === 'none') {
       return <div className="hm-list">{renderTaskRows(list)}</div>;
     }
-    return groupTasks(list, groupBy, tz, fadingTaskIds).map((g) => (
+    return groupTasks(list, groupBy, tz, fadingTaskIds, taskTypes).map((g) => (
       <div key={g.key} className="hm-group">
         <div className="hm-group-head">
           {g.color && (

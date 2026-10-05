@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { usePMStore } from '../../../stores/pmStore';
 import { useNewTasks } from '../../../hooks/useNewTasks';
+import { useTaskTypes } from '../../../hooks/useTaskTypes';
 import { GROUP_BY_OPTIONS, groupTasks, type GroupBy } from '../../../lib/taskGrouping';
 import NewTaskRow from './NewTaskRow';
 
@@ -20,6 +21,7 @@ export default function NewTasksPanel() {
   const [showReviewed, setShowReviewed] = useState(false);
 
   const { data, isLoading } = useNewTasks({ includeReviewed: showReviewed, enabled: open });
+  const { data: taskTypes } = useTaskTypes();
   const tasks = data || [];
   const reviewedCount = showReviewed ? tasks.filter((t) => t.reviewed).length : 0;
 
@@ -31,8 +33,8 @@ export default function NewTasksPanel() {
   const tz = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC', []);
   const currentGroupLabel = GROUP_BY_OPTIONS.find((o) => o.value === groupBy)?.label ?? 'None';
   const grouped = useMemo(
-    () => (groupBy === 'none' ? [] : groupTasks(tasks, groupBy, tz, fadingTaskIds)),
-    [tasks, groupBy, tz, fadingTaskIds],
+    () => (groupBy === 'none' ? [] : groupTasks(tasks, groupBy, tz, fadingTaskIds, taskTypes)),
+    [tasks, groupBy, tz, fadingTaskIds, taskTypes],
   );
 
   useEffect(() => {

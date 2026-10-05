@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import type { SpaceStatus, Task, ListViewRow } from '@squadhub/shared';
 import { useTasks, useUpdateTask, groupTasksByStatus } from '../../../hooks/useTasks';
+import { useTaskTypes } from '../../../hooks/useTaskTypes';
 import { usePMStore, type ListGroupBy } from '../../../stores/pmStore';
 import { useAuthStore } from '../../../stores/authStore';
 import { groupTasks as groupTasksGeneric, partitionByCompletion, sortTasks, buildFocusTodayGroup, isTaskFocused, isTaskUpcoming, nestSubtasks, filterWithSubtasks, sortByCreationOrder, type SortBy } from '../../../lib/taskGrouping';
@@ -40,6 +41,7 @@ export default function ListView({
   // parent row gets the expandable subtask dropdown (TaskRow's chevron) instead
   // of subtasks cluttering the top level.
   const { data: flatTasks, isLoading } = useTasks(listId, { includeSubtasks: true });
+  const { data: taskTypes } = useTaskTypes();
   const tasks = useMemo(() => nestSubtasks(flatTasks ?? []), [flatTasks]);
   const updateTask = useUpdateTask(listId);
   const { selectedTasks, clearSelection, fadingTaskIds } = usePMStore();
@@ -135,8 +137,8 @@ export default function ListView({
 
   const genericGroups = useMemo(() => {
     if (groupBy === 'status' || groupBy === 'none') return null;
-    return groupTasksGeneric(currentOpenTasks, groupBy, tz, fadingTaskIds);
-  }, [currentOpenTasks, groupBy, tz, fadingTaskIds]);
+    return groupTasksGeneric(currentOpenTasks, groupBy, tz, fadingTaskIds, taskTypes);
+  }, [currentOpenTasks, groupBy, tz, fadingTaskIds, taskTypes]);
 
   const handleStatusChange = (taskId: string, statusId: string) => {
     updateTask.mutate({ id: taskId, status: statusId });
@@ -285,8 +287,12 @@ export default function ListView({
                 listId={listId}
                 onStatusChange={handleStatusChange}
                 canEdit={canEdit}
-                showAddRow={false}
+                showAddRow={canEdit && groupBy === 'task_type'}
                 dimFocused={!!focusGroup}
+                defaultTaskTypeId={groupBy === 'task_type' && g.key !== '__none__' ? g.key : activeView?.config?.defaultTaskTypeId}
+                defaultPriority={activeView?.config?.defaultPriority}
+                defaultLabelId={activeView?.config?.defaultLabel}
+                activeViewId={activeView?.id}
               />
             ))}
             {upcomingCard()}

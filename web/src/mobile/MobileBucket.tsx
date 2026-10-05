@@ -10,6 +10,7 @@ import { useMemo } from 'react';
 import type { Task } from '@squadhub/shared';
 import { usePMStore, type DashboardTab } from '../stores/pmStore';
 import { useMyTasksSummary } from '../hooks/useMyTasksSummary';
+import { useTaskTypes } from '../hooks/useTaskTypes';
 import { GROUP_BY_OPTIONS, groupTasks } from '../lib/taskGrouping';
 import DashboardTaskRow from '../views/app/home/DashboardTaskRow';
 import { MEmpty, MLoading } from './MobileKit';
@@ -48,6 +49,7 @@ export default function MobileBucket() {
   const setScopedGroupBy = usePMStore((s) => s.setScopedGroupBy);
   const fadingTaskIds = usePMStore((s) => s.fadingTaskIds);
   const { data, isLoading } = useMyTasksSummary(!!tab);
+  const { data: taskTypes } = useTaskTypes();
 
   const dashScopeKey = tab ? `dashboard:${tab}` : '';
   const groupBy = (dashScopeKey && groupByScope[dashScopeKey]) || 'none';
@@ -61,8 +63,8 @@ export default function MobileBucket() {
   const tz = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC', []);
   const groups = useMemo(() => {
     if (groupBy === 'none') return [];
-    return groupTasks(tasks, groupBy, tz, fadingTaskIds);
-  }, [tasks, groupBy, tz, fadingTaskIds]);
+    return groupTasks(tasks, groupBy, tz, fadingTaskIds, taskTypes);
+  }, [tasks, groupBy, tz, fadingTaskIds, taskTypes]);
 
   const summary = useMemo(() => {
     if (!tab || isLoading || tasks.length === 0) return null;

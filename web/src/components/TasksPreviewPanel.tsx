@@ -7,6 +7,7 @@ import { useAuthStore } from '../stores/authStore';
 import { useTabsStore } from '../stores/tabsStore';
 import { buildHomeSnapshot } from '../lib/tabSnapshots';
 import { usePersonalList, useTasks, useUpdateTask, groupTasksByStatus } from '../hooks/useTasks';
+import { useTaskTypes } from '../hooks/useTaskTypes';
 import { useCompletionGate } from '../hooks/useCompletionGate';
 import { useListViews } from '../hooks/useListViews';
 import {
@@ -267,6 +268,7 @@ export default function TasksPreviewPanel({
 
   // Same fetch + nesting as ListView.
   const { data: flatTasks, isLoading } = useTasks(listId, { includeSubtasks: true });
+  const { data: taskTypes } = useTaskTypes();
   const tasks = useMemo(() => nestSubtasks(flatTasks ?? []), [flatTasks]);
 
   // Same per-list ephemeral toggles the section uses.
@@ -307,8 +309,8 @@ export default function TasksPreviewPanel({
 
   const genericGroups = useMemo(() => {
     if (groupBy === 'status' || groupBy === 'none') return null;
-    return groupTasksGeneric(openTasks, groupBy, tz, fadingTaskIds).filter((g) => g.tasks.length > 0);
-  }, [openTasks, groupBy, tz, fadingTaskIds]);
+    return groupTasksGeneric(openTasks, groupBy, tz, fadingTaskIds, taskTypes).filter((g) => g.tasks.length > 0);
+  }, [openTasks, groupBy, tz, fadingTaskIds, taskTypes]);
 
   const openTask = (t: Task) => {
     // Same as the inbox panel: back the detail overlay with a My Tasks tab so
