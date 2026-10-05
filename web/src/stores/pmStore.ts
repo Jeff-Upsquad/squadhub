@@ -685,7 +685,21 @@ export const usePMStore = create<PMState>()(
         triggerSave();
       },
       setTodayListGroupBy: (value) => {
-        set({ todayListGroupBy: value });
+        set((state) => ({
+          todayListGroupBy: value,
+          groupByScope: {
+            ...state.groupByScope,
+            'dashboard:today': value,
+            'dashboard:overdue': value,
+            'dashboard:tomorrow': value,
+            'dashboard:all': value,
+            'home:new-tasks': value,
+          },
+          secondaryCardGroupBy: Object.keys(state.secondaryCardGroupBy).reduce(
+            (acc, key) => ({ ...acc, [key]: value }),
+            {} as Record<string, GroupBy>,
+          ),
+        }));
         triggerSave();
       },
       setTodayListView: (value) => {

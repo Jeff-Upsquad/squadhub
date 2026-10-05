@@ -22,8 +22,8 @@ export default function SecondaryCardPanel({ card }: { card: SecondaryCardConfig
   const setActiveSecondaryCard = usePMStore((s) => s.setActiveSecondaryCard);
   const fadingTaskIds = usePMStore((s) => s.fadingTaskIds);
   // Group-by is a persisted per-card preference (synced via view-preferences),
-  // so the choice sticks across refresh and devices instead of resetting.
-  const groupBy = usePMStore((s) => (card ? s.secondaryCardGroupBy[card.key] ?? 'none' : 'none'));
+  // defaulting to Home's focus list grouping if not explicitly overridden.
+  const groupBy = usePMStore((s) => (card ? s.secondaryCardGroupBy[card.key] ?? s.todayListGroupBy ?? 'none' : 'none'));
   const setSecondaryCardGroupBy = usePMStore((s) => s.setSecondaryCardGroupBy);
   const groupedExpanded = usePMStore((s) => s.groupedExpanded);
   const toggleGroupedExpanded = usePMStore((s) => s.toggleGroupedExpanded);

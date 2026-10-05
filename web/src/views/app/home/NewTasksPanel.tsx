@@ -25,7 +25,7 @@ export default function NewTasksPanel() {
   const tasks = data || [];
   const reviewedCount = showReviewed ? tasks.filter((t) => t.reviewed).length : 0;
 
-  const groupBy = (usePMStore((s) => s.groupByScope[GROUP_SCOPE]) ?? 'none') as GroupBy;
+  const groupBy = (usePMStore((s) => s.groupByScope[GROUP_SCOPE] ?? s.todayListGroupBy ?? 'none')) as GroupBy;
   const setScopedGroupBy = usePMStore((s) => s.setScopedGroupBy);
   const fadingTaskIds = usePMStore((s) => s.fadingTaskIds);
   const [groupMenuOpen, setGroupMenuOpen] = useState(false);

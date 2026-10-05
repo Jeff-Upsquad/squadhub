@@ -69,8 +69,9 @@ export default function DashboardListPanel() {
         <DashboardTaskRow key={item.id} task={item} />
       ),
     );
+  const todayListGroupBy = usePMStore((s) => s.todayListGroupBy);
   const dashScopeKey = activeDashboardTab ? `dashboard:${activeDashboardTab}` : '';
-  const groupBy = (dashScopeKey && groupByScope[dashScopeKey]) || 'none';
+  const groupBy = (dashScopeKey && groupByScope[dashScopeKey]) || todayListGroupBy || 'none';
 
   useEffect(() => {
     if (activeDashboardTab) {

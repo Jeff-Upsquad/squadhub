@@ -51,8 +51,9 @@ export default function MobileBucket() {
   const { data, isLoading } = useMyTasksSummary(!!tab);
   const { data: taskTypes } = useTaskTypes();
 
+  const todayListGroupBy = usePMStore((s) => s.todayListGroupBy);
   const dashScopeKey = tab ? `dashboard:${tab}` : '';
-  const groupBy = (dashScopeKey && groupByScope[dashScopeKey]) || 'none';
+  const groupBy = (dashScopeKey && groupByScope[dashScopeKey]) || todayListGroupBy || 'none';
 
   const tasks = useMemo<Task[]>(() => {
     if (!data || !tab) return [];
