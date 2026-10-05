@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import type { Task } from '@squadhub/shared';
 import { usePMStore } from '../../../stores/pmStore';
 import { useMyTasksSummary } from '../../../hooks/useMyTasksSummary';
+import { useTaskTypes } from '../../../hooks/useTaskTypes';
 import { GROUP_BY_OPTIONS, groupTasks, collapseGroupedTasks, isGroupedRow, type GroupBy } from '../../../lib/taskGrouping';
 import DashboardTaskRow from './DashboardTaskRow';
 import GroupedTaskRow from './GroupedTaskRow';
@@ -31,6 +32,7 @@ export default function DashboardListPanel() {
   const activeDashboardTab = usePMStore((s) => s.activeDashboardTab);
   const setActiveDashboardTab = usePMStore((s) => s.setActiveDashboardTab);
   const { data, isLoading } = useMyTasksSummary(!!activeDashboardTab);
+  const { data: taskTypes } = useTaskTypes();
   const [mounted, setMounted] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const groupByScope = usePMStore((s) => s.groupByScope);
@@ -105,8 +107,8 @@ export default function DashboardListPanel() {
 
   const groups = useMemo(() => {
     if (groupBy === 'none') return [];
-    return groupTasks(tasks, groupBy, tz, fadingTaskIds);
-  }, [tasks, groupBy, tz, fadingTaskIds]);
+    return groupTasks(tasks, groupBy, tz, fadingTaskIds, taskTypes);
+  }, [tasks, groupBy, tz, fadingTaskIds, taskTypes]);
 
   // Bucket context for the header eyebrow — a date for day buckets,
   // a plain-words scope for the rest.

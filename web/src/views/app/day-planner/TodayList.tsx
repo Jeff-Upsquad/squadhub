@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Task } from '@squadhub/shared';
 import { usePMStore } from '../../../stores/pmStore';
 import { useDayPlannerTasks, useUnscheduledTasks, useDayPlans, useFocusTask, planDateKey } from '../../../hooks/useDayPlanner';
+import { useTaskTypes } from '../../../hooks/useTaskTypes';
 import { groupTasks, collapseGroupedTasks, isGroupedRow, GROUP_BY_OPTIONS, type GroupBy } from '../../../lib/taskGrouping';
 import GroupedTaskRow from '../home/GroupedTaskRow';
 import SnoozeMenu from './SnoozeMenu';
@@ -61,6 +62,7 @@ function priorityChip(p: Task['priority']): { level: 'emg' | 'p0' | 'p1'; label:
 export default function TodayList() {
   const { data: tasks = [], isLoading } = useDayPlannerTasks();
   const { data: unscheduled = [], isLoading: unscheduledLoading } = useUnscheduledTasks();
+  const { data: taskTypes } = useTaskTypes();
   const focusTask = useFocusTask();
   const setActiveTask = usePMStore((s) => s.setActiveTask);
 
@@ -162,8 +164,8 @@ export default function TodayList() {
   const overCapacity = plannedMin > DAY_CAPACITY_MIN;
 
   const groups = useMemo(
-    () => (groupBy === 'none' ? [] : groupTasks(visibleTasks, groupBy, tz, NO_FADING)),
-    [visibleTasks, groupBy, tz],
+    () => (groupBy === 'none' ? [] : groupTasks(visibleTasks, groupBy, tz, NO_FADING, taskTypes)),
+    [visibleTasks, groupBy, tz, taskTypes],
   );
 
   // Close the group-by menu on an outside click or Escape.

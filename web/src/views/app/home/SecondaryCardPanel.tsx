@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { Task } from '@squadhub/shared';
 import { usePMStore } from '../../../stores/pmStore';
+import { useTaskTypes } from '../../../hooks/useTaskTypes';
 import { GROUP_BY_OPTIONS, groupTasks, collapseGroupedTasks, isGroupedRow } from '../../../lib/taskGrouping';
 import DashboardTaskRow from './DashboardTaskRow';
 import GroupedTaskRow from './GroupedTaskRow';
@@ -17,6 +18,7 @@ const GROUP_OPTIONS = GROUP_BY_OPTIONS;
 // path/avatar display). Resource rows use their source-opening action; other
 // rows open via the peek slot so the lister stays behind the task detail.
 export default function SecondaryCardPanel({ card }: { card: SecondaryCardConfig | null }) {
+  const { data: taskTypes } = useTaskTypes();
   const setActiveSecondaryCard = usePMStore((s) => s.setActiveSecondaryCard);
   const fadingTaskIds = usePMStore((s) => s.fadingTaskIds);
   // Group-by is a persisted per-card preference (synced via view-preferences),
@@ -104,8 +106,8 @@ export default function SecondaryCardPanel({ card }: { card: SecondaryCardConfig
 
   const groups = useMemo(() => {
     if (groupBy === 'none') return [];
-    return groupTasks(tasks, groupBy, tz, fadingTaskIds);
-  }, [tasks, groupBy, tz, fadingTaskIds]);
+    return groupTasks(tasks, groupBy, tz, fadingTaskIds, taskTypes);
+  }, [tasks, groupBy, tz, fadingTaskIds, taskTypes]);
 
   // One-line shape of the bucket: count, urgent count, oldest overdue age —
   // same format as DashboardListPanel ("24 tasks · 24 urgent · oldest 142d").

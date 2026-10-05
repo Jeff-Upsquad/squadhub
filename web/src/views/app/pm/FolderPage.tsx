@@ -4,6 +4,7 @@ import type { Folder, List, SpaceStatus, Task } from '@squadhub/shared';
 import api from '../../../services/api';
 import { usePMStore } from '../../../stores/pmStore';
 import { useSpace, useReorderLists } from '../../../hooks/useSpaces';
+import { useTaskTypes } from '../../../hooks/useTaskTypes';
 import { useIsMobile } from '../../../hooks/useIsMobile';
 import TaskGroupCard from './TaskGroupCard';
 import { GROUP_BY_OPTIONS, groupTasks, partitionByCompletion, buildFocusTodayGroup, isTaskCompleted, isTaskUpcoming, nestSubtasks, filterWithSubtasks, sortByCreationOrder, type GroupBy } from '../../../lib/taskGrouping';
@@ -37,6 +38,7 @@ export default function FolderPage({ folderId: propFolderId }: { folderId?: stri
   const groupByScope = usePMStore((s) => s.groupByScope);
   const setScopedGroupBy = usePMStore((s) => s.setScopedGroupBy);
   const fadingTaskIds = usePMStore((s) => s.fadingTaskIds);
+  const { data: taskTypes } = useTaskTypes();
   const isMobile = useIsMobile();
   const [listFilter, setListFilter] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
@@ -184,8 +186,8 @@ export default function FolderPage({ folderId: propFolderId }: { folderId?: stri
 
   const groups = useMemo(() => {
     if (groupBy === 'none') return [];
-    return groupTasks(currentOpenTasks, groupBy, tz, fadingTaskIds);
-  }, [currentOpenTasks, groupBy, tz, fadingTaskIds]);
+    return groupTasks(currentOpenTasks, groupBy, tz, fadingTaskIds, taskTypes);
+  }, [currentOpenTasks, groupBy, tz, fadingTaskIds, taskTypes]);
 
   const focusGroup = useMemo(() => {
     return buildFocusTodayGroup(currentOpenTasks);
