@@ -105,44 +105,115 @@ export async function logTaskTimeEntry(params: LogTaskTimeParams): Promise<LogTa
   const entryStartedAt = durationSeconds < 0 ? edgeAt : startedAt;
   const stoppedAt = durationSeconds < 0 ? startedAt : edgeAt;
 
-  const { data: entry, error: insertErr } = await supabaseAdmin
-    .from('task_time_entries')
-    .insert({
-      task_id: taskId,
-      user_id: userId,
-      workspace_id: workspaceId,
-      started_at: entryStartedAt,
-      stopped_at: stoppedAt,
-      duration_seconds: durationSeconds,
-      source,
-      work_block_run_id: workBlockRunId ?? null,
-      note: note ?? null,
-    })
-    .select()
-    .single();
-  if (insertErr) return { ok: false, error: insertErr.message };
+  let entryRecord: any = null;
+  let effectiveDelta = durationSeconds;
 
-  // Bump the aggregate cache on the task (task detail "Logged" field).
-  const newTotal = ((task as any).time_tracked || 0) + durationSeconds;
-  await supabaseAdmin
-    .from('tasks')
-    .update({ time_tracked: newTotal })
-    .eq('id', taskId);
+  // When source='timer' and positive with no note, protect against concurrent/duplicate
+  // flushes from multiple tabs or network retries by checking for overlapping entries.
+  if (source === 'timer' && durationSeconds > 0 && !note) {
+    const currStartMs = new Date(entryStartedAt).getTime();
+    const currStopMs = new Date(stoppedAt).getTime();
 
-  if (durationSeconds > 0) {
-    await ensureAssigneeOnTimeLogged(taskId, userId, ((task as any).assignee_ids as string[] | null) ?? null);
-  }
+    // Query existing timer entries on this task by this user within 24 hours.
+    const lookbackStart = new Date(currStartMs - 24 * 3600 * 1000).toISOString();
+    const lookaheadStop = new Date(currStopMs + 24 * 3600 * 1000).toISOString();
 
-  if (!skipDailySummary) {
-    const isExcluded = await isTaskExcludedFromTimeReports(taskId);
-    if (!isExcluded) {
-      // Bucket the day by the entry's own start, not the reordered row, so a
-      // negative correction lands on the date the user picked.
-      await upsertDailySummary(userId, workspaceId, startedAt, stoppedAt, durationSeconds);
+    const { data: existingTimerRows } = await supabaseAdmin
+      .from('task_time_entries')
+      .select('*')
+      .eq('task_id', taskId)
+      .eq('user_id', userId)
+      .eq('source', 'timer')
+      .is('note', null)
+      .gt('duration_seconds', 0)
+      .gte('started_at', lookbackStart)
+      .lte('started_at', lookaheadStop);
+
+    const overlapping = (existingTimerRows || []).filter((r: any) => {
+      if ((r.work_block_run_id ?? null) !== (workBlockRunId ?? null)) return false;
+      const rStart = new Date(r.started_at).getTime();
+      const rStop = new Date(r.stopped_at).getTime();
+      // Overlap: new chunk starts before existing chunk stops, and new chunk stops after existing starts
+      return currStartMs < rStop - 1000 && currStopMs > rStart + 1000;
+    });
+
+    if (overlapping.length > 0) {
+      // Merge overlapping entries into a single continuous window
+      const allStartMs = Math.min(currStartMs, ...overlapping.map((r: any) => new Date(r.started_at).getTime()));
+      const allStopMs = Math.max(currStopMs, ...overlapping.map((r: any) => new Date(r.stopped_at).getTime()));
+      const mergedDurationSeconds = Math.max(1, Math.round((allStopMs - allStartMs) / 1000));
+      const alreadyLoggedSeconds = overlapping.reduce((acc: number, r: any) => acc + (r.duration_seconds || 0), 0);
+
+      // Only count net-new non-overlapping seconds toward aggregates
+      effectiveDelta = Math.max(0, mergedDurationSeconds - alreadyLoggedSeconds);
+
+      // Keep the first existing entry and expand it to cover the merged window
+      const primary = overlapping[0];
+      const { data: updated, error: updateErr } = await supabaseAdmin
+        .from('task_time_entries')
+        .update({
+          started_at: new Date(allStartMs).toISOString(),
+          stopped_at: new Date(allStopMs).toISOString(),
+          duration_seconds: mergedDurationSeconds,
+        })
+        .eq('id', primary.id)
+        .select()
+        .single();
+
+      if (updateErr) return { ok: false, error: updateErr.message };
+      entryRecord = updated;
+
+      // Delete any secondary overlapping entries that were absorbed into the primary
+      const extraIds = overlapping.slice(1).map((r: any) => r.id);
+      if (extraIds.length > 0) {
+        await supabaseAdmin.from('task_time_entries').delete().in('id', extraIds);
+      }
     }
   }
 
-  return { ok: true, entry, workspaceId };
+  if (!entryRecord) {
+    const { data: entry, error: insertErr } = await supabaseAdmin
+      .from('task_time_entries')
+      .insert({
+        task_id: taskId,
+        user_id: userId,
+        workspace_id: workspaceId,
+        started_at: entryStartedAt,
+        stopped_at: stoppedAt,
+        duration_seconds: durationSeconds,
+        source,
+        work_block_run_id: workBlockRunId ?? null,
+        note: note ?? null,
+      })
+      .select()
+      .single();
+    if (insertErr) return { ok: false, error: insertErr.message };
+    entryRecord = entry;
+  }
+
+  // Bump the aggregate cache on the task (task detail "Logged" field) by effectiveDelta.
+  if (effectiveDelta !== 0) {
+    const newTotal = Math.max(0, ((task as any).time_tracked || 0) + effectiveDelta);
+    await supabaseAdmin
+      .from('tasks')
+      .update({ time_tracked: newTotal })
+      .eq('id', taskId);
+
+    if (effectiveDelta > 0) {
+      await ensureAssigneeOnTimeLogged(taskId, userId, ((task as any).assignee_ids as string[] | null) ?? null);
+    }
+
+    if (!skipDailySummary) {
+      const isExcluded = await isTaskExcludedFromTimeReports(taskId);
+      if (!isExcluded) {
+        // Bucket the day by the entry's own start, not the reordered row, so a
+        // negative correction lands on the date the user picked.
+        await upsertDailySummary(userId, workspaceId, startedAt, stoppedAt, effectiveDelta);
+      }
+    }
+  }
+
+  return { ok: true, entry: entryRecord, workspaceId };
 }
 
 /**

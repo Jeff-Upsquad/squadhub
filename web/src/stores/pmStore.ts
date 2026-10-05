@@ -108,6 +108,17 @@ function closeSegmentShares(timers: TimerState[], segmentStart: number | null, n
   return timers.map((t) => ({ taskId: t.taskId, listId: t.listId, startedAt: segmentStart, seconds: per }));
 }
 
+/** Broadcast live timer changes across browser tabs/windows to prevent concurrent drift. */
+export function broadcastTimerState(timers: TimerState[], timerSegmentStart: number | null): void {
+  if (typeof BroadcastChannel !== 'undefined') {
+    try {
+      const bc = new BroadcastChannel('squadhub_timer_sync');
+      bc.postMessage({ type: 'SYNC_TIMERS', timers, timerSegmentStart });
+      bc.close();
+    } catch {}
+  }
+}
+
 // Target for the grouped-task detail panel (the work-block-style view opened by
 // clicking a "Grouped tasks under …" row's name). A group is virtual, so we
 // carry its stable run key, label, a list-id hint for time attribution, and a
@@ -560,10 +571,12 @@ export const usePMStore = create<PMState>()(
         if (timers.length >= MAX_PARALLEL_TIMERS) return null;
         const now = Date.now();
         const shares = closeSegmentShares(timers, timerSegmentStart, now);
+        const nextTimers = [...timers, { taskId, taskTitle, listId, startedAt: now, baseTracked }];
         set({
-          timers: [...timers, { taskId, taskTitle, listId, startedAt: now, baseTracked }],
+          timers: nextTimers,
           timerSegmentStart: now,
         });
+        broadcastTimerState(nextTimers, now);
         return { shares };
       },
       adoptCompanionTimer: (taskId, taskTitle, listId, baseTracked, startedAt) => {
@@ -578,10 +591,13 @@ export const usePMStore = create<PMState>()(
         if (timers.length && now - start >= 1000) {
           shares.push({ taskId, listId, startedAt: start, seconds: Math.floor((now - start) / 1000) });
         }
+        const nextTimers = [...timers, { taskId, taskTitle, listId, startedAt: start, baseTracked }];
+        const nextSegment = timers.length ? now : start;
         set({
-          timers: [...timers, { taskId, taskTitle, listId, startedAt: start, baseTracked }],
-          timerSegmentStart: timers.length ? now : start,
+          timers: nextTimers,
+          timerSegmentStart: nextSegment,
         });
+        broadcastTimerState(nextTimers, nextSegment);
         return { shares };
       },
       stopParallelTimer: (taskId) => {
@@ -593,10 +609,12 @@ export const usePMStore = create<PMState>()(
         // equal split alongside the survivors.
         const shares = closeSegmentShares(timers, timerSegmentStart, now);
         const remaining = timers.filter((t) => t.taskId !== taskId);
+        const nextSegment = remaining.length ? now : null;
         set({
           timers: remaining,
-          timerSegmentStart: remaining.length ? now : null,
+          timerSegmentStart: nextSegment,
         });
+        broadcastTimerState(remaining, nextSegment);
         return { stopped, shares };
       },
       setPendingTimerStart: (pending) => set({ pendingTimerStart: pending }),

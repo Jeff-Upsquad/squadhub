@@ -40,11 +40,61 @@ export function useTimerAutoSave(userId?: string) {
     window.addEventListener('focus', onSyncTrigger);
     document.addEventListener('visibilitychange', onSyncTrigger);
 
+    // 4. Cross-tab timer state synchronization (BroadcastChannel + localStorage storage event)
+    const applyRemoteTimers = (remoteTimers: any[], remoteSegmentStart: number | null) => {
+      if (!Array.isArray(remoteTimers)) return;
+      const currentTimers = usePMStore.getState().timers;
+      const currentSegment = usePMStore.getState().timerSegmentStart;
+      const changed =
+        currentTimers.length !== remoteTimers.length ||
+        currentSegment !== remoteSegmentStart ||
+        currentTimers.some(
+          (t, i) => t.taskId !== remoteTimers[i]?.taskId || t.startedAt !== remoteTimers[i]?.startedAt,
+        );
+
+      if (changed) {
+        usePMStore.setState({
+          timers: remoteTimers,
+          timerSegmentStart: remoteSegmentStart,
+        });
+        qc.invalidateQueries({ queryKey: ['task-time-entries'] });
+        qc.invalidateQueries({ queryKey: ['tasks'] });
+        qc.invalidateQueries({ queryKey: ['my-tasks'] });
+      }
+    };
+
+    let channel: BroadcastChannel | null = null;
+    if (typeof BroadcastChannel !== 'undefined') {
+      try {
+        channel = new BroadcastChannel('squadhub_timer_sync');
+        channel.onmessage = (event) => {
+          if (event.data?.type === 'SYNC_TIMERS') {
+            applyRemoteTimers(event.data.timers, event.data.timerSegmentStart ?? null);
+          }
+        };
+      } catch {}
+    }
+
+    const onStorage = (event: StorageEvent) => {
+      if (event.key !== 'squadhub-pm' || !event.newValue) return;
+      try {
+        const parsed = JSON.parse(event.newValue);
+        if (parsed?.state && Array.isArray(parsed.state.timers)) {
+          applyRemoteTimers(parsed.state.timers, parsed.state.timerSegmentStart ?? null);
+        }
+      } catch {}
+    };
+    window.addEventListener('storage', onStorage);
+
     return () => {
       window.clearInterval(interval);
       window.removeEventListener('online', onSyncTrigger);
       window.removeEventListener('focus', onSyncTrigger);
       document.removeEventListener('visibilitychange', onSyncTrigger);
+      window.removeEventListener('storage', onStorage);
+      if (channel) {
+        channel.close();
+      }
     };
   }, [userId, qc]);
 }
