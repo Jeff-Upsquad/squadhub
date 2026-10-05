@@ -35,6 +35,7 @@ const createSchema = z.object({
   color: z.string().optional(),
   icon: z.string().optional(),
   description: z.string().optional(),
+  status_group_id: z.string().uuid().optional(),
 });
 
 // GET /pm/spaces?workspace_id=xxx — list spaces the user has access to
@@ -335,6 +336,28 @@ router.post('/spaces', requirePermission('can_create_spaces'), async (req: Reque
 
     // Fetch the space with statuses separately (trigger-created rows
     // may not be visible in the same insert statement's RETURNING clause)
+    // If a status group was requested (or a default group exists for
+    // brand-new areas), clone it into space_statuses so boards update.
+    try {
+      const { upsertAssignment } = await import('../../utils/statusGroups');
+      let groupId: string | null = body.status_group_id || null;
+      if (!groupId) {
+        const { data: def } = await supabaseAdmin
+          .from('status_groups')
+          .select('id')
+          .eq('is_default', true)
+          .eq('is_enabled', true)
+          .limit(1)
+          .maybeSingle();
+        groupId = (def as any)?.id || null;
+      }
+      if (groupId) {
+        await upsertAssignment(groupId, 'space', inserted.id, req.userId!);
+      }
+    } catch (e) {
+      console.error('Space status-group auto-apply error:', e);
+    }
+
     const { data, error } = await supabaseAdmin
       .from('spaces')
       .select('*, space_statuses(*)')

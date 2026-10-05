@@ -498,6 +498,53 @@ export interface SpaceStatus {
   category: StatusCategory;
 }
 
+// ---- Status Groups (admin-managed reusable status sets) ----
+// A StatusGroup holds an ordered list of StatusGroupStatus rows and can be
+// applied to spaces (= Areas), folders (= Spaces in UI), lists, and
+// client-space templates (so future templated spaces inherit it).
+export type StatusGroupEntityType = 'space' | 'folder' | 'list' | 'template';
+
+export interface StatusGroupStatus {
+  id: string;
+  group_id: string;
+  name: string;
+  color: string;
+  position: number;
+  is_default: boolean;
+  category: StatusCategory;
+  created_at?: string;
+}
+
+export interface StatusGroup {
+  id: string;
+  key: string;
+  name: string;
+  description: string | null;
+  icon: string;
+  color: string;
+  position: number;
+  is_default: boolean;
+  is_system: boolean;
+  is_enabled: boolean;
+  created_at: string;
+  updated_at: string;
+  statuses?: StatusGroupStatus[];
+  usage_count?: number;
+}
+
+export interface StatusGroupAssignment {
+  id: string;
+  group_id: string;
+  entity_type: StatusGroupEntityType;
+  entity_id: string;
+  created_by?: string | null;
+  created_at: string;
+  // Joined for usage views
+  entity_name?: string;
+  entity_detail?: string;
+  group?: StatusGroup;
+}
+
 export interface Folder {
   id: string;
   space_id: string;

@@ -44,6 +44,7 @@ const createSchema = z.object({
   skip_template_lists: z.boolean().optional(),
   parent_folder_id: z.string().uuid().optional(),
   folder_type: z.enum(['folder', 'client']).optional(),
+  status_group_id: z.string().uuid().optional(),
 });
 
 // GET /pm/folders?space_id=xxx
@@ -444,6 +445,32 @@ router.post('/folders', requirePermission('can_create_folders'), async (req: Req
           console.error('[pm/folders] child list insert failed:', listErr);
         }
       }
+    }
+
+    // Status-group inheritance for templated spaces (designer / editor / …):
+    // explicit body.status_group_id wins, else the group applied to the
+    // space template in admin ("future spaces get it automatically").
+    // The folder-level assignment is always recorded; when the parent
+    // area still carries the untouched 3-row seed, the area board is
+    // synced too so the new space works end-to-end today.
+    try {
+      const { upsertAssignment, getAssignmentFor, spaceHasSeedStatuses, syncSpaceToGroup } =
+        await import('../../utils/statusGroups');
+      let inheritedGroupId: string | null = body.status_group_id || null;
+      if (!inheritedGroupId && clientSpaceTemplate) {
+        const tplAssign = await getAssignmentFor('template', clientSpaceTemplate.id);
+        inheritedGroupId = tplAssign?.group_id || null;
+      }
+      if (inheritedGroupId) {
+        await upsertAssignment(inheritedGroupId, 'folder', data.id, req.userId!);
+        const spaceAssign = await getAssignmentFor('space', body.space_id);
+        if (!spaceAssign && (await spaceHasSeedStatuses(body.space_id))) {
+          await syncSpaceToGroup(body.space_id, inheritedGroupId);
+          await upsertAssignment(inheritedGroupId, 'space', body.space_id, req.userId!);
+        }
+      }
+    } catch (e) {
+      console.error('[pm/folders] status-group inheritance error:', e);
     }
 
     res.status(201).json({ success: true, data });

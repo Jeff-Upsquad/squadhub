@@ -17,6 +17,7 @@ const createSchema = z.object({
   name: z.string().min(1).max(100),
   default_view: z.enum(['list', 'board', 'whiteboard']).optional(),
   profile_id: z.string().uuid().optional(),
+  status_group_id: z.string().uuid().optional(),
 });
 
 // GET /pm/lists?space_id=xxx or ?folder_id=xxx
@@ -340,6 +341,17 @@ router.post('/lists', requirePermission('can_create_lists'), async (req: Request
       { list_id: data.id, view_type: 'list', name: 'List', position: 0, is_default: !preferBoard, created_by: req.userId! },
       { list_id: data.id, view_type: 'board', name: 'Board', position: 1, is_default: preferBoard, created_by: req.userId! },
     ]);
+
+    // List-level status-group assignment (recorded for the effective-group
+    // lookup; boards adopt it in the follow-up web change).
+    if (body.status_group_id) {
+      try {
+        const { upsertAssignment } = await import('../../utils/statusGroups');
+        await upsertAssignment(body.status_group_id, 'list', data.id, req.userId!);
+      } catch (e) {
+        console.error('[pm/lists] status-group assign error:', e);
+      }
+    }
 
     res.status(201).json({ success: true, data });
   } catch (err) {
