@@ -123,6 +123,43 @@ export default function AdminTaskTypes() {
     onError: (err: any) => alert(err?.response?.data?.error || 'Failed to update group'),
   });
 
+  const toggleGroupEnabled = useMutation({
+    mutationFn: ({
+      group_name,
+      task_type_ids,
+      is_enabled,
+    }: {
+      group_name?: string;
+      task_type_ids: string[];
+      is_enabled: boolean;
+    }) =>
+      api.put('/admin/task-types/groups/enabled', { group_name, task_type_ids, is_enabled }),
+    onMutate: async ({ task_type_ids, is_enabled }) => {
+      await qc.cancelQueries({ queryKey: ['admin-task-types'] });
+      const previousData = qc.getQueryData(['admin-task-types']);
+      qc.setQueryData(['admin-task-types'], (old: any) => {
+        if (!old?.data) return old;
+        const targetIds = new Set(task_type_ids);
+        return {
+          ...old,
+          data: old.data.map((t: TaskType) =>
+            targetIds.has(t.id) ? { ...t, is_enabled } : t
+          ),
+        };
+      });
+      return { previousData };
+    },
+    onError: (err: any, _vars, context: any) => {
+      if (context?.previousData) {
+        qc.setQueryData(['admin-task-types'], context.previousData);
+      }
+      alert(err?.response?.data?.error || 'Failed to toggle group');
+    },
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: ['admin-task-types'] });
+    },
+  });
+
   const createField = useMutation({
     mutationFn: ({ typeId, ...body }: any) => api.post(`/admin/task-types/${typeId}/fields`, body),
     onSuccess: () => {
@@ -279,6 +316,36 @@ export default function AdminTaskTypes() {
               <div className="max-h-[calc(100vh-280px)] overflow-y-auto divide-y divide-divider/50">
                 {groupedData.map(([groupName, groupItems]) => {
                   const isCollapsed = collapsedGroups[groupName];
+                  const fullGroupTypes = types.filter(
+                    (t) => ((t.group_name && t.group_name.trim()) || 'Other') === groupName
+                  );
+                  const groupTypesToToggle = fullGroupTypes.length > 0 ? fullGroupTypes : groupItems;
+                  const allGroupEnabled =
+                    groupTypesToToggle.length > 0 && groupTypesToToggle.every((t) => t.is_enabled);
+                  const someGroupEnabled = groupTypesToToggle.some((t) => t.is_enabled);
+                  const isIndeterminate = someGroupEnabled && !allGroupEnabled;
+                  const enabledCount = groupTypesToToggle.filter((t) => t.is_enabled).length;
+
+                  const groupToggleTitle = allGroupEnabled
+                    ? `Disable all ${groupTypesToToggle.length} task types in ${groupName}`
+                    : isIndeterminate
+                    ? `${enabledCount} of ${groupTypesToToggle.length} enabled — click to enable all (Alt-click to disable all) in ${groupName}`
+                    : `Enable all ${groupTypesToToggle.length} task types in ${groupName}`;
+
+                  const handleToggleGroup = (nextVal: boolean) => {
+                    toggleGroupEnabled.mutate({
+                      group_name: groupName,
+                      task_type_ids: groupTypesToToggle.map((t) => t.id),
+                      is_enabled: nextVal,
+                    });
+                  };
+
+                  const handleGroupToggleClick = (e: React.MouseEvent) => {
+                    e.stopPropagation();
+                    const nextVal = e.altKey || e.shiftKey ? false : !allGroupEnabled;
+                    handleToggleGroup(nextVal);
+                  };
+
                   return (
                     <div key={groupName} className="group/section">
                       {/* Group Header */}
@@ -301,7 +368,7 @@ export default function AdminTaskTypes() {
                             {groupItems.length}
                           </span>
                         </button>
-                        <div className="flex items-center gap-1 opacity-80 hover:opacity-100">
+                        <div className="flex items-center gap-1 shrink-0 opacity-80 hover:opacity-100">
                           <button
                             onClick={() => { setPreselectedGroup(groupName); setShowTypeForm(true); }}
                             title={`Add task type to ${groupName}`}
@@ -323,6 +390,15 @@ export default function AdminTaskTypes() {
                           >
                             ✎
                           </button>
+                          <div className="mx-0.5 h-3.5 w-px bg-divider" />
+                          <Toggle
+                            value={allGroupEnabled}
+                            indeterminate={isIndeterminate}
+                            title={groupToggleTitle}
+                            onToggleClick={handleGroupToggleClick}
+                            onChange={handleToggleGroup}
+                            disabled={groupTypesToToggle.length === 0}
+                          />
                         </div>
                       </div>
 
@@ -1200,18 +1276,54 @@ function TypeCreateModal({
 // ----------------------------------------------------------------
 // Toggle switch
 // ----------------------------------------------------------------
-function Toggle({ value, onChange, size = 'sm' }: { value: boolean; onChange: (v: boolean) => void; size?: 'sm' | 'md' }) {
+function Toggle({
+  value,
+  onChange,
+  onToggleClick,
+  size = 'sm',
+  indeterminate = false,
+  title,
+  disabled = false,
+}: {
+  value: boolean;
+  onChange?: (v: boolean) => void;
+  onToggleClick?: (e: React.MouseEvent) => void;
+  size?: 'sm' | 'md';
+  indeterminate?: boolean;
+  title?: string;
+  disabled?: boolean;
+}) {
   const w = size === 'md' ? 'w-10 h-5' : 'w-8 h-4';
   const knob = size === 'md' ? 'h-4 w-4' : 'h-3 w-3';
-  const offset = size === 'md' ? (value ? 'translate-x-5' : 'translate-x-0.5') : (value ? 'translate-x-4' : 'translate-x-0.5');
+  const offset = size === 'md'
+    ? (indeterminate ? 'translate-x-2.5' : value ? 'translate-x-5' : 'translate-x-0.5')
+    : (indeterminate ? 'translate-x-2' : value ? 'translate-x-4' : 'translate-x-0.5');
+
+  const bg = indeterminate
+    ? 'bg-amber-500/80 dark:bg-amber-600'
+    : value
+    ? 'bg-emerald-500'
+    : 'bg-well';
+
   return (
     <button
       type="button"
-      onClick={(e) => { e.stopPropagation(); onChange(!value); }}
-      className={`relative ${w} shrink-0 rounded-full transition ${value ? 'bg-emerald-500' : 'bg-well'}`}
-      aria-label={value ? 'Enabled' : 'Disabled'}
+      disabled={disabled}
+      title={title}
+      onClick={(e) => {
+        e.stopPropagation();
+        if (onToggleClick) {
+          onToggleClick(e);
+        } else if (onChange) {
+          onChange(!value);
+        }
+      }}
+      className={`relative ${w} shrink-0 rounded-full transition ${bg} disabled:opacity-40`}
+      aria-label={title || (indeterminate ? 'Partially enabled' : value ? 'Enabled' : 'Disabled')}
     >
-      <span className={`absolute top-0.5 ${offset} ${knob} rounded-full bg-surface shadow transition`} />
+      <span className={`absolute top-0.5 ${offset} ${knob} rounded-full bg-surface shadow transition flex items-center justify-center`}>
+        {indeterminate && <span className="h-0.5 w-1.5 rounded-full bg-amber-600 dark:bg-amber-400" />}
+      </span>
     </button>
   );
 }

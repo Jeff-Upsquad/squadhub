@@ -333,6 +333,51 @@ router.put('/groups/assign', async (req: Request, res: Response) => {
   }
 });
 
+// PUT /admin/task-types/groups/enabled — bulk toggle is_enabled for a group of task types
+router.put('/groups/enabled', async (req: Request, res: Response) => {
+  try {
+    const groupToggleSchema = z
+      .object({
+        group_name: z.string().optional().nullable(),
+        task_type_ids: z.array(z.string().uuid()).optional(),
+        is_enabled: z.boolean(),
+      })
+      .refine(
+        (data) => data.group_name !== undefined || (data.task_type_ids && data.task_type_ids.length > 0),
+        { message: 'Either group_name or task_type_ids must be provided' }
+      );
+
+    const { group_name, task_type_ids, is_enabled } = groupToggleSchema.parse(req.body);
+
+    let query = supabaseAdmin
+      .from('task_types')
+      .update({ is_enabled });
+
+    if (task_type_ids && task_type_ids.length > 0) {
+      query = query.in('id', task_type_ids);
+    } else if (group_name === 'Other' || !group_name) {
+      query = query.or('group_name.is.null,group_name.eq.');
+    } else {
+      query = query.eq('group_name', group_name);
+    }
+
+    const { data, error } = await query.select('id, is_enabled, group_name');
+    if (error) {
+      res.status(500).json({ success: false, error: error.message });
+      return;
+    }
+
+    res.json({ success: true, updated_count: data?.length || 0, is_enabled });
+  } catch (err) {
+    if (err instanceof z.ZodError) {
+      res.status(400).json({ success: false, error: err.errors[0].message });
+      return;
+    }
+    console.error('Toggle task group enabled error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
 // ------------------------------------------------------------
 // :id routes
 // ------------------------------------------------------------
