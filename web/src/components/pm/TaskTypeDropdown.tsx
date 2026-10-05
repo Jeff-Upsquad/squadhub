@@ -44,6 +44,10 @@ export const DEFAULT_TASK_TYPE_GROUPS: Record<string, string> = {
 
   chores: 'Personal',
 
+  coding: 'Software Development',
+  testing: 'Software Development',
+  ui_designing: 'Software Development',
+
   quick_wins: 'Planning & Review',
   review: 'Planning & Review',
   on_hold: 'Planning & Review',
@@ -90,6 +94,10 @@ export const DEFAULT_TASK_TYPE_DESCRIPTIONS: Record<string, string> = {
 
   chores: 'For Household work related tasks, like cleaning, laundry etc',
 
+  coding: 'Software engineering, feature implementation, and bug fixing.',
+  testing: 'Writing and executing tests, QA verification, and bug validation.',
+  ui_designing: 'User interface design, wireframes, and prototyping.',
+
   quick_wins: 'Small but impactful tasks that can be done quickly to move things forward.',
   review: 'Revisiting past work, reports, or plans to evaluate or update them.',
   on_hold: 'Tasks that are on hold',
@@ -102,6 +110,9 @@ export const TASK_TYPE_KEYWORDS: Record<string, string[]> = {
   chores: ['cleaning', 'laundry', 'household', 'home'],
   work_block: ['focus session', 'time block', 'timer'],
   focus_task: ['deep work', 'uninterrupted', 'concentration'],
+  coding: ['code', 'developer', 'dev', 'programming', 'bugfix', 'frontend', 'backend', 'api', 'software'],
+  testing: ['test', 'qa', 'quality', 'verification', 'spec', 'bug', 'cypress', 'jest'],
+  ui_designing: ['ui', 'ux', 'design', 'figma', 'wireframe', 'mockup', 'interface', 'layout'],
   quick_wins: ['impactful', 'fast', 'quick'],
   on_hold: ['paused', 'delayed', 'frozen', 'waiting'],
   parked_task: ['someday', 'later', 'backlog', 'shelved', 'aside'],
@@ -109,6 +120,7 @@ export const TASK_TYPE_KEYWORDS: Record<string, string[]> = {
 
 export const GROUP_ORDER = [
   'Task Types',
+  'Software Development',
   'Location-Based',
   'Meetings & Collaboration',
   'Learning & Exploration',
@@ -377,6 +389,44 @@ export function TaskTypeGlyph({ icon, size = 14, color }: { icon?: string; size?
           <rect width="20" height="5" x="2" y="3" rx="1" />
           <path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8" />
           <path d="M10 12h4" />
+        </svg>
+      );
+    case 'code':
+      return (
+        <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={stroke} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <polyline points="16 18 22 12 16 6" />
+          <polyline points="8 6 2 12 8 18" />
+        </svg>
+      );
+    case 'test-tube':
+    case 'flask-conical':
+      return (
+        <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={stroke} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M10 2v7.31L4.69 19.3A2 2 0 0 0 6.44 22h11.12a2 2 0 0 0 1.75-2.7L14 9.31V2" />
+          <line x1="8.5" x2="15.5" y1="2" y2="2" />
+          <line x1="7" x2="17" y1="14" y2="14" />
+        </svg>
+      );
+    case 'bug':
+      return (
+        <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={stroke} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <rect width="8" height="14" x="8" y="6" rx="4" />
+          <path d="m19 7-3 2" />
+          <path d="m5 7 3 2" />
+          <path d="m19 19-3-2" />
+          <path d="m5 19 3-2" />
+          <path d="M20 13h-4" />
+          <path d="M4 13h4" />
+          <path d="m10 4 1 2" />
+          <path d="m14 4-1 2" />
+        </svg>
+      );
+    case 'layout':
+      return (
+        <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={stroke} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <rect width="18" height="18" x="3" y="3" rx="2" />
+          <line x1="3" x2="21" y1="9" y2="9" />
+          <line x1="9" x2="9" y1="21" y2="9" />
         </svg>
       );
     default:

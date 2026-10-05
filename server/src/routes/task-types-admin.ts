@@ -277,15 +277,74 @@ router.put('/:id/fields/reorder', async (req: Request, res: Response) => {
   }
 });
 
+// PUT /admin/task-types/groups/rename — rename group across all types
+router.put('/groups/rename', async (req: Request, res: Response) => {
+  try {
+    const renameSchema = z.object({
+      old_name: z.string().min(1),
+      new_name: z.string().min(1).max(100),
+    });
+    const { old_name, new_name } = renameSchema.parse(req.body);
+    const { data, error } = await supabaseAdmin
+      .from('task_types')
+      .update({ group_name: new_name })
+      .eq('group_name', old_name)
+      .select('id, group_name');
+    if (error) {
+      res.status(500).json({ success: false, error: error.message });
+      return;
+    }
+    res.json({ success: true, updated_count: data?.length || 0 });
+  } catch (err) {
+    if (err instanceof z.ZodError) {
+      res.status(400).json({ success: false, error: err.errors[0].message });
+      return;
+    }
+    console.error('Rename task group error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// PUT /admin/task-types/groups/assign — bulk assign types to a group
+router.put('/groups/assign', async (req: Request, res: Response) => {
+  try {
+    const assignSchema = z.object({
+      group_name: z.string().min(1).max(100),
+      task_type_ids: z.array(z.string().uuid()).min(1),
+    });
+    const { group_name, task_type_ids } = assignSchema.parse(req.body);
+    const { data, error } = await supabaseAdmin
+      .from('task_types')
+      .update({ group_name })
+      .in('id', task_type_ids)
+      .select('id, group_name');
+    if (error) {
+      res.status(500).json({ success: false, error: error.message });
+      return;
+    }
+    res.json({ success: true, updated_count: data?.length || 0 });
+  } catch (err) {
+    if (err instanceof z.ZodError) {
+      res.status(400).json({ success: false, error: err.errors[0].message });
+      return;
+    }
+    console.error('Assign task group error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
 // ------------------------------------------------------------
 // :id routes
 // ------------------------------------------------------------
 
-// PUT /admin/task-types/:id — update (custom types only)
+// PUT /admin/task-types/:id — update (allowed for all types)
 router.put('/:id', async (req: Request, res: Response) => {
   try {
     const type = await getType(req.params.id as string);
-    if (rejectIfSystem(type, res)) return;
+    if (!type) {
+      res.status(404).json({ success: false, error: 'Task type not found' });
+      return;
+    }
 
     const body = typeUpdateSchema.parse(req.body);
     const patch: Record<string, any> = {};
