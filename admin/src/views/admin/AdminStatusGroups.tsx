@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../services/api';
 import type { StatusGroup, StatusGroupStatus, StatusCategory } from '@squadhub/shared';
@@ -317,6 +317,33 @@ function StatusesCard({ group, onChanged }: { group: StatusGroup; onChanged: () 
 
   const statuses: StatusGroupStatus[] = [...(group.statuses || [])].sort((a, b) => a.position - b.position);
 
+  // Display order: Task Workflow groups by picker section (same order as the
+  // task picker); other groups render flat in position order. The reorder API
+  // rewrites positions from the submitted array, so display order is always
+  // safe to submit.
+  const displayOrder: StatusGroupStatus[] = isTaskWorkflow
+    ? [
+        ...TASK_SECTIONS.flatMap((sec) => statuses.filter((s) => (s.section || '') === sec.key)),
+        ...statuses.filter((s) => !(s.section || '') || !TASK_SECTIONS.some((sec) => sec.key === s.section)),
+      ]
+    : statuses;
+
+  const sectionOf = (s: StatusGroupStatus) =>
+    TASK_SECTIONS.find((sec) => sec.key === (s.section || '')) || null;
+
+  const placeAtEndOfSection = (order: StatusGroupStatus[], id: string, sectionKey: string) => {
+    const without = order.filter((s) => s.id !== id);
+    const stub = order.find((s) => s.id === id) || ({ id } as StatusGroupStatus);
+    let idx = without.length;
+    for (let k = without.length - 1; k >= 0; k--) {
+      if ((without[k].section || '') === sectionKey) { idx = k + 1; break; }
+    }
+    without.splice(idx, 0, stub);
+    return without;
+  };
+
+  const pendingRelocate = useRef<{ id: string; section: string } | null>(null);
+
   const create = useMutation({
     mutationFn: () => {
       const sec = TASK_SECTIONS.find((s) => s.key === section);
@@ -326,14 +353,33 @@ function StatusesCard({ group, onChanged }: { group: StatusGroup; onChanged: () 
         section: isTaskWorkflow ? section : undefined,
         section_label: isTaskWorkflow ? sec?.label : undefined,
         section_emoji: isTaskWorkflow ? sec?.emoji : undefined,
-      });
+      }).then((r) => r.data);
     },
-    onSuccess: () => { onChanged(); setName(''); setDescription(''); },
+    onSuccess: (res) => {
+      const newId = res?.data?.id as string | undefined;
+      setName(''); setDescription('');
+      // New rows land at the end of their section, not the end of the list.
+      if (isTaskWorkflow && newId) {
+        move.mutate(placeAtEndOfSection(displayOrder, newId, section));
+      } else {
+        onChanged();
+      }
+    },
     onError: (err: any) => alert(err?.response?.data?.error || 'Failed to add status'),
   });
   const update = useMutation({
     mutationFn: (args: { id: string; body: any }) => api.put(`/admin/status-groups/${group.id}/statuses/${args.id}`, args.body),
-    onSuccess: () => { onChanged(); setEditingId(null); },
+    onSuccess: () => {
+      const rel = pendingRelocate.current;
+      pendingRelocate.current = null;
+      setEditingId(null);
+      // Section changes relocate to the end of the new section.
+      if (rel) {
+        move.mutate(placeAtEndOfSection(displayOrder, rel.id, rel.section));
+      } else {
+        onChanged();
+      }
+    },
     onError: (err: any) => alert(err?.response?.data?.error || 'Failed to update status'),
   });
   const remove = useMutation({
@@ -349,12 +395,22 @@ function StatusesCard({ group, onChanged }: { group: StatusGroup; onChanged: () 
     onSuccess: onChanged,
   });
 
-  const shift = (idx: number, dir: -1 | 1) => {
-    const next = [...statuses];
-    const j = idx + dir;
+  const shift = (displayIdx: number, dir: -1 | 1) => {
+    const next = [...displayOrder];
+    const j = displayIdx + dir;
     if (j < 0 || j >= next.length) return;
-    [next[idx], next[j]] = [next[j], next[idx]];
+    // Arrows stay inside the section (cross-section moves via Edit → section,
+    // which relocates to the end of the new section).
+    if (isTaskWorkflow && (next[displayIdx].section || '') !== (next[j].section || '')) return;
+    [next[displayIdx], next[j]] = [next[j], next[displayIdx]];
     move.mutate(next);
+  };
+
+  const atSectionEdge = (displayIdx: number, dir: -1 | 1) => {
+    if (!isTaskWorkflow) return displayIdx === 0 ? dir === -1 : displayIdx === displayOrder.length - 1;
+    const j = displayIdx + dir;
+    if (j < 0 || j >= displayOrder.length) return true;
+    return (displayOrder[displayIdx].section || '') !== (displayOrder[j].section || '');
   };
 
   return (
@@ -393,8 +449,23 @@ function StatusesCard({ group, onChanged }: { group: StatusGroup; onChanged: () 
       </form>
 
       <div className="space-y-1.5">
-        {statuses.map((s, i) => (
-          <div key={s.id} className="rounded-lg border border-divider px-3 py-2">
+        {displayOrder.map((s, i) => {
+          const showHeader = isTaskWorkflow &&
+            (i === 0 || (displayOrder[i - 1].section || '') !== (s.section || ''));
+          const secInfo = sectionOf(s);
+          const sectionCount = isTaskWorkflow
+            ? displayOrder.filter((x) => (x.section || '') === (s.section || '')).length
+            : 0;
+          return (
+          <Fragment key={s.id}>
+          {showHeader && (
+            <div className="flex items-center gap-1.5 px-1 pt-2 text-[11px] font-semibold uppercase tracking-wider text-foreground-dim">
+              <span aria-hidden>{secInfo?.emoji || '📋'}</span>
+              <span>{secInfo?.label || s.section_label || s.section || 'Other'}</span>
+              <span className="font-normal normal-case tracking-normal">({sectionCount})</span>
+            </div>
+          )}
+          <div className="rounded-lg border border-divider px-3 py-2">
             <div className="flex items-center gap-2">
               <span className="h-3 w-3 shrink-0 rounded-full" style={{ background: s.color }} />
               {editingId === s.id ? (
@@ -415,6 +486,9 @@ function StatusesCard({ group, onChanged }: { group: StatusGroup; onChanged: () 
                   )}
                   <button onClick={() => {
                     const sec = TASK_SECTIONS.find((x) => x.key === editSection);
+                    if (isTaskWorkflow && editSection !== (s.section || '')) {
+                      pendingRelocate.current = { id: s.id, section: editSection };
+                    }
                     update.mutate({ id: s.id, body: { name: editName.trim(), color: editColor, category: editCategory, description: editDescription.trim() || null, section: isTaskWorkflow ? editSection : undefined, section_label: isTaskWorkflow ? sec?.label : undefined, section_emoji: isTaskWorkflow ? sec?.emoji : undefined } });
                   }} className="rounded bg-ink px-2 py-1 text-xs font-medium text-white">Save</button>
                   <button onClick={() => setEditingId(null)} className="rounded border border-divider px-2 py-1 text-xs">Cancel</button>
@@ -425,8 +499,8 @@ function StatusesCard({ group, onChanged }: { group: StatusGroup; onChanged: () 
                   {s.key && <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] text-foreground-dim">{s.key}</code>}
                   <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium text-foreground-dim">{CATEGORY_LABELS[s.category]}</span>
                   {s.is_default && <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700">DEFAULT</span>}
-                  <button onClick={() => shift(i, -1)} disabled={i === 0} className="rounded px-1 text-foreground-dim hover:text-foreground disabled:opacity-30" title="Move up">↑</button>
-                  <button onClick={() => shift(i, 1)} disabled={i === statuses.length - 1} className="rounded px-1 text-foreground-dim hover:text-foreground disabled:opacity-30" title="Move down">↓</button>
+                  <button onClick={() => shift(i, -1)} disabled={atSectionEdge(i, -1)} className="rounded px-1 text-foreground-dim hover:text-foreground disabled:opacity-30" title="Move up">↑</button>
+                  <button onClick={() => shift(i, 1)} disabled={atSectionEdge(i, 1)} className="rounded px-1 text-foreground-dim hover:text-foreground disabled:opacity-30" title="Move down">↓</button>
                   {!s.is_default && (
                     <button onClick={() => update.mutate({ id: s.id, body: { is_default: true } })} className="rounded px-1 text-xs text-foreground-dim hover:text-foreground" title="Mark as default">★</button>
                   )}
@@ -441,7 +515,9 @@ function StatusesCard({ group, onChanged }: { group: StatusGroup; onChanged: () 
               s.description && <p className="mt-0.5 truncate pl-5 text-xs text-foreground-dim">{s.description}</p>
             )}
           </div>
-        ))}
+          </Fragment>
+          );
+        })}
         {statuses.length === 0 && <p className="py-4 text-center text-xs text-foreground-dim">No statuses yet — add the first one above.</p>}
       </div>
     </div>
