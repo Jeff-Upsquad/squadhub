@@ -877,12 +877,25 @@ router.get('/tasks/new', async (req: Request, res: Response) => {
     const byId = new Map<string, any>();
     for (const t of [...(assignedRes.data || []), ...createdUnassigned]) byId.set(t.id, t);
 
-    // Which of these has the caller already reviewed?
-    const reviewedRes = await supabaseAdmin
-      .from('task_reviews')
-      .select('task_id')
-      .eq('user_id', userId);
-    const reviewedSet = new Set((reviewedRes.data || []).map((r: any) => r.task_id as string));
+    // Which of THESE has the caller already reviewed? Scope the lookup to the
+    // candidate IDs: an unbounded select hits PostgREST's 1000-row cap, so once
+    // a user accumulates >1000 total reviews the newest rows fall outside the
+    // set and freshly-reviewed tasks reappear in the queue. Chunked to keep
+    // the query string small for users with very large queues.
+    const reviewedSet = new Set<string>();
+    const candidateIds = Array.from(byId.keys());
+    for (let i = 0; i < candidateIds.length; i += 100) {
+      const reviewedRes = await supabaseAdmin
+        .from('task_reviews')
+        .select('task_id')
+        .eq('user_id', userId)
+        .in('task_id', candidateIds.slice(i, i + 100));
+      if (reviewedRes.error) {
+        res.status(500).json({ success: false, error: reviewedRes.error.message });
+        return;
+      }
+      for (const r of (reviewedRes.data || []) as any[]) reviewedSet.add(r.task_id as string);
+    }
 
     let rows = Array.from(byId.values());
     if (!includeReviewed) rows = rows.filter((t) => !reviewedSet.has(t.id));
