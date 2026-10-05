@@ -741,6 +741,7 @@ export interface TaskType {
   key: string;
   name: string;
   description: string | null;
+  group_name?: string | null;
   icon: string;
   color: string;
   position: number;

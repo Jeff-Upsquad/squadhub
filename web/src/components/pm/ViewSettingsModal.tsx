@@ -1,7 +1,8 @@
-import { useState, useEffect, useRef, type ReactNode } from 'react';
+import { useState, useEffect, useRef, useMemo, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import type { ListView, ListViewRow, ListViewConfig, TaskPriority } from '@squadhub/shared';
 import { useTaskTypes } from '../../hooks/useTaskTypes';
+import { getTaskTypeGroup, GROUP_ORDER } from './TaskTypeDropdown';
 import { useListLabelPicker } from '../../hooks/useLabels';
 import { PRIORITY_META } from '../../views/app/pm/PriorityPicker';
 
@@ -88,6 +89,27 @@ export default function ViewSettingsModal({
   const { data: labelPickerData } = useListLabelPicker(listId, isOpen);
 
   const flatLabels = (labelPickerData?.groups || []).flatMap((g) => g.labels);
+
+  const groupedTaskTypes = useMemo(() => {
+    const map = new Map<string, any[]>();
+    for (const tt of taskTypes) {
+      const g = getTaskTypeGroup(tt);
+      const list = map.get(g) || [];
+      list.push(tt);
+      map.set(g, list);
+    }
+    const res: { groupName: string; items: any[] }[] = [];
+    for (const gName of GROUP_ORDER) {
+      if (map.has(gName)) {
+        res.push({ groupName: gName, items: map.get(gName)! });
+        map.delete(gName);
+      }
+    }
+    for (const [gName, items] of map.entries()) {
+      res.push({ groupName: gName, items });
+    }
+    return res;
+  }, [taskTypes]);
 
   useEffect(() => {
     if (isOpen) {
@@ -343,10 +365,14 @@ export default function ViewSettingsModal({
                   className="w-full rounded-lg border border-[var(--sh-hair)] bg-[var(--surface)] px-2 py-1.5 text-xs text-[var(--sh-ink)] outline-none focus:border-[#2962FF]"
                 >
                   <option value="">Default (None)</option>
-                  {taskTypes.map((tt: any) => (
-                    <option key={tt.id} value={tt.id}>
-                      {tt.name}
-                    </option>
+                  {groupedTaskTypes.map((group) => (
+                    <optgroup key={group.groupName} label={group.groupName}>
+                      {group.items.map((tt: any) => (
+                        <option key={tt.id} value={tt.id}>
+                          {tt.name}
+                        </option>
+                      ))}
+                    </optgroup>
                   ))}
                 </select>
               </div>

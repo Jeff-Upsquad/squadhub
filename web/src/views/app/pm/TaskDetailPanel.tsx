@@ -11,6 +11,7 @@ import { isTaskFocused } from '../../../lib/taskGrouping';
 import { useWorkspaceStore } from '../../../stores/workspaceStore';
 import { useAuthStore } from '../../../stores/authStore';
 import { useTaskTypes } from '../../../hooks/useTaskTypes';
+import TaskTypeDropdown from '../../../components/pm/TaskTypeDropdown';
 import {
   useChecklists,
   useCreateChecklist,
@@ -744,10 +745,7 @@ export default function TaskDetailPanel({
 
   const selectableTypes = useMemo(() => {
     if (!taskTypes) return [];
-    return taskTypes.filter((t) =>
-      t.is_enabled !== false &&
-      !['course', 'routine', 'design_task', 'video_edit_task', 'meeting', 'knowledge_review'].includes(t.key)
-    );
+    return taskTypes.filter((t) => t.is_enabled !== false);
   }, [taskTypes]);
 
   const upsertWb = useUpsertWorkBlockConfig();
@@ -3724,112 +3722,13 @@ function TaskTypePicker({
   canEdit: boolean;
   onChange: (t: TaskType) => void;
 }) {
-  const [open, setOpen] = useState(false);
-  const btnRef = useRef<HTMLButtonElement>(null);
-  const popRef = useRef<HTMLDivElement>(null);
-  const [rect, setRect] = useState<DOMRect | null>(null);
-
-  const toggle = useCallback(() => {
-    if (!canEdit) return;
-    if (open) { setOpen(false); return; }
-    if (btnRef.current) setRect(btnRef.current.getBoundingClientRect());
-    setOpen(true);
-  }, [open, canEdit]);
-
-  useEffect(() => {
-    if (!open) return;
-    const onDown = (e: MouseEvent) => {
-      if (popRef.current?.contains(e.target as Node)) return;
-      if (btnRef.current?.contains(e.target as Node)) return;
-      setOpen(false);
-    };
-    window.addEventListener('mousedown', onDown);
-    return () => window.removeEventListener('mousedown', onDown);
-  }, [open]);
-
-  useEffect(() => {
-    if (!open) return;
-    const reposition = () => {
-      if (btnRef.current) setRect(btnRef.current.getBoundingClientRect());
-    };
-    window.addEventListener('scroll', reposition, true);
-    window.addEventListener('resize', reposition);
-    return () => {
-      window.removeEventListener('scroll', reposition, true);
-      window.removeEventListener('resize', reposition);
-    };
-  }, [open]);
-
-  const popStyle = useMemo<React.CSSProperties>(() => {
-    if (!rect) return { visibility: 'hidden' as const };
-    const maxH = 280;
-    const spaceBelow = window.innerHeight - rect.bottom;
-    const openUp = spaceBelow < 180 && rect.top > spaceBelow;
-    return {
-      position: 'fixed',
-      top: openUp ? Math.max(8, rect.top - maxH - 4) : rect.bottom + 4,
-      left: Math.min(rect.left, window.innerWidth - 220),
-      width: 200,
-      maxHeight: maxH,
-      zIndex: 9999,
-      borderColor: 'var(--sh-hair)',
-      background: 'var(--surface)',
-    };
-  }, [rect]);
-
   return (
-    <>
-      <button
-        ref={btnRef}
-        type="button"
-        onClick={canEdit ? toggle : undefined}
-        className="td-prop-chip"
-        style={{
-          cursor: canEdit ? 'pointer' : 'default',
-          background: current?.color
-            ? `color-mix(in oklch, ${current.color} 14%, transparent)`
-            : 'var(--surface-alt)',
-          color: current?.color || 'var(--sh-ink-3)',
-        }}
-      >
-        <span className="dot" style={{ background: current?.color || 'var(--sh-ink-4)' }} />
-        {current?.name || '—'}
-        {canEdit && (
-          <svg className="ml-1 opacity-50" width="10" height="10" viewBox="0 0 20 20" fill="currentColor">
-            <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
-          </svg>
-        )}
-      </button>
-      {open && typeof document !== 'undefined' && createPortal(
-        <>
-          <div className="fixed inset-0" style={{ zIndex: 9998 }} onClick={() => setOpen(false)} />
-          <div
-            ref={popRef}
-            className="overflow-y-auto rounded-xl border shadow-lg py-1"
-            style={popStyle}
-          >
-            {taskTypes.map((t) => (
-              <button
-                key={t.id}
-                type="button"
-                onClick={() => {
-                  onChange(t);
-                  setOpen(false);
-                }}
-                className={`flex w-full items-center gap-2 px-3 py-2 text-left text-[13px] hover:bg-[color:var(--sh-hair-3)] ${
-                  current?.id === t.id ? 'bg-[color:var(--sh-hair-3)] font-medium' : ''
-                }`}
-              >
-                <span className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: t.color }} />
-                <span className="flex-1 text-[color:var(--sh-ink)]">{t.name}</span>
-                {t.is_default && <span className="text-[10px] text-[color:var(--sh-ink-4)]">Default</span>}
-              </button>
-            ))}
-          </div>
-        </>,
-        document.body,
-      )}
-    </>
+    <TaskTypeDropdown
+      taskTypes={taskTypes}
+      current={current}
+      canEdit={canEdit}
+      onChange={onChange}
+    />
   );
 }
 
