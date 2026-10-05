@@ -250,45 +250,98 @@ function TypeSection({
   onAdd?: () => void;
   emptyText?: string;
 }) {
+  const [search, setSearch] = useState('');
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return items;
+    return items.filter((t) =>
+      (t.name || '').toLowerCase().includes(q) ||
+      (t.description || '').toLowerCase().includes(q) ||
+      (t.group_name || '').toLowerCase().includes(q) ||
+      (t.key || '').toLowerCase().includes(q)
+    );
+  }, [items, search]);
+
+  const grouped = useMemo(() => {
+    const map = new Map<string, TaskType[]>();
+    for (const t of filtered) {
+      const g = t.group_name || 'General';
+      const list = map.get(g) || [];
+      list.push(t);
+      map.set(g, list);
+    }
+    return Array.from(map.entries());
+  }, [filtered]);
+
   return (
     <div>
       <div className="mb-2 flex items-center justify-between px-1">
-        <h3 className="text-[10px] font-semibold uppercase tracking-wider text-foreground-dim">{title}</h3>
+        <h3 className="text-[10px] font-semibold uppercase tracking-wider text-foreground-dim">{title} ({items.length})</h3>
         {onAdd && (
           <button onClick={onAdd} className="text-xs font-medium text-foreground hover:underline">
             + Add
           </button>
         )}
       </div>
-      <div className="rounded-xl border border-divider bg-surface">
-        {items.length === 0 ? (
-          <div className="p-4 text-center text-xs text-foreground-dim">{emptyText || 'None'}</div>
+      <div className="rounded-xl border border-divider bg-surface overflow-hidden">
+        {items.length > 5 && (
+          <div className="p-2 border-b border-divider bg-surface-alt/50">
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder={`Search ${title.toLowerCase()} types...`}
+              className="w-full rounded-md border border-divider bg-surface px-2.5 py-1 text-xs text-foreground placeholder:text-foreground-dim outline-none focus:border-foreground-dim"
+            />
+          </div>
+        )}
+        {filtered.length === 0 ? (
+          <div className="p-4 text-center text-xs text-foreground-dim">{emptyText || 'No types found'}</div>
         ) : (
-          <ul className="p-2">
-            {items.map((t) => (
-              <li key={t.id}>
-                <div
-                  className={`flex items-center gap-2 rounded-md px-2 py-2 transition ${
-                    selectedId === t.id ? 'bg-canvas' : 'hover:bg-surface-alt'
-                  }`}
-                >
-                  <button
-                    onClick={() => onSelect(t.id)}
-                    className="flex flex-1 items-center gap-2 text-left text-sm"
-                  >
-                    <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: t.color }} />
-                    <span className={`flex-1 truncate font-medium ${t.is_enabled ? 'text-foreground' : 'text-foreground-dim'}`}>
-                      {t.name}
-                    </span>
-                    {t.is_default && (
-                      <span className="rounded-full bg-emerald-50 px-1.5 py-0.5 text-[9px] font-medium text-emerald-700">Default</span>
-                    )}
-                  </button>
-                  <Toggle value={t.is_enabled} onChange={(v) => onToggle(t.id, v)} />
-                </div>
-              </li>
+          <div className="max-h-[520px] overflow-y-auto divide-y divide-divider/40">
+            {grouped.map(([groupName, groupItems]) => (
+              <div key={groupName} className="p-1">
+                {grouped.length > 1 && (
+                  <div className="px-2 py-1 text-[9px] font-semibold uppercase tracking-wider text-foreground-dim bg-surface/50">
+                    {groupName} ({groupItems.length})
+                  </div>
+                )}
+                <ul>
+                  {groupItems.map((t) => (
+                    <li key={t.id}>
+                      <div
+                        className={`flex items-center gap-2 rounded-md px-2 py-1.5 transition ${
+                          selectedId === t.id ? 'bg-canvas' : 'hover:bg-surface-alt'
+                        }`}
+                      >
+                        <button
+                          onClick={() => onSelect(t.id)}
+                          className="flex flex-1 items-center gap-2 text-left text-xs min-w-0"
+                        >
+                          <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: t.color }} />
+                          <div className="flex-1 min-w-0">
+                            <span className={`block truncate font-medium ${t.is_enabled ? 'text-foreground' : 'text-foreground-dim'}`}>
+                              {t.name}
+                            </span>
+                            {t.description && (
+                              <span className="block truncate text-[10px] text-foreground-dim leading-tight">
+                                {t.description}
+                              </span>
+                            )}
+                          </div>
+                          {t.is_default && (
+                            <span className="rounded-full bg-emerald-50 px-1.5 py-0.5 text-[9px] font-medium text-emerald-700">Default</span>
+                          )}
+                        </button>
+                        <Toggle value={t.is_enabled} onChange={(v) => onToggle(t.id, v)} />
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </div>
             ))}
-          </ul>
+          </div>
         )}
       </div>
     </div>
@@ -327,6 +380,9 @@ function SystemTypeDetail({ type, onToggle }: { type: TaskType; onToggle: (v: bo
               <span className="h-3 w-3 rounded-full" style={{ backgroundColor: type.color }} />
               <h3 className="text-base font-semibold text-foreground">{type.name}</h3>
               <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-700">Hard-coded</span>
+              {type.group_name && (
+                <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-medium text-blue-700">{type.group_name}</span>
+              )}
               {type.is_default && (
                 <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-700">Default</span>
               )}

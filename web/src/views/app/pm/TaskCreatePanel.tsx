@@ -3,6 +3,7 @@ import { useCreateTask, usePersonalList } from '../../../hooks/useTasks';
 import { useFocusTask } from '../../../hooks/useDayPlanner';
 import { useAssignableUsersByList } from '../../../hooks/useAssignableUsers';
 import { useTaskTypes } from '../../../hooks/useTaskTypes';
+import TaskTypeDropdown from '../../../components/pm/TaskTypeDropdown';
 import { useMeetingPanelStore } from '../../../stores/meetingPanelStore';
 import { useSpace } from '../../../hooks/useSpaces';
 import { useAuthStore } from '../../../stores/authStore';
@@ -438,8 +439,6 @@ export default function TaskCreatePanel({
   const [labelAnchor, setLabelAnchor] = useState<DOMRect | null>(null);
   const [priorityAnchor, setPriorityAnchor] = useState<DOMRect | null>(null);
   const [pendingEmergency, setPendingEmergency] = useState(false);
-  const [typeMenuOpen, setTypeMenuOpen] = useState(false);
-  const [typeAnchor, setTypeAnchor] = useState<DOMRect | null>(null);
   // Work-block fields — only used when currentType.key === 'work_block'.
   const [wbStartTime, setWbStartTime] = useState('09:00');
   const [wbEndTime, setWbEndTime] = useState('10:00');
@@ -1701,21 +1700,18 @@ export default function TaskCreatePanel({
                 >
                   <span className="k">{META_ICONS.Space}Type</span>
                   <span className="v">
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        setTypeAnchor((e.currentTarget as HTMLElement).getBoundingClientRect());
-                        setTypeMenuOpen((v) => !v);
+                    <TaskTypeDropdown
+                      taskTypes={taskTypes}
+                      current={currentType}
+                      onChange={(t) => {
+                        if (t.key === 'meeting') {
+                          openMeetingPanel({ initialTitle: draft.title, listId: effectiveListId });
+                          onClose();
+                          return;
+                        }
+                        setDraft((d) => ({ ...d, task_type_id: t.id }));
                       }}
-                      className="td-prop-chip"
-                      style={{
-                        background: currentType?.color ? `color-mix(in oklch, ${currentType.color} 14%, transparent)` : 'var(--surface-alt)',
-                        color: currentType?.color || 'var(--sh-ink-3)',
-                      }}
-                    >
-                      <span className="dot" style={{ background: currentType?.color || 'var(--sh-ink-4)' }} />
-                      {currentType?.name || 'Select type'}
-                    </button>
+                    />
                   </span>
                 </div>
               )}
@@ -2243,50 +2239,6 @@ export default function TaskCreatePanel({
         />
       )}
 
-      {typeMenuOpen && typeAnchor && (
-        <>
-          <div className="fixed inset-0 z-[55]" onClick={() => setTypeMenuOpen(false)} />
-          <div
-            className="fixed z-[56] w-56 overflow-hidden rounded-xl border shadow-lg"
-            style={{
-              borderColor: 'var(--sh-hair)',
-              background: 'var(--surface)',
-              top: Math.min(typeAnchor.bottom + 4, window.innerHeight - 240),
-              left: Math.min(typeAnchor.left, window.innerWidth - 232),
-            }}
-          >
-            {(taskTypes || [])
-              // Course + Routine are system-managed (set automatically on
-              // materialised/recurring tasks). "Meeting" IS selectable here: it
-              // swaps the panel into the meeting creation flow.
-              .filter((t) => !['course', 'routine'].includes(t.key))
-              .map((t) => (
-              <button
-                key={t.id}
-                type="button"
-                onClick={() => {
-                  setTypeMenuOpen(false);
-                  if (t.key === 'meeting') {
-                    // Switching the type to "Meeting" hands off to the meeting
-                    // creation slide-over, seeded with whatever title was typed.
-                    openMeetingPanel({ initialTitle: draft.title, listId: effectiveListId });
-                    onClose();
-                    return;
-                  }
-                  setDraft((d) => ({ ...d, task_type_id: t.id }));
-                }}
-                className={`flex w-full items-center gap-2 px-3 py-2 text-left text-[13px] hover:bg-[color:var(--sh-hair-3)] ${
-                  currentType?.id === t.id ? 'bg-[color:var(--sh-hair-3)]' : ''
-                }`}
-              >
-                <span className="h-2 w-2 rounded-full" style={{ backgroundColor: t.color }} />
-                <span className="flex-1 text-[color:var(--sh-ink)]">{t.name}</span>
-                {t.is_default && <span className="text-[10px] text-[color:var(--sh-ink-4)]">Default</span>}
-              </button>
-            ))}
-          </div>
-        </>
-      )}
 
       {labelPickerOpen && effectiveListId && (
 

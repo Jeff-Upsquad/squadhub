@@ -23,6 +23,7 @@ const typeCreateSchema = z.object({
   key: z.string().min(1).max(64).regex(slugRegex, 'Key must be lowercase letters, numbers and underscores'),
   name: z.string().min(1).max(100),
   description: z.string().nullable().optional(),
+  group_name: z.string().nullable().optional(),
   icon: z.string().max(64).optional(),
   color: z.string().max(16).optional(),
 });
@@ -30,6 +31,7 @@ const typeCreateSchema = z.object({
 const typeUpdateSchema = z.object({
   name: z.string().min(1).max(100).optional(),
   description: z.string().nullable().optional(),
+  group_name: z.string().nullable().optional(),
   icon: z.string().max(64).optional(),
   color: z.string().max(16).optional(),
 });
@@ -188,6 +190,7 @@ router.post('/', async (req: Request, res: Response) => {
         key: body.key,
         name: body.name,
         description: body.description ?? null,
+        group_name: body.group_name ?? null,
         icon: body.icon || 'check-square',
         color: body.color || '#6b7280',
         position: nextPos,
@@ -288,6 +291,7 @@ router.put('/:id', async (req: Request, res: Response) => {
     const patch: Record<string, any> = {};
     if (body.name !== undefined) patch.name = body.name;
     if (body.description !== undefined) patch.description = body.description;
+    if (body.group_name !== undefined) patch.group_name = body.group_name;
     if (body.icon !== undefined) patch.icon = body.icon;
     if (body.color !== undefined) patch.color = body.color;
 
