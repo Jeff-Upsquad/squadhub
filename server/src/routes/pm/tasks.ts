@@ -75,6 +75,7 @@ const updateSchema = z.object({
   metadata: z.record(z.string(), z.any()).optional(),
   list_id: z.string().uuid().optional(),
   recurrence: recurrenceSchema.nullable().optional(),
+  focused_at: z.string().nullable().optional(),
 });
 
 // Helper to get list_id from a task
@@ -751,26 +752,38 @@ router.get('/tasks/my', async (req: Request, res: Response) => {
 
     const workedIds: string[] = [];
     const seenWorked = new Set<string>();
+    const workedTodayIds = new Set<string>();
 
     for (const run of activeWbRuns || []) {
       const id = (run as any).task_id as string;
-      if (id && !seenWorked.has(id)) {
-        seenWorked.add(id);
-        workedIds.push(id);
+      if (id) {
+        workedTodayIds.add(id);
+        if (!seenWorked.has(id)) {
+          seenWorked.add(id);
+          workedIds.push(id);
+        }
       }
     }
 
     for (const e of recentEntries || []) {
       const id = (e as any).task_id as string;
-      if (!id || seenWorked.has(id)) continue;
+      if (!id) continue;
+      const entryStartedDay = toTzDay((e as any).started_at);
+      const entryCreatedDay = toTzDay((e as any).created_at);
+      if (entryStartedDay === todayStr || entryCreatedDay === todayStr) {
+        workedTodayIds.add(id);
+      }
+      if (seenWorked.has(id)) continue;
       seenWorked.add(id);
       workedIds.push(id);
     }
 
     // NOTE: In Progress is "ever worked" (any time-tracked history), NOT just
-    // "worked TODAY". Only exclusion: a task whose work_date or start_date is
-    // in the future (upcoming work start) must not stick in In Progress — it
-    // surfaces in the Home Focus list (Forecast) when that date arrives.
+    // "worked TODAY". Exclusions:
+    // 1. A task whose work_date or start_date is in the future (upcoming work start)
+    //    must not stick in In Progress — it is hidden until that date arrives.
+    // 2. A task scheduled for TODAY (work_date or start_date == todayStr) that
+    //    has NOT been worked today must surface in the Focus list, not In Progress.
     if (workedIds.length > 0) {
       const have = new Map(tasks.map((t: any) => [t.id, t]));
       const missingWorked = workedIds.filter((id) => !have.has(id));
@@ -817,10 +830,12 @@ router.get('/tasks/my', async (req: Request, res: Response) => {
         .filter(Boolean)
         .filter((t) => includeDone || !isTaskDone(t))
         .filter((t) => {
+          if (workedTodayIds.has(t.id)) return true;
           const workDay = toTzDay(t.work_date);
           if (workDay && workDay > todayStr) return false;
           const startDay = toTzDay(t.start_date);
           if (startDay && startDay > todayStr) return false;
+          if (workDay === todayStr || startDay === todayStr) return false;
           return true;
         });
     }

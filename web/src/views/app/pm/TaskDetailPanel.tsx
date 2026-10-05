@@ -3192,7 +3192,7 @@ export default function TaskDetailPanel({
             if (next && task.metadata?.work_end_date && Date.parse(next) > Date.parse(task.metadata.work_end_date)) {
               showToast('Work start date must be on or before work end date'); return;
             }
-            updateTask.mutate({ id: task.id, work_date: next });
+            updateTask.mutate({ id: task.id, work_date: next, ...(next && !task.focused_at ? { focused_at: new Date().toISOString() } : {}) });
           }}
           onClose={() => setWorkDateOpen(false)}
         />

@@ -147,7 +147,7 @@ export default function GroupedTaskRow({
     setMenuPos(null);
     for (const t of row.tasks) {
       if (focusBuckets[t.id]) setFocusBucket(t.id, null);
-      updateTask.mutate({ id: t.id, work_date: iso } as any);
+      updateTask.mutate({ id: t.id, work_date: iso, focused_at: t.focused_at ?? new Date().toISOString() } as any);
     }
   };
 
@@ -162,7 +162,11 @@ export default function GroupedTaskRow({
 
   const applyWorkDate = (next: string | null) => {
     for (const t of row.tasks) {
-      updateTask.mutate({ id: t.id, work_date: next } as any);
+      updateTask.mutate({
+        id: t.id,
+        work_date: next,
+        ...(next && !t.focused_at ? { focused_at: new Date().toISOString() } : {}),
+      } as any);
     }
   };
 
