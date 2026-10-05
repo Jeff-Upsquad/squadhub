@@ -13,6 +13,8 @@ import TaskStatusPicker from '../pm/TaskStatusPicker';
 import DatePicker from '../pm/DatePicker';
 import ListPickerCombobox from '../pm/ListPickerCombobox';
 import { useActiveWorkBlockRun } from '../../../hooks/useWorkBlocks';
+import { useTaskTypes } from '../../../hooks/useTaskTypes';
+import type { TaskType } from '@squadhub/shared';
 import EstimatePopover from '../../../components/pm/EstimatePopover';
 import { formatDuration } from '../../../lib/timeDuration';
 import { formatClock, formatTracked } from '../../../lib/formatDuration';
@@ -197,14 +199,18 @@ function ListMenu({
 export default function NewTaskRow({
   task,
   showReviewed,
+  taskTypes: taskTypesProp,
 }: {
   task: NewTask;
   showReviewed: boolean;
+  taskTypes?: TaskType[] | null;
 }) {
   const qc = useQueryClient();
   const updateTask = useUpdateTask(null);
   const reviewTask = useReviewTask();
   const focusTask = useFocusTask();
+  const { data: taskTypesFallback } = useTaskTypes();
+  const taskTypes = taskTypesProp ?? taskTypesFallback;
   const workspaceId = useWorkspaceStore((s) => s.currentWorkspace?.id);
   const addToLists = useAddTaskToLists(task.id);
   // Opening a task sets activeTaskId → the global TaskDetailPanel renders on top of
@@ -224,6 +230,23 @@ export default function NewTaskRow({
   const breadcrumb = [t.space?.name, t.folder?.name, t.list?.name].filter(Boolean).join(' / ') || '';
   const listName = (t.list?.name as string | undefined) || '';
   const primaryListId = (t.list_id as string | undefined) || (t.list?.id as string | undefined) || null;
+  const taskType = useMemo(() => {
+    const joined = (t.task_type as TaskType | undefined) || null;
+    if (joined?.id || joined?.name) return joined;
+    const typeId = (t.task_type_id as string | null) || null;
+    const typeKey = (t.task_type_key as string | null) || (joined as any)?.key || null;
+    if (typeId && taskTypes) {
+      const found = taskTypes.find((x) => x.id === typeId);
+      if (found) return found;
+    }
+    if (typeKey && taskTypes) {
+      const found = taskTypes.find((x) => x.key === typeKey);
+      if (found) return found;
+    }
+    return null;
+  }, [t.task_type, t.task_type_id, t.task_type_key, taskTypes]);
+  const taskTypeColor = taskType?.color || (t.task_type_color as string | null) || null;
+  const taskTypeName = taskType?.name || null;
   const isFocused = isTaskFocused(task);
   const isSubtask = !!t.parent_task_id;
 
@@ -454,6 +477,20 @@ export default function NewTaskRow({
           onChange={(key) => applyEdit({ status: key })}
           buttonClassName="nt-cellbtn nt-status-btn"
         />
+      </div>
+
+      {/* Task type — read-only display right after status */}
+      <div className="nt-cell nt-c-type">
+        {taskTypeName ? (
+          <span className="nt-type" title={`Task type: ${taskTypeName}`}>
+            {taskTypeColor && (
+              <span className="nt-pri-dot" style={{ background: taskTypeColor }} aria-hidden />
+            )}
+            <span className="nt-type-name">{taskTypeName}</span>
+          </span>
+        ) : (
+          <span className="nt-placeholder">—</span>
+        )}
       </div>
 
       {/* Due date — first of the dates: the deadline drives triage urgency */}
