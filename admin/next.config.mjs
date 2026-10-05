@@ -8,6 +8,7 @@ const API_URL = process.env.INTERNAL_API_URL || 'http://localhost:4000';
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  outputFileTracingRoot: path.resolve(__dirname, '..'),
 
   // Module renamed Published Cards -> Subscription Cards. Old paths redirect so
   // existing bookmarks/deep links keep working (query strings are preserved).

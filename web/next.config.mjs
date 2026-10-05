@@ -8,6 +8,7 @@ const API_URL = process.env.INTERNAL_API_URL || 'http://localhost:4000';
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  outputFileTracingRoot: path.resolve(__dirname, '..'),
   // Allow an independent UI preview server without sharing the main dev cache.
   distDir: process.env.SQUADHUB_NEXT_DIST_DIR || '.next',
 
