@@ -14,6 +14,7 @@ import DatePicker from '../pm/DatePicker';
 import ListPickerCombobox from '../pm/ListPickerCombobox';
 import { useActiveWorkBlockRun } from '../../../hooks/useWorkBlocks';
 import { useTaskTypes } from '../../../hooks/useTaskTypes';
+import TaskTypeDropdown from '../../../components/pm/TaskTypeDropdown';
 import type { TaskType } from '@squadhub/shared';
 import EstimatePopover from '../../../components/pm/EstimatePopover';
 import { formatDuration } from '../../../lib/timeDuration';
@@ -479,18 +480,30 @@ export default function NewTaskRow({
         />
       </div>
 
-      {/* Task type — read-only display right after status */}
+      {/* Task type — editable picker right after status */}
       <div className="nt-cell nt-c-type">
-        {taskTypeName ? (
-          <span className="nt-type" title={`Task type: ${taskTypeName}`}>
-            {taskTypeColor && (
-              <span className="nt-pri-dot" style={{ background: taskTypeColor }} aria-hidden />
-            )}
-            <span className="nt-type-name">{taskTypeName}</span>
-          </span>
-        ) : (
-          <span className="nt-placeholder">—</span>
-        )}
+        <TaskTypeDropdown
+          taskTypes={taskTypes ?? []}
+          current={taskType}
+          onChange={(nt) => applyEdit({ task_type_id: nt.id, task_type: nt })}
+          trigger={
+            <span
+              className="nt-cellbtn"
+              title={taskTypeName ? `Task type: ${taskTypeName}` : 'Set task type'}
+            >
+              {taskTypeName ? (
+                <>
+                  {taskTypeColor && (
+                    <span className="nt-pri-dot" style={{ background: taskTypeColor }} aria-hidden />
+                  )}
+                  <span className="nt-type-name">{taskTypeName}</span>
+                </>
+              ) : (
+                <span className="nt-placeholder">Type</span>
+              )}
+            </span>
+          }
+        />
       </div>
 
       {/* Due date — first of the dates: the deadline drives triage urgency */}
