@@ -55,21 +55,44 @@ test('short sequential entries reserve their visible footprint without changing 
   assert.deepEqual(layout.map(e => e.column), [0, 1, 2]);
   assert.deepEqual(layout.map(e => e.event.seconds), [60, 60, 60]);
 });
-test('split task timers count once per task and retain each credited segment', () => {
-  const segments = Array.from({ length: 103 }, (_, i) => ({ ...activity(`split-${i}`, start + (i + 1) * 60000, start + (i + 2) * 60000, 30), taskId: `task-${i % 11}` }));
+test('contiguous split task timers combine into one continuous session with credited segments', () => {
+  const segments = Array.from({ length: 55 }, (_, i) => {
+    const taskIdx = Math.floor(i / 5);
+    const segIdx = i % 5;
+    return {
+      ...activity(`split-${taskIdx}-${segIdx}`, start + segIdx * 60000, start + (segIdx + 1) * 60000, 30),
+      taskId: `task-${taskIdx}`,
+    };
+  });
   const grouped = combineTaskSegments(segments);
   assert.equal(grouped.length, 11);
-  assert.equal(grouped.reduce((sum, e) => sum + e.seconds, 0), 103 * 30);
-  assert.equal(grouped.reduce((sum, e) => sum + (e.segments?.length || 1), 0), 103);
+  assert.equal(grouped.reduce((sum, e) => sum + e.seconds, 0), 55 * 30);
+  assert.equal(grouped.reduce((sum, e) => sum + (e.segments?.length || 1), 0), 55);
   assert.equal(combineTaskSegments(grouped).length, 11);
 });
-test('group clipping sums actual segments and excludes gaps instead of crediting the envelope', () => {
+test('task sessions separated by a break remain distinct calendar entries so breaks appear', () => {
+  const events = combineTaskSegments([
+    { ...activity('first', start, start + 27 * 60000, 27 * 60), taskId: 'email-cleanup' },
+    // 69m break between 12:27 AM and 1:36 AM
+    { ...activity('second', start + 96 * 60000, start + 118 * 60000, 22 * 60), taskId: 'email-cleanup', live: true },
+  ]);
+  assert.equal(events.length, 2);
+  assert.equal(events[0].start, start);
+  assert.equal(events[0].end, start + 27 * 60000);
+  assert.equal(events[0].seconds, 27 * 60);
+  assert.equal(events[0].live, false);
+  assert.equal(events[1].start, start + 96 * 60000);
+  assert.equal(events[1].end, start + 118 * 60000);
+  assert.equal(events[1].seconds, 22 * 60);
+  assert.equal(events[1].live, true);
+});
+test('group clipping sums actual contiguous segments and excludes gaps outside bounds', () => {
   const grouped = combineTaskSegments([
     { ...activity('first', start + hour, start + 2 * hour, 1800), taskId: 'a' },
-    { ...activity('second', start + 3 * hour, start + 4 * hour, 1200), taskId: 'a', live: true },
+    { ...activity('second', start + 2 * hour, start + 3 * hour, 1200), taskId: 'a', live: true },
   ])[0];
-  assert.equal(clipActivity(grouped, start + 2 * hour, start + 3 * hour), null);
-  assert.equal(clipActivity(grouped, start + 1.5 * hour, start + 3.5 * hour)?.seconds, 1500);
+  assert.equal(clipActivity(grouped, start + 3 * hour, start + 4 * hour), null);
+  assert.equal(clipActivity(grouped, start + 1.5 * hour, start + 2.5 * hour)?.seconds, 1500);
   assert.equal(grouped.seconds, 3000);
   assert.equal(grouped.live, true);
 });
@@ -93,4 +116,46 @@ test('eleven overlapping tasks remain eleven separate positioned cards with cred
   assert.deepEqual(layout.map(e => e.column), Array.from({ length: 11 }, (_, i) => i));
   assert.ok(layout.every(e => e.columns === 11 && e.event.seconds === 300));
   assert.ok(layout.every(e => e.event.start === start + 20 * hour && e.event.end === start + 21 * hour));
+});
+
+test('multiple breaks on the same task create distinct blocks and intermediate tasks do not overlap', () => {
+  const events = combineTaskSegments([
+    // Email cleanup: morning session 9:00 - 9:30
+    { ...activity('ec-1', start + 9 * hour, start + 9.5 * hour, 1800), taskId: 'email-cleanup' },
+    // Call kia during the break: 10:00 - 10:20
+    { ...activity('call', start + 10 * hour, start + 10.33 * hour, 1200), taskId: 'call-kia' },
+    // Email cleanup: afternoon session 11:00 - 11:45
+    { ...activity('ec-2', start + 11 * hour, start + 11.75 * hour, 2700), taskId: 'email-cleanup' },
+  ]);
+  assert.equal(events.length, 3);
+  const ecSessions = events.filter(e => e.taskId === 'email-cleanup');
+  assert.equal(ecSessions.length, 2);
+  assert.equal(ecSessions[0].start, start + 9 * hour);
+  assert.equal(ecSessions[0].end, start + 9.5 * hour);
+  assert.equal(ecSessions[1].start, start + 11 * hour);
+  assert.equal(ecSessions[1].end, start + 11.75 * hour);
+
+  const layout = layoutActivities(events);
+  // Because the sessions don't overlap, all can sit in column 0!
+  assert.ok(layout.every(l => l.column === 0 && l.columns === 1));
+});
+
+test('segments within 5s tolerance merge as contiguous while >5s gaps become separate sessions', () => {
+  const events = combineTaskSegments([
+    // Two segments within 3s of each other (e.g. parallel timer tick/sync)
+    { ...activity('tick-1', start + hour, start + 1.25 * hour, 900), taskId: 't1' },
+    { ...activity('tick-2', start + 1.25 * hour + 3000, start + 1.5 * hour, 900), taskId: 't1' },
+    // A 10s pause/break
+    { ...activity('after-break', start + 1.5 * hour + 10000, start + 2 * hour, 1800), taskId: 't1' },
+  ]);
+  assert.equal(events.length, 2);
+  // First session merges tick-1 and tick-2
+  assert.equal(events[0].start, start + hour);
+  assert.equal(events[0].end, start + 1.5 * hour);
+  assert.equal(events[0].seconds, 1800);
+  assert.equal(events[0].segments?.length, 2);
+  // Second session is after the 10s break
+  assert.equal(events[1].start, start + 1.5 * hour + 10000);
+  assert.equal(events[1].end, start + 2 * hour);
+  assert.equal(events[1].seconds, 1800);
 });

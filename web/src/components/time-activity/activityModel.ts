@@ -95,7 +95,7 @@ export function clipActivity(event: Activity, from: number, to: number): Activit
   return { ...event, start, end, seconds: event.seconds * (end - start) / (event.end - event.start) };
 }
 
-/** Show one task entry per IST day, retaining the real segments and their credited time. */
+/** Combine contiguous task segments per IST day into continuous work sessions, preserving breaks. */
 export function combineTaskSegments(events: Activity[]): Activity[] {
   const grouped = new Map<string, Activity[]>();
   const result: Activity[] = [];
@@ -114,15 +114,44 @@ export function combineTaskSegments(events: Activity[]): Activity[] {
       stamp = next;
     }
   }
-  for (const [id, segments] of grouped) {
+  for (const [key, segments] of grouped) {
     segments.sort((a, b) => a.start - b.start || a.end - b.end);
-    result.push({ ...segments[segments.length - 1], id,
-      start: segments[0].start, end: Math.max(...segments.map(s => s.end)),
-      seconds: segments.reduce((sum, s) => sum + s.seconds, 0), live: segments.some(s => s.live),
-      source: segments.length > 1 ? 'Task time' : segments[0].source,
-      note: segments.length > 1 ? null : segments[0].note,
-      segments: segments.length > 1 ? segments : undefined,
-    });
+    const runs: Activity[][] = [];
+    let currentRun: Activity[] = [];
+    let currentRunEnd = -Infinity;
+
+    for (const segment of segments) {
+      if (!currentRun.length) {
+        currentRun.push(segment);
+        currentRunEnd = segment.end;
+      } else if (segment.start <= currentRunEnd + 5000) {
+        currentRun.push(segment);
+        currentRunEnd = Math.max(currentRunEnd, segment.end);
+      } else {
+        runs.push(currentRun);
+        currentRun = [segment];
+        currentRunEnd = segment.end;
+      }
+    }
+    if (currentRun.length) {
+      runs.push(currentRun);
+    }
+
+    for (let i = 0; i < runs.length; i++) {
+      const run = runs[i];
+      const id = runs.length === 1 ? key : `${key}:${i}`;
+      result.push({
+        ...run[run.length - 1],
+        id,
+        start: run[0].start,
+        end: Math.max(...run.map(s => s.end)),
+        seconds: run.reduce((sum, s) => sum + s.seconds, 0),
+        live: run.some(s => s.live),
+        source: run.length > 1 ? 'Task time' : run[0].source,
+        note: run.length > 1 ? null : run[0].note,
+        segments: run.length > 1 ? run : undefined,
+      });
+    }
   }
   return result;
 }
