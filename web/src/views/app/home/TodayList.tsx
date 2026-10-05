@@ -14,7 +14,7 @@ import AssigneePicker from '../pm/AssigneePicker';
 import IncompleteItemsDialog from '../pm/IncompleteItemsDialog';
 import NoAssigneeCompleteDialog from '../pm/NoAssigneeCompleteDialog';
 import { formatTracked, toLocalDateKey } from '../../../lib/formatDuration';
-import { groupTasks, isFutureDay, isTaskFocused, collapseGroupedTasks, isGroupedRow, GROUP_BY_OPTIONS, isTaskCompleted } from '../../../lib/taskGrouping';
+import { groupTasks, isFutureDay, isToday, isTaskFocused, collapseGroupedTasks, isGroupedRow, GROUP_BY_OPTIONS, isTaskCompleted } from '../../../lib/taskGrouping';
 import GroupedTaskRow from './GroupedTaskRow';
 import DayCalendar from '../day-planner/DayCalendar';
 import { planDateKey, computeSnoozeTargets } from '../../../hooks/useDayPlanner';
@@ -133,115 +133,13 @@ export default function TodayList() {
   const timers = usePMStore((s) => s.timers);
   const timerSegmentStart = usePMStore((s) => s.timerSegmentStart);
 
-  // "In progress" — tasks with time tracked today or on previous days
-  // (computed server-side, full task objects, most-recently-worked first) plus
-  // any task actively being timed right now. These render as their own section
-  // ABOVE the focus list and are pulled out of the focus/evening/night sections
-  // below so a worked task appears in In Progress and never shows up twice.
-  // The header total stays today-only (secondsTodayByTask). Tasks whose
-  // work_date or start_date is upcoming are excluded until that day arrives.
-  const rawInProgress: Task[] = useMemo(() => {
-    const list = [...(data?.in_progress_today ?? [])];
-    const seen = new Set(list.map((t) => t.id));
-
-    // Also include any task currently being timed if not already in the list
-    const allAvailable = [
-      ...(data?.in_progress_today ?? []),
-      ...(data?.today ?? []),
-      ...(data?.overdue ?? []),
-      ...(data?.tomorrow ?? []),
-      ...(data?.upcoming ?? []),
-      ...(data?.later ?? []),
-      ...(data?.focused ?? []),
-      ...(data?.day_planner ?? []),
-      ...(data?.unscheduled ?? []),
-    ];
-
-    if (activeWB?.task && !seen.has(activeWB.task.id)) {
-      const found = allAvailable.find((t) => t.id === activeWB.task.id);
-      if (found && !isTaskCompleted(found)) {
-        list.unshift(found);
-        seen.add(activeWB.task.id);
-      }
-    }
-    for (const rt of timers) {
-      if (!seen.has(rt.taskId)) {
-        const found = allAvailable.find((t) => t.id === rt.taskId);
-        if (found && !isTaskCompleted(found)) {
-          list.unshift(found);
-          seen.add(rt.taskId);
-        }
-      }
-    }
-
-    return list.filter((t) => !isTaskCompleted(t) && !isFutureDay(t.work_date, tz) && !isFutureDay((t as unknown as { start_date?: string | null }).start_date, tz));
-  }, [data, activeWB?.task, timers, tz]);
-  const inProgressTasks = useRetainFading(rawInProgress, fadingTaskIds);
-  const inProgressIds = useMemo(() => new Set(inProgressTasks.map((t) => t.id)), [inProgressTasks]);
-
   // Check if a task is actively being timed right now (timer running or active work-block run).
   // Actively timed tasks ALWAYS stay in "In progress" at the top of the dashboard.
-  const isActivelyTimed = (id: string) =>
-    timers.some((rt) => rt.taskId === id) || (activeWB?.task?.id === id && !activeWB.run?.ended_at);
-
-  // In-progress tasks that have NOT been assigned a bucket — these stay in the
-  // "In progress" card. Those with a bucket ('evening', 'night', 'focus') flow
-  // into their respective section below. Any task actively running a timer always stays in In progress.
-  const unbucketedInProgress = useMemo(
-    () => inProgressTasks.filter((t) => isActivelyTimed(t.id) || !effectiveFocusBucket(t, focusBuckets, recurringFocusBuckets, true)),
-    [inProgressTasks, focusBuckets, recurringFocusBuckets, timers, activeWB],
+  const isActivelyTimed = useCallback(
+    (id: string) =>
+      timers.some((rt) => rt.taskId === id) || (activeWB?.task?.id === id && !activeWB.run?.ended_at),
+    [timers, activeWB],
   );
-
-  // Union of regular starred tasks + any in-progress tasks that have an explicit bucket.
-  const allFocusCandidates = useMemo(() => {
-    const list = [...tasks];
-    const seen = new Set(list.map((t) => t.id));
-    for (const t of inProgressTasks) {
-      if (!seen.has(t.id) && !isActivelyTimed(t.id)) {
-        const b = effectiveFocusBucket(t, focusBuckets, recurringFocusBuckets, true);
-        if (b) {
-          list.push(t);
-          seen.add(t.id);
-        }
-      }
-    }
-    return list;
-  }, [tasks, inProgressTasks, focusBuckets, recurringFocusBuckets, timers, activeWB]);
-
-  // Split the focus list into the main list plus the manual Evening / Night
-  // triage buckets that render as their own sections below it. Any in-progress
-  // task without a bucket stays in the "In progress" section above.
-  const focusTasks = useMemo(() => allFocusCandidates.filter((t) => {
-    if (isActivelyTimed(t.id)) return false;
-    const b = effectiveFocusBucket(t, focusBuckets, recurringFocusBuckets, inProgressIds.has(t.id));
-    if (!inProgressIds.has(t.id)) return true;
-    return !!b;
-  }), [allFocusCandidates, inProgressIds, focusBuckets, recurringFocusBuckets, timers, activeWB]);
-
-  const mainTasks = useMemo(
-    () => focusTasks.filter((t) => {
-      const b = effectiveFocusBucket(t, focusBuckets, recurringFocusBuckets, inProgressIds.has(t.id));
-      return !b || b === 'focus';
-    }),
-    [focusTasks, focusBuckets, recurringFocusBuckets, inProgressIds],
-  );
-  const eveningTasks = useMemo(
-    () => focusTasks.filter((t) => effectiveFocusBucket(t, focusBuckets, recurringFocusBuckets, inProgressIds.has(t.id)) === 'evening'),
-    [focusTasks, focusBuckets, recurringFocusBuckets, inProgressIds],
-  );
-  const nightTasks = useMemo(
-    () => focusTasks.filter((t) => effectiveFocusBucket(t, focusBuckets, recurringFocusBuckets, inProgressIds.has(t.id)) === 'night'),
-    [focusTasks, focusBuckets, recurringFocusBuckets, inProgressIds],
-  );
-
-  const groupBy = usePMStore((s) => s.todayListGroupBy);
-  const setTodayListGroupBy = usePMStore((s) => s.setTodayListGroupBy);
-  const view = usePMStore((s) => s.todayListView);
-  const setTodayListView = usePMStore((s) => s.setTodayListView);
-  const { data: taskTypes } = useTaskTypes();
-  const [menuOpen, setMenuOpen] = useState(false);
-  const [mobileFocusExpanded, setMobileFocusExpanded] = useState(false);
-  const anchorRef = useRef<HTMLDivElement>(null);
 
   const today = useMemo(() => planDateKey(), []);
   const [viewDate, setViewDate] = useState<string>(today);
@@ -305,6 +203,119 @@ export default function TodayList() {
     }
     return { secondsTodayByTask: map, totalTodaySeconds: total, liveByTask };
   }, [timeEntries, today, timers, timerSegmentStart, nowTick, activeWB]);
+
+  // "In progress" — tasks with time tracked today or on previous days
+  // (computed server-side, full task objects, most-recently-worked first) plus
+  // any task actively being timed right now. These render as their own section
+  // ABOVE the focus list and are pulled out of the focus/evening/night sections
+  // below so a worked task appears in In Progress and never shows up twice.
+  // The header total stays today-only (secondsTodayByTask). Tasks whose
+  // work_date or start_date is upcoming are excluded until that day arrives.
+  // Tasks scheduled for today that haven't been worked on today yet surface in Focus.
+  const rawInProgress: Task[] = useMemo(() => {
+    const list = [...(data?.in_progress_today ?? [])];
+    const seen = new Set(list.map((t) => t.id));
+
+    // Also include any task currently being timed if not already in the list
+    const allAvailable = [
+      ...(data?.in_progress_today ?? []),
+      ...(data?.today ?? []),
+      ...(data?.overdue ?? []),
+      ...(data?.tomorrow ?? []),
+      ...(data?.upcoming ?? []),
+      ...(data?.later ?? []),
+      ...(data?.focused ?? []),
+      ...(data?.day_planner ?? []),
+      ...(data?.unscheduled ?? []),
+    ];
+
+    if (activeWB?.task && !seen.has(activeWB.task.id)) {
+      const found = allAvailable.find((t) => t.id === activeWB.task.id);
+      if (found && !isTaskCompleted(found)) {
+        list.unshift(found);
+        seen.add(activeWB.task.id);
+      }
+    }
+    for (const rt of timers) {
+      if (!seen.has(rt.taskId)) {
+        const found = allAvailable.find((t) => t.id === rt.taskId);
+        if (found && !isTaskCompleted(found)) {
+          list.unshift(found);
+          seen.add(rt.taskId);
+        }
+      }
+    }
+
+    return list.filter((t) => {
+      if (isTaskCompleted(t)) return false;
+      if (isFutureDay(t.work_date, tz) || isFutureDay((t as unknown as { start_date?: string | null }).start_date, tz)) return false;
+      if (isActivelyTimed(t.id) || (secondsTodayByTask.get(t.id) || 0) > 0) return true;
+      const isScheduledToday = isToday(t.work_date, tz) || isToday((t as unknown as { start_date?: string | null }).start_date, tz);
+      if (isScheduledToday) return false;
+      return true;
+    });
+  }, [data, activeWB?.task, timers, tz, isActivelyTimed, secondsTodayByTask]);
+  const inProgressTasks = useRetainFading(rawInProgress, fadingTaskIds);
+  const inProgressIds = useMemo(() => new Set(inProgressTasks.map((t) => t.id)), [inProgressTasks]);
+
+  // In-progress tasks that have NOT been assigned a bucket — these stay in the
+  // "In progress" card. Those with a bucket ('evening', 'night', 'focus') flow
+  // into their respective section below. Any task actively running a timer always stays in In progress.
+  const unbucketedInProgress = useMemo(
+    () => inProgressTasks.filter((t) => isActivelyTimed(t.id) || !effectiveFocusBucket(t, focusBuckets, recurringFocusBuckets, true)),
+    [inProgressTasks, focusBuckets, recurringFocusBuckets, timers, activeWB],
+  );
+
+  // Union of regular starred tasks + any in-progress tasks that have an explicit bucket.
+  const allFocusCandidates = useMemo(() => {
+    const list = [...tasks];
+    const seen = new Set(list.map((t) => t.id));
+    for (const t of inProgressTasks) {
+      if (!seen.has(t.id) && !isActivelyTimed(t.id)) {
+        const b = effectiveFocusBucket(t, focusBuckets, recurringFocusBuckets, true);
+        if (b) {
+          list.push(t);
+          seen.add(t.id);
+        }
+      }
+    }
+    return list;
+  }, [tasks, inProgressTasks, focusBuckets, recurringFocusBuckets, timers, activeWB]);
+
+  // Split the focus list into the main list plus the manual Evening / Night
+  // triage buckets that render as their own sections below it. Any in-progress
+  // task without a bucket stays in the "In progress" section above.
+  const focusTasks = useMemo(() => allFocusCandidates.filter((t) => {
+    if (isActivelyTimed(t.id)) return false;
+    const b = effectiveFocusBucket(t, focusBuckets, recurringFocusBuckets, inProgressIds.has(t.id));
+    if (!inProgressIds.has(t.id)) return true;
+    return !!b;
+  }), [allFocusCandidates, inProgressIds, focusBuckets, recurringFocusBuckets, timers, activeWB]);
+
+  const mainTasks = useMemo(
+    () => focusTasks.filter((t) => {
+      const b = effectiveFocusBucket(t, focusBuckets, recurringFocusBuckets, inProgressIds.has(t.id));
+      return !b || b === 'focus';
+    }),
+    [focusTasks, focusBuckets, recurringFocusBuckets, inProgressIds],
+  );
+  const eveningTasks = useMemo(
+    () => focusTasks.filter((t) => effectiveFocusBucket(t, focusBuckets, recurringFocusBuckets, inProgressIds.has(t.id)) === 'evening'),
+    [focusTasks, focusBuckets, recurringFocusBuckets, inProgressIds],
+  );
+  const nightTasks = useMemo(
+    () => focusTasks.filter((t) => effectiveFocusBucket(t, focusBuckets, recurringFocusBuckets, inProgressIds.has(t.id)) === 'night'),
+    [focusTasks, focusBuckets, recurringFocusBuckets, inProgressIds],
+  );
+
+  const groupBy = usePMStore((s) => s.todayListGroupBy);
+  const setTodayListGroupBy = usePMStore((s) => s.setTodayListGroupBy);
+  const view = usePMStore((s) => s.todayListView);
+  const setTodayListView = usePMStore((s) => s.setTodayListView);
+  const { data: taskTypes } = useTaskTypes();
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [mobileFocusExpanded, setMobileFocusExpanded] = useState(false);
+  const anchorRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -748,7 +759,7 @@ function TodayRow({ task: t, onOpen, secondsToday = 0, liveSecs = 0, isInProgres
     if (bucket) setFocusBucket(t.id, null);
     setIsHidden(true);
     updateTask.mutate(
-      { id: t.id, work_date: iso } as any,
+      { id: t.id, work_date: iso, focused_at: t.focused_at ?? new Date().toISOString() } as any,
       { onError: () => setIsHidden(false) },
     );
   };
