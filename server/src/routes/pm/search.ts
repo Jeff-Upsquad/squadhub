@@ -201,7 +201,11 @@ router.get('/search', async (req: Request, res: Response) => {
     // 3. Search each field independently so title matches cannot crowd out
     // description matches. Both queries use the same accessible-list scope.
     const safeQ = q.replace(/[\\%_]/g, (m) => `\\${m}`);
-    const taskFields = 'id, title, description, status, priority, due_date, work_date, work_end_date:metadata->>work_end_date, start_date, assignee_ids, display_number, list_id, parent_task_id, created_at, updated_at';
+    // NOTE: prod tasks table has no updated_at column (see fix 775ca948), so
+    // select + order by created_at only. Selecting a missing column makes
+    // PostgREST return 500, which empties tasks/descriptions in the global
+    // palette and leaves only the Messages section visible.
+    const taskFields = 'id, title, description, status, priority, due_date, work_date, work_end_date:metadata->>work_end_date, start_date, assignee_ids, display_number, list_id, parent_task_id, created_at';
     const searchField = (field: 'title' | 'description') => {
       let query = supabaseAdmin
         .from('tasks')
@@ -209,10 +213,9 @@ router.get('/search', async (req: Request, res: Response) => {
         .in('list_id', accessibleListIds)
         .is('recurrence', null)
         .ilike(field, `%${safeQ}%`)
-        // Most recently added and updated first: updated_at is bumped by
-        // trg_tasks_updated_at on every update and defaults to now() on insert,
-        // so DESC covers both recency signals with one ordering.
-        .order('updated_at', { ascending: false })
+        // Newest first. created_at is guaranteed to exist; updated_at is not
+        // present in prod, so it must not be used here.
+        .order('created_at', { ascending: false })
         .limit(limit);
       // Preserve title-search behavior for existing callers. Description search
       // also finds subtasks, and selection opens their owning task details.
