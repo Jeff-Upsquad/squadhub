@@ -244,6 +244,21 @@ export default function AdminTaskTypes() {
     setCollapsedGroups((prev) => ({ ...prev, [gName]: !prev[gName] }));
   };
 
+  // Single-click collapse-all / expand-all for the directory panel. When every
+  // visible group is already collapsed the click expands everything, otherwise
+  // it collapses everything currently shown (respects the search filter).
+  const allGroupsCollapsed =
+    groupedData.length > 0 && groupedData.every(([gName]) => collapsedGroups[gName]);
+  const toggleAllGroupsCollapse = () => {
+    if (allGroupsCollapsed) {
+      setCollapsedGroups({});
+    } else {
+      setCollapsedGroups(
+        groupedData.reduce<Record<string, boolean>>((acc, [gName]) => ({ ...acc, [gName]: true }), {}),
+      );
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -303,7 +318,23 @@ export default function AdminTaskTypes() {
               </div>
               <div className="mt-2 flex items-center justify-between text-[11px] text-foreground-dim">
                 <span>{filteredTypes.length} types in {groupedData.length} groups</span>
-                <span className="text-[10px]">Click any type to edit</span>
+                {groupedData.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={toggleAllGroupsCollapse}
+                    title={allGroupsCollapsed ? 'Expand all groups' : 'Collapse all groups'}
+                    className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-semibold text-foreground-muted transition hover:bg-surface-alt hover:text-foreground"
+                  >
+                    <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      {allGroupsCollapsed ? (
+                        <path d="M7 15l5 5 5-5M7 9l5-5 5 5" />
+                      ) : (
+                        <path d="M7 9l5 5 5-5M7 15l5-5 5 5" />
+                      )}
+                    </svg>
+                    {allGroupsCollapsed ? 'Expand all' : 'Collapse all'}
+                  </button>
+                )}
               </div>
             </div>
 
