@@ -203,6 +203,103 @@ export async function hydrateLabels<T extends { id: string }>(
   return tasks.map(t => ({ ...t, tags: byTask.get(t.id) || [] }));
 }
 
+// Attach list-view metadata in batched queries so rows can render the
+// Created-by, Comments, Latest-comment and Date-completed columns without
+// per-row fetches:
+// - `creator`: the creating user (mirrors GET /tasks/:id)
+// - `comment_count` + `latest_comment` (content trimmed, author attached)
+// - `last_status_change_at`: latest status-change timestamp; the client shows
+//   it as "Date completed" only when the task is currently completed.
+export async function hydrateTaskMeta<T extends { id: string; created_by?: string | null }>(
+  tasks: T[],
+): Promise<
+  (T & {
+    creator: Pick<User, 'id' | 'display_name' | 'email' | 'avatar_url'> | null;
+    comment_count: number;
+    latest_comment: {
+      content: string;
+      user_id: string;
+      created_at: string;
+      user: Pick<User, 'id' | 'display_name' | 'avatar_url'> | null;
+    } | null;
+    last_status_change_at: string | null;
+  })[]
+> {
+  type Meta = {
+    creator: Pick<User, 'id' | 'display_name' | 'email' | 'avatar_url'> | null;
+    comment_count: number;
+    latest_comment: {
+      content: string;
+      user_id: string;
+      created_at: string;
+      user: Pick<User, 'id' | 'display_name' | 'avatar_url'> | null;
+    } | null;
+    last_status_change_at: string | null;
+  };
+  const empty = (): Meta => ({ creator: null, comment_count: 0, latest_comment: null, last_status_change_at: null });
+  if (tasks.length === 0) return [];
+  const ids = tasks.map((t) => t.id);
+  const meta = new Map<string, Meta>(ids.map((id) => [id, empty()]));
+
+  // Creators — one batched users lookup.
+  try {
+    const creatorIds = Array.from(new Set(tasks.map((t) => t.created_by).filter(Boolean))) as string[];
+    if (creatorIds.length) {
+      const { data: users } = await supabaseAdmin
+        .from('users')
+        .select('id, display_name, email, avatar_url')
+        .in('id', creatorIds);
+      const byId = new Map<string, any>((users || []).map((u: any) => [u.id, u]));
+      for (const t of tasks) {
+        const c = t.created_by ? byId.get(t.created_by) : null;
+        if (c) meta.get(t.id)!.creator = c;
+      }
+    }
+  } catch { /* non-fatal: creator stays null */ }
+
+  // Comments — newest-first so the first row per task is the latest comment
+  // (content trimmed for the list payload) and the rest just bump the count.
+  try {
+    const { data: comments } = await supabaseAdmin
+      .from('task_comments')
+      .select('task_id, content, user_id, created_at, users(id, display_name, avatar_url)')
+      .in('task_id', ids)
+      .order('created_at', { ascending: false });
+    for (const c of (comments || []) as any[]) {
+      const m = meta.get(c.task_id);
+      if (!m) continue;
+      m.comment_count += 1;
+      if (!m.latest_comment) {
+        m.latest_comment = {
+          content: String(c.content || '').slice(0, 140),
+          user_id: c.user_id,
+          created_at: c.created_at,
+          user: c.users
+            ? { id: c.users.id, display_name: c.users.display_name, avatar_url: c.users.avatar_url }
+            : null,
+        };
+      }
+    }
+  } catch { /* table may not exist: counts stay 0 */ }
+
+  // Latest status change per task (client gates display on completed status).
+  try {
+    const { data: acts } = await supabaseAdmin
+      .from('task_activity')
+      .select('task_id, created_at')
+      .in('task_id', ids)
+      .eq('event_type', 'field_change')
+      .eq('field', 'status')
+      .order('created_at', { ascending: false });
+    for (const a of (acts || []) as any[]) {
+      const m = meta.get(a.task_id);
+      if (m && !m.last_status_change_at) m.last_status_change_at = a.created_at;
+    }
+  } catch { /* table may not exist: stays null */ }
+
+  return tasks.map((t) => ({ ...t, ...meta.get(t.id)! }));
+}
+
 // Attach each task's direct subtasks (`subtasks`) in one batched query, so list
 // payloads can render an expandable subtask dropdown without an extra fetch per
 // row (the detail panel keeps its own richer copy via GET /tasks/:id). Children
@@ -544,10 +641,13 @@ router.get('/tasks', async (req: Request, res: Response) => {
     // Space, Folder and List — same annotations GET /pm/tasks/my provides.
     // Linked (multi-homed) tasks resolve to their PRIMARY list chain here.
     const hydrated = await hydrateLists(labeled);
+    // Creator + comment stats + last status change for the Created-by,
+    // Comments, Latest-comment and Date-completed columns (batched).
+    const withMeta = await hydrateTaskMeta(hydrated);
     // Flag rows that are only in this view because they were ADDED to this list
     // (their primary list_id points elsewhere) so the UI can badge them.
     const linkedSet = new Set(linkedIds);
-    const flagged = hydrated.map((t: any) =>
+    const flagged = withMeta.map((t: any) =>
       t.list_id !== listId && linkedSet.has(t.id) ? { ...t, linked_in_list: true } : t,
     );
     res.json({ success: true, data: flagged });

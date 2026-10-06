@@ -1,10 +1,13 @@
 import { useState } from 'react';
-import type { Task, SpaceStatus } from '@squadhub/shared';
+import type { Task, SpaceStatus, ListViewColumnId } from '@squadhub/shared';
 import api from '../../../services/api';
 import { usePMStore } from '../../../stores/pmStore';
 import { useCreateTask } from '../../../hooks/useTasks';
 import { isTaskCompleted, isTaskFocused } from '../../../lib/taskGrouping';
+import { COLUMN_DEFS, DEFAULT_VISIBLE_IDS, gridTemplateFor, type ColumnControls } from '../../../lib/columns';
 import TaskRow from './TaskRow';
+
+const DEFAULT_VISIBLE_COLUMNS: ListViewColumnId[] = DEFAULT_VISIBLE_IDS;
 
 interface TaskGroupCardProps {
   groupKey: string;
@@ -27,6 +30,10 @@ interface TaskGroupCardProps {
   defaultTaskTypeId?: string | null;
   defaultLabelId?: string | null;
   activeViewId?: string | null;
+  /** Visible field columns in display order. Defaults to priority → assignee → work → due. */
+  columns?: ListViewColumnId[];
+  /** Full field controls (enables the header "+" field manager). */
+  columnControls?: ColumnControls;
 }
 
 export default function TaskGroupCard({
@@ -48,7 +55,37 @@ export default function TaskGroupCard({
   defaultTaskTypeId,
   defaultLabelId,
   activeViewId,
+  columns,
+  columnControls,
 }: TaskGroupCardProps) {
+  const visibleColumns: ListViewColumnId[] = columns ?? DEFAULT_VISIBLE_COLUMNS;
+  const headGridStyle = { gridTemplateColumns: gridTemplateFor(visibleColumns) };
+  const labelFor = (id: ListViewColumnId) => COLUMN_DEFS.find((d) => d.id === id)?.label ?? id;
+  // Header "+" slot: opens the same field manager as the toolbar Fields
+  // button. Falls back to the visible ids when no full controls are passed.
+  const renderHeaderAdd = () => {
+    const open = columnControls?.onOpenManager;
+    if (!open) return <span />;
+    return (
+      <span style={{ display: 'inline-flex', justifyContent: 'center' }}>
+        <button
+          type="button"
+          className="lv-col-add"
+          onClick={(e) => {
+            e.stopPropagation();
+            open();
+          }}
+          title="Add / manage fields in this view"
+          aria-label="Add / manage fields in this view"
+          aria-haspopup="dialog"
+        >
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+            <path d="M12 5v14M5 12h14" />
+          </svg>
+        </button>
+      </span>
+    );
+  };
   const isFocus = variant === 'focus';
   const { collapsedGroups, setGroupCollapsed } = usePMStore();
   const isCollapsed = collapsedGroups[groupKey] ?? defaultCollapsed;
@@ -160,13 +197,13 @@ export default function TaskGroupCard({
             <div
               className="lv-card-head lv-focus-cols"
               aria-hidden="true"
+              style={headGridStyle}
             >
               <div className="gh-left" />
-              <span className="gh-col">Priority</span>
-              <span className="gh-col">Assignee</span>
-              <span className="gh-col">Work date</span>
-              <span className="gh-col">Due</span>
-              <span />
+              {visibleColumns.map((id) => (
+                <span key={id} className="gh-col">{labelFor(id)}</span>
+              ))}
+              {renderHeaderAdd()}
             </div>
           )}
         </>
@@ -174,6 +211,7 @@ export default function TaskGroupCard({
         <div
           className="lv-card-head"
           onClick={toggleCollapse}
+          style={headGridStyle}
         >
           <div className="gh-left">
             <span className="gh-chevron">
@@ -216,11 +254,10 @@ export default function TaskGroupCard({
               {completedCount}/{totalCount}
             </span>
           </div>
-          <span className="gh-col">Priority</span>
-          <span className="gh-col">Assignee</span>
-          <span className="gh-col">Work date</span>
-          <span className="gh-col">Due</span>
-          <span />
+          {visibleColumns.map((id) => (
+            <span key={id} className="gh-col">{labelFor(id)}</span>
+          ))}
+          {renderHeaderAdd()}
         </div>
       )}
 
@@ -236,6 +273,7 @@ export default function TaskGroupCard({
               canEdit={canEdit}
               listId={listId || (task as any).list_id || task.list?.id || ''}
               dimmed={dimFocused && !isFocus && isTaskFocused(task) && !isTaskCompleted(task)}
+              columns={visibleColumns}
             />
           ))}
 

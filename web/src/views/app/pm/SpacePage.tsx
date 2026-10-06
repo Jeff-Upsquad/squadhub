@@ -9,6 +9,9 @@ import { useIsMobile } from '../../../hooks/useIsMobile';
 import TaskGroupCard from './TaskGroupCard';
 import { GROUP_BY_OPTIONS, groupTasks, partitionByCompletion, buildFocusTodayGroup, isTaskCompleted, isTaskUpcoming, nestSubtasks, filterWithSubtasks, sortByCreationOrder, type GroupBy } from '../../../lib/taskGrouping';
 import MinimalGroupFilterBar from '../../../components/pm/MinimalGroupFilterBar';
+import FieldManagerPanel from '../../../components/pm/FieldManagerPanel';
+import { useColumnPrefs } from '../../../hooks/useColumnPrefs';
+import { visibleColumnIds } from '../../../lib/columns';
 import ViewSearchInput from '../../../components/pm/ViewSearchInput';
 import ContainerChatButton from '../../../components/pm/ContainerChatButton';
 import ListChipsFilter from '../../../components/pm/ListChipsFilter';
@@ -49,6 +52,27 @@ export default function SpacePage({ spacePageId: propSpacePageId }: { spacePageI
 
   const scopeKey = activeSpacePageId ? `space:${activeSpacePageId}` : '';
   const filters = (scopeKey && filtersByScope[scopeKey]) || EMPTY_FILTER;
+
+  const [fieldsOpen, setFieldsOpen] = useState(false);
+
+  // Field (column) visibility + order for this area view (personal, synced).
+  const {
+    columns: spaceColumnStates,
+    hasPersonalOverride: hasSpaceColumnOverride,
+    setColumns: setSpaceColumns,
+    resetColumns: resetSpaceColumns,
+  } = useColumnPrefs(scopeKey);
+  const spaceVisibleColumns = useMemo(() => visibleColumnIds(spaceColumnStates), [spaceColumnStates]);
+  const spaceColumnControls = useMemo(
+    () => ({
+      states: spaceColumnStates,
+      onChange: setSpaceColumns,
+      onReset: resetSpaceColumns,
+      hasOverride: hasSpaceColumnOverride,
+      onOpenManager: () => setFieldsOpen(true),
+    }),
+    [spaceColumnStates, hasSpaceColumnOverride, setSpaceColumns, resetSpaceColumns],
+  );
 
   const { data: space } = useSpace(activeSpacePageId) as { data: SpaceWithChildren | undefined };
 
@@ -384,6 +408,8 @@ export default function SpacePage({ spacePageId: propSpacePageId }: { spacePageI
                 variant="focus"
                 tasks={focusGroup.tasks}
                 allStatuses={spaceStatuses}
+                columns={spaceVisibleColumns}
+                columnControls={spaceColumnControls}
                 listId={null}
                 onStatusChange={noopStatusChange}
                 canEdit
@@ -397,6 +423,8 @@ export default function SpacePage({ spacePageId: propSpacePageId }: { spacePageI
                   label="All tasks"
                   tasks={currentOpenTasks}
                   allStatuses={spaceStatuses}
+                columns={spaceVisibleColumns}
+                columnControls={spaceColumnControls}
                   listId={null}
                   onStatusChange={noopStatusChange}
                   canEdit
@@ -413,6 +441,8 @@ export default function SpacePage({ spacePageId: propSpacePageId }: { spacePageI
                   dotColor={g.color}
                   tasks={g.tasks}
                   allStatuses={spaceStatuses}
+                columns={spaceVisibleColumns}
+                columnControls={spaceColumnControls}
                   listId={null}
                   onStatusChange={noopStatusChange}
                   canEdit
@@ -428,6 +458,8 @@ export default function SpacePage({ spacePageId: propSpacePageId }: { spacePageI
                 dotColor="#0ea5e9"
                 tasks={upcomingTasks}
                 allStatuses={spaceStatuses}
+                columns={spaceVisibleColumns}
+                columnControls={spaceColumnControls}
                 listId={null}
                 onStatusChange={noopStatusChange}
                 canEdit
@@ -443,6 +475,8 @@ export default function SpacePage({ spacePageId: propSpacePageId }: { spacePageI
                 dotColor="#7c3aed"
                 tasks={completedTasks}
                 allStatuses={spaceStatuses}
+                columns={spaceVisibleColumns}
+                columnControls={spaceColumnControls}
                 listId={null}
                 onStatusChange={noopStatusChange}
                 canEdit
@@ -453,6 +487,15 @@ export default function SpacePage({ spacePageId: propSpacePageId }: { spacePageI
           </>
         )}
       </div>
+
+      <FieldManagerPanel
+        open={fieldsOpen}
+        onClose={() => setFieldsOpen(false)}
+        columns={spaceColumnStates}
+        onChange={setSpaceColumns}
+        onReset={resetSpaceColumns}
+        hasOverride={hasSpaceColumnOverride}
+      />
     </div>
   );
 }

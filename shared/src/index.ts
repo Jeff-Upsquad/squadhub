@@ -655,6 +655,29 @@ export interface ListViewFilters {
   workDate?: string[];
 }
 
+export type ListViewColumnId =
+  | 'status'
+  | 'priority'
+  | 'assignee'
+  | 'labels'
+  | 'type'
+  | 'startDate'
+  | 'workDate'
+  | 'dueDate'
+  | 'estimate'
+  | 'tracked'
+  | 'taskId'
+  | 'createdBy'
+  | 'latestComment'
+  | 'comments'
+  | 'dateCreated'
+  | 'dateCompleted';
+
+export interface ListViewColumnState {
+  id: ListViewColumnId;
+  visible: boolean;
+}
+
 export interface ListViewConfig {
   filters?: ListViewFilters;
   groupBy?: string;
@@ -665,6 +688,8 @@ export interface ListViewConfig {
   defaultTaskTypeId?: string | null;
   defaultLabel?: string | null;
   showAllTasks?: boolean;
+  /** Ordered column visibility for the list view. Absent = all four visible in default order. */
+  columns?: ListViewColumnState[];
 }
 
 export interface ListViewRow {
@@ -913,6 +938,16 @@ export interface Task {
   subtasks?: Task[];
   comment_count?: number;
   creator?: User;
+  /** Newest comment (content trimmed) + author, hydrated on GET /pm/tasks. */
+  latest_comment?: {
+    content: string;
+    user_id: string;
+    created_at: string;
+    user?: Pick<User, 'id' | 'display_name' | 'avatar_url'> | null;
+  } | null;
+  /** Latest status-change timestamp (from task_activity); shown as "Date
+   * completed" only when the task is currently completed. */
+  last_status_change_at?: string | null;
   list?: { id: string; name: string } | null;
   folder?: { id: string; name: string } | null;
   space?: { id: string; name: string } | null;

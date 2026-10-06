@@ -12,6 +12,9 @@ import ListView from './ListView';
 import BoardView from './BoardView';
 import WhiteboardView from './WhiteboardView';
 import ViewTabs from '../../../components/pm/ViewTabs';
+import FieldManagerPanel from '../../../components/pm/FieldManagerPanel';
+import { useColumnPrefs } from '../../../hooks/useColumnPrefs';
+import { visibleColumnIds } from '../../../lib/columns';
 import SettingsSlider from '../../../components/SettingsSlider';
 import ManageMembersModal from './ManageMembersModal';
 import MinimalGroupFilterBar from '../../../components/pm/MinimalGroupFilterBar';
@@ -47,6 +50,7 @@ export default function ListPage({
   const currentUserId = useAuthStore((s) => s.user?.id);
   const [showSettings, setShowSettings] = useState(false);
   const [showShare, setShowShare] = useState(false);
+  const [fieldsOpen, setFieldsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   // "Focus today" and "My tasks" stay per-user ephemeral toggles (not part of a
   // saved view's config), so they keep using the existing list-scoped store.
@@ -84,6 +88,35 @@ export default function ListPage({
   const configDirty = useMemo(
     () => JSON.stringify(workingConfig ?? {}) !== JSON.stringify(activeView?.config ?? {}),
     [workingConfig, activeView?.config],
+  );
+
+  // ── Field (column) visibility + order for this list view ──────────────
+  // Scope is per named-view tab (shared default from list_views.config), with
+  // a personal override in columnPrefsByScope when the user customizes it.
+  const columnScopeKey = activeView ? `listview:${activeView.id}` : listScopeKey;
+  const {
+    columns: columnStates,
+    hasPersonalOverride: hasColumnOverride,
+    setColumns: setScopeColumns,
+    resetColumns: resetScopeColumns,
+  } = useColumnPrefs(columnScopeKey, workingConfig.columns);
+  const listVisibleColumns = useMemo(() => visibleColumnIds(columnStates), [columnStates]);
+  const handleColumnsChange = (next: typeof columnStates) => {
+    setScopeColumns(next);
+    setWorkingConfig((c) => ({ ...c, columns: next }));
+  };
+  const listColumnControls = useMemo(
+    () => ({
+      states: columnStates,
+      onChange: handleColumnsChange,
+      onReset: resetScopeColumns,
+      hasOverride: hasColumnOverride,
+      onOpenManager: () => setFieldsOpen(true),
+    }),
+    // handleColumnsChange closes over stable setters + scope key; columnStates
+    // and override flag are the reactive inputs.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [columnStates, hasColumnOverride, columnScopeKey],
   );
 
   const { data: listData } = useQuery({
@@ -458,6 +491,8 @@ export default function ListPage({
             focusToday={focusToday}
             activeView={activeView}
             allViews={views}
+            columns={listVisibleColumns}
+            columnControls={listColumnControls}
           />
         ) : contentType === 'board' ? (
           <BoardView
@@ -506,6 +541,15 @@ export default function ListPage({
           onClose={() => setShowShare(false)}
         />
       )}
+
+      <FieldManagerPanel
+        open={fieldsOpen}
+        onClose={() => setFieldsOpen(false)}
+        columns={columnStates}
+        onChange={handleColumnsChange}
+        onReset={resetScopeColumns}
+        hasOverride={hasColumnOverride}
+      />
 
       {/* Creation now lives in the small global bottom-right quick-create FAB
           (see GlobalQuickCreateFab in MainLayout) — the old large per-view

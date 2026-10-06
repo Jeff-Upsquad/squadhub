@@ -202,6 +202,8 @@ interface PMState {
   pendingTimerStart: PendingTimerStart | null;
   pendingTimeSync: PendingTimeSyncItem[];
   filtersByScope: Record<string, TaskFilterState>;
+  /** Per-view column show/hide + order, keyed by scope (`listview:<viewId>`, `list:<id>`, `folder:<id>`, `space:<id>`). */
+  columnPrefsByScope: Record<string, import('@squadhub/shared').ListViewColumnState[]>;
   focusedTodayIds: string[];
   focusedTodayDate: string;
   focusBuckets: Record<string, FocusBucket>;
@@ -265,6 +267,8 @@ interface PMState {
   checkpointRunningTimers: (minElapsedSeconds?: number) => TimerShare[];
   setScopeFilters: (scopeKey: string, next: TaskFilterState) => void;
   clearScopeFilters: (scopeKey: string) => void;
+  setScopeColumns: (scopeKey: string, next: import('@squadhub/shared').ListViewColumnState[]) => void;
+  resetScopeColumns: (scopeKey: string) => void;
   setScopedGroupBy: (scopeKey: string, value: GroupBy) => void;
   setScopedSortBy: (scopeKey: string, value: SortBy) => void;
   setScopedFocusToday: (scopeKey: string, value: boolean) => void;
@@ -374,6 +378,7 @@ export const usePMStore = create<PMState>()(
       pendingTimerStart: null,
       pendingTimeSync: [],
       filtersByScope: {},
+      columnPrefsByScope: {},
       focusedTodayIds: [],
       focusedTodayDate: todayKey(),
       focusBuckets: {},
@@ -660,6 +665,20 @@ export const usePMStore = create<PMState>()(
         });
         triggerSave();
       },
+      setScopeColumns: (scopeKey, next) => {
+        set((state) => ({
+          columnPrefsByScope: { ...state.columnPrefsByScope, [scopeKey]: next },
+        }));
+        triggerSave();
+      },
+      resetScopeColumns: (scopeKey) => {
+        set((state) => {
+          if (!(scopeKey in state.columnPrefsByScope)) return state;
+          const { [scopeKey]: _removed, ...rest } = state.columnPrefsByScope;
+          return { columnPrefsByScope: rest };
+        });
+        triggerSave();
+      },
       setScopedGroupBy: (scopeKey, value) => {
         set((state) => ({
           groupByScope: { ...state.groupByScope, [scopeKey]: value },
@@ -779,6 +798,7 @@ export const usePMStore = create<PMState>()(
         if (prefs.listGroupBy !== undefined) patch.listGroupBy = prefs.listGroupBy as ListGroupBy;
         if (prefs.myTasksOnly !== undefined) patch.myTasksOnly = prefs.myTasksOnly as boolean;
         if (prefs.filtersByScope !== undefined) patch.filtersByScope = prefs.filtersByScope as Record<string, TaskFilterState>;
+        if (prefs.columnPrefsByScope !== undefined) patch.columnPrefsByScope = prefs.columnPrefsByScope as Record<string, import('@squadhub/shared').ListViewColumnState[]>;
         if (prefs.groupByScope !== undefined) patch.groupByScope = prefs.groupByScope as Record<string, GroupBy>;
         if (prefs.sortByScope !== undefined) patch.sortByScope = prefs.sortByScope as Record<string, SortBy>;
         if (prefs.focusTodayScope !== undefined) patch.focusTodayScope = prefs.focusTodayScope as Record<string, boolean>;
@@ -855,6 +875,7 @@ export const usePMStore = create<PMState>()(
           listGroupBy: s.listGroupBy,
           myTasksOnly: s.myTasksOnly,
           filtersByScope: s.filtersByScope,
+          columnPrefsByScope: s.columnPrefsByScope,
           groupByScope: s.groupByScope,
           sortByScope: s.sortByScope,
           focusTodayScope: s.focusTodayScope,
@@ -880,7 +901,7 @@ export const usePMStore = create<PMState>()(
           sidebarSectionOrder: s.sidebarSectionOrder,
         };
       },
-      reset: () => set({ activeSpaceId: null, activeListId: null, activeFolderId: null, activeSpacePageId: null, activeTaskId: null, activeDesignFolderId: null, activeDashboardTab: null, activeSecondaryCard: null, newTasksOpen: false, newTaskFabVisible: false, homeView: 'hub', contextListId: null, viewMode: 'list', activeViewIdByList: {}, listGroupBy: 'status', myTasksOnly: false, collapsedGroups: {}, groupedExpanded: {}, focusBucketCollapsed: {}, focusBucketAutoOpenedDate: {}, sidebarSectionsExpanded: DEFAULT_SIDEBAR_SECTIONS, expandedSpaces: {}, expandedFolders: {}, expandedClients: {}, favoriteItemsOrder: [], appFavoritesOrder: [], sidebarSectionOrder: DEFAULT_SIDEBAR_SECTION_ORDER, selectedTasks: [], fadingTaskIds: new Map<string, string>(), peekTaskId: null, groupRunPanel: null, timers: [], timerSegmentStart: null, pendingTimerStart: null, pendingTimeSync: [], filtersByScope: {}, focusedTodayIds: [], focusedTodayDate: todayKey(), focusBuckets: {}, recurringFocusBuckets: {}, focusBucketsRolloverDate: todayKey(), groupByScope: {}, sortByScope: {}, focusTodayScope: {}, secondaryCardGroupBy: {}, todayListGroupBy: 'none', todayListView: 'list', lastActiveSection: 'home', lastHomeView: 'hub' }),
+      reset: () => set({ activeSpaceId: null, activeListId: null, activeFolderId: null, activeSpacePageId: null, activeTaskId: null, activeDesignFolderId: null, activeDashboardTab: null, activeSecondaryCard: null, newTasksOpen: false, newTaskFabVisible: false, homeView: 'hub', contextListId: null, viewMode: 'list', activeViewIdByList: {}, listGroupBy: 'status', myTasksOnly: false, collapsedGroups: {}, groupedExpanded: {}, focusBucketCollapsed: {}, focusBucketAutoOpenedDate: {}, sidebarSectionsExpanded: DEFAULT_SIDEBAR_SECTIONS, expandedSpaces: {}, expandedFolders: {}, expandedClients: {}, favoriteItemsOrder: [], appFavoritesOrder: [], sidebarSectionOrder: DEFAULT_SIDEBAR_SECTION_ORDER, selectedTasks: [], fadingTaskIds: new Map<string, string>(), peekTaskId: null, groupRunPanel: null, timers: [], timerSegmentStart: null, pendingTimerStart: null, pendingTimeSync: [], filtersByScope: {}, columnPrefsByScope: {}, focusedTodayIds: [], focusedTodayDate: todayKey(), focusBuckets: {}, recurringFocusBuckets: {}, focusBucketsRolloverDate: todayKey(), groupByScope: {}, sortByScope: {}, focusTodayScope: {}, secondaryCardGroupBy: {}, todayListGroupBy: 'none', todayListView: 'list', lastActiveSection: 'home', lastHomeView: 'hub' }),
     }),
     {
       name: 'squadhub-pm',
@@ -901,6 +922,7 @@ export const usePMStore = create<PMState>()(
         listGroupBy: state.listGroupBy,
         myTasksOnly: state.myTasksOnly,
         filtersByScope: state.filtersByScope,
+        columnPrefsByScope: state.columnPrefsByScope,
         focusedTodayIds: state.focusedTodayIds,
         focusedTodayDate: state.focusedTodayDate,
         focusBuckets: state.focusBuckets,

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import type { Task, SpaceStatus, TaskPriority, TaskChecklist } from '@squadhub/shared';
 import api from '../../../services/api';
@@ -17,13 +17,22 @@ import AssigneePicker from './AssigneePicker';
 import NoAssigneeCompleteDialog from './NoAssigneeCompleteDialog';
 import IncompleteItemsDialog from './IncompleteItemsDialog';
 import DatePicker from './DatePicker';
+import LabelPicker from './LabelPicker';
 import PriorityPicker, { PRIORITY_META } from './PriorityPicker';
+import EstimatePopover from '../../../components/pm/EstimatePopover';
+import LogTimePopover from '../../../components/pm/LogTimePopover';
+import TaskTypeDropdown from '../../../components/pm/TaskTypeDropdown';
+import { formatDuration } from '../../../lib/timeDuration';
 import SopBreachReportModal from '../../../components/sop/SopBreachReportModal';
 import SopFlagDetailModal from '../../../components/sop/SopFlagDetailModal';
 import { GoalTaskFlag } from '../goals/GoalIntegration';
 import { useGoalsUI } from '../goals/goalsStore';
 import GoalIcon from '../goals/GoalIcons';
 import FocusStarButton from '../../../components/pm/FocusStarButton';
+import type { ListViewColumnId } from '@squadhub/shared';
+import { DEFAULT_VISIBLE_IDS, gridTemplateFor } from '../../../lib/columns';
+
+const DEFAULT_VISIBLE_COLUMNS: ListViewColumnId[] = DEFAULT_VISIBLE_IDS;
 
 function fmtClock(seconds: number): string {
   const h = Math.floor(seconds / 3600);
@@ -41,6 +50,7 @@ export default function TaskRow({
   canEdit = true,
   listId,
   dimmed = false,
+  columns,
 }: {
   task: Task;
   statuses: SpaceStatus[];
@@ -50,6 +60,8 @@ export default function TaskRow({
   listId: string;
   /** Render faded — used for focused tasks that also appear in the Focus Today banner above. */
   dimmed?: boolean;
+  /** Visible field columns in display order. Defaults to priority → assignee → work → due. */
+  columns?: ListViewColumnId[];
 }) {
   const { activeTaskId, setActiveTask, selectedTasks, toggleTaskSelection, fadingTaskIds, markFading, unmarkFading, timers } = usePMStore();
   const focusTask = useFocusTask();
@@ -126,6 +138,11 @@ export default function TaskRow({
   const [priorityAnchor, setPriorityAnchor] = useState<DOMRect | null>(null);
   const [workDateAnchor, setWorkDateAnchor] = useState<DOMRect | null>(null);
   const [dueDateAnchor, setDueDateAnchor] = useState<DOMRect | null>(null);
+  const [startDateAnchor, setStartDateAnchor] = useState<DOMRect | null>(null);
+  const [labelAnchor, setLabelAnchor] = useState<DOMRect | null>(null);
+  const [estimateAnchor, setEstimateAnchor] = useState<DOMRect | null>(null);
+  const [logTimeAnchor, setLogTimeAnchor] = useState<DOMRect | null>(null);
+  const [statusOpen, setStatusOpen] = useState(false);
 
   // Completion-time "no assignee" prompt. Both anchored to the checkbox.
   // `noAssigneePrompt` shows the choose-what-to-do popover; `assignCompleteAnchor`
@@ -268,6 +285,431 @@ export default function TaskRow({
         ? 'lv-cell-value lv-due--today'
         : 'lv-cell-value';
 
+  const visibleColumns: ListViewColumnId[] = columns ?? DEFAULT_VISIBLE_COLUMNS;
+  const rowGridStyle: CSSProperties = {
+    gridTemplateColumns: gridTemplateFor(visibleColumns),
+    ...(depth > 0 ? { paddingLeft: 20 + depth * 22 } : null),
+  };
+
+  const renderPriorityCell = () => (
+    <div
+      className="lv-cell lv-cell--priority"
+      data-empty={priority === 'none'}
+      onClick={canEdit ? (e) => openPicker(e, setPriorityAnchor) : undefined}
+      style={{ cursor: canEdit ? 'pointer' : 'default' }}
+      title={canEdit ? 'Change priority' : undefined}
+    >
+      {priority === 'none' ? (
+        <span className="lv-cell-value">—</span>
+      ) : (
+        <span className="lv-pri">
+          <span className="lv-pri-dot" style={{ background: priorityMeta.color }} />
+          <span className="lv-pri-label">{priorityMeta.label}</span>
+        </span>
+      )}
+    </div>
+  );
+
+  const renderAssigneeCell = () => (
+    <div
+      className="lv-cell lv-cell--assignee"
+      data-empty={assignees.length === 0}
+      onClick={canEdit ? (e) => openPicker(e, setAssigneeAnchor) : undefined}
+      style={{ cursor: canEdit ? 'pointer' : 'default' }}
+      title={canEdit ? 'Change assignees' : undefined}
+    >
+      {assignees.length > 0 ? (
+        <span className="av-stack" aria-label={`${assignees.length} assignee${assignees.length === 1 ? '' : 's'}`}>
+          {assignees.slice(0, 2).map((u) => (
+            <span
+              key={u.id}
+              className="lv-ava"
+              style={{ background: avatarColor(u.id || u.email) }}
+              title={u.display_name || u.email}
+            >
+              {initialOf(u.display_name || u.email)}
+            </span>
+          ))}
+          {assignees.length > 2 && (
+            <span className="av-more" title={`${assignees.length - 2} more`}>+{assignees.length - 2}</span>
+          )}
+        </span>
+      ) : (
+        <span className="lv-ava lv-ava--empty" title="Unassigned">–</span>
+      )}
+    </div>
+  );
+
+  const renderWorkDateCell = () => (
+    <div
+      className="lv-cell lv-cell--date"
+      data-empty={!task.work_date}
+      onClick={canEdit ? (e) => openPicker(e, setWorkDateAnchor) : undefined}
+      style={{ cursor: canEdit ? 'pointer' : 'default' }}
+      title={canEdit ? 'Set work date' : undefined}
+    >
+      <span className="lv-cell-value lv-date-text">
+        {task.work_date ? workWhen.text : '—'}
+      </span>
+      {canEdit && (
+        <button
+          type="button"
+          className="lv-date-today-btn"
+          onClick={(e) => {
+            e.stopPropagation();
+            const cur = pendingDates.current.work !== undefined ? pendingDates.current.work : task.work_date;
+            const next = nextQuickDate(cur);
+            pendingDates.current.work = next;
+            updateTask.mutate({ id: task.id, work_date: next } as any);
+          }}
+          aria-label="Set work date to today / tomorrow"
+          title="Click: today · Click again: tomorrow"
+        >
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+            <line x1="16" y1="2" x2="16" y2="6" />
+            <line x1="8" y1="2" x2="8" y2="6" />
+            <line x1="3" y1="10" x2="21" y2="10" />
+          </svg>
+        </button>
+      )}
+    </div>
+  );
+
+  const renderDueDateCell = () => (
+    <div
+      className="lv-cell lv-cell--date"
+      data-empty={!task.due_date}
+      onClick={canEdit ? (e) => openPicker(e, setDueDateAnchor) : undefined}
+      style={{ cursor: canEdit ? 'pointer' : 'default' }}
+      title={canEdit ? 'Set due date' : undefined}
+    >
+      <span className={`${dueValueClass} lv-date-text`}>
+        {task.due_date ? dueWhen.text : '—'}
+      </span>
+      {canEdit && (
+        <button
+          type="button"
+          className="lv-date-today-btn"
+          onClick={(e) => {
+            e.stopPropagation();
+            const cur = pendingDates.current.due !== undefined ? pendingDates.current.due : task.due_date;
+            const next = nextQuickDate(cur);
+            pendingDates.current.due = next;
+            updateTask.mutate({ id: task.id, due_date: next } as any);
+          }}
+          aria-label="Set due date to today / tomorrow"
+          title="Click: today · Click again: tomorrow"
+        >
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+            <line x1="16" y1="2" x2="16" y2="6" />
+            <line x1="8" y1="2" x2="8" y2="6" />
+            <line x1="3" y1="10" x2="21" y2="10" />
+          </svg>
+        </button>
+      )}
+    </div>
+  );
+
+  const renderColumnCell = (id: ListViewColumnId) => {
+    switch (id) {
+      case 'status': return renderStatusCell();
+      case 'priority': return renderPriorityCell();
+      case 'assignee': return renderAssigneeCell();
+      case 'labels': return renderLabelsCell();
+      case 'type': return renderTypeCell();
+      case 'startDate': return renderStartDateCell();
+      case 'workDate': return renderWorkDateCell();
+      case 'dueDate': return renderDueDateCell();
+      case 'estimate': return renderEstimateCell();
+      case 'tracked': return renderTrackedCell();
+      case 'taskId': return renderIdCell();
+      case 'createdBy': return renderCreatedByCell();
+      case 'latestComment': return renderLatestCommentCell();
+      case 'comments': return renderCommentsCell();
+      case 'dateCreated': return renderDateCreatedCell();
+      case 'dateCompleted': return renderDateCompletedCell();
+      default: return null;
+    }
+  };
+
+  const currentStatus: SpaceStatus | null =
+    statuses.find((s) => s.name === statusCategory || s.id === (task as any).status_id) ?? null;
+  const startWhen = formatWhen(task.start_date);
+
+  const startRowTimer = () =>
+    requestStartTimer({
+      taskId: task.id,
+      taskTitle: task.title,
+      listId: effectiveListId || '',
+      baseTracked: task.time_tracked || 0,
+      isWorkBlock,
+    });
+  const stopRowTimer = async () => {
+    if (isWorkBlockRun && activeWB) {
+      try {
+        await stopWBRun.mutateAsync({ run_id: activeWB.run.id, task_id: task.id });
+      } catch (err) {
+        console.error('Failed to stop work-block run:', err);
+      }
+      return;
+    }
+    await stopTimer(task.id);
+  };
+
+  const renderStatusCell = () => (
+    <div
+      className="lv-cell lv-cell--status relative"
+      data-empty={!currentStatus}
+      onClick={canEdit ? () => setStatusOpen((v) => !v) : undefined}
+      style={{ cursor: canEdit ? 'pointer' : 'default' }}
+      title={canEdit ? 'Change status' : undefined}
+    >
+      {currentStatus ? (
+        <span className="lv-pri">
+          <span className="lv-pri-dot" style={{ background: currentStatus.color }} />
+          <span className="lv-pri-label">{currentStatus.name}</span>
+        </span>
+      ) : (
+        <span className="lv-cell-value">—</span>
+      )}
+      {statusOpen && canEdit && (
+        <>
+          <div className="fixed inset-0 z-10" onClick={(e) => { e.stopPropagation(); setStatusOpen(false); }} />
+          <div className="sh-float absolute left-0 top-full z-20 mt-1 max-h-64 w-48 overflow-y-auto rounded-lg border bg-[var(--surface)] shadow-lg" style={{ borderColor: 'var(--sh-hair)' }}>
+            {statuses.map((s) => (
+              <button
+                key={s.id}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setStatusOpen(false);
+                  updateTask.mutate({ id: task.id, status: s.name } as any);
+                }}
+                className="flex w-full items-center gap-2 px-3 py-2 text-left text-[12.5px] text-[var(--sh-ink)] hover:bg-[var(--sh-hair-3)]"
+              >
+                <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: s.color }} aria-hidden />
+                <span className="truncate">{s.name}</span>
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+
+  const renderLabelsCell = () => (
+    <div
+      className="lv-cell lv-cell--labels"
+      data-empty={tags.length === 0}
+      onClick={canEdit ? (e) => openPicker(e, setLabelAnchor) : undefined}
+      style={{ cursor: canEdit ? 'pointer' : 'default' }}
+      title={canEdit ? 'Edit labels' : undefined}
+    >
+      {tags.length > 0 ? (
+        <span className="flex min-w-0 items-center gap-1">
+          {visibleTags.slice(0, 1).map((t) => (
+            <span
+              key={t.id}
+              className="inline-flex max-w-[80px] shrink-0 items-center gap-1 truncate rounded-full px-1.5 py-px text-[10px] font-medium leading-4"
+              style={{
+                background: `${t.color || '#6b7280'}1a`,
+                color: t.color || '#6b7280',
+                border: `1px solid ${t.color || '#6b7280'}33`,
+              }}
+              title={t.name}
+            >
+              <span className="truncate">{t.name}</span>
+            </span>
+          ))}
+          {tags.length > 1 && (
+            <span
+              className="shrink-0 rounded-full bg-[var(--sh-hair-3)] px-1.5 py-px text-[10px] font-medium leading-4 text-[color:var(--sh-ink-3)]"
+              title={tags.map((t) => t.name).join(', ')}
+            >
+              +{tags.length - 1}
+            </span>
+          )}
+        </span>
+      ) : (
+        <span className="lv-cell-value">—</span>
+      )}
+    </div>
+  );
+
+  const renderTypeCell = () => (
+    <div
+      className="lv-cell lv-cell--type"
+      data-empty={!resolvedTaskType}
+      style={{ cursor: canEdit ? 'pointer' : 'default' }}
+      title={canEdit ? 'Change type' : undefined}
+      onClick={(e) => e.stopPropagation()}
+    >
+      {taskTypesList ? (
+        <TaskTypeDropdown
+          taskTypes={taskTypesList}
+          value={task.task_type_id}
+          canEdit={canEdit}
+          onChange={(t) => updateTask.mutate({ id: task.id, task_type_id: t.id } as any)}
+          trigger={
+            resolvedTaskType ? (
+              <span className="lv-pri">
+                <span className="lv-pri-dot" style={{ background: resolvedTaskType.color || 'var(--sh-ink-4)' }} />
+                <span className="lv-pri-label">{resolvedTaskType.name}</span>
+              </span>
+            ) : (
+              <span className="lv-cell-value">—</span>
+            )
+          }
+        />
+      ) : (
+        <span className="lv-cell-value">—</span>
+      )}
+    </div>
+  );
+
+  const renderStartDateCell = () => (
+    <div
+      className="lv-cell lv-cell--date"
+      data-empty={!task.start_date}
+      onClick={canEdit ? (e) => openPicker(e, setStartDateAnchor) : undefined}
+      style={{ cursor: canEdit ? 'pointer' : 'default' }}
+      title={canEdit ? 'Set start date' : undefined}
+    >
+      <span className="lv-cell-value lv-date-text">
+        {task.start_date ? startWhen.text : '—'}
+      </span>
+    </div>
+  );
+
+  const renderEstimateCell = () => (
+    <div
+      className="lv-cell lv-cell--estimate"
+      data-empty={!task.time_estimate}
+      onClick={canEdit ? (e) => openPicker(e, setEstimateAnchor) : undefined}
+      style={{ cursor: canEdit ? 'pointer' : 'default' }}
+      title={canEdit ? 'Set estimate' : undefined}
+    >
+      <span className="lv-cell-value">
+        {task.time_estimate ? formatDuration(task.time_estimate) : '—'}
+      </span>
+    </div>
+  );
+
+  const renderTrackedCell = () => (
+    <div
+      className="lv-cell lv-cell--tracked"
+      data-empty={!totalTrackedSeconds}
+      onClick={(e) => openPicker(e, setLogTimeAnchor)}
+      style={{ cursor: 'pointer' }}
+      title="View / log time"
+    >
+      <span className="lv-cell-value" data-live={isTiming || undefined}>
+        {trackedText ?? '—'}
+      </span>
+    </div>
+  );
+
+  const renderIdCell = () => (
+    <div
+      className="lv-cell lv-cell--id"
+      title={task.display_number != null ? `Task SQ-${String(task.display_number).padStart(3, '0')}` : undefined}
+    >
+      <span className="lv-cell-value lv-id-text">
+        {task.display_number != null ? `SQ-${String(task.display_number).padStart(3, '0')}` : '—'}
+      </span>
+    </div>
+  );
+
+  const formatDay = (iso: string | null | undefined): string => {
+    if (!iso) return '';
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return '';
+    return d.toLocaleDateString([], { day: '2-digit', month: '2-digit', year: '2-digit' });
+  };
+
+  const renderCreatedByCell = () => {
+    const creator = (task as any).creator as { id?: string; display_name?: string | null; email?: string | null } | null | undefined;
+    const name = creator?.display_name || creator?.email || null;
+    return (
+      <div className="lv-cell lv-cell--creator" data-empty={!name} title={name ?? 'Unknown creator'}>
+        {name ? (
+          <span
+            className="lv-ava"
+            style={{ background: avatarColor(creator?.id || creator?.email || name) }}
+          >
+            {initialOf(name)}
+          </span>
+        ) : (
+          <span className="lv-cell-value">—</span>
+        )}
+      </div>
+    );
+  };
+
+  const openTaskDetail = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setActiveTask(task.id);
+  };
+
+  const renderLatestCommentCell = () => {
+    const lc = (task as any).latest_comment as { content?: string; created_at?: string; user?: { display_name?: string | null } | null } | null | undefined;
+    const text = lc?.content?.trim() || '';
+    const author = lc?.user?.display_name || null;
+    return (
+      <div
+        className="lv-cell lv-cell--comment"
+        data-empty={!text}
+        onClick={text ? openTaskDetail : undefined}
+        style={{ cursor: text ? 'pointer' : 'default' }}
+        title={text ? `${author ? `${author} · ` : ''}${formatDay(lc?.created_at)}\n${lc?.content}` : 'No comments yet'}
+      >
+        <span className="lv-cell-value lv-comment-text">
+          {text || '—'}
+        </span>
+      </div>
+    );
+  };
+
+  const renderCommentsCell = () => {
+    const count = (task as any).comment_count as number | undefined;
+    return (
+      <div
+        className="lv-cell lv-cell--comments"
+        data-empty={!count}
+        onClick={count ? openTaskDetail : undefined}
+        style={{ cursor: count ? 'pointer' : 'default' }}
+        title={count ? `View ${count} comment${count === 1 ? '' : 's'}` : 'No comments yet'}
+      >
+        <span className="lv-comment-count">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+          </svg>
+          <span className="lv-cell-value">{count || '—'}</span>
+        </span>
+      </div>
+    );
+  };
+
+  const renderDateCreatedCell = () => (
+    <div className="lv-cell lv-cell--date" title={task.created_at ? `Created ${formatDay(task.created_at)}` : undefined}>
+      <span className="lv-cell-value lv-date-text">
+        {formatDay(task.created_at) || '—'}
+      </span>
+    </div>
+  );
+
+  const renderDateCompletedCell = () => {
+    const doneAt = isDone ? formatDay((task as any).last_status_change_at) : '';
+    return (
+      <div className="lv-cell lv-cell--date" data-empty={!doneAt} title={doneAt ? `Completed ${doneAt}` : undefined}>
+        <span className="lv-cell-value lv-date-text">
+          {doneAt || '—'}
+        </span>
+      </div>
+    );
+  };
+
   return (
     <>
       <div
@@ -300,7 +742,7 @@ export default function TaskRow({
         data-type={isWorkBlock ? 'work_block' : undefined}
         data-tracking={isTiming || undefined}
         data-depth={depth > 0 ? depth : undefined}
-        style={depth > 0 ? { paddingLeft: 20 + depth * 22 } : undefined}
+        style={rowGridStyle}
       >
         {/* Checkbox — toggles done */}
         <button
@@ -508,122 +950,10 @@ export default function TaskRow({
           </div>
         </div>
 
-        {/* Priority cell — clickable, opens PriorityPicker */}
-        <div
-          className="lv-cell lv-cell--priority"
-          data-empty={priority === 'none'}
-          onClick={canEdit ? (e) => openPicker(e, setPriorityAnchor) : undefined}
-          style={{ cursor: canEdit ? 'pointer' : 'default' }}
-          title={canEdit ? 'Change priority' : undefined}
-        >
-          {priority === 'none' ? (
-            <span className="lv-cell-value">—</span>
-          ) : (
-            <span className="lv-pri">
-              <span className="lv-pri-dot" style={{ background: priorityMeta.color }} />
-              <span className="lv-pri-label">{priorityMeta.label}</span>
-            </span>
-          )}
-        </div>
-
-        {/* Assignee cell — clickable, opens AssigneePicker */}
-        <div
-          className="lv-cell lv-cell--assignee"
-          data-empty={assignees.length === 0}
-          onClick={canEdit ? (e) => openPicker(e, setAssigneeAnchor) : undefined}
-          style={{ cursor: canEdit ? 'pointer' : 'default' }}
-          title={canEdit ? 'Change assignees' : undefined}
-        >
-          {assignees.length > 0 ? (
-            <span className="av-stack" aria-label={`${assignees.length} assignee${assignees.length === 1 ? '' : 's'}`}>
-              {assignees.slice(0, 2).map((u) => (
-                <span
-                  key={u.id}
-                  className="lv-ava"
-                  style={{ background: avatarColor(u.id || u.email) }}
-                  title={u.display_name || u.email}
-                >
-                  {initialOf(u.display_name || u.email)}
-                </span>
-              ))}
-              {assignees.length > 2 && (
-                <span className="av-more" title={`${assignees.length - 2} more`}>+{assignees.length - 2}</span>
-              )}
-            </span>
-          ) : (
-            <span className="lv-ava lv-ava--empty" title="Unassigned">–</span>
-          )}
-        </div>
-
-        {/* Work date cell — clickable, opens DatePicker (datetime) */}
-        <div
-          className="lv-cell lv-cell--date"
-          data-empty={!task.work_date}
-          onClick={canEdit ? (e) => openPicker(e, setWorkDateAnchor) : undefined}
-          style={{ cursor: canEdit ? 'pointer' : 'default' }}
-          title={canEdit ? 'Set work date' : undefined}
-        >
-          <span className="lv-cell-value lv-date-text">
-            {task.work_date ? workWhen.text : '—'}
-          </span>
-          {canEdit && (
-            <button
-              type="button"
-              className="lv-date-today-btn"
-              onClick={(e) => {
-                e.stopPropagation();
-                const cur = pendingDates.current.work !== undefined ? pendingDates.current.work : task.work_date;
-                const next = nextQuickDate(cur);
-                pendingDates.current.work = next;
-                updateTask.mutate({ id: task.id, work_date: next } as any);
-              }}
-              aria-label="Set work date to today / tomorrow"
-              title="Click: today · Click again: tomorrow"
-            >
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
-                <line x1="16" y1="2" x2="16" y2="6" />
-                <line x1="8" y1="2" x2="8" y2="6" />
-                <line x1="3" y1="10" x2="21" y2="10" />
-              </svg>
-            </button>
-          )}
-        </div>
-
-        {/* Due date cell — clickable, opens DatePicker (datetime) */}
-        <div
-          className="lv-cell lv-cell--date"
-          data-empty={!task.due_date}
-          onClick={canEdit ? (e) => openPicker(e, setDueDateAnchor) : undefined}
-          style={{ cursor: canEdit ? 'pointer' : 'default' }}
-          title={canEdit ? 'Set due date' : undefined}
-        >
-          <span className={`${dueValueClass} lv-date-text`}>
-            {task.due_date ? dueWhen.text : '—'}
-          </span>
-          {canEdit && (
-            <button
-              type="button"
-              className="lv-date-today-btn"
-              onClick={(e) => {
-                e.stopPropagation();
-                const cur = pendingDates.current.due !== undefined ? pendingDates.current.due : task.due_date;
-                const next = nextQuickDate(cur);
-                pendingDates.current.due = next;
-                updateTask.mutate({ id: task.id, due_date: next } as any);
-              }}
-              aria-label="Set due date to today / tomorrow"
-              title="Click: today · Click again: tomorrow"
-            >
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
-                <line x1="16" y1="2" x2="16" y2="6" />
-                <line x1="8" y1="2" x2="8" y2="6" />
-                <line x1="3" y1="10" x2="21" y2="10" />
-              </svg>
-            </button>
-          )}
-        </div>
+        {/* Field columns — order + visibility controlled per view (Fields menu) */}
+        {visibleColumns.map((id) => (
+          <span key={id} style={{ display: 'contents' }}>{renderColumnCell(id)}</span>
+        ))}
 
         {/* More button (6th column) */}
         <div className="lv-cell--more relative">
@@ -671,6 +1001,7 @@ export default function TaskRow({
           depth={depth + 1}
           canEdit={canEdit}
           listId={listId || (sub as any).list_id || sub.list?.id || ''}
+          columns={visibleColumns}
         />
       ))}
 
@@ -760,6 +1091,50 @@ export default function TaskRow({
           mode="datetime"
           onChange={(next) => updateTask.mutate({ id: task.id, due_date: next, list_id: effectiveListId || undefined } as any)}
           onClose={() => setDueDateAnchor(null)}
+        />
+      )}
+
+      {startDateAnchor && (
+        <DatePicker
+          anchorRect={startDateAnchor}
+          value={task.start_date}
+          mode="datetime"
+          onChange={(next) => updateTask.mutate({ id: task.id, start_date: next, list_id: effectiveListId || undefined } as any)}
+          onClose={() => setStartDateAnchor(null)}
+        />
+      )}
+
+      {labelAnchor && (
+        <LabelPicker
+          taskId={task.id}
+          attachedTagIds={(tags || []).map((t) => t.id)}
+          anchorRect={labelAnchor}
+          onClose={() => setLabelAnchor(null)}
+        />
+      )}
+
+      {estimateAnchor && (
+        <EstimatePopover
+          anchorRect={estimateAnchor}
+          value={task.time_estimate ?? null}
+          onApply={(mins) => updateTask.mutate({ id: task.id, time_estimate: mins } as any)}
+          onClose={() => setEstimateAnchor(null)}
+        />
+      )}
+
+      {logTimeAnchor && (
+        <LogTimePopover
+          anchorRect={logTimeAnchor}
+          taskId={task.id}
+          totalSeconds={task.time_tracked || 0}
+          estimateMinutes={task.time_estimate ?? null}
+          currentUserId={currentUser?.id ?? null}
+          canLog={canEdit}
+          isRunning={isTiming}
+          runningSeconds={tickElapsed}
+          onStartTimer={canEdit ? () => void startRowTimer() : undefined}
+          onStopTimer={canEdit ? () => void stopRowTimer() : undefined}
+          onClose={() => setLogTimeAnchor(null)}
         />
       )}
 
