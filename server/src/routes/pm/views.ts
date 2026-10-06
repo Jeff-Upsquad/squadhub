@@ -10,6 +10,11 @@ const router = Router();
 router.use(requireAuth);
 router.use(requireUserType('internal', ...PARTNER_USER_TYPES, 'client', 'client_staff'));
 
+const columnSchema = z.object({
+  id: z.enum(['status', 'priority', 'assignee', 'labels', 'type', 'startDate', 'workDate', 'dueDate', 'estimate', 'tracked', 'taskId', 'createdBy', 'latestComment', 'comments', 'dateCreated', 'dateCompleted']),
+  visible: z.boolean(),
+});
+
 const configSchema = z
   .object({
     filters: z.record(z.any()).optional(),
@@ -21,6 +26,7 @@ const configSchema = z
     defaultTaskTypeId: z.string().nullable().optional(),
     defaultLabel: z.string().nullable().optional(),
     showAllTasks: z.boolean().optional(),
+    columns: z.array(columnSchema).max(12).optional(),
   })
   .passthrough()
   .default({});

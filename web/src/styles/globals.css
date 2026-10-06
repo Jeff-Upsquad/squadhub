@@ -3794,7 +3794,10 @@ body.sb-resizing { user-select: none; -webkit-user-select: none; cursor: col-res
 .lv-canvas .lv-card .lv-row,
 .lv-card .lv-card-body .lv-row,
 .lv-card .lv-row {
-  grid-template-columns: 22px minmax(0,1fr) 84px 64px 100px 90px 24px !important;
+  /* No !important on grid-template-columns: TaskRow sets it inline from the
+     view's visible-field order (Fields menu). Inline style still beats the
+     legacy 5-col rule below by specificity; !important would block it. */
+  grid-template-columns: 22px minmax(0,1fr) 84px 64px 100px 90px 24px;
   gap: 0 !important;
   padding: 0 14px !important;
   margin: 0 !important;
@@ -3875,6 +3878,48 @@ body.sb-resizing { user-select: none; -webkit-user-select: none; cursor: col-res
 .lv-card .lv-cell:hover { background: transparent; }
 .lv-card .lv-cell--assignee { justify-content: center !important; }
 .lv-card .lv-cell--date { justify-content: center !important; }
+
+/* Comment columns — count badge + latest-comment snippet (ellipsis). */
+.lv-comment-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  color: var(--sh-ink-3);
+}
+.lv-cell--comment .lv-comment-text {
+  display: block;
+  min-width: 0;
+}
+
+/* Column-header "+" — opens the field manager for the view. Lives in the
+   trailing slot of each group header (same cell as the row ⋯ buttons). */
+@keyframes cfm-in {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+.cfm-panel {
+  animation: cfm-in 220ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.lv-col-add {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  border: none;
+  background: color-mix(in srgb, #10b981 18%, transparent);
+  color: #10b981;
+  cursor: pointer;
+  padding: 0;
+  transition: background 120ms, color 120ms, transform 120ms;
+}
+.lv-col-add:hover {
+  background: color-mix(in srgb, #10b981 30%, transparent);
+  color: #059669;
+  transform: scale(1.06);
+}
 
 /* Shared Focus Today star — the list and detail panel use the same small,
    warm interaction. The burst only mounts after a deliberate click, so focused

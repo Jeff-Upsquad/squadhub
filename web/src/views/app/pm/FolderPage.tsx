@@ -9,6 +9,9 @@ import { useIsMobile } from '../../../hooks/useIsMobile';
 import TaskGroupCard from './TaskGroupCard';
 import { GROUP_BY_OPTIONS, groupTasks, partitionByCompletion, buildFocusTodayGroup, isTaskCompleted, isTaskUpcoming, nestSubtasks, filterWithSubtasks, sortByCreationOrder, type GroupBy } from '../../../lib/taskGrouping';
 import MinimalGroupFilterBar from '../../../components/pm/MinimalGroupFilterBar';
+import FieldManagerPanel from '../../../components/pm/FieldManagerPanel';
+import { useColumnPrefs } from '../../../hooks/useColumnPrefs';
+import { visibleColumnIds } from '../../../lib/columns';
 import ViewSearchInput from '../../../components/pm/ViewSearchInput';
 import ContainerChatButton from '../../../components/pm/ContainerChatButton';
 import ListChipsFilter from '../../../components/pm/ListChipsFilter';
@@ -47,6 +50,27 @@ export default function FolderPage({ folderId: propFolderId }: { folderId?: stri
 
   const scopeKey = activeFolderId ? `folder:${activeFolderId}` : '';
   const filters = (scopeKey && filtersByScope[scopeKey]) || EMPTY_FILTER;
+
+  const [fieldsOpen, setFieldsOpen] = useState(false);
+
+  // Field (column) visibility + order for this folder view (personal, synced).
+  const {
+    columns: folderColumnStates,
+    hasPersonalOverride: hasFolderColumnOverride,
+    setColumns: setFolderColumns,
+    resetColumns: resetFolderColumns,
+  } = useColumnPrefs(scopeKey);
+  const folderVisibleColumns = useMemo(() => visibleColumnIds(folderColumnStates), [folderColumnStates]);
+  const folderColumnControls = useMemo(
+    () => ({
+      states: folderColumnStates,
+      onChange: setFolderColumns,
+      onReset: resetFolderColumns,
+      hasOverride: hasFolderColumnOverride,
+      onOpenManager: () => setFieldsOpen(true),
+    }),
+    [folderColumnStates, hasFolderColumnOverride, setFolderColumns, resetFolderColumns],
+  );
 
   useEffect(() => {
     setContextListId(listFilter === 'all' ? null : listFilter);
@@ -310,6 +334,8 @@ export default function FolderPage({ folderId: propFolderId }: { folderId?: stri
                 variant="focus"
                 tasks={focusGroup.tasks}
                 allStatuses={spaceStatuses}
+                columns={folderVisibleColumns}
+                columnControls={folderColumnControls}
                 listId={null}
                 onStatusChange={noopStatusChange}
                 canEdit
@@ -323,6 +349,8 @@ export default function FolderPage({ folderId: propFolderId }: { folderId?: stri
                   label="All tasks"
                   tasks={currentOpenTasks}
                   allStatuses={spaceStatuses}
+                columns={folderVisibleColumns}
+                columnControls={folderColumnControls}
                   listId={null}
                   onStatusChange={noopStatusChange}
                   canEdit
@@ -339,6 +367,8 @@ export default function FolderPage({ folderId: propFolderId }: { folderId?: stri
                   dotColor={g.color}
                   tasks={g.tasks}
                   allStatuses={spaceStatuses}
+                columns={folderVisibleColumns}
+                columnControls={folderColumnControls}
                   listId={null}
                   onStatusChange={noopStatusChange}
                   canEdit
@@ -354,6 +384,8 @@ export default function FolderPage({ folderId: propFolderId }: { folderId?: stri
                 dotColor="#0ea5e9"
                 tasks={upcomingTasks}
                 allStatuses={spaceStatuses}
+                columns={folderVisibleColumns}
+                columnControls={folderColumnControls}
                 listId={null}
                 onStatusChange={noopStatusChange}
                 canEdit
@@ -369,6 +401,8 @@ export default function FolderPage({ folderId: propFolderId }: { folderId?: stri
                 dotColor="#7c3aed"
                 tasks={completedTasks}
                 allStatuses={spaceStatuses}
+                columns={folderVisibleColumns}
+                columnControls={folderColumnControls}
                 listId={null}
                 onStatusChange={noopStatusChange}
                 canEdit
@@ -379,6 +413,15 @@ export default function FolderPage({ folderId: propFolderId }: { folderId?: stri
           </>
         )}
       </div>
+
+      <FieldManagerPanel
+        open={fieldsOpen}
+        onClose={() => setFieldsOpen(false)}
+        columns={folderColumnStates}
+        onChange={setFolderColumns}
+        onReset={resetFolderColumns}
+        hasOverride={hasFolderColumnOverride}
+      />
     </div>
   );
 }

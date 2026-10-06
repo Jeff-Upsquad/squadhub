@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
-import type { SpaceStatus, Task, ListViewRow } from '@squadhub/shared';
+import type { SpaceStatus, Task, ListViewRow, ListViewColumnId } from '@squadhub/shared';
+import type { ColumnControls } from '../../../lib/columns';
 import { useTasks, useUpdateTask, groupTasksByStatus } from '../../../hooks/useTasks';
 import { useTaskTypes } from '../../../hooks/useTaskTypes';
 import { usePMStore, type ListGroupBy } from '../../../stores/pmStore';
@@ -23,6 +24,8 @@ export default function ListView({
   focusToday = false,
   activeView,
   allViews = [],
+  columns,
+  columnControls,
 }: {
   listId: string;
   statuses: SpaceStatus[];
@@ -36,6 +39,8 @@ export default function ListView({
   focusToday?: boolean;
   activeView?: ListViewRow | null;
   allViews?: ListViewRow[];
+  columns?: ListViewColumnId[];
+  columnControls?: ColumnControls;
 }) {
   // Include subtasks as flat rows, then nest them under their parents so each
   // parent row gets the expandable subtask dropdown (TaskRow's chevron) instead
@@ -152,6 +157,8 @@ export default function ListView({
         dotColor="#0ea5e9"
         tasks={upcomingTasks}
         allStatuses={statuses}
+        columns={columns}
+        columnControls={columnControls}
         listId={listId}
         onStatusChange={handleStatusChange}
         canEdit={canEdit}
@@ -169,6 +176,8 @@ export default function ListView({
         dotColor="#7c3aed"
         tasks={tasksToShow}
         allStatuses={statuses}
+        columns={columns}
+        columnControls={columnControls}
         listId={listId}
         onStatusChange={handleStatusChange}
         canEdit={canEdit}
@@ -205,6 +214,8 @@ export default function ListView({
             variant="focus"
             tasks={focusGroup.tasks}
             allStatuses={statuses}
+            columns={columns}
+            columnControls={columnControls}
             listId={listId}
             onStatusChange={handleStatusChange}
             canEdit={canEdit}
@@ -237,6 +248,8 @@ export default function ListView({
                 dotColor={status.color}
                 tasks={groupTasks}
                 allStatuses={statuses}
+                columns={columns}
+                columnControls={columnControls}
                 listId={listId}
                 onStatusChange={handleStatusChange}
                 canEdit={canEdit}
@@ -260,6 +273,8 @@ export default function ListView({
                 label="All tasks"
                 tasks={currentOpenTasks}
                 allStatuses={statuses}
+                columns={columns}
+                columnControls={columnControls}
                 listId={listId}
                 onStatusChange={handleStatusChange}
                 canEdit={canEdit}
@@ -284,6 +299,8 @@ export default function ListView({
                 dotColor={g.color}
                 tasks={g.tasks}
                 allStatuses={statuses}
+                columns={columns}
+                columnControls={columnControls}
                 listId={listId}
                 onStatusChange={handleStatusChange}
                 canEdit={canEdit}
