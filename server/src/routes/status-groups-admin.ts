@@ -10,6 +10,7 @@ import {
   spaceHasSeedStatuses,
   loadTaskStatusOverrides,
 } from '../utils/statusGroups';
+import { isSystemStatus, isSystemStatusKey, SYSTEM_STATUS_PRESETS } from '@squadhub/shared';
 
 // Fire-and-forget refresh of the shared Task Workflow override registry
 // (same-process admin edits take effect immediately; never throws).
@@ -127,7 +128,10 @@ router.get('/', async (_req: Request, res: Response) => {
     const statusesByGroup = new Map<string, any[]>();
     for (const s of statuses || []) {
       const list = statusesByGroup.get(s.group_id) || [];
-      list.push(s);
+      list.push({
+        ...s,
+        is_system: isSystemStatus(s),
+      });
       statusesByGroup.set(s.group_id, list);
     }
 
@@ -559,20 +563,25 @@ router.post('/:id/statuses', async (req: Request, res: Response) => {
       ? Math.max(...existing.map((s: any) => s.position)) + 1
       : 0;
 
+    const rawSlug = slugify(body.name);
+    const canonicalKey = body.key || (isSystemStatusKey(rawSlug) ? rawSlug : rawSlug);
+    const isSystem = isSystemStatusKey(canonicalKey);
+    const preset = isSystem ? SYSTEM_STATUS_PRESETS.find((p) => p.key === canonicalKey) : null;
+
     const { data, error } = await supabaseAdmin
       .from('status_group_statuses')
       .insert({
         group_id: (req.params.id as string),
-        key: body.key || slugify(body.name),
+        key: canonicalKey,
         name: body.name,
-        description: body.description ?? null,
-        color: body.color || '#6b7280',
-        category: body.category || 'todo',
+        description: body.description ?? preset?.description ?? null,
+        color: body.color || preset?.color || '#6b7280',
+        category: body.category || preset?.category || 'todo',
         is_default: body.is_default ?? existing.length === 0,
         position: nextPos,
-        section: body.section || null,
-        section_label: body.section_label ?? null,
-        section_emoji: body.section_emoji ?? null,
+        section: body.section || preset?.section || null,
+        section_label: body.section_label ?? preset?.section_label ?? null,
+        section_emoji: body.section_emoji ?? preset?.section_emoji ?? null,
       })
       .select()
       .single();
@@ -620,6 +629,21 @@ router.put('/:id/statuses/reorder', async (req: Request, res: Response) => {
 // PUT /admin/status-groups/:id/statuses/:statusId
 router.put('/:id/statuses/:statusId', async (req: Request, res: Response) => {
   try {
+    const { data: existing } = await supabaseAdmin
+      .from('status_group_statuses')
+      .select('id, key, is_system')
+      .eq('id', (req.params.statusId as string))
+      .eq('group_id', (req.params.id as string))
+      .maybeSingle();
+    if (!existing) {
+      res.status(404).json({ success: false, error: 'Status not found' });
+      return;
+    }
+    if (isSystemStatus(existing as any)) {
+      res.status(400).json({ success: false, error: 'System default status cannot be edited or changed' });
+      return;
+    }
+
     const body = statusUpdateSchema.parse(req.body);
     const patch: Record<string, any> = {};
     if (body.name !== undefined) patch.name = body.name;
@@ -661,12 +685,16 @@ router.delete('/:id/statuses/:statusId', async (req: Request, res: Response) => 
   try {
     const { data: existing } = await supabaseAdmin
       .from('status_group_statuses')
-      .select('id')
+      .select('id, key, is_system')
       .eq('id', (req.params.statusId as string))
       .eq('group_id', (req.params.id as string))
       .maybeSingle();
     if (!existing) {
       res.status(404).json({ success: false, error: 'Status not found' });
+      return;
+    }
+    if (isSystemStatus(existing as any)) {
+      res.status(400).json({ success: false, error: 'System default status cannot be deleted' });
       return;
     }
     const { error } = await supabaseAdmin

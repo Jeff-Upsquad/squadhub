@@ -29,7 +29,8 @@ import { GoalTaskFlag } from '../goals/GoalIntegration';
 import { useGoalsUI } from '../goals/goalsStore';
 import GoalIcon from '../goals/GoalIcons';
 import FocusStarButton from '../../../components/pm/FocusStarButton';
-import type { ListViewColumnId } from '@squadhub/shared';
+import TaskRelationshipsButton from '../../../components/pm/TaskRelationshipsButton';
+import { getTaskStatusDef, type ListViewColumnId } from '@squadhub/shared';
 import { DEFAULT_VISIBLE_IDS, gridTemplateFor } from '../../../lib/columns';
 
 const DEFAULT_VISIBLE_COLUMNS: ListViewColumnId[] = DEFAULT_VISIBLE_IDS;
@@ -458,22 +459,27 @@ export default function TaskRow({
     await stopTimer(task.id);
   };
 
-  const renderStatusCell = () => (
-    <div
-      className="lv-cell lv-cell--status relative"
-      data-empty={!currentStatus}
-      onClick={canEdit ? () => setStatusOpen((v) => !v) : undefined}
-      style={{ cursor: canEdit ? 'pointer' : 'default' }}
-      title={canEdit ? 'Change status' : undefined}
-    >
-      {currentStatus ? (
-        <span className="lv-pri">
-          <span className="lv-pri-dot" style={{ background: currentStatus.color }} />
-          <span className="lv-pri-label">{currentStatus.name}</span>
-        </span>
-      ) : (
-        <span className="lv-cell-value">—</span>
-      )}
+  const renderStatusCell = () => {
+    const catalogDef = !currentStatus ? getTaskStatusDef(statusCategory) : null;
+    const statusLabel = currentStatus?.name ?? catalogDef?.label ?? null;
+    const statusColor = currentStatus?.color ?? catalogDef?.color ?? '#6b7280';
+
+    return (
+      <div
+        className="lv-cell lv-cell--status relative"
+        data-empty={!statusLabel}
+        onClick={canEdit ? () => setStatusOpen((v) => !v) : undefined}
+        style={{ cursor: canEdit ? 'pointer' : 'default' }}
+        title={canEdit ? 'Change status' : undefined}
+      >
+        {statusLabel ? (
+          <span className="lv-pri">
+            <span className="lv-pri-dot" style={{ background: statusColor }} />
+            <span className="lv-pri-label">{statusLabel}</span>
+          </span>
+        ) : (
+          <span className="lv-cell-value">—</span>
+        )}
       {statusOpen && canEdit && (
         <>
           <div className="fixed inset-0 z-10" onClick={(e) => { e.stopPropagation(); setStatusOpen(false); }} />
@@ -497,6 +503,7 @@ export default function TaskRow({
       )}
     </div>
   );
+};
 
   const renderLabelsCell = () => (
     <div
@@ -897,6 +904,7 @@ export default function TaskRow({
               onToggle={(focused) => focusTask.mutate({ id: task.id, focused })}
             />
             <GoalTaskFlag taskId={task.id} />
+            <TaskRelationshipsButton task={task} canEdit={canEdit} />
             {canEdit && (
               <button
                 type="button"

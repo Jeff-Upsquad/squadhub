@@ -1,5 +1,5 @@
 import { supabaseAdmin } from '../supabase';
-import { registerTaskStatusDefs, statusGroupRowToTaskDef } from '@squadhub/shared';
+import { registerTaskStatusDefs, statusGroupRowToTaskDef, isSystemStatus } from '@squadhub/shared';
 
 /**
  * Status-group helpers shared by the admin routes and the PM creation hooks.
@@ -19,7 +19,10 @@ export async function getGroupStatuses(groupId: string) {
     .eq('group_id', groupId)
     .order('position', { ascending: true });
   if (error) throw new Error(error.message);
-  return (data || []) as any[];
+  return (data || []).map((s: any) => ({
+    ...s,
+    is_system: isSystemStatus(s),
+  }));
 }
 
 /** Fetch an enabled group by key with ordered statuses (null when missing/disabled). */
