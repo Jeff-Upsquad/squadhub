@@ -13,6 +13,7 @@ export interface Activity {
   project?: string;
   note?: string | null;
   source?: string;
+  isManual?: boolean;
   children?: WorkBlockChildEntry[];
   segments?: Activity[];
 }
@@ -79,7 +80,8 @@ export function taskActivities(entries: TaskTimeEntry[]): Activity[] {
     id: `entry:${e.id}`, kind: e.source === 'work_block' ? 'block' : 'task',
     title: e.task?.title || 'Archived task', start: Date.parse(e.started_at), end: Date.parse(e.stopped_at),
     seconds: e.duration_seconds, taskId: e.task_id, project: [e.task?.space?.name, e.task?.list?.name].filter(Boolean).join(' / '),
-    note: e.note, source: e.source === 'manual' ? 'Manually logged' : e.source === 'work_block' ? 'Work block timer' : 'Task timer', children: e.children,
+    note: e.note, source: e.source === 'manual' ? 'Manually logged' : e.source === 'work_block' ? 'Work block timer' : 'Task timer',
+    isManual: e.source === 'manual', children: e.children,
   }));
 }
 /** Keep credited task time (including parallel shares) distinct from elapsed wall time. */
@@ -90,7 +92,7 @@ export function clipActivity(event: Activity, from: number, to: number): Activit
   if (event.segments) {
     const segments = event.segments.map(segment => clipActivity(segment, from, to)).filter((segment): segment is Activity => !!segment);
     if (!segments.length) return null;
-    return { ...event, start: Math.min(...segments.map(s => s.start)), end: Math.max(...segments.map(s => s.end)), seconds: segments.reduce((sum, s) => sum + s.seconds, 0), segments, live: segments.some(s => s.live) };
+    return { ...event, start: Math.min(...segments.map(s => s.start)), end: Math.max(...segments.map(s => s.end)), seconds: segments.reduce((sum, s) => sum + s.seconds, 0), segments, live: segments.some(s => s.live), isManual: event.isManual };
   }
   return { ...event, start, end, seconds: event.seconds * (end - start) / (event.end - event.start) };
 }
@@ -106,7 +108,8 @@ export function combineTaskSegments(events: Activity[]): Activity[] {
       const date = dayKey(stamp), next = dayStart(shiftDay(date, 1));
       const clipped = clipActivity(event, dayStart(date), next);
       if (clipped) {
-        const key = `task-day:${event.taskId}:${date}`;
+        const manualKey = clipped.isManual ? 'manual' : 'timer';
+        const key = `task-day:${event.taskId}:${date}:${manualKey}`;
         const segments = grouped.get(key) || [];
         segments.push(...(clipped.segments || [clipped]));
         grouped.set(key, segments);
@@ -140,6 +143,7 @@ export function combineTaskSegments(events: Activity[]): Activity[] {
     for (let i = 0; i < runs.length; i++) {
       const run = runs[i];
       const id = runs.length === 1 ? key : `${key}:${i}`;
+      const isManual = run.some(s => s.isManual);
       result.push({
         ...run[run.length - 1],
         id,
@@ -147,7 +151,8 @@ export function combineTaskSegments(events: Activity[]): Activity[] {
         end: Math.max(...run.map(s => s.end)),
         seconds: run.reduce((sum, s) => sum + s.seconds, 0),
         live: run.some(s => s.live),
-        source: run.length > 1 ? 'Task time' : run[0].source,
+        source: run.length > 1 ? (isManual ? 'Manually logged' : 'Task time') : run[0].source,
+        isManual,
         note: run.length > 1 ? null : run[0].note,
         segments: run.length > 1 ? run : undefined,
       });

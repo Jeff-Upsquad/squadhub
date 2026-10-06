@@ -102,9 +102,16 @@ function CalendarData({ events, commitment, loading = false, error = false, onRe
     <button key={event.id} className="ta-event" data-kind={event.kind} data-selected={event.id === selectedId} data-short={height < 43}
       style={{ top, height: Math.max(MIN_EVENT_HEIGHT, height - EVENT_GAP), left, width, '--event-color': KINDS.find(k => k.kind === event.kind)!.color } as CSSProperties}
       onClick={() => setSelectedId(event.id === selectedId ? null : event.id)}
-      aria-label={`${event.title}, ${clock(event.start)} to ${event.live ? 'now' : clock(event.end)}, ${duration(event.seconds)}`}
-      title={`${event.title} · ${clock(event.start)}–${event.live ? 'now' : clock(event.end)} · ${duration(event.seconds)}`}>
-      <span className="ta-event-title"><span>{event.live && <i className="ta-live-dot" />}{event.title}</span><b title="Logged time">{duration(event.seconds)}</b></span>
+      aria-label={`${event.title}, ${clock(event.start)} to ${event.live ? 'now' : clock(event.end)}, ${duration(event.seconds)}${event.isManual ? ', manually entered' : ''}`}
+      title={`${event.title} · ${clock(event.start)}–${event.live ? 'now' : clock(event.end)} · ${duration(event.seconds)}${event.isManual ? ' · Manually entered' : ''}`}>
+      <span className="ta-event-title">
+        <span className="ta-event-name">
+          {event.live && <i className="ta-live-dot" />}
+          <span className="ta-event-text">{event.title}</span>
+          {event.isManual && <span className="ta-manual-tag">manual</span>}
+        </span>
+        <b title="Logged time">{duration(event.seconds)}</b>
+      </span>
       {height >= 43 && <span className="ta-event-time">{clock(event.start)} – {event.live ? 'now' : clock(event.end)}</span>}
       {height >= 78 && event.project && <span className="ta-event-project">{event.project}</span>}
       {height >= 105 && event.kind === 'block' && <span className="ta-event-badge">{event.children?.length || 0} tasks in this block</span>}
@@ -145,7 +152,14 @@ function CalendarData({ events, commitment, loading = false, error = false, onRe
               return <div className="ta-day-column" key={key} style={{ flex: `0 0 ${width}px` }}>
                 {layout.map((lane, i) => <div className="ta-lane" key={i} style={{ flex: `0 0 ${widths[i]}px` }}>{lane.map(({ event, column, columns }) => {
                   const attendance = view === 'day' && i === 0;
-                  const columnWidth = attendance ? widths[i] / columns : view === 'week' ? 140 : 160;
+                  const visibleLaneWidth = Math.max(320, (calendarWidth - gutterWidth) * 0.62);
+                  const columnWidth = attendance
+                    ? widths[i] / columns
+                    : view === 'week'
+                      ? 140
+                      : columns <= 4
+                        ? Math.max(100, (visibleLaneWidth - 10) / columns)
+                        : 160;
                   const cardWidth = columns === 1 ? Math.min(widths[i], attendance ? widths[i] : 360) : columnWidth;
                   return display(event, (event.start - start) / 3600000 * HOUR_HEIGHT, (event.end - event.start) / 3600000 * HOUR_HEIGHT,
                     `${column * columnWidth + 5}px`, `${cardWidth - 10}px`);
@@ -158,11 +172,11 @@ function CalendarData({ events, commitment, loading = false, error = false, onRe
         </div>}
     </div>
     {selected && <div className="ta-detail" aria-live="polite">
-      <><div className="ta-detail-top"><i style={{ background: KINDS.find(k => k.kind === selected.kind)!.color }} /><strong>{selected.title}</strong><span>{duration(selected.seconds)}</span><button className="ta-icon-btn" onClick={() => setSelectedId(null)} aria-label="Dismiss session details"><Glyph name="close" /></button></div>
+      <><div className="ta-detail-top"><i style={{ background: KINDS.find(k => k.kind === selected.kind)!.color }} /><strong>{selected.title}</strong>{selected.isManual && <span className="ta-manual-tag">manual</span>}<span>{duration(selected.seconds)}</span><button className="ta-icon-btn" onClick={() => setSelectedId(null)} aria-label="Dismiss session details"><Glyph name="close" /></button></div>
         <p>{clock(selected.start)} – {selected.live ? 'Now · tracking' : clock(selected.end)}<span>·</span>{selected.source}{selected.project && <><span>·</span>{selected.project}</>}</p>
         {selected.note && <p>{selected.note}</p>}
         {!!selected.segments?.length && <details className="ta-segments"><summary>{selected.segments.length} time segments · {duration(selected.seconds)} tracked</summary>
-          {selected.segments.map(segment => <div key={`${segment.id}:${segment.start}`}><span>{clock(segment.start)} – {segment.live ? 'Now · tracking' : clock(segment.end)}<small>{segment.source}{segment.note ? ` · ${segment.note}` : ''}</small></span><b>{duration(segment.seconds)}</b></div>)}
+          {selected.segments.map(segment => <div key={`${segment.id}:${segment.start}`}><span>{clock(segment.start)} – {segment.live ? 'Now · tracking' : clock(segment.end)}<small>{segment.source}{segment.isManual ? ' · manual' : ''}{segment.note ? ` · ${segment.note}` : ''}</small></span><b>{duration(segment.seconds)}</b></div>)}
         </details>}
         {!!selected.children?.length && <div className="ta-children">{selected.children.map(c => <div key={c.task_id}><span>{c.completed ? '✓ ' : '↳ '}{c.title}</span><b>{duration(c.seconds)}</b></div>)}</div>}
         {selected.taskId && onOpenTask && <button className="ta-open-task" onClick={() => onOpenTask(selected.taskId!)}>Open task<Glyph name="arrow" /></button>}

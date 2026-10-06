@@ -33,6 +33,7 @@ function sampleTasks(): Activity[] {
     ] },
     make(date, 780, 807, 'task', 'Agency — review required features', 'SquadHire / Product'),
     make(date, 807, 827, 'task', 'GST filings checking', 'Accounts / Finance'),
+    { ...make(date, 830, 930, 'task', 'Tax preparation', 'Accounts / Finance'), source: 'Manually logged', isManual: true },
   ];
   // Dense short sessions reproduce the crowding seen in real task timer history.
   for (let i = 0; i < 30; i++) {
