@@ -78,12 +78,24 @@ export interface FolderLite {
   lists?: ListLite[];
 }
 
+export interface SpaceStatus {
+  id: string;
+  space_id: string;
+  name: string;
+  color: string;
+  position: number;
+  is_default: boolean;
+  category: string;
+}
+
 export interface SpaceLite {
   id: string;
   name: string;
   color?: string | null;
   lists?: ListLite[];
   folders?: FolderLite[];
+  /** Present on GET /pm/spaces/:id (space_statuses join). */
+  space_statuses?: SpaceStatus[];
 }
 
 export interface WorkspaceLite {
@@ -139,12 +151,35 @@ export interface LabelPickerData {
   can_create: boolean;
 }
 
+export interface TaskType {
+  id: string;
+  key: string;
+  name: string;
+  description: string | null;
+  group_name?: string | null;
+  icon: string;
+  color: string;
+  position: number;
+  is_default: boolean;
+  is_system: boolean;
+  is_enabled: boolean;
+}
+
+/** GET /pm/task-types — task types the caller can use when creating a task. */
+export function fetchTaskTypes(): Promise<TaskType[]> {
+  return apiJson<TaskType[]>('/pm/task-types');
+}
+
 export interface CreateTaskPayload {
   list_id: string;
   title: string;
   description?: string;
+  status?: string;
   priority?: TaskPriority;
   work_date?: string | null;
+  start_date?: string | null;
+  due_date?: string | null;
+  task_type_id?: string | null;
   assignee_ids?: string[];
   time_estimate?: number;
   start_timer?: boolean;

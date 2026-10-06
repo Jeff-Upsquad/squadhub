@@ -525,9 +525,9 @@ body.qa-window {
   border-color: #f5c518;
 }
 
-/* Quick-add: description */
+/* Quick-add: description (always visible, directly under the title) */
 .qa-desc {
-  padding-left: 36px;
+  padding-left: 0;
 }
 
 .qa-textarea {
@@ -888,4 +888,294 @@ body.qa-window {
   letter-spacing: 0.06em;
   color: var(--text-muted);
   padding: 8px 9px 2px;
+}
+
+/* Quick-add: redesign — section labels + Where row */
+.qa-sec-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  padding-left: 2px;
+  margin-top: 2px;
+}
+
+.qa-where {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  padding-bottom: 5px;
+  scrollbar-width: thin;
+}
+
+.qa-where .qa-chip {
+  flex-shrink: 0;
+}
+
+.qa-locsearch {
+  position: sticky;
+  right: 0;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--bg-card);
+  flex-shrink: 0;
+}
+
+/* Quick-add: self-assign circle next to the assignee pill */
+.qa-assign-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.qa-mecircle {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  background: transparent;
+  border: 1.5px dashed var(--text-muted);
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 0;
+  transition: border-color 0.12s, background 0.12s, color 0.12s;
+}
+
+.qa-mecircle:hover {
+  border-color: var(--text);
+  color: var(--text);
+}
+
+.qa-mecircle.on {
+  background: var(--primary);
+  border: 1.5px solid var(--primary);
+  color: #fff;
+}
+
+.qa-mecircle-initials {
+  font-size: 10px;
+  font-weight: 700;
+}
+
+/* Quick-add: work-date quick chips */
+.qa-quickchips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 10px 11px 4px;
+}
+
+.qa-qchip {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0;
+  padding: 6px 12px;
+  max-width: none;
+}
+
+.qa-qchip-label {
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.qa-qchip-sub {
+  font-size: 10px;
+  opacity: 0.65;
+  font-weight: 400;
+}
+
+/* Quick-add: compact month calendar */
+.qa-cal {
+  padding: 4px 11px 2px;
+  max-width: 228px;
+}
+
+.qa-cal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+
+.qa-cal-title {
+  font-size: 11.5px;
+  font-weight: 700;
+}
+
+.qa-cal-nav {
+  width: 20px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  color: var(--text-muted);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.qa-cal-nav:hover {
+  color: var(--text);
+  border-color: var(--text-muted);
+}
+
+.qa-cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 24px);
+  gap: 1px;
+}
+
+.qa-cal-dow {
+  font-size: 8.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  text-align: center;
+  padding: 2px 0;
+}
+
+.qa-cal-day {
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: var(--text);
+  font-size: 11px;
+  cursor: pointer;
+  padding: 0;
+}
+
+.qa-cal-day:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.qa-cal-day.today {
+  border-color: var(--text-muted);
+}
+
+.qa-cal-day.sel {
+  background: rgba(99, 102, 241, 0.25);
+  border-color: var(--primary);
+  font-weight: 700;
+}
+
+/* Quick-add: start→due range menu */
+.qa-range {
+  display: flex;
+  gap: 10px;
+  align-items: flex-end;
+  padding: 10px 12px;
+  flex-wrap: wrap;
+}
+
+.qa-range label {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+/* Quick-add: menu hint + footer rows */
+.qa-menu-hint {
+  font-size: 11px;
+  color: var(--text-muted);
+  padding: 9px 11px 0;
+}
+
+.qa-menu-foot {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 7px 11px;
+  font-size: 10.5px;
+  color: var(--text-muted);
+  border-top: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.qa-linkbtn {
+  background: transparent;
+  border: none;
+  color: var(--primary);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+/* Quick-add: task-type picker rows */
+.qa-type-scroll {
+  max-height: 260px;
+}
+
+.qa-type-group {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.qa-type-count {
+  font-weight: 400;
+  opacity: 0.7;
+}
+
+.qa-type-row {
+  align-items: flex-start;
+}
+
+.qa-type-row.hi {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.qa-type-badge {
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.qa-type-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.qa-type-name {
+  font-size: 12.5px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.qa-type-default {
+  font-size: 9px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+}
+
+.qa-type-desc {
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.35;
+  white-space: normal;
 }

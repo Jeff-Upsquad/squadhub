@@ -7,6 +7,7 @@ import {
   fetchSpaces,
   fetchSpace,
   fetchAssignableUsers,
+  fetchTaskTypes,
   createTask,
   setTaskFocus,
   uploadTaskAttachment,
@@ -16,8 +17,10 @@ import {
   logTaskTime,
   type AssignableUser,
   type ListLite,
+  type SpaceStatus,
   type TaskPriority,
   type TaskTag,
+  type TaskType,
   type LabelPickerGroup,
 } from './services/api';
 import { login } from './services/auth';
@@ -26,11 +29,11 @@ import { formatDuration, parseDuration } from './timeDuration';
 
 // Cached across summons of the (persistent) quickadd window so we only resolve
 // the personal list / list tree once per app run.
-let cachedPersonal: { id: string; name: string } | null = null;
+let cachedPersonal: { id: string; name: string; spaceId: string } | null = null;
 
 type Phase = 'idle' | 'saving' | 'done' | 'error';
-type MenuKey = 'list' | 'assignee' | 'priority' | 'date' | 'labels' | 'logged' | 'estimate' | null;
-type SelectedList = { id: string; name: string };
+type MenuKey = 'list' | 'assignee' | 'priority' | 'date' | 'rangedate' | 'labels' | 'logged' | 'estimate' | 'type' | 'status' | null;
+type SelectedList = { id: string; name: string; spaceId?: string };
 
 // A file the user has dropped onto the panel, queued to upload once the task
 // itself is created. `previewUrl` is an object URL for images (revoked on
@@ -86,8 +89,138 @@ function initials(name: string | null | undefined, email?: string): string {
   return src.slice(0, 2).toUpperCase();
 }
 
+// ── task-type statuses (for task_type.key = 'task') ──────────────────────────
+// Compact client copy of the server TASK_STATUS_CATALOG keys used at creation.
+// Other task types use their space's space_statuses (names) instead.
+const TASK_STATUS_CATALOG: { key: string; label: string; color: string }[] = [
+  { key: 'open', label: 'Open', color: '#9ca3af' },
+  { key: 'today', label: 'Today', color: '#f97316' },
+  { key: 'tomorrow', label: 'Tomorrow', color: '#06b6d4' },
+  { key: 'this_week', label: 'This Week', color: '#22d3ee' },
+  { key: 'up_next', label: 'Up Next', color: '#38bdf8' },
+  { key: 'in_progress', label: 'In Progress', color: '#16a34a' },
+  { key: 'on_hold', label: 'On Hold', color: '#78716c' },
+  { key: 'closed', label: 'Closed', color: '#10b981' },
+  { key: 'cancelled', label: 'Cancelled', color: '#6b7280' },
+];
+
+// ── task-type grouping (mirrors web TaskTypeDropdown order) ─────────────────
+const TYPE_GROUP_ORDER = [
+  'Task Types',
+  'Software Development',
+  'Location-Based',
+  'Meetings & Collaboration',
+  'Learning & Exploration',
+  'Follow-ups & Monitoring',
+  'Media Creation',
+  'Action-Oriented Activities',
+  'Goals & Milestones',
+  'Personal',
+  'Planning & Review',
+];
+
+function taskTypeGroup(t: TaskType): string {
+  return t.group_name || 'Other';
+}
+
+function groupTaskTypes(types: TaskType[], query: string): { group: string; items: TaskType[] }[] {
+  const q = query.trim().toLowerCase();
+  const filtered = types.filter(
+    (t) =>
+      !q ||
+      t.name.toLowerCase().includes(q) ||
+      (t.description || '').toLowerCase().includes(q) ||
+      taskTypeGroup(t).toLowerCase().includes(q) ||
+      t.key.toLowerCase().includes(q),
+  );
+  const out: { group: string; items: TaskType[] }[] = [];
+  for (const g of TYPE_GROUP_ORDER) {
+    const items = filtered.filter((t) => taskTypeGroup(t) === g);
+    if (items.length) out.push({ group: g, items });
+  }
+  for (const t of filtered) {
+    const g = taskTypeGroup(t);
+    if (!TYPE_GROUP_ORDER.includes(g) && !out.some((o) => o.group === g)) {
+      out.push({ group: g, items: filtered.filter((x) => taskTypeGroup(x) === g) });
+    }
+  }
+  return out;
+}
+
+// ── work-date shortcuts (local dates) ────────────────────────────────────────
+/** Upcoming Saturday (today if Saturday). */
+function weekendYmd(): string {
+  const d = new Date();
+  d.setDate(d.getDate() + ((6 - d.getDay() + 7) % 7));
+  return ymd(d);
+}
+/** Next Monday (7 days out if today is Monday). */
+function nextWeekYmd(): string {
+  const d = new Date();
+  d.setDate(d.getDate() + (((8 - d.getDay()) % 7) || 7));
+  return ymd(d);
+}
+function shortDay(s: string): string {
+  return new Date(`${s}T00:00:00`).toLocaleDateString(undefined, { weekday: 'short' });
+}
+
+// ── compact month calendar (Monday-first) ────────────────────────────────────
+function MiniCalendar({ value, onPick }: { value: string | null; onPick: (s: string) => void }) {
+  const seed = value ? new Date(`${value}T00:00:00`) : new Date();
+  const [view, setView] = useState({ y: seed.getFullYear(), m: seed.getMonth() });
+  const todayStr = ymd(new Date());
+  const first = new Date(view.y, view.m, 1);
+  const lead = (first.getDay() + 6) % 7;
+  const days = new Date(view.y, view.m + 1, 0).getDate();
+  const cells: (number | null)[] = [...Array(lead).fill(null), ...Array.from({ length: days }, (_, i) => i + 1)];
+  const cellYmd = (day: number) => ymd(new Date(view.y, view.m, day));
+
+  return (
+    <div className="qa-cal">
+      <div className="qa-cal-head">
+        <button
+          type="button"
+          className="qa-cal-nav"
+          aria-label="Previous month"
+          onClick={() => setView((v) => (v.m === 0 ? { y: v.y - 1, m: 11 } : { y: v.y, m: v.m - 1 }))}
+        >
+          ‹
+        </button>
+        <span className="qa-cal-title">{first.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}</span>
+        <button
+          type="button"
+          className="qa-cal-nav"
+          aria-label="Next month"
+          onClick={() => setView((v) => (v.m === 11 ? { y: v.y + 1, m: 0 } : { y: v.y, m: v.m + 1 }))}
+        >
+          ›
+        </button>
+      </div>
+      <div className="qa-cal-grid">
+        {['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'].map((d) => (
+          <span key={d} className="qa-cal-dow">{d}</span>
+        ))}
+        {cells.map((day, i) =>
+          day === null ? (
+            <span key={`e-${i}`} />
+          ) : (
+            <button
+              key={day}
+              type="button"
+              className={`qa-cal-day${cellYmd(day) === value ? ' sel' : ''}${cellYmd(day) === todayStr ? ' today' : ''}`}
+              onClick={() => onPick(cellYmd(day))}
+            >
+              {day}
+            </button>
+          ),
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── pickable-list tree (cached briefly so new lists show up) ──────────────────
-type PickableList = { id: string; name: string; spaceName: string; folderName: string | null };
+type PickableList = { id: string; name: string; spaceName: string; folderName: string | null; spaceId: string };
 let pickCache: PickableList[] | null = null;
 let pickCacheAt = 0;
 const PICK_CACHE_TTL_MS = 30_000;
@@ -109,7 +242,7 @@ async function fetchPickableLists(): Promise<PickableList[]> {
   for (const full of details) {
     if (!full) continue;
     const add = (l: ListLite, folderName: string | null) => {
-      if (canPick(l)) out.push({ id: l.id, name: l.name, spaceName: full.name, folderName });
+      if (canPick(l)) out.push({ id: l.id, name: l.name, spaceName: full.name, folderName, spaceId: full.id });
     };
     for (const l of full.lists || []) add(l, null);
     for (const f of full.folders || []) for (const l of f.lists || []) add(l, f.name);
@@ -131,9 +264,10 @@ export default function QuickAdd() {
 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
-  const [descOpen, setDescOpen] = useState(false);
   const [priority, setPriority] = useState<TaskPriority>('none');
   const [workDate, setWorkDate] = useState<string | null>(null);
+  const [startDate, setStartDate] = useState<string | null>(null);
+  const [dueDate, setDueDate] = useState<string | null>(null);
   const [focused, setFocused] = useState(false);
   const [selectedList, setSelectedList] = useState<SelectedList | null>(cachedPersonal);
   const [recents, setRecents] = useState<RecentList[]>([]);
@@ -156,6 +290,14 @@ export default function QuickAdd() {
   const [labelGroups, setLabelGroups] = useState<LabelPickerGroup[]>([]);
   const [labelQuery, setLabelQuery] = useState('');
   const [selectedLabels, setSelectedLabels] = useState<TaskTag[]>([]);
+  // Task type + status (status value is a catalog key for `task` types,
+  // a space-status name for every other type — mirrors the web panel).
+  const [taskTypes, setTaskTypes] = useState<TaskType[] | null>(null);
+  const [taskTypeId, setTaskTypeId] = useState<string | null>(null);
+  const [typeSearch, setTypeSearch] = useState('');
+  const [typeHi, setTypeHi] = useState(0);
+  const [spaceStatuses, setSpaceStatuses] = useState<SpaceStatus[]>([]);
+  const [status, setStatus] = useState('open');
   // Mark the task being created as completed on add.
   const [completeOnCreate, setCompleteOnCreate] = useState(false);
   const [startTimerOnCreate, setStartTimerOnCreate] = useState(false);
@@ -196,9 +338,10 @@ export default function QuickAdd() {
   const reset = () => {
     setTitle('');
     setDescription('');
-    setDescOpen(false);
     setPriority('none');
     setWorkDate(null);
+    setStartDate(null);
+    setDueDate(null);
     setFocused(false);
     setOpenMenu(null);
     setPhase('idle');
@@ -216,8 +359,10 @@ export default function QuickAdd() {
     setEstimateInput('');
     loggedTimeAppliedRef.current = false;
     setLoginError('');
-    const self = useAuthStore.getState().userId;
-    setAssigneeIds(self ? [self] : []);
+    // Assignee starts empty — the circle next to the pill self-assigns.
+    setAssigneeIds([]);
+    setTypeSearch('');
+    setTypeHi(0);
     if (defaultListRef.current) setSelectedList(defaultListRef.current);
     void getRecentLists().then(setRecents);
     setTimeout(() => inputRef.current?.focus(), 0);
@@ -227,7 +372,7 @@ export default function QuickAdd() {
     try {
       if (!cachedPersonal) {
         const p = await fetchPersonalList();
-        cachedPersonal = { id: p.list.id, name: 'My Tasks' };
+        cachedPersonal = { id: p.list.id, name: 'My Tasks', spaceId: p.space.id };
       }
       defaultListRef.current = cachedPersonal;
       setSelectedList((prev) => prev ?? cachedPersonal);
@@ -296,8 +441,7 @@ export default function QuickAdd() {
       .then((users) => {
         if (!alive) return;
         setAssignable(users);
-        const self = useAuthStore.getState().userId;
-        setAssigneeIds(self && users.some((u) => u.id === self) ? [self] : []);
+        // Assignee stays empty by default; the self-assign circle adds the user.
       })
       .catch(() => {
         if (alive) {
@@ -320,6 +464,72 @@ export default function QuickAdd() {
       alive = false;
     };
   }, [selectedList?.id]);
+
+  // Load task types once per app run; default to the workspace default type.
+  useEffect(() => {
+    let alive = true;
+    fetchTaskTypes()
+      .then((types) => {
+        if (!alive) return;
+        setTaskTypes(types);
+        setTaskTypeId((cur) => {
+          if (cur && types.some((t) => t.id === cur)) return cur;
+          return types.find((t) => t.is_default)?.id ?? types[0]?.id ?? null;
+        });
+      })
+      .catch(() => {
+        if (alive) setTaskTypes([]);
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  // Resolve the selected list's space and load its statuses for non-`task` types.
+  useEffect(() => {
+    const list = selectedList;
+    if (!list) {
+      setSpaceStatuses([]);
+      return;
+    }
+    let alive = true;
+    (async () => {
+      try {
+        let spaceId = list.spaceId;
+        if (!spaceId) {
+          if (cachedPersonal && list.id === cachedPersonal.id) {
+            spaceId = cachedPersonal.spaceId;
+          } else {
+            const lists = await loadPickableLists();
+            spaceId = lists.find((l) => l.id === list.id)?.spaceId;
+          }
+        }
+        if (!spaceId || !alive) return;
+        const space = await fetchSpace(spaceId);
+        if (alive) setSpaceStatuses(space.space_statuses || []);
+      } catch {
+        if (alive) setSpaceStatuses([]);
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [selectedList]);
+
+  // Keep status valid when the type or the space's statuses change (web parity:
+  // `task` types use the catalog, everything else uses space-status names).
+  useEffect(() => {
+    const t = taskTypes?.find((x) => x.id === taskTypeId);
+    if (!t) return;
+    if (t.key === 'task') {
+      if (!TASK_STATUS_CATALOG.some((c) => c.key === status)) setStatus('open');
+    } else {
+      if (spaceStatuses.length === 0) return; // statuses still loading
+      if (!spaceStatuses.some((s) => s.name === status)) {
+        setStatus(spaceStatuses.find((s) => s.is_default)?.name ?? spaceStatuses[0].name);
+      }
+    }
+  }, [taskTypes, taskTypeId, spaceStatuses, status]);
 
 
 
@@ -380,7 +590,7 @@ export default function QuickAdd() {
       try {
         if (!cachedPersonal) {
           const p = await fetchPersonalList();
-          cachedPersonal = { id: p.list.id, name: 'My Tasks' };
+          cachedPersonal = { id: p.list.id, name: 'My Tasks', spaceId: p.space.id };
         }
         list = cachedPersonal;
       } catch {
@@ -401,8 +611,12 @@ export default function QuickAdd() {
           list_id: list.id,
           title: trimmed,
           description: description.trim() || undefined,
+          status: status || undefined,
           priority: priority === 'none' ? undefined : priority,
           work_date: workDate || undefined,
+          start_date: startDate || undefined,
+          due_date: dueDate || undefined,
+          task_type_id: taskTypeId || undefined,
           assignee_ids: assigneeIds.length ? assigneeIds : undefined,
           time_estimate: estimateMinutes ?? undefined,
           start_timer: startTimerOnCreate,
@@ -492,7 +706,14 @@ export default function QuickAdd() {
   };
 
   const toggleMenu = (key: Exclude<MenuKey, null>) =>
-    setOpenMenu((cur) => (cur === key ? null : key));
+    setOpenMenu((cur) => {
+      if (cur === key) return null;
+      if (key === 'type') {
+        setTypeSearch('');
+        setTypeHi(0);
+      }
+      return key;
+    });
   const pickList = (l: SelectedList) => {
     setSelectedList(l);
     setOpenMenu(null);
@@ -592,13 +813,13 @@ export default function QuickAdd() {
     setTimeout(() => inputRef.current?.focus(), 0);
   };
 
-  // ── chips: My Tasks + up to 3 recents (+ current selection if off-list) ─────
+  // ── chips: My Tasks + all recents (+ current selection if off-list) ─────────
+  // The row scrolls horizontally, so every recent location is reachable.
   const personalId = cachedPersonal?.id;
   const chips: SelectedList[] = [];
   if (defaultListRef.current) chips.push({ id: defaultListRef.current.id, name: 'My Tasks' });
   for (const r of recents) {
     if (r.id === personalId) continue;
-    if (chips.length >= 4) break;
     chips.push(r);
   }
   if (selectedList && !chips.some((c) => c.id === selectedList.id)) {
@@ -620,6 +841,59 @@ export default function QuickAdd() {
   const labelCount = selectedLabels.length;
   const labelButtonText =
     labelCount === 0 ? 'Labels' : labelCount === 1 ? selectedLabels[0].name : `${labelCount} labels`;
+
+  // ── task type + status (derived) ──────────────────────────────────────────
+  const currentType = taskTypes?.find((t) => t.id === taskTypeId) ?? null;
+  const isTaskCatalogType = !currentType || currentType.key === 'task';
+  const typeGroups = groupTaskTypes(taskTypes || [], typeSearch);
+  const typeFlat = typeGroups.flatMap((g) => g.items);
+  const pickType = (id: string) => {
+    setTaskTypeId(id);
+    const t = taskTypes?.find((x) => x.id === id);
+    if (t) {
+      if (t.key === 'task') {
+        setStatus((cur) => (TASK_STATUS_CATALOG.some((c) => c.key === cur) ? cur : 'open'));
+      } else if (spaceStatuses.length) {
+        setStatus((cur) =>
+          spaceStatuses.some((s) => s.name === cur)
+            ? cur
+            : (spaceStatuses.find((s) => s.is_default)?.name ?? spaceStatuses[0].name),
+        );
+      }
+    }
+    setOpenMenu(null);
+  };
+  const onTypeKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setTypeHi((i) => (typeFlat.length ? (i + 1) % typeFlat.length : 0));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setTypeHi((i) => (typeFlat.length ? (i - 1 + typeFlat.length) % typeFlat.length : 0));
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      if (typeFlat[typeHi]) pickType(typeFlat[typeHi].id);
+    } else if (e.key === 'Escape') {
+      setOpenMenu(null);
+    }
+  };
+  const statusDef = isTaskCatalogType
+    ? TASK_STATUS_CATALOG.find((c) => c.key === status)
+    : spaceStatuses.find((s) => s.name === status);
+  const statusLabel = isTaskCatalogType ? (statusDef as { label: string } | undefined)?.label ?? status : status;
+  const statusColor = (statusDef as { color: string } | undefined)?.color ?? '#6b7280';
+
+  // ── self-assign circle ────────────────────────────────────────────────────
+  const selfId = useAuthStore.getState().userId;
+  const isSelfAssigned = !!selfId && assigneeIds.includes(selfId);
+  const toggleSelfAssign = () => {
+    if (!selfId) return;
+    setAssigneeIds((cur) => (cur.includes(selfId) ? cur.filter((x) => x !== selfId) : [...cur, selfId]));
+  };
+  const selfName =
+    (selfId && assignable.find((u) => u.id === selfId)?.display_name) ||
+    (selfId && assignable.find((u) => u.id === selfId)?.email) ||
+    'you';
   const lq = labelQuery.trim().toLowerCase();
   const filteredLabelGroups = (labelGroups || [])
     .map((g) => ({
@@ -711,8 +985,20 @@ export default function QuickAdd() {
         />
       </div>
 
-      {/* List chips */}
-      <div className="qa-chips">
+      <div className="qa-desc">
+        <textarea
+          className="qa-textarea"
+          placeholder="Add a description…"
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          rows={2}
+          disabled={phase === 'saving'}
+        />
+      </div>
+
+      {/* Where: every recent location, scrollable */}
+      <div className="qa-sec-label">Where</div>
+      <div className="qa-chips qa-where">
         {chips.map((c) => (
           <button
             key={c.id}
@@ -727,25 +1013,65 @@ export default function QuickAdd() {
         ))}
         <button
           type="button"
-          className={`qa-chip qa-chip-more${openMenu === 'list' ? ' active' : ''}`}
+          className={`qa-chip qa-locsearch${openMenu === 'list' ? ' active' : ''}`}
           onClick={() => toggleMenu('list')}
+          title="Search all locations"
+          aria-label="Search locations"
         >
-          More…
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="11" cy="11" r="8" />
+            <path d="m21 21-4.3-4.3" />
+          </svg>
         </button>
       </div>
 
-      {/* Attribute pills */}
+      {/* What: assignee first (circle self-assigns), then type/status/priority/labels */}
+      <div className="qa-sec-label">What</div>
       <div className="qa-attrs">
+        <span className="qa-assign-wrap">
+          <button
+            type="button"
+            className={`qa-mecircle${isSelfAssigned ? ' on' : ''}`}
+            title={isSelfAssigned ? `Assigned to ${selfName} — click to remove` : 'Assign to me'}
+            aria-label={isSelfAssigned ? 'Remove self assignment' : 'Assign to me'}
+            onClick={toggleSelfAssign}
+          >
+            {isSelfAssigned ? (
+              <span className="qa-mecircle-initials">
+                {initials(assignable.find((u) => u.id === selfId)?.display_name, assignable.find((u) => u.id === selfId)?.email)}
+              </span>
+            ) : (
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                <circle cx="12" cy="7" r="4" />
+              </svg>
+            )}
+          </button>
+          <button
+            type="button"
+            className={`qa-pill${assigneeIds.length ? ' active' : ' muted'}`}
+            onClick={() => toggleMenu('assignee')}
+          >
+            <span className="qa-pill-label">{assigneeLabel}</span>
+          </button>
+        </span>
+
         <button
           type="button"
-          className={`qa-pill${assigneeIds.length ? ' active' : ' muted'}`}
-          onClick={() => toggleMenu('assignee')}
+          className={`qa-pill${taskTypeId ? ' active' : ' muted'}`}
+          onClick={() => toggleMenu('type')}
         >
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-            <circle cx="12" cy="7" r="4" />
-          </svg>
-          <span className="qa-pill-label">{assigneeLabel}</span>
+          <span className="qa-dot" style={{ background: currentType?.color || '#6b7280' }} />
+          <span className="qa-pill-label">{currentType?.name || 'Type'}</span>
+        </button>
+
+        <button
+          type="button"
+          className="qa-pill active"
+          onClick={() => toggleMenu('status')}
+        >
+          <span className="qa-dot" style={{ background: statusColor }} />
+          <span className="qa-pill-label">{statusLabel}</span>
         </button>
 
         <button
@@ -759,38 +1085,6 @@ export default function QuickAdd() {
 
         <button
           type="button"
-          className={`qa-pill${workDate ? ' active' : ' muted'}`}
-          onClick={() => toggleMenu('date')}
-        >
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <rect x="3" y="4" width="18" height="18" rx="2" />
-            <path d="M16 2v4M8 2v4M3 10h18" />
-          </svg>
-          <span className="qa-pill-label">{dateLabel(workDate)}</span>
-        </button>
-
-        <button
-          type="button"
-          className={`qa-pill qa-star${focused ? ' active' : ' muted'}`}
-          onClick={() => setFocused((v) => !v)}
-          title="Focus star"
-        >
-          {focused ? '★' : '☆'}
-        </button>
-
-        <button
-          type="button"
-          className={`qa-pill${descOpen || description ? ' active' : ' muted'}`}
-          onClick={() => setDescOpen((v) => !v)}
-        >
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M4 6h16M4 12h16M4 18h10" />
-          </svg>
-          <span className="qa-pill-label">Description</span>
-        </button>
-
-        <button
-          type="button"
           className={`qa-pill${labelCount ? ' active' : ' muted'}`}
           onClick={() => toggleMenu('labels')}
           title={selectedList ? `Labels in ${selectedList.name}` : 'Labels'}
@@ -800,6 +1094,56 @@ export default function QuickAdd() {
             <circle cx="7.5" cy="7.5" r="1" fill="currentColor" />
           </svg>
           <span className="qa-pill-label">{labelButtonText}</span>
+        </button>
+      </div>
+
+      {/* When: work date, start→due range, estimate, logged */}
+      <div className="qa-sec-label">When</div>
+      <div className="qa-attrs">
+        <button
+          type="button"
+          className={`qa-pill${workDate ? ' active' : ' muted'}`}
+          onClick={() => toggleMenu('date')}
+        >
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="3" y="4" width="18" height="18" rx="2" />
+            <path d="M16 2v4M8 2v4M3 10h18" />
+          </svg>
+          <span className="qa-pill-label">{workDate ? `Work: ${dateLabel(workDate)}` : 'Work date'}</span>
+        </button>
+
+        <button
+          type="button"
+          className={`qa-pill${startDate || dueDate ? ' active' : ' muted'}`}
+          onClick={() => toggleMenu('rangedate')}
+        >
+          <span aria-hidden>▶</span>
+          <span className="qa-pill-label">
+            {(startDate ? dateLabel(startDate) : 'Start')} → {(dueDate ? dateLabel(dueDate) : 'Due')}
+          </span>
+        </button>
+
+        <button type="button" className={`qa-pill${estimateInput.trim() ? ' active' : ' muted'}`} onClick={() => toggleMenu('estimate')}>
+          <span aria-hidden>◷</span>
+          <span className="qa-pill-label">{estimateMinutes && estimateMinutes > 0 ? `Estimate ${formatDuration(estimateMinutes)}` : 'Estimate'}</span>
+        </button>
+
+        <button type="button" className={`qa-pill${loggedInput.trim() ? ' active' : ' muted'}`} onClick={() => toggleMenu('logged')}>
+          <span aria-hidden>◴</span>
+          <span className="qa-pill-label">{loggedMinutes && loggedMinutes > 0 ? `Logged ${formatDuration(loggedMinutes)}` : 'Time logged'}</span>
+        </button>
+      </div>
+
+      {/* Details: focus, completion, timer */}
+      <div className="qa-sec-label">Details</div>
+      <div className="qa-attrs">
+        <button
+          type="button"
+          className={`qa-pill qa-star${focused ? ' active' : ' muted'}`}
+          onClick={() => setFocused((v) => !v)}
+          title="Focus star"
+        >
+          {focused ? '★ Focused' : '☆ Focus'}
         </button>
 
         <button
@@ -828,16 +1172,6 @@ export default function QuickAdd() {
           <span aria-hidden>◷</span>
           <span className="qa-pill-label">{startTimerOnCreate ? 'Start timer on add' : 'Start timer'}</span>
         </button>
-
-        <button type="button" className={`qa-pill${loggedInput.trim() ? ' active' : ' muted'}`} onClick={() => toggleMenu('logged')}>
-          <span aria-hidden>◴</span>
-          <span className="qa-pill-label">{loggedMinutes && loggedMinutes > 0 ? `Logged ${formatDuration(loggedMinutes)}` : 'Time logged'}</span>
-        </button>
-
-        <button type="button" className={`qa-pill${estimateInput.trim() ? ' active' : ' muted'}`} onClick={() => toggleMenu('estimate')}>
-          <span aria-hidden>◷</span>
-          <span className="qa-pill-label">{estimateMinutes && estimateMinutes > 0 ? `Estimate ${formatDuration(estimateMinutes)}` : 'Estimate'}</span>
-        </button>
       </div>
 
       {labelCount > 0 && (
@@ -855,18 +1189,6 @@ export default function QuickAdd() {
               <span aria-hidden>×</span>
             </button>
           ))}
-        </div>
-      )}
-
-      {descOpen && (
-        <div className="qa-desc">
-          <textarea
-            className="qa-textarea"
-            placeholder="Add a description…"
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            rows={2}
-          />
         </div>
       )}
 
@@ -951,22 +1273,181 @@ export default function QuickAdd() {
 
       {openMenu === 'date' && (
         <div className="qa-menu">
-          <div className="qa-date-quick">
-            <button type="button" className="qa-chip" onClick={() => { setWorkDate(todayYmd()); setOpenMenu(null); }}>
-              Today
+          <div className="qa-quickchips">
+            {[
+              { label: 'Today', value: todayYmd() },
+              { label: 'Tomorrow', value: tomorrowYmd() },
+              { label: 'This weekend', value: weekendYmd() },
+              { label: 'Next week', value: nextWeekYmd() },
+            ].map((c) => (
+              <button
+                key={c.label}
+                type="button"
+                className={`qa-chip qa-qchip${workDate === c.value ? ' active' : ''}`}
+                onClick={() => {
+                  setWorkDate(c.value);
+                  setOpenMenu(null);
+                }}
+              >
+                <span className="qa-qchip-label">{c.label}</span>
+                <span className="qa-qchip-sub">{shortDay(c.value)}</span>
+              </button>
+            ))}
+          </div>
+          <MiniCalendar
+            value={workDate}
+            onPick={(s) => {
+              setWorkDate(s);
+              setOpenMenu(null);
+            }}
+          />
+          <div className="qa-menu-foot">
+            <span>{workDate ? dateLabel(workDate) : 'No date set'}</span>
+            <button
+              type="button"
+              className="qa-linkbtn"
+              onClick={() => {
+                setWorkDate(null);
+                setOpenMenu(null);
+              }}
+            >
+              Clear
             </button>
-            <button type="button" className="qa-chip" onClick={() => { setWorkDate(tomorrowYmd()); setOpenMenu(null); }}>
-              Tomorrow
+          </div>
+        </div>
+      )}
+
+      {openMenu === 'rangedate' && (
+        <div className="qa-menu">
+          <div className="qa-quickchips">
+            <button
+              type="button"
+              className="qa-chip"
+              onClick={() => {
+                setStartDate(todayYmd());
+                setDueDate(tomorrowYmd());
+                setOpenMenu(null);
+              }}
+            >
+              <span className="qa-qchip-label">Today → Tomorrow</span>
             </button>
-            <button type="button" className="qa-chip" onClick={() => { setWorkDate(null); setOpenMenu(null); }}>
-              No date
+            <button
+              type="button"
+              className="qa-chip"
+              onClick={() => {
+                setStartDate(null);
+                setDueDate(null);
+                setOpenMenu(null);
+              }}
+            >
+              <span className="qa-qchip-label">Clear dates</span>
             </button>
-            <input
-              type="date"
-              className="qa-date-input"
-              value={workDate || ''}
-              onChange={(e) => { setWorkDate(e.target.value || null); }}
-            />
+          </div>
+          <div className="qa-range">
+            <label>
+              Start
+              <input
+                type="date"
+                className="qa-date-input"
+                value={startDate || ''}
+                onChange={(e) => setStartDate(e.target.value || null)}
+              />
+            </label>
+            <label>
+              Due
+              <input
+                type="date"
+                className="qa-date-input"
+                value={dueDate || ''}
+                onChange={(e) => setDueDate(e.target.value || null)}
+              />
+            </label>
+          </div>
+        </div>
+      )}
+
+      {openMenu === 'type' && (
+        <div className="qa-menu">
+          <input
+            className="qa-search"
+            autoFocus
+            placeholder="Search task types (e.g. Focus, Plan, Call)…"
+            value={typeSearch}
+            onChange={(e) => {
+              setTypeSearch(e.target.value);
+              setTypeHi(0);
+            }}
+            onKeyDown={onTypeKeyDown}
+          />
+          <div className="qa-menu-scroll qa-type-scroll">
+            {!taskTypes && <div className="qa-menu-empty">Loading task types…</div>}
+            {taskTypes && typeGroups.length === 0 && (
+              <div className="qa-menu-empty">No task types found — try a different term</div>
+            )}
+            {typeGroups.map((g) => (
+              <div key={g.group}>
+                <div className="qa-grouphead qa-type-group">
+                  {g.group}
+                  <span className="qa-type-count">{g.items.length}</span>
+                </div>
+                {g.items.map((t) => {
+                  const flatIdx = typeFlat.indexOf(t);
+                  return (
+                    <button
+                      key={t.id}
+                      type="button"
+                      className={`qa-opt-row qa-type-row${flatIdx === typeHi ? ' hi' : ''}`}
+                      onClick={() => pickType(t.id)}
+                      onMouseEnter={() => setTypeHi(flatIdx)}
+                    >
+                      <span className="qa-type-badge" style={{ backgroundColor: `${t.color}22`, color: t.color }}>
+                        <span className="qa-dot" style={{ background: t.color }} />
+                      </span>
+                      <span className="qa-type-main">
+                        <span className="qa-type-name">
+                          {t.name}
+                          {t.is_default && <span className="qa-type-default">Default</span>}
+                        </span>
+                        {!!t.description && <span className="qa-type-desc">{t.description}</span>}
+                      </span>
+                      {t.id === taskTypeId && <span className="qa-check">✓</span>}
+                    </button>
+                  );
+                })}
+              </div>
+            ))}
+          </div>
+          <div className="qa-menu-foot">
+            <span>{typeFlat.length} task type{typeFlat.length !== 1 ? 's' : ''}</span>
+            <span>↑↓ navigate · ↵ pick</span>
+          </div>
+        </div>
+      )}
+
+      {openMenu === 'status' && (
+        <div className="qa-menu">
+          <div className="qa-menu-hint">
+            {isTaskCatalogType ? 'Task workflow statuses' : `Space statuses · ${currentType?.name || ''}`}
+          </div>
+          <div className="qa-menu-scroll">
+            {isTaskCatalogType
+              ? TASK_STATUS_CATALOG.map((s) => (
+                  <button key={s.key} type="button" className="qa-opt-row" onClick={() => { setStatus(s.key); setOpenMenu(null); }}>
+                    <span className="qa-dot" style={{ background: s.color }} />
+                    <span className="qa-opt-main">{s.label}</span>
+                    {status === s.key && <span className="qa-check">✓</span>}
+                  </button>
+                ))
+              : spaceStatuses.map((s) => (
+                  <button key={s.id} type="button" className="qa-opt-row" onClick={() => { setStatus(s.name); setOpenMenu(null); }}>
+                    <span className="qa-dot" style={{ background: s.color }} />
+                    <span className="qa-opt-main">{s.name}</span>
+                    {status === s.name && <span className="qa-check">✓</span>}
+                  </button>
+                ))}
+            {!isTaskCatalogType && spaceStatuses.length === 0 && (
+              <div className="qa-menu-empty">Loading statuses…</div>
+            )}
           </div>
         </div>
       )}
@@ -1129,7 +1610,7 @@ function ListPicker({ onPick }: { onPick: (l: SelectedList) => void }) {
         {!err && !lists && <div className="qa-menu-empty">Loading lists…</div>}
         {!err && lists && matches.length === 0 && <div className="qa-menu-empty">No lists found</div>}
         {matches.map((l) => (
-          <button key={l.id} type="button" className="qa-opt" onClick={() => onPick({ id: l.id, name: l.name })}>
+          <button key={l.id} type="button" className="qa-opt" onClick={() => onPick({ id: l.id, name: l.name, spaceId: l.spaceId })}>
             <span className="qa-opt-main">{l.name}</span>
             <span className="qa-opt-sub">{l.folderName ? `${l.spaceName} / ${l.folderName}` : l.spaceName}</span>
           </button>
