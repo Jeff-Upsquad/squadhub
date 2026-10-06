@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import type { TaskTimeEntry, TimerSession } from '@squadhub/shared';
-import { attendanceActivities, clipActivity, combineTaskSegments, dayKey, dayStart, layoutActivities, taskActivities, weekStart, type Activity } from '../activityModel';
+import type { TaskDayPlan, TaskTimeEntry, TimerSession } from '@squadhub/shared';
+import { attendanceActivities, clipActivity, combineTaskSegments, dayKey, dayPlanActivities, dayStart, isAttendance, layoutActivities, taskActivities, weekStart, type Activity } from '../activityModel';
 const hour = 3600000;
 const start = dayStart('2026-10-04');
 function session(id: string, from: number, to: number | null, type: TimerSession['timer_type'] = 'work'): TimerSession {
@@ -208,4 +208,93 @@ test('combineTaskSegments preserves isManual tag and does not merge manual entri
   assert.equal(combined[1].isManual, false);
   assert.equal(combined[1].source, 'Task timer');
 });
+
+test('dayPlanActivities maps day plans to day_plan activities with start, end, seconds, and task info', () => {
+  const plans: TaskDayPlan[] = [
+    {
+      id: 'dp-1',
+      task_id: 'task-100',
+      user_id: 'u1',
+      plan_date: '2026-10-04',
+      start_minute: 600, // 10:00 AM
+      duration_minutes: 45,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      task: { id: 'task-100', title: 'Prepare design spec', list_id: 'list-1', list: { id: 'list-1', name: 'Design / UX' }, priority: 'high', status_id: 's1', time_estimate: null },
+    },
+    {
+      id: 'dp-2',
+      task_id: 'task-200',
+      user_id: 'u1',
+      plan_date: '2026-10-04',
+      start_minute: 0,
+      duration_minutes: 1440, // all day sentinel
+      all_day: true,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      virtual: true,
+      task: { id: 'task-200', title: 'All day milestone task', list_id: 'list-2', priority: 'normal', status_id: 's2', time_estimate: null },
+    },
+    {
+      id: 'dp-3',
+      task_id: 'task-300',
+      user_id: 'u1',
+      plan_date: '2026-10-04',
+      start_minute: 840, // 2:00 PM
+      duration_minutes: 60,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      kind: 'group_block',
+      container: { type: 'folder', id: 'f-1', name: 'Grouped tasks under QA' },
+    },
+  ];
+
+  const activities = dayPlanActivities(plans);
+  assert.equal(activities.length, 3);
+
+  // Timed plan
+  assert.equal(activities[0].id, 'plan:dp-1');
+  assert.equal(activities[0].kind, 'day_plan');
+  assert.equal(activities[0].title, 'Prepare design spec');
+  assert.equal(activities[0].start, start + 10 * hour);
+  assert.equal(activities[0].end, start + 10 * hour + 45 * 60000);
+  assert.equal(activities[0].seconds, 45 * 60);
+  assert.equal(activities[0].taskId, 'task-100');
+  assert.equal(activities[0].project, 'Design / UX');
+  assert.equal(activities[0].source, 'Day Planner');
+
+  // All-day plan defaults to 9 AM with 30m duration and note
+  assert.equal(activities[1].id, 'plan:dp-2');
+  assert.equal(activities[1].kind, 'day_plan');
+  assert.equal(activities[1].title, 'All day milestone task');
+  assert.equal(activities[1].start, start + 9 * hour);
+  assert.equal(activities[1].end, start + 9 * hour + 30 * 60000);
+  assert.equal(activities[1].note, 'All day task');
+  assert.equal(activities[1].source, 'Day Planner (scheduled)');
+
+  // Group block
+  assert.equal(activities[2].id, 'plan:dp-3');
+  assert.equal(activities[2].kind, 'day_plan');
+  assert.equal(activities[2].title, 'Grouped tasks under QA');
+  assert.equal(activities[2].source, 'Day Planner group');
+});
+
+test('three sections partition divides attendance, day planner, and time tracker items', () => {
+  const attendanceItem: Activity = { id: 'att-1', kind: 'work', title: 'Work session', start: start + 9 * hour, end: start + 12 * hour, seconds: 3 * 3600 };
+  const breakItem: Activity = { id: 'att-2', kind: 'break', title: 'Lunch break', start: start + 12 * hour, end: start + 13 * hour, seconds: 3600 };
+  const dayPlanItem: Activity = { id: 'dp-1', kind: 'day_plan', title: 'Scheduled review', start: start + 10 * hour, end: start + 11 * hour, seconds: 3600 };
+  const taskItem: Activity = { id: 'task-1', kind: 'task', title: 'Logged coding', start: start + 9.5 * hour, end: start + 11.5 * hour, seconds: 2 * 3600 };
+  const blockItem: Activity = { id: 'blk-1', kind: 'block', title: 'Sprint block', start: start + 14 * hour, end: start + 16 * hour, seconds: 2 * 3600 };
+
+  const allItems = [attendanceItem, breakItem, dayPlanItem, taskItem, blockItem];
+
+  const lane0 = allItems.filter(e => isAttendance(e.kind));
+  const lane1 = allItems.filter(e => e.kind === 'day_plan');
+  const lane2 = allItems.filter(e => !isAttendance(e.kind) && e.kind !== 'day_plan');
+
+  assert.deepEqual(lane0.map(e => e.id), ['att-1', 'att-2']);
+  assert.deepEqual(lane1.map(e => e.id), ['dp-1']);
+  assert.deepEqual(lane2.map(e => e.id), ['task-1', 'blk-1']);
+});
+
 

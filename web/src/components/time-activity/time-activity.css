@@ -59,8 +59,8 @@ html.dark .ta-panel, html[data-theme="noir"] .ta-panel {
 .ta-day-head b { font-size: 10px; color: var(--ta-ink); background: var(--ta-soft); padding: 2px 5px; border-radius: 4px; font-weight: 500; }
 .ta-day-head[data-today="true"] b { background: #4bc88d; color: #11231a; }
 .ta-lane-labels { display: flex; color: var(--ta-muted); letter-spacing: .12em; font-size: 8px; padding: 0 0 4px; }
-.ta-lane-labels span { width: 38%; text-align: center; }
-.ta-lane-labels span + span { width: 62%; }
+.ta-lane-labels span { box-sizing: border-box; flex-shrink: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-left: 8px; text-align: left; }
+.ta-lane-labels span:first-child { text-align: center; padding-left: 0; }
 .ta-day-head small { display: block; text-align: center; color: var(--ta-muted); font-size: 8px; margin: 0 0 4px; }
 .ta-grid-scroll { flex: 1; min-height: 0; overflow: auto; scrollbar-width: thin; scrollbar-color: var(--ta-line) transparent; }
 .ta-grid-body { display: flex; height: 1440px; position: relative; padding-top: 0; }
@@ -69,7 +69,7 @@ html.dark .ta-panel, html[data-theme="noir"] .ta-panel {
 .ta-hours span:first-child { transform: none; }
 .ta-day-column { position: relative; display: flex; flex: 1; min-width: 0; border-left: 1px solid var(--ta-line); background-image: repeating-linear-gradient(to bottom, var(--ta-line) 0, var(--ta-line) 1px, transparent 1px, transparent 60px), repeating-linear-gradient(to bottom, transparent 0, transparent 29px, color-mix(in srgb, var(--ta-line) 40%, transparent) 29px, color-mix(in srgb, var(--ta-line) 40%, transparent) 30px, transparent 30px, transparent 60px); }
 .ta-lane { position: relative; flex: 1; }
-.ta-calendar[data-view="day"] .ta-lane:first-child { border-right: 1px dashed var(--ta-line); }
+.ta-calendar[data-view="day"] .ta-lane:not(:last-child) { border-right: 1px dashed var(--ta-line); }
 .ta-event { position: absolute; box-sizing: border-box; min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: 5px; text-align: left; overflow: hidden; padding: 9px 10px;
   background: color-mix(in srgb, var(--event-color) 12%, var(--ta-grid)); border: 1px solid color-mix(in srgb, var(--event-color) 23%, transparent); border-left: 3px solid var(--event-color); border-radius: 6px; color: color-mix(in srgb, var(--event-color) 80%, var(--ta-ink)); z-index: 1; transition: background .15s, box-shadow .15s; }
 .ta-event:hover, .ta-event[data-selected="true"] { background: color-mix(in srgb, var(--event-color) 23%, var(--ta-grid)); box-shadow: 0 0 0 1px var(--event-color); z-index: 3; }
@@ -99,13 +99,32 @@ html.dark .ta-panel, html[data-theme="noir"] .ta-panel {
 .ta-event-project { font-size: 9px; opacity: .65; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ta-event-badge { margin-top: auto; font-size: 9px; opacity: .65; }
 .ta-event[data-short="true"] { padding: 3px 7px; }
+.ta-event[data-narrow="true"] { padding: 4px 6px; gap: 2px; }
+.ta-event[data-narrow="true"] .ta-event-title { font-size: 10px; gap: 4px; }
+.ta-event[data-narrow="true"] .ta-event-title > b { font-size: 8.5px; }
+.ta-event[data-narrow="true"] .ta-event-time { font-size: 8px; gap: 3px; }
 .ta-live-dot { background: currentColor; margin-right: 6px; vertical-align: middle; }
 .ta-calendar[data-view="week"] .ta-event { padding: 6px 5px; border-left-width: 2px; }
 .ta-calendar[data-view="week"] .ta-event-title { font-size: 9px; }
 .ta-calendar[data-view="week"] .ta-event-time { font-size: 8px; }
 .ta-now { position: absolute; height: 1px; background: #ef7869; width: 100%; pointer-events: none; z-index: 4; }
 .ta-now i { width: 5px; height: 5px; border-radius: 50%; background: #ef7869; position: absolute; left: -2px; top: -2px; }
-.ta-now span { display: none; }
+.ta-now span {
+  position: absolute;
+  left: 6px;
+  top: -8px;
+  background: #ef7869;
+  color: #fff;
+  font-size: 8px;
+  font-weight: 600;
+  padding: 1px 4px;
+  border-radius: 3px;
+  line-height: 1.2;
+  letter-spacing: .02em;
+  font-variant-numeric: tabular-nums;
+  display: inline-block;
+  box-shadow: 0 1px 3px rgba(0,0,0,.2);
+}
 .ta-empty-day { position: absolute; left: 0; width: 100%; padding: 20px 8px; text-align: center; color: var(--ta-muted); pointer-events: none; }
 .ta-empty-day svg { margin: 0 auto 10px; opacity: .6; }
 .ta-empty-day strong { display: block; font-size: 11px; font-weight: 500; }
@@ -178,4 +197,4 @@ html.dark .ta-panel, html[data-theme="noir"] .ta-panel {
 .ta-scroll-hint { padding: 4px 20px; font-size: 9px; color: var(--ta-muted); border-bottom: 1px solid var(--ta-line); }
 
 .ta-day-head > button { position: sticky; left: 76px; width: max-content; margin-left: 12px; margin-right: 0; }
-.ta-lane-labels span + span { text-align: left; padding-left: 12px; }
+

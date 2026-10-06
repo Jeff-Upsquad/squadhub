@@ -19,7 +19,7 @@ function Glyph({ name }: { name: 'clock' | 'close' | 'left' | 'right' | 'expand'
 }
 
 function TimeActivityCalendar({ onClose, renderData, demo = false, initialDate }: {
-  onClose: () => void; renderData: (from: number, to: number, now: number) => ReactNode; demo?: boolean; initialDate?: string;
+  onClose: () => void; renderData: (from: number, to: number, now: number, days: string[]) => ReactNode; demo?: boolean; initialDate?: string;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const [date, setDate] = useState(initialDate || dayKey());
@@ -50,7 +50,7 @@ function TimeActivityCalendar({ onClose, renderData, demo = false, initialDate }
         <button className="ta-icon-btn" autoFocus onClick={onClose} aria-label="Close time overview"><Glyph name="close" /></button>
       </div>
       <CalendarContext.Provider value={{ date, setDate, view, setView, now, from, to, days }}>
-        {renderData(from, to, now)}
+        {renderData(from, to, now, days)}
       </CalendarContext.Provider>
     </dialog>, document.body);
 }
@@ -78,29 +78,65 @@ function CalendarData({ events, commitment, loading = false, error = false, onRe
   const denominator = commitment * (view === 'day' ? 1 : trackedDays);
   const pct = denominator ? Math.round(work / denominator * 100) : null;
   useEffect(() => {
-    const firstEvent = visibleEvents.filter(e => filters.includes(e.kind)).sort((a, b) => a.start - b.start)[0];
-    const hour = firstEvent ? (firstEvent.start - dayStart(dayKey(firstEvent.start))) / 3600000 : 9;
-    if (scroller.current) scroller.current.scrollTop = Math.max(0, hour - .45) * HOUR_HEIGHT;
+    const scrollToTarget = () => {
+      if (!scroller.current) return;
+      const viewportHeight = scroller.current.clientHeight || 500;
+      let targetHour = 9;
+      if (days.includes(dayKey(now))) {
+        targetHour = (now - dayStart(dayKey(now))) / 3600000;
+      } else {
+        const firstEvent = visibleEvents.filter(e => filters.includes(e.kind)).sort((a, b) => a.start - b.start)[0];
+        targetHour = firstEvent ? (firstEvent.start - dayStart(dayKey(firstEvent.start))) / 3600000 : 9;
+      }
+      scroller.current.scrollTop = Math.max(0, targetHour * HOUR_HEIGHT - viewportHeight / 2);
+    };
+
+    const raf = requestAnimationFrame(() => {
+      scrollToTarget();
+      const timer = setTimeout(scrollToTarget, 60);
+      return () => clearTimeout(timer);
+    });
     setSelectedId(null);
+    return () => cancelAnimationFrame(raf);
   }, [from, to, loading, view]);
   useEffect(() => { setSelectedId(null); }, [filters]);
   const gutterWidth = typeof window !== 'undefined' && window.matchMedia('(max-width: 640px)').matches ? 48 : 64;
-  const attendanceWidth = Math.max(180, (calendarWidth - gutterWidth) * .38);
+  const availableWidth = Math.max(0, calendarWidth - gutterWidth);
   const dayLayouts = days.map(key => {
     const start = dayStart(key);
     const items = visibleEvents.filter(e => filters.includes(e.kind)).map(e => clipActivity(e, start, start + 86400000)).filter((e): e is Activity => !!e);
-    const lanes = view === 'day' ? [items.filter(e => isAttendance(e.kind)), items.filter(e => !isAttendance(e.kind))] : [items];
+    // Three sections in day view:
+    // 1. Small section for work time, break time, and no work time (attendance)
+    // 2. Day planner (tasks or items appearing in the day planner)
+    // 3. Time tracker section (tracked tasks & work blocks)
+    const lanes = view === 'day'
+      ? [
+          items.filter(e => isAttendance(e.kind)),
+          items.filter(e => e.kind === 'day_plan'),
+          items.filter(e => !isAttendance(e.kind) && e.kind !== 'day_plan'),
+        ]
+      : [items];
     const layout = lanes.map(lane => layoutActivities(lane, (MIN_EVENT_HEIGHT + EVENT_GAP) / HOUR_HEIGHT * 3600000));
     const columnCount = (lane: typeof layout[number]) => Math.max(1, ...lane.map(e => e.columns));
+
+    const section1Base = Math.max(120, Math.round(availableWidth * 0.16));
+    const remain = Math.max(240, availableWidth - section1Base);
+    const section2Base = Math.max(140, Math.round(remain * 0.48));
+    const section3Base = Math.max(140, remain - section2Base);
+
     const widths = view === 'day'
-      ? [Math.max(attendanceWidth, columnCount(layout[0]) * 140), Math.max((calendarWidth - gutterWidth) * .62, columnCount(layout[1]) * 160)]
-      : [Math.max((calendarWidth - gutterWidth) / 7, columnCount(layout[0]) * 140)];
+      ? [
+          Math.max(section1Base, columnCount(layout[0]) * 110),
+          Math.max(section2Base, columnCount(layout[1]) * 140),
+          Math.max(section3Base, columnCount(layout[2]) * 140),
+        ]
+      : [Math.max(availableWidth / 7, columnCount(layout[0]) * 140)];
     return { key, start, items, layout, widths, width: widths.reduce((sum, width) => sum + width, 0) };
   });
   const gridWidth = Math.max(calendarWidth, gutterWidth + dayLayouts.reduce((sum, day) => sum + day.width, 0));
-  const display = (event: Activity, top: number, height: number, left: string, width: string) => (
-    <button key={event.id} className="ta-event" data-kind={event.kind} data-selected={event.id === selectedId} data-short={height < 43}
-      style={{ top, height: Math.max(MIN_EVENT_HEIGHT, height - EVENT_GAP), left, width, '--event-color': KINDS.find(k => k.kind === event.kind)!.color } as CSSProperties}
+  const display = (event: Activity, top: number, height: number, left: string, width: string, isNarrow?: boolean) => (
+    <button key={event.id} className="ta-event" data-kind={event.kind} data-selected={event.id === selectedId} data-short={height < 43} data-narrow={isNarrow}
+      style={{ top, height: Math.max(MIN_EVENT_HEIGHT, height - EVENT_GAP), left, width, '--event-color': KINDS.find(k => k.kind === event.kind)?.color || '#38bdf8' } as CSSProperties}
       onClick={() => setSelectedId(event.id === selectedId ? null : event.id)}
       aria-label={`${event.title}, ${clock(event.start)} to ${event.live ? 'now' : clock(event.end)}, ${duration(event.seconds)}${event.isManual ? ', manually entered' : ''}`}
       title={`${event.title} · ${clock(event.start)}–${event.live ? 'now' : clock(event.end)} · ${duration(event.seconds)}${event.isManual ? ' · Manually entered' : ''}`}>
@@ -144,25 +180,22 @@ function CalendarData({ events, commitment, loading = false, error = false, onRe
         : <div className="ta-grid-scroll" ref={scroller} tabIndex={0} aria-label="Time calendar. Scroll sideways to see overlapping tasks.">
       <div className="ta-grid-head" style={{ width: gridWidth }}><div className="ta-zone">IST</div>{dayLayouts.map(({ key, width, widths }) => <div key={key} style={{ flex: `0 0 ${width}px` }} className="ta-day-head" data-today={key === dayKey(now)}>
         <button onClick={() => { setDate(key); setView('day'); }}><span>{dateLabel(dayStart(key), { weekday: view === 'day' ? 'long' : 'short' })}</span><b>{dateLabel(dayStart(key), { day: '2-digit' })}</b></button>
-        {view === 'day' ? <div className="ta-lane-labels"><span style={{ width: widths[0] }}>ATTENDANCE</span><span style={{ flex: 1 }}>TASKS & WORK BLOCKS</span></div> : <small>{duration(visibleEvents.filter(e => dayKey(e.start) === key && (e.kind === 'work' || e.kind === 'overtime')).reduce((s, e) => s + e.seconds, 0))} worked</small>}
+        {view === 'day' ? <div className="ta-lane-labels"><span style={{ width: widths[0] }}>WORK & BREAK</span><span style={{ width: widths[1] }}>DAY PLANNER</span><span style={{ width: widths[2], flex: 1 }}>TIME TRACKER</span></div> : <small>{duration(visibleEvents.filter(e => dayKey(e.start) === key && (e.kind === 'work' || e.kind === 'overtime')).reduce((s, e) => s + e.seconds, 0))} worked</small>}
       </div>)}</div>
 
           <div className="ta-grid-body" style={{ width: gridWidth }}><div className="ta-hours">{Array.from({ length: 24 }, (_, h) => <span key={h} style={{ top: h * HOUR_HEIGHT }}>{h === 0 ? '12 AM' : h < 12 ? `${h} AM` : h === 12 ? '12 PM' : `${h - 12} PM`}</span>)}</div>
             {dayLayouts.map(({ key, start, items, layout, widths, width }) => {
               return <div className="ta-day-column" key={key} style={{ flex: `0 0 ${width}px` }}>
                 {layout.map((lane, i) => <div className="ta-lane" key={i} style={{ flex: `0 0 ${widths[i]}px` }}>{lane.map(({ event, column, columns }) => {
-                  const attendance = view === 'day' && i === 0;
-                  const visibleLaneWidth = Math.max(320, (calendarWidth - gutterWidth) * 0.62);
-                  const columnWidth = attendance
-                    ? widths[i] / columns
-                    : view === 'week'
-                      ? 140
-                      : columns <= 4
-                        ? Math.max(100, (visibleLaneWidth - 10) / columns)
-                        : 160;
-                  const cardWidth = columns === 1 ? Math.min(widths[i], attendance ? widths[i] : 360) : columnWidth;
+                  const laneWidth = widths[i];
+                  const columnWidth = view === 'week' ? 140 : laneWidth / columns;
+                  const isNarrow = view === 'day' && i === 0;
+                  const cardWidth = columns === 1
+                    ? (isNarrow ? laneWidth - 8 : laneWidth - 10)
+                    : Math.max(60, columnWidth - 6);
+                  const left = `${column * columnWidth + (isNarrow ? 4 : 5)}px`;
                   return display(event, (event.start - start) / 3600000 * HOUR_HEIGHT, (event.end - event.start) / 3600000 * HOUR_HEIGHT,
-                    `${column * columnWidth + 5}px`, `${cardWidth - 10}px`);
+                    left, `${cardWidth}px`, isNarrow);
                 })}</div>)}
                 {key === dayKey(now) && <div className="ta-now" style={{ top: (now - start) / 3600000 * HOUR_HEIGHT }}><span>{clock(now)}</span><i /></div>}
                 {!items.length && <div className="ta-empty-day" style={{ top: 9 * HOUR_HEIGHT + 12 }}><Glyph name="clock" /><strong>{visibleEvents.length ? 'Nothing matches' : 'No time tracked'}</strong><span>{filters.length ? 'Your tracked sessions appear here.' : 'Select a time type above.'}</span></div>}
