@@ -49,10 +49,12 @@ function groupCatalog(items: TaskStatusDef[]): Grouped[] {
 
 export default function TaskStatusPicker({
   value,
+  originalStatus,
   onChange,
   buttonClassName,
 }: {
   value: string | null | undefined;
+  originalStatus?: string | null;
   onChange: (key: TaskStatusKey) => void;
   buttonClassName?: string;
 }) {
@@ -109,6 +111,13 @@ export default function TaskStatusPicker({
   const current = findTaskStatusDef(catalog, value)
     || getTaskStatusDef(value)
     || (value ? getTaskStatusDef(LEGACY_TO_KEY[value]) : null);
+
+  const isWaitingOrUnblocked = value === 'waiting_on_dependency' || value === 'unblocked';
+  const origDef = originalStatus
+    ? (findTaskStatusDef(catalog, originalStatus) || getTaskStatusDef(originalStatus))
+    : null;
+  const origLabel = origDef?.label || originalStatus || null;
+  const origColor = origDef?.color || '#6b7280';
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -168,6 +177,23 @@ export default function TaskStatusPicker({
           style={{ background: current?.color || 'var(--sh-ink-4)' }}
         />
         <span className="text-[13px]">{current?.label || value || 'No status'}</span>
+        {isWaitingOrUnblocked && origLabel && (
+          <span
+            className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10.5px] font-medium border shrink-0"
+            style={{
+              borderColor: 'var(--sh-hair)',
+              background: 'var(--surface-alt)',
+              color: 'var(--sh-ink-2)',
+            }}
+            title={`Original status: ${origLabel}`}
+          >
+            <span
+              className="h-1.5 w-1.5 rounded-full shrink-0"
+              style={{ background: origColor }}
+            />
+            <span className="truncate max-w-[120px]">{origLabel}</span>
+          </span>
+        )}
         <svg
           width="9"
           height="9"

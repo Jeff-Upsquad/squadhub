@@ -463,6 +463,14 @@ export default function TaskRow({
     const catalogDef = !currentStatus ? getTaskStatusDef(statusCategory) : null;
     const statusLabel = currentStatus?.name ?? catalogDef?.label ?? null;
     const statusColor = currentStatus?.color ?? catalogDef?.color ?? '#6b7280';
+    const originalStatus = (task as any)?.metadata?.original_status;
+    const isWaitingOrUnblocked = statusCategory === 'waiting_on_dependency' || statusCategory === 'unblocked'
+      || (statusLabel && (statusLabel.toUpperCase().includes('WAITING') && statusLabel.toUpperCase().includes('DEPEND') || statusLabel.toUpperCase() === 'UNBLOCKED'));
+    const origDef = originalStatus
+      ? (statuses.find((s) => s.name === originalStatus || s.id === originalStatus) || getTaskStatusDef(originalStatus))
+      : null;
+    const origLabel = (origDef as any)?.name || (origDef as any)?.label || originalStatus || null;
+    const origColor = origDef?.color || '#6b7280';
 
     return (
       <div
@@ -473,9 +481,23 @@ export default function TaskRow({
         title={canEdit ? 'Change status' : undefined}
       >
         {statusLabel ? (
-          <span className="lv-pri">
+          <span className="lv-pri flex items-center gap-1.5">
             <span className="lv-pri-dot" style={{ background: statusColor }} />
             <span className="lv-pri-label">{statusLabel}</span>
+            {isWaitingOrUnblocked && origLabel && (
+              <span
+                className="inline-flex items-center gap-1 rounded-full px-1.5 py-0.2 text-[10px] font-medium border shrink-0"
+                style={{
+                  borderColor: 'var(--sh-hair)',
+                  background: 'var(--surface-alt)',
+                  color: 'var(--sh-ink-2)',
+                }}
+                title={`Original status: ${origLabel}`}
+              >
+                <span className="h-1 w-1 rounded-full shrink-0" style={{ background: origColor }} />
+                <span className="truncate max-w-[90px]">{origLabel}</span>
+              </span>
+            )}
           </span>
         ) : (
           <span className="lv-cell-value">—</span>

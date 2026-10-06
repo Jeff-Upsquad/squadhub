@@ -570,6 +570,14 @@ export function isSystemStatus(status: { key?: string | null; name?: string | nu
   return false;
 }
 
+export function isWaitingOrUnblockedStatus(status: string | null | undefined): boolean {
+  if (!status) return false;
+  const s = status.toLowerCase().trim();
+  return s === 'waiting_on_dependency' || s === 'unblocked'
+    || (s.includes('waiting') && s.includes('depend'))
+    || s === 'unblocked';
+}
+
 export interface SystemStatusPreset {
   key: SystemStatusKey;
   name: string;
@@ -847,6 +855,9 @@ export interface TaskMetadata {
   tone?: string;
   category?: string;
   references?: string[];
+  relationships?: TaskRelationship[];
+  /** Preserved status prior to moving into waiting_on_dependency or unblocked */
+  original_status?: string | null;
   /** @deprecated File attachments now live in the `task_attachments` table — see TaskAttachment. */
   attachments?: { name: string; size: string }[];
   custom?: Record<string, unknown>;
