@@ -40,9 +40,9 @@ function CalendarData({ workspaceId, context, from, to, now, days = [], onClose 
       ...taskActivities(entries.data || []),
     ];
     for (const timer of timers) {
-      const start = segmentStart ?? timer.startedAt;
-      all.push({ id: `live:${timer.taskId}`, kind: 'task', title: timer.taskTitle, start, end: now,
-        seconds: Math.max(0, (now - start) / 1000 / timers.length), live: true, taskId: timer.taskId, source: 'Running task timer' });
+      const segmentOpen = segmentStart ?? timer.startedAt;
+      all.push({ id: `live:${timer.taskId}`, kind: 'task', title: timer.taskTitle, start: timer.startedAt, end: now,
+        seconds: Math.max(0, (now - segmentOpen) / 1000 / timers.length), live: true, taskId: timer.taskId, source: 'Running task timer' });
     }
     const block = activeBlock.data;
     if (block && !block.run.ended_at) all.push({ id: `block:${block.run.id}`, kind: 'block', title: block.task.title,

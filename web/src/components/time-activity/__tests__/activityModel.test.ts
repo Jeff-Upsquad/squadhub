@@ -70,21 +70,18 @@ test('contiguous split task timers combine into one continuous session with cred
   assert.equal(grouped.reduce((sum, e) => sum + (e.segments?.length || 1), 0), 55);
   assert.equal(combineTaskSegments(grouped).length, 11);
 });
-test('task sessions separated by a break remain distinct calendar entries so breaks appear', () => {
+test('task sessions on the same task stay one block from first start to last end with allocated time', () => {
   const events = combineTaskSegments([
     { ...activity('first', start, start + 27 * 60000, 27 * 60), taskId: 'email-cleanup' },
-    // 69m break between 12:27 AM and 1:36 AM
+    // 69m gap until 1:36 AM — still one block per task
     { ...activity('second', start + 96 * 60000, start + 118 * 60000, 22 * 60), taskId: 'email-cleanup', live: true },
   ]);
-  assert.equal(events.length, 2);
+  assert.equal(events.length, 1);
   assert.equal(events[0].start, start);
-  assert.equal(events[0].end, start + 27 * 60000);
-  assert.equal(events[0].seconds, 27 * 60);
-  assert.equal(events[0].live, false);
-  assert.equal(events[1].start, start + 96 * 60000);
-  assert.equal(events[1].end, start + 118 * 60000);
-  assert.equal(events[1].seconds, 22 * 60);
-  assert.equal(events[1].live, true);
+  assert.equal(events[0].end, start + 118 * 60000);
+  assert.equal(events[0].seconds, (27 + 22) * 60);
+  assert.equal(events[0].live, true);
+  assert.equal(events[0].segments?.length, 2);
 });
 test('group clipping sums actual contiguous segments and excludes gaps outside bounds', () => {
   const grouped = combineTaskSegments([
@@ -118,46 +115,41 @@ test('eleven overlapping tasks remain eleven separate positioned cards with cred
   assert.ok(layout.every(e => e.event.start === start + 20 * hour && e.event.end === start + 21 * hour));
 });
 
-test('multiple breaks on the same task create distinct blocks and intermediate tasks do not overlap', () => {
+test('one task is one block even with gaps; overlapping tasks share columns', () => {
   const events = combineTaskSegments([
     // Email cleanup: morning session 9:00 - 9:30
     { ...activity('ec-1', start + 9 * hour, start + 9.5 * hour, 1800), taskId: 'email-cleanup' },
-    // Call kia during the break: 10:00 - 10:20
+    // Call kia during the gap: 10:00 - 10:20
     { ...activity('call', start + 10 * hour, start + 10.33 * hour, 1200), taskId: 'call-kia' },
     // Email cleanup: afternoon session 11:00 - 11:45
     { ...activity('ec-2', start + 11 * hour, start + 11.75 * hour, 2700), taskId: 'email-cleanup' },
   ]);
-  assert.equal(events.length, 3);
+  assert.equal(events.length, 2);
   const ecSessions = events.filter(e => e.taskId === 'email-cleanup');
-  assert.equal(ecSessions.length, 2);
+  assert.equal(ecSessions.length, 1);
   assert.equal(ecSessions[0].start, start + 9 * hour);
-  assert.equal(ecSessions[0].end, start + 9.5 * hour);
-  assert.equal(ecSessions[1].start, start + 11 * hour);
-  assert.equal(ecSessions[1].end, start + 11.75 * hour);
+  assert.equal(ecSessions[0].end, start + 11.75 * hour);
+  assert.equal(ecSessions[0].seconds, 1800 + 2700);
+  assert.equal(ecSessions[0].segments?.length, 2);
 
   const layout = layoutActivities(events);
-  // Because the sessions don't overlap, all can sit in column 0!
-  assert.ok(layout.every(l => l.column === 0 && l.columns === 1));
+  // Email cleanup spans 9:00-11:45 and overlaps the 10:00 call, so they share columns.
+  assert.ok(layout.every(l => l.columns === 2));
 });
 
-test('segments within 5s tolerance merge as contiguous while >5s gaps become separate sessions', () => {
+test('all segments of one task merge into a single block regardless of gap size', () => {
   const events = combineTaskSegments([
     // Two segments within 3s of each other (e.g. parallel timer tick/sync)
     { ...activity('tick-1', start + hour, start + 1.25 * hour, 900), taskId: 't1' },
     { ...activity('tick-2', start + 1.25 * hour + 3000, start + 1.5 * hour, 900), taskId: 't1' },
-    // A 10s pause/break
+    // A 10s pause/break — still the same task block
     { ...activity('after-break', start + 1.5 * hour + 10000, start + 2 * hour, 1800), taskId: 't1' },
   ]);
-  assert.equal(events.length, 2);
-  // First session merges tick-1 and tick-2
+  assert.equal(events.length, 1);
   assert.equal(events[0].start, start + hour);
-  assert.equal(events[0].end, start + 1.5 * hour);
-  assert.equal(events[0].seconds, 1800);
-  assert.equal(events[0].segments?.length, 2);
-  // Second session is after the 10s break
-  assert.equal(events[1].start, start + 1.5 * hour + 10000);
-  assert.equal(events[1].end, start + 2 * hour);
-  assert.equal(events[1].seconds, 1800);
+  assert.equal(events[0].end, start + 2 * hour);
+  assert.equal(events[0].seconds, 3600);
+  assert.equal(events[0].segments?.length, 3);
 });
 
 test('task activities flag manually logged entries with isManual', () => {
