@@ -99,10 +99,14 @@ html.dark .ta-panel, html[data-theme="noir"] .ta-panel {
 .ta-event-project { font-size: 9px; opacity: .65; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ta-event-badge { margin-top: auto; font-size: 9px; opacity: .65; }
 .ta-event[data-short="true"] { padding: 3px 7px; }
-.ta-event[data-narrow="true"] { padding: 4px 6px; gap: 2px; }
-.ta-event[data-narrow="true"] .ta-event-title { font-size: 10px; gap: 4px; }
-.ta-event[data-narrow="true"] .ta-event-title > b { font-size: 8.5px; }
-.ta-event[data-narrow="true"] .ta-event-time { font-size: 8px; gap: 3px; }
+.ta-event[data-narrow="true"] { padding: 3px 5px; gap: 1px; }
+.ta-event[data-narrow="true"] .ta-event-title { font-size: 9.5px; gap: 3px; }
+.ta-event[data-narrow="true"] .ta-event-title > b { font-size: 8px; }
+.ta-event[data-narrow="true"] .ta-event-time { font-size: 7.5px; gap: 2px; }
+.ta-event[data-tight="true"] { padding: 2px 4px; }
+.ta-event[data-tight="true"] .ta-event-title { font-size: 8.5px; gap: 2px; }
+.ta-event[data-tight="true"] .ta-event-title > b { font-size: 7.5px; }
+.ta-event[data-tight="true"] .ta-event-time { display: none; }
 .ta-live-dot { background: currentColor; margin-right: 6px; vertical-align: middle; }
 .ta-calendar[data-view="week"] .ta-event { padding: 6px 5px; border-left-width: 2px; }
 .ta-calendar[data-view="week"] .ta-event-title { font-size: 9px; }
