@@ -1,14 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import type { Task } from '@squadhub/shared';
-import { isFutureDay, isToday, isTaskFocused } from '../lib/taskGrouping';
+import { isFutureDay, isTaskFocused } from '../lib/taskGrouping';
 
-describe('In progress future work date and Focus reappearance', () => {
+describe('In progress today-only and Focus fallback', () => {
   const tz = 'UTC';
   const today = '2026-10-06T12:00:00Z';
   const tomorrow = '2026-10-07T00:00:00Z';
   const overdue = '2026-10-04T00:00:00Z';
 
-  // Helper matching TodayList's filtering for in-progress tasks
+  // Helper matching TodayList's filtering for in-progress tasks:
+  // today-only — actively timed or time tracked today, nothing else.
   function filterInProgress(
     tasks: Task[],
     isActivelyTimed: (id: string) => boolean,
@@ -18,13 +19,8 @@ describe('In progress future work date and Focus reappearance', () => {
     return tasks.filter((t) => {
       const statusStr = typeof t.status === 'string' ? t.status : (t.status as unknown as { name?: string })?.name;
       if (statusStr === 'done' || statusStr === 'closed') return false;
-      if (isFutureDay(t.work_date, userTz) || isFutureDay((t as unknown as { start_date?: string | null }).start_date, userTz)) {
-        return false;
-      }
       if (isActivelyTimed(t.id) || (secondsTodayByTask.get(t.id) || 0) > 0) return true;
-      const isScheduledToday = isToday(t.work_date, userTz) || isToday((t as unknown as { start_date?: string | null }).start_date, userTz);
-      if (isScheduledToday) return false;
-      return true;
+      return false;
     });
   }
 
@@ -94,7 +90,7 @@ describe('In progress future work date and Focus reappearance', () => {
     expect(inProgressLogged[0].id).toBe('task-1');
   });
 
-  it('keeps overdue tasks with past time tracked in In progress', () => {
+  it('moves overdue tasks with only past time to Focus, not In progress', () => {
     const overdueTask: Task = {
       id: 'task-2',
       title: 'cashfree payment gateway integration',
@@ -104,7 +100,6 @@ describe('In progress future work date and Focus reappearance', () => {
     } as unknown as Task;
 
     const inProgress = filterInProgress([overdueTask], () => false, new Map(), tz);
-    expect(inProgress).toHaveLength(1);
-    expect(inProgress[0].id).toBe('task-2');
+    expect(inProgress).toHaveLength(0);
   });
 });
