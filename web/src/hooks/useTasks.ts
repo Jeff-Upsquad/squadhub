@@ -110,9 +110,9 @@ export type MyTasksBuckets = {
   upcoming: Task[];
   later: Task[];
   focused: Task[];
-  // Tasks with time tracked today or on previous days (user tz), most-recent first.
+  // Tasks worked TODAY (user tz), most-recent first.
   // Surfaced as the "In progress" section above the Home focus list.
-  // Header total stays today-only; upcoming work/start dates are excluded.
+  // Past time alone never keeps a task here.
   in_progress_today: Task[];
   day_planner?: Task[];
   unscheduled?: Task[];

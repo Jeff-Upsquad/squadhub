@@ -14,7 +14,7 @@ import AssigneePicker from '../pm/AssigneePicker';
 import IncompleteItemsDialog from '../pm/IncompleteItemsDialog';
 import NoAssigneeCompleteDialog from '../pm/NoAssigneeCompleteDialog';
 import { formatTracked, toLocalDateKey } from '../../../lib/formatDuration';
-import { groupTasks, isFutureDay, isToday, isTaskFocused, collapseGroupedTasks, isGroupedRow, GROUP_BY_OPTIONS, isTaskCompleted } from '../../../lib/taskGrouping';
+import { groupTasks, isFutureDay, isTaskFocused, collapseGroupedTasks, isGroupedRow, GROUP_BY_OPTIONS, isTaskCompleted } from '../../../lib/taskGrouping';
 import GroupedTaskRow from './GroupedTaskRow';
 import DayCalendar from '../day-planner/DayCalendar';
 import { planDateKey, computeSnoozeTargets } from '../../../hooks/useDayPlanner';
@@ -204,14 +204,10 @@ export default function TodayList() {
     return { secondsTodayByTask: map, totalTodaySeconds: total, liveByTask };
   }, [timeEntries, today, timers, timerSegmentStart, nowTick, activeWB]);
 
-  // "In progress" — tasks with time tracked today or on previous days
-  // (computed server-side, full task objects, most-recently-worked first) plus
-  // any task actively being timed right now. These render as their own section
-  // ABOVE the focus list and are pulled out of the focus/evening/night sections
-  // below so a worked task appears in In Progress and never shows up twice.
-  // The header total stays today-only (secondsTodayByTask). Tasks whose
-  // work_date or start_date is upcoming are excluded until that day arrives.
-  // Tasks scheduled for today that haven't been worked on today yet surface in Focus.
+  // "In progress" — tasks worked TODAY (time tracked today, computed
+  // client-side from today's entries) plus any task actively being timed right
+  // now. Renders as its own section ABOVE the focus list. Anything not worked
+  // today surfaces in Focus / Today instead — past time alone never keeps it here.
   const rawInProgress: Task[] = useMemo(() => {
     const list = [...(data?.in_progress_today ?? [])];
     const seen = new Set(list.map((t) => t.id));
@@ -248,13 +244,10 @@ export default function TodayList() {
 
     return list.filter((t) => {
       if (isTaskCompleted(t)) return false;
-      if (isFutureDay(t.work_date, tz) || isFutureDay((t as unknown as { start_date?: string | null }).start_date, tz)) return false;
       if (isActivelyTimed(t.id) || (secondsTodayByTask.get(t.id) || 0) > 0) return true;
-      const isScheduledToday = isToday(t.work_date, tz) || isToday((t as unknown as { start_date?: string | null }).start_date, tz);
-      if (isScheduledToday) return false;
-      return true;
+      return false;
     });
-  }, [data, activeWB?.task, timers, tz, isActivelyTimed, secondsTodayByTask]);
+  }, [data, activeWB?.task, timers, isActivelyTimed, secondsTodayByTask]);
   const inProgressTasks = useRetainFading(rawInProgress, fadingTaskIds);
   const inProgressIds = useMemo(() => new Set(inProgressTasks.map((t) => t.id)), [inProgressTasks]);
 

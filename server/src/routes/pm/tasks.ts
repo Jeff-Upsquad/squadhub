@@ -729,14 +729,12 @@ router.get('/tasks/my', async (req: Request, res: Response) => {
       buckets.focused = [...fromExisting, ...filteredExtra];
     }
 
-    // "In progress" — tasks the caller has time-tracked on today or any
-    // previous day, via ANY entry: real timer sessions or manual "Time logged"
-    // edits. Pulls recent time entries (most-recently-worked first, any date)
-    // plus currently-active runs. Full task objects (assignees, dates,
-    // parents) so the Home list renders these rows identically to the focus list.
-    // The header total stays today-only (computed client-side from today's
-    // entries) — the list itself is history. Tasks whose work_date or
-    // start_date is upcoming (work start in the future) are excluded here.
+    // "In progress" — tasks the caller has time-tracked TODAY, via ANY entry:
+    // real timer sessions or manual "Time logged" edits, plus currently-active
+    // runs. Full task objects (assignees, dates, parents) so the Home list
+    // renders these rows identically to the focus list. Anything not worked
+    // today surfaces in Focus / Today instead — past time alone never keeps
+    // a task here.
     const { data: recentEntries } = await supabaseAdmin
       .from('task_time_entries')
       .select('task_id, started_at, created_at, source')
@@ -778,12 +776,8 @@ router.get('/tasks/my', async (req: Request, res: Response) => {
       workedIds.push(id);
     }
 
-    // NOTE: In Progress is "ever worked" (any time-tracked history), NOT just
-    // "worked TODAY". Exclusions:
-    // 1. A task whose work_date or start_date is in the future (upcoming work start)
-    //    must not stick in In Progress — it is hidden until that date arrives.
-    // 2. A task scheduled for TODAY (work_date or start_date == todayStr) that
-    //    has NOT been worked today must surface in the Focus list, not In Progress.
+    // NOTE: In Progress is "worked TODAY" only. If not worked today it
+    // belongs in Focus / Today, not here — even overdue tasks with past time.
     if (workedIds.length > 0) {
       const have = new Map(tasks.map((t: any) => [t.id, t]));
       const missingWorked = workedIds.filter((id) => !have.has(id));
@@ -829,15 +823,7 @@ router.get('/tasks/my', async (req: Request, res: Response) => {
         .map((id) => workedById.get(id))
         .filter(Boolean)
         .filter((t) => includeDone || !isTaskDone(t))
-        .filter((t) => {
-          if (workedTodayIds.has(t.id)) return true;
-          const workDay = toTzDay(t.work_date);
-          if (workDay && workDay > todayStr) return false;
-          const startDay = toTzDay(t.start_date);
-          if (startDay && startDay > todayStr) return false;
-          if (workDay === todayStr || startDay === todayStr) return false;
-          return true;
-        });
+        .filter((t) => workedTodayIds.has(t.id));
     }
 
     res.json({ success: true, data: buckets });
