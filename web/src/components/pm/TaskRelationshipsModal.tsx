@@ -14,6 +14,7 @@ export interface RelatedTaskItem {
   id: string;
   title: string;
   status: string;
+  original_status?: string | null;
   priority?: string | null;
   display_number?: number | null;
   due_date?: string | null;
@@ -62,11 +63,13 @@ export default function TaskRelationshipsModal({
   taskId,
   taskTitle,
   currentStatus,
+  originalStatus,
   onClose,
 }: {
   taskId: string;
   taskTitle: string;
   currentStatus?: SpaceStatus | string | null;
+  originalStatus?: string | null;
   onClose: () => void;
 }) {
   const qc = useQueryClient();
@@ -220,6 +223,13 @@ export default function TaskRelationshipsModal({
   const statusLabel = (currentStatus && typeof currentStatus !== 'string' ? currentStatus.name : null) || statusDef?.label || statusString || 'Open';
   const statusColor = (currentStatus && typeof currentStatus !== 'string' ? currentStatus.color : null) || statusDef?.color || '#6b7280';
 
+  const isWaitingOrUnblocked = statusString === 'waiting_on_dependency' || statusString === 'unblocked'
+    || (statusLabel.toUpperCase().includes('WAITING') && statusLabel.toUpperCase().includes('DEPEND'))
+    || statusLabel.toUpperCase() === 'UNBLOCKED';
+  const origDef = originalStatus ? getTaskStatusDef(originalStatus) : null;
+  const origLabel = origDef?.label || originalStatus || null;
+  const origColor = origDef?.color || '#6b7280';
+
   return createPortal(
     <div
       className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-150"
@@ -244,11 +254,25 @@ export default function TaskRelationshipsModal({
               <div className="flex items-center gap-2">
                 <h3 className="text-base font-bold text-foreground">Task Relationships</h3>
                 <span
-                  className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium"
+                  className="inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-medium"
                   style={{ backgroundColor: `${statusColor}18`, color: statusColor }}
                 >
                   <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: statusColor }} />
-                  {statusLabel}
+                  <span>{statusLabel}</span>
+                  {isWaitingOrUnblocked && origLabel && (
+                    <span
+                      className="inline-flex items-center gap-1 rounded-full px-1.5 py-0.2 text-[10px] font-medium border"
+                      style={{
+                        borderColor: `${statusColor}40`,
+                        backgroundColor: `${origColor}18`,
+                        color: origColor,
+                      }}
+                      title={`Original status: ${origLabel}`}
+                    >
+                      <span className="h-1 w-1 rounded-full" style={{ backgroundColor: origColor }} />
+                      <span>{origLabel}</span>
+                    </span>
+                  )}
                 </span>
               </div>
               <p className="truncate text-xs text-foreground-dim" title={taskTitle}>
@@ -373,6 +397,7 @@ export default function TaskRelationshipsModal({
                               {item.title}
                             </p>
                             <div className="flex items-center gap-1.5 text-[11px] text-foreground-dim">
+                              <TaskStatusBadge status={item.status} originalStatus={item.original_status} />
                               {item.space_name && <span>{item.space_name}</span>}
                               {item.space_name && item.list_name && <span>›</span>}
                               {item.list_name && <span>{item.list_name}</span>}
@@ -448,6 +473,7 @@ export default function TaskRelationshipsModal({
                               {item.title}
                             </p>
                             <div className="flex items-center gap-1.5 text-[11px] text-foreground-dim">
+                              <TaskStatusBadge status={item.status} originalStatus={item.original_status} />
                               {item.space_name && <span>{item.space_name}</span>}
                               {item.space_name && item.list_name && <span>›</span>}
                               {item.list_name && <span>{item.list_name}</span>}

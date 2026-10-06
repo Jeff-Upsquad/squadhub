@@ -475,6 +475,7 @@ export default function NewTaskRow({
       <div className="nt-cell nt-c-status">
         <TaskStatusPicker
           value={t.status}
+          originalStatus={(t.metadata as any)?.original_status}
           onChange={(key) => applyEdit({ status: key })}
           buttonClassName="nt-cellbtn nt-status-btn"
         />

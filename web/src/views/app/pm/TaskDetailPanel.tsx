@@ -2184,6 +2184,7 @@ export default function TaskDetailPanel({
                     {isTaskType && canEdit ? (
                       <TaskStatusPicker
                         value={taskStatusCategory || null}
+                        originalStatus={(task?.metadata as any)?.original_status}
                         onChange={(key: TaskStatusKey) => {
                           updateTask.mutate({ id: task.id, status: key } as any);
                         }}
@@ -2193,6 +2194,7 @@ export default function TaskDetailPanel({
                         statuses={statuses}
                         current={status ?? null}
                         taskStatusCategory={taskStatusCategory}
+                        originalStatus={(task?.metadata as any)?.original_status}
                         canEdit={canEdit}
                         onPick={(s) => {
                           updateTask.mutate({ id: task.id, status: s.name } as any);
@@ -3326,6 +3328,7 @@ export default function TaskDetailPanel({
           taskId={task.id}
           taskTitle={task.title}
           currentStatus={task.status}
+          originalStatus={(task?.metadata as any)?.original_status}
           onClose={() => setRelationshipsOpen(false)}
         />
       )}
@@ -3645,12 +3648,14 @@ function SpaceStatusPicker({
   statuses,
   current,
   taskStatusCategory,
+  originalStatus,
   canEdit,
   onPick,
 }: {
   statuses: SpaceStatus[];
   current: SpaceStatus | null;
   taskStatusCategory: string | undefined;
+  originalStatus?: string | null;
   canEdit: boolean;
   onPick: (s: SpaceStatus) => void;
 }) {
@@ -3658,6 +3663,14 @@ function SpaceStatusPicker({
   const btnRef = useRef<HTMLButtonElement>(null);
   const popRef = useRef<HTMLDivElement>(null);
   const [rect, setRect] = useState<DOMRect | null>(null);
+
+  const isWaitingOrUnblocked = taskStatusCategory === 'waiting_on_dependency' || taskStatusCategory === 'unblocked'
+    || (current?.name && (current.name.toUpperCase().includes('WAITING') && current.name.toUpperCase().includes('DEPEND') || current.name.toUpperCase() === 'UNBLOCKED'));
+  const origDef = originalStatus
+    ? (statuses.find((s) => s.name === originalStatus || s.id === originalStatus) || getTaskStatusDef(originalStatus))
+    : null;
+  const origLabel = (origDef as any)?.name || (origDef as any)?.label || originalStatus || null;
+  const origColor = origDef?.color || '#6b7280';
 
   const toggle = useCallback(() => {
     if (open) { setOpen(false); return; }
@@ -3712,14 +3725,28 @@ function SpaceStatusPicker({
         ref={btnRef}
         type="button"
         onClick={canEdit ? toggle : undefined}
-        className="td-prop-chip"
+        className="td-prop-chip inline-flex items-center gap-1.5"
         style={{
           background: current?.color ? `color-mix(in oklch, ${current.color} 14%, transparent)` : 'var(--surface-alt)',
           color: current?.color || 'var(--sh-ink-3)',
         }}
       >
         <span className="dot" style={{ background: current?.color || 'var(--sh-ink-4)' }} />
-        {current?.name || (taskStatusCategory ? ({ todo: 'To Do', active: 'Active', done: 'Done', closed: 'Closed' }[taskStatusCategory] ?? taskStatusCategory) : 'No status')}
+        <span>{current?.name || (taskStatusCategory ? ({ todo: 'To Do', active: 'Active', done: 'Done', closed: 'Closed' }[taskStatusCategory] ?? taskStatusCategory) : 'No status')}</span>
+        {isWaitingOrUnblocked && origLabel && (
+          <span
+            className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10.5px] font-medium border shrink-0"
+            style={{
+              borderColor: 'var(--sh-hair)',
+              background: 'var(--surface-alt)',
+              color: 'var(--sh-ink-2)',
+            }}
+            title={`Original status: ${origLabel}`}
+          >
+            <span className="h-1.5 w-1.5 rounded-full shrink-0" style={{ background: origColor }} />
+            <span className="truncate max-w-[110px]">{origLabel}</span>
+          </span>
+        )}
       </button>
       {open && createPortal(
         <>

@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import type { User, TaskRecurrence, TaskTag, TaskListPath } from '@squadhub/shared';
-import { taskRecurrenceOccursOn, getTaskStatusCategory } from '@squadhub/shared';
+import { taskRecurrenceOccursOn, getTaskStatusCategory, isWaitingOrUnblockedStatus } from '@squadhub/shared';
 import { supabaseAdmin } from '../../supabase';
 import { requireAuth } from '../../middleware/auth';
 import { requireUserType } from '../../middleware/userType';
@@ -1901,7 +1901,7 @@ async function handleTaskCompletionDependencies(taskId: string, userId: string, 
           }
         }
 
-        if (allOtherBlockersDone && (depTask as any).status !== 'unblocked') {
+        if (allOtherBlockersDone && (depTask as any).status === 'waiting_on_dependency') {
           const oldStatus = (depTask as any).status;
           await supabaseAdmin
             .from('tasks')
@@ -1988,7 +1988,7 @@ router.get('/tasks/:id/relationships', async (req: Request, res: Response) => {
     const targetIds = Array.from(new Set(rawRels.map((r) => r.target_task_id).filter(Boolean)));
     const { data: targetTasks, error: targetsError } = await supabaseAdmin
       .from('tasks')
-      .select('id, title, status, priority, list_id, lists(id, name, space_id, spaces(id, name, color)), due_date, display_number, last_status_change_at')
+      .select('id, title, status, priority, list_id, lists(id, name, space_id, spaces(id, name, color)), due_date, display_number, last_status_change_at, metadata')
       .in('id', targetIds);
     if (targetsError) throw targetsError;
 
@@ -2006,6 +2006,7 @@ router.get('/tasks/:id/relationships', async (req: Request, res: Response) => {
         id: t.id,
         title: t.title,
         status: t.status,
+        original_status: (t.metadata as any)?.original_status || null,
         priority: t.priority,
         display_number: t.display_number,
         due_date: t.due_date,
@@ -2103,9 +2104,15 @@ router.post('/tasks/:id/relationships', async (req: Request, res: Response) => {
     if (body.type === 'waiting_on') {
       const isDoneB = await isTaskStatusDone(listIdB, (taskB as any).status);
       patchA.status = isDoneB ? 'unblocked' : 'waiting_on_dependency';
+      if (!isWaitingOrUnblockedStatus((taskA as any).status) && (taskA as any).status) {
+        nextMetaA.original_status = (taskA as any).status;
+      }
     } else if (body.type === 'blocks') {
       const isDoneA = await isTaskStatusDone(listIdA, (taskA as any).status);
       patchB.status = isDoneA ? 'unblocked' : 'waiting_on_dependency';
+      if (!isWaitingOrUnblockedStatus((taskB as any).status) && (taskB as any).status) {
+        nextMetaB.original_status = (taskB as any).status;
+      }
     }
 
     await Promise.all([
@@ -2506,6 +2513,29 @@ router.put('/tasks/:id', async (req: Request, res: Response) => {
     }
 
     const updatePayload: Record<string, any> = { ...body, last_modified_by: req.userId! };
+
+    const priorMeta = (prior as any)?.metadata || {};
+    const nextMeta = body.metadata !== undefined ? { ...priorMeta, ...body.metadata } : { ...priorMeta };
+
+    if (body.status !== undefined) {
+      const priorStatus = (prior as any)?.status;
+      const isNextWaitingOrUnblocked = isWaitingOrUnblockedStatus(body.status);
+      const isPriorWaitingOrUnblocked = isWaitingOrUnblockedStatus(priorStatus);
+
+      if (isNextWaitingOrUnblocked) {
+        if (!isPriorWaitingOrUnblocked && priorStatus) {
+          nextMeta.original_status = priorStatus;
+        } else if (isPriorWaitingOrUnblocked) {
+          nextMeta.original_status = priorMeta.original_status || priorStatus;
+        }
+      } else {
+        // Leaving waiting_on_dependency / unblocked -> clear original_status
+        delete nextMeta.original_status;
+      }
+      updatePayload.metadata = nextMeta;
+    } else if (body.metadata !== undefined) {
+      updatePayload.metadata = nextMeta;
+    }
     if (body.recurrence !== undefined) {
       if (body.recurrence) {
         // Task becomes (or updates) a routine template. If it was itself a
