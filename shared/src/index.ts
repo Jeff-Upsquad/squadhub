@@ -398,6 +398,7 @@ export interface TaskStatusDef {
   groupEmoji: string;
   category: StatusCategory;
   color: string;
+  is_system?: boolean;
 }
 
 export const TASK_STATUS_CATALOG: TaskStatusDef[] = [
@@ -407,7 +408,7 @@ export const TASK_STATUS_CATALOG: TaskStatusDef[] = [
 
   // Scheduled / Queued → active
   { key: 'scheduled', label: 'SCHEDULED', description: 'Has a specific date/time set.', group: 'scheduled_queued', groupLabel: 'Scheduled / Queued', groupEmoji: '📅', category: 'active', color: '#60a5fa' },
-  { key: 'reminder', label: 'REMINDER', description: 'A nudge to do or check something later.', group: 'scheduled_queued', groupLabel: 'Scheduled / Queued', groupEmoji: '📅', category: 'active', color: '#93c5fd' },
+  { key: 'reminder', label: 'REMINDER', description: 'A nudge to do or check something later.', group: 'scheduled_queued', groupLabel: 'Scheduled / Queued', groupEmoji: '📅', category: 'active', color: '#93c5fd', is_system: true },
   { key: 'back_burner', label: 'BACK BURNER', description: 'Low priority; get to it eventually.', group: 'scheduled_queued', groupLabel: 'Scheduled / Queued', groupEmoji: '📅', category: 'active', color: '#a8a29e' },
   { key: 'up_next', label: 'UP NEXT', description: 'Next in line after current work wraps up.', group: 'scheduled_queued', groupLabel: 'Scheduled / Queued', groupEmoji: '📅', category: 'active', color: '#38bdf8' },
   { key: 'this_week', label: 'THIS WEEK', description: 'To be handled sometime this week.', group: 'scheduled_queued', groupLabel: 'Scheduled / Queued', groupEmoji: '📅', category: 'active', color: '#22d3ee' },
@@ -435,14 +436,14 @@ export const TASK_STATUS_CATALOG: TaskStatusDef[] = [
 
   // Blocked / Paused → active
   { key: 'on_hold', label: 'ON HOLD', description: 'Intentionally paused for now.', group: 'blocked_paused', groupLabel: 'Blocked / Paused', groupEmoji: '⏸️', category: 'active', color: '#78716c' },
-  { key: 'waiting_on_dependency', label: 'WAITING ON – DEPENDANCY', description: 'Blocked until something/someone else moves.', group: 'blocked_paused', groupLabel: 'Blocked / Paused', groupEmoji: '⏸️', category: 'active', color: '#6b7280' },
+  { key: 'waiting_on_dependency', label: 'WAITING ON – DEPENDENCY', description: 'Blocked until something/someone else moves.', group: 'blocked_paused', groupLabel: 'Blocked / Paused', groupEmoji: '⏸️', category: 'active', color: '#6b7280', is_system: true },
   { key: 'follow_ups', label: 'FOLLOW UPS', description: 'Awaiting a reply; check back periodically.', group: 'blocked_paused', groupLabel: 'Blocked / Paused', groupEmoji: '⏸️', category: 'active', color: '#4b5563' },
   { key: 'help', label: 'HELP', description: 'Stuck; needs input or assistance from someone.', group: 'blocked_paused', groupLabel: 'Blocked / Paused', groupEmoji: '⏸️', category: 'active', color: '#a16207' },
-  { key: 'unblocked', label: 'UNBLOCKED', description: 'Was blocked, now free to resume.', group: 'blocked_paused', groupLabel: 'Blocked / Paused', groupEmoji: '⏸️', category: 'active', color: '#84cc16' },
+  { key: 'unblocked', label: 'UNBLOCKED', description: 'Was blocked, now free to resume.', group: 'blocked_paused', groupLabel: 'Blocked / Paused', groupEmoji: '⏸️', category: 'active', color: '#84cc16', is_system: true },
 
   // Closed → closed
-  { key: 'closed', label: 'CLOSED', description: 'Completed and archived.', group: 'done', groupLabel: 'Closed', groupEmoji: '✅', category: 'closed', color: '#10b981' },
-  { key: 'cancelled', label: 'CANCELLED', description: 'No longer needed; closed without completing.', group: 'done', groupLabel: 'Closed', groupEmoji: '✅', category: 'closed', color: '#6b7280' },
+  { key: 'closed', label: 'CLOSED', description: 'Completed and archived.', group: 'done', groupLabel: 'Closed', groupEmoji: '✅', category: 'closed', color: '#10b981', is_system: true },
+  { key: 'cancelled', label: 'CANCELLED', description: 'No longer needed; closed without completing.', group: 'done', groupLabel: 'Closed', groupEmoji: '✅', category: 'closed', color: '#6b7280', is_system: true },
 ];
 
 const TASK_STATUS_BY_KEY: Record<string, TaskStatusDef> = TASK_STATUS_CATALOG.reduce(
@@ -537,9 +538,58 @@ export interface StatusGroupStatus {
   section?: string | null;
   section_label?: string | null;
   section_emoji?: string | null;
+  is_system?: boolean;
 }
 
 /** Convert a managed task_workflow row into the catalog shape the picker renders. */
+export const SYSTEM_STATUS_KEYS = [
+  'waiting_on_dependency',
+  'unblocked',
+  'reminder',
+  'closed',
+  'cancelled',
+] as const;
+
+export type SystemStatusKey = (typeof SYSTEM_STATUS_KEYS)[number];
+
+export function isSystemStatusKey(key: string | null | undefined): boolean {
+  if (!key) return false;
+  const k = key.toLowerCase().trim();
+  return (SYSTEM_STATUS_KEYS as readonly string[]).includes(k);
+}
+
+export function isSystemStatus(status: { key?: string | null; name?: string | null; is_system?: boolean } | null | undefined): boolean {
+  if (!status) return false;
+  if (status.is_system) return true;
+  if (isSystemStatusKey(status.key)) return true;
+  if (status.name) {
+    const slug = status.name.toLowerCase().replace(/[^a-z0-9_\s]/g, '').trim().replace(/\s+/g, '_');
+    if (isSystemStatusKey(slug)) return true;
+    if (slug.includes('waiting') && slug.includes('depend')) return true;
+  }
+  return false;
+}
+
+export interface SystemStatusPreset {
+  key: SystemStatusKey;
+  name: string;
+  label: string;
+  category: StatusCategory;
+  color: string;
+  description: string;
+  section: TaskStatusGroup;
+  section_label: string;
+  section_emoji: string;
+}
+
+export const SYSTEM_STATUS_PRESETS: SystemStatusPreset[] = [
+  { key: 'closed', name: 'CLOSED', label: 'Closed', category: 'closed', color: '#10b981', description: 'Completed and archived.', section: 'done', section_label: 'Closed', section_emoji: '✅' },
+  { key: 'cancelled', name: 'CANCELLED', label: 'Cancelled', category: 'closed', color: '#6b7280', description: 'No longer needed; closed without completing.', section: 'done', section_label: 'Closed', section_emoji: '✅' },
+  { key: 'waiting_on_dependency', name: 'WAITING ON – DEPENDENCY', label: 'Waiting on Dependency', category: 'active', color: '#6b7280', description: 'Blocked until something/someone else moves.', section: 'blocked_paused', section_label: 'Blocked / Paused', section_emoji: '⏸️' },
+  { key: 'unblocked', name: 'UNBLOCKED', label: 'Unblocked', category: 'active', color: '#84cc16', description: 'Was blocked, now free to resume.', section: 'blocked_paused', section_label: 'Blocked / Paused', section_emoji: '⏸️' },
+  { key: 'reminder', name: 'REMINDER', label: 'Reminder', category: 'active', color: '#93c5fd', description: 'A nudge to do or check something later.', section: 'scheduled_queued', section_label: 'Scheduled / Queued', section_emoji: '📅' },
+];
+
 export function statusGroupRowToTaskDef(r: StatusGroupStatus): TaskStatusDef {
   return {
     key: (r.key || '') as TaskStatusKey,
@@ -550,7 +600,17 @@ export function statusGroupRowToTaskDef(r: StatusGroupStatus): TaskStatusDef {
     groupEmoji: r.section_emoji || '',
     category: r.category,
     color: r.color,
+    is_system: isSystemStatus(r),
   };
+}
+
+export type TaskRelationshipType = 'waiting_on' | 'blocks';
+
+export interface TaskRelationship {
+  type: TaskRelationshipType;
+  target_task_id: string;
+  created_at?: string;
+  created_by?: string;
 }
 
 export interface StatusGroup {

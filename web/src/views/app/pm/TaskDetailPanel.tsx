@@ -66,6 +66,7 @@ import LogTimePopover from '../../../components/pm/LogTimePopover';
 import { formatDuration } from '../../../lib/timeDuration';
 import AddEntrySplitButton from './AddEntrySplitButton';
 import TaskDetailMoreMenu from './TaskDetailMoreMenu';
+import TaskRelationshipsModal from '../../../components/pm/TaskRelationshipsModal';
 
 function formatTracked(seconds: number | null | undefined): string {
   if (!seconds) return '';
@@ -602,6 +603,7 @@ export default function TaskDetailPanel({
   // has open subtasks / unchecked checklist items. Blocking: no complete-anyway.
   const [incompletePrompt, setIncompletePrompt] = useState<{ rect: DOMRect; subtasks: number; checklist: number; subtaskId?: string } | null>(null);
   const [showReport, setShowReport] = useState(false);
+  const [relationshipsOpen, setRelationshipsOpen] = useState(false);
   const [flagDetail, setFlagDetail] = useState<any>(null);
 
   useEffect(() => {
@@ -885,7 +887,7 @@ export default function TaskDetailPanel({
       ? (catalogDef
           ? ({ color: catalogDef.color, name: catalogDef.label } as Pick<SpaceStatus, 'color' | 'name'> as SpaceStatus)
           : undefined)
-      : statuses.find((s) => s.name === taskStatusCategory) || statuses.find((s) => s.category === taskStatusCategory)
+      : statuses.find((s) => s.name === taskStatusCategory) || statuses.find((s) => s.category === taskStatusCategory) || (catalogDef ? ({ color: catalogDef.color, name: catalogDef.label } as Pick<SpaceStatus, 'color' | 'name'> as SpaceStatus) : undefined)
     : undefined;
   const matchedStatus = !isTaskType ? (statuses.find((s) => s.name === taskStatusCategory) || statuses.find((s) => s.category === taskStatusCategory)) : null;
   const isDone = catalogDef?.category === 'closed' || taskStatusCategory === 'done' || taskStatusCategory === 'closed' || taskStatusCategory === 'cancelled' || matchedStatus?.category === 'done' || matchedStatus?.category === 'closed';
@@ -1359,6 +1361,18 @@ export default function TaskDetailPanel({
                 onToggle={(focused) => focusTask.mutate({ id: task.id, focused })}
               />
               <GoalTaskFlag taskId={task.id} size={19} className="td-m-hero-icon" />
+              <button
+                type="button"
+                className="td-m-hero-icon"
+                title="Relationships"
+                aria-label="Task relationships"
+                onClick={() => setRelationshipsOpen(true)}
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71" />
+                  <path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71" />
+                </svg>
+              </button>
               <button type="button" className="td-m-hero-icon" aria-label="Copy link" onClick={handleCopyLink}>
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71" /><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71" /></svg>
               </button>
@@ -1388,6 +1402,7 @@ export default function TaskDetailPanel({
                   onAddToList={() => setAddPickerOpen(true)}
                   onDelete={handleDelete}
                   onAddToGoal={() => task && useGoalsUI.getState().pickGoalFor(task.id)}
+                  onRelationships={() => setRelationshipsOpen(true)}
                   onReportSop={() => setShowReport(true)}
                 />
               </div>
@@ -1552,6 +1567,18 @@ export default function TaskDetailPanel({
                 onToggle={(focused) => focusTask.mutate({ id: task.id, focused })}
               />
               <GoalTaskFlag taskId={task.id} size={16} className="td-nav-btn" />
+              <button
+                type="button"
+                onClick={() => setRelationshipsOpen(true)}
+                className="td-nav-btn"
+                title="Relationships"
+                aria-label="Task relationships"
+              >
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+                  <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+                </svg>
+              </button>
             </>
           )}
           <button type="button" onClick={handleCopyLink} className="td-nav-btn" title="Copy link">
@@ -1587,6 +1614,7 @@ export default function TaskDetailPanel({
               onAddToList={() => setAddPickerOpen(true)}
               onDelete={handleDelete}
               onAddToGoal={() => task && useGoalsUI.getState().pickGoalFor(task.id)}
+              onRelationships={() => setRelationshipsOpen(true)}
               onReportSop={() => setShowReport(true)}
             />
           </div>
@@ -3293,6 +3321,14 @@ export default function TaskDetailPanel({
         />
       )}
       {flagDetail && <SopFlagDetailModal detail={flagDetail} onClose={() => setFlagDetail(null)} />}
+      {relationshipsOpen && task && (
+        <TaskRelationshipsModal
+          taskId={task.id}
+          taskTitle={task.title}
+          currentStatus={task.status}
+          onClose={() => setRelationshipsOpen(false)}
+        />
+      )}
     </div>
   );
 }

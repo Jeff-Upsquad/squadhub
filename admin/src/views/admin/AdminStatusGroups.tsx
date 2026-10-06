@@ -2,7 +2,14 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../services/api';
-import type { StatusGroup, StatusGroupStatus, StatusCategory } from '@squadhub/shared';
+import {
+  type StatusGroup,
+  type StatusGroupStatus,
+  type StatusCategory,
+  type SystemStatusPreset,
+  isSystemStatus,
+  SYSTEM_STATUS_PRESETS,
+} from '@squadhub/shared';
 
 type SubTab = 'statuses' | 'apply' | 'usage' | 'templates';
 type EntityType = 'space' | 'folder' | 'list' | 'template';
@@ -395,6 +402,35 @@ function StatusesCard({ group, onChanged }: { group: StatusGroup; onChanged: () 
     onSuccess: onChanged,
   });
 
+  const addSystemStatus = useMutation({
+    mutationFn: (preset: SystemStatusPreset) => {
+      const sec = TASK_SECTIONS.find((s) => s.key === preset.section);
+      return api.post(`/admin/status-groups/${group.id}/statuses`, {
+        name: isTaskWorkflow ? preset.name : preset.label,
+        key: preset.key,
+        color: preset.color,
+        category: preset.category,
+        description: preset.description,
+        section: isTaskWorkflow ? preset.section : undefined,
+        section_label: isTaskWorkflow ? sec?.label : undefined,
+        section_emoji: isTaskWorkflow ? sec?.emoji : undefined,
+      }).then((r) => r.data);
+    },
+    onSuccess: (res, preset) => {
+      const newId = res?.data?.id as string | undefined;
+      if (isTaskWorkflow && newId) {
+        move.mutate(placeAtEndOfSection(displayOrder, newId, preset.section));
+      } else {
+        onChanged();
+      }
+    },
+    onError: (err: any) => alert(err?.response?.data?.error || 'Failed to add system status'),
+  });
+
+  const availableSystemPresets = SYSTEM_STATUS_PRESETS.filter(
+    (preset) => !statuses.some((s) => s.key === preset.key || isSystemStatus(s) && (s.key === preset.key || s.name.toLowerCase().trim() === preset.label.toLowerCase().trim() || s.name.toUpperCase().trim() === preset.name))
+  );
+
   const shift = (displayIdx: number, dir: -1 | 1) => {
     const next = [...displayOrder];
     const j = displayIdx + dir;
@@ -423,6 +459,40 @@ function StatusesCard({ group, onChanged }: { group: StatusGroup; onChanged: () 
           and can’t be changed — rename labels freely. Changes apply within about a minute.
         </p>
       )}
+
+      {/* System default statuses quick-add / info box */}
+      <div className="mb-3 rounded-lg border border-divider/70 bg-muted/20 p-2.5">
+        <div className="flex items-center justify-between gap-2 mb-1.5">
+          <span className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+            <span className="inline-block h-1.5 w-1.5 rounded-full bg-slate-500" />
+            System Default Statuses
+          </span>
+          <span className="text-[11px] text-foreground-dim">Universal across workflows</span>
+        </div>
+        {availableSystemPresets.length > 0 ? (
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="text-[11px] text-foreground-dim mr-1">Add to this group:</span>
+            {availableSystemPresets.map((preset) => (
+              <button
+                key={preset.key}
+                type="button"
+                disabled={addSystemStatus.isPending}
+                onClick={() => addSystemStatus.mutate(preset)}
+                className="inline-flex items-center gap-1.5 rounded-md border border-divider bg-surface px-2 py-1 text-xs font-medium text-foreground hover:bg-muted/60 hover:border-foreground/30 transition shadow-xs disabled:opacity-50 cursor-pointer"
+                title={`Add universal system default status "${preset.label}" (${CATEGORY_LABELS[preset.category]})`}
+              >
+                <span className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: preset.color }} />
+                <span>+ {preset.label}</span>
+                <span className="rounded bg-slate-100 dark:bg-slate-800 px-1 py-0.2 text-[9px] font-semibold text-slate-600 dark:text-slate-300">SYSTEM</span>
+              </button>
+            ))}
+          </div>
+        ) : (
+          <p className="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-1">
+            ✓ All system default statuses are active in this workflow group
+          </p>
+        )}
+      </div>
 
       <form
         className="mb-3 space-y-2"
@@ -499,13 +569,29 @@ function StatusesCard({ group, onChanged }: { group: StatusGroup; onChanged: () 
                   {s.key && <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] text-foreground-dim">{s.key}</code>}
                   <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium text-foreground-dim">{CATEGORY_LABELS[s.category]}</span>
                   {s.is_default && <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700">DEFAULT</span>}
-                  <button onClick={() => shift(i, -1)} disabled={atSectionEdge(i, -1)} className="rounded px-1 text-foreground-dim hover:text-foreground disabled:opacity-30" title="Move up">↑</button>
-                  <button onClick={() => shift(i, 1)} disabled={atSectionEdge(i, 1)} className="rounded px-1 text-foreground-dim hover:text-foreground disabled:opacity-30" title="Move down">↓</button>
-                  {!s.is_default && (
-                    <button onClick={() => update.mutate({ id: s.id, body: { is_default: true } })} className="rounded px-1 text-xs text-foreground-dim hover:text-foreground" title="Mark as default">★</button>
-                  )}
-                  <button onClick={() => { setEditingId(s.id); setEditName(s.name); setEditColor(s.color); setEditCategory(s.category); setEditDescription(s.description || ''); setEditSection(s.section || 'not_started'); }} className="rounded px-1 text-xs text-foreground-dim hover:text-foreground">Edit</button>
-                  <button onClick={() => { if (confirm(`Delete status “${s.name}”?${s.key ? ' Tasks already on this status will keep working and show the old label.' : ''}`)) remove.mutate(s.id); }} className="rounded px-1 text-xs text-red-500 hover:text-red-700">Delete</button>
+                  {(() => {
+                    const isSystem = isSystemStatus(s);
+                    return (
+                      <>
+                        {isSystem && (
+                          <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-600">SYSTEM</span>
+                        )}
+                        <button onClick={() => shift(i, -1)} disabled={atSectionEdge(i, -1)} className="rounded px-1 text-foreground-dim hover:text-foreground disabled:opacity-30" title="Move up">↑</button>
+                        <button onClick={() => shift(i, 1)} disabled={atSectionEdge(i, 1)} className="rounded px-1 text-foreground-dim hover:text-foreground disabled:opacity-30" title="Move down">↓</button>
+                        {!s.is_default && !isSystem && (
+                          <button onClick={() => update.mutate({ id: s.id, body: { is_default: true } })} className="rounded px-1 text-xs text-foreground-dim hover:text-foreground" title="Mark as default">★</button>
+                        )}
+                        {isSystem ? (
+                          <span className="rounded px-1.5 py-0.5 text-[11px] font-medium text-foreground-dim bg-muted/60" title="System default status cannot be edited or changed">Locked</span>
+                        ) : (
+                          <>
+                            <button onClick={() => { setEditingId(s.id); setEditName(s.name); setEditColor(s.color); setEditCategory(s.category); setEditDescription(s.description || ''); setEditSection(s.section || 'not_started'); }} className="rounded px-1 text-xs text-foreground-dim hover:text-foreground">Edit</button>
+                            <button onClick={() => { if (confirm(`Delete status “${s.name}”?${s.key ? ' Tasks already on this status will keep working and show the old label.' : ''}`)) remove.mutate(s.id); }} className="rounded px-1 text-xs text-red-500 hover:text-red-700">Delete</button>
+                          </>
+                        )}
+                      </>
+                    );
+                  })()}
                 </>
               )}
             </div>

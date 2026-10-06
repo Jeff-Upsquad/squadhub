@@ -1813,6 +1813,408 @@ router.post('/tasks/:id/companion-timer/cancel', async (req: Request, res: Respo
   }
 });
 
+// ------------------------------------------------------------
+// Task Relationships: waiting_on and blocks dependencies
+// ------------------------------------------------------------
+
+/**
+ * When a task is completed, any task waiting on it will move to 'unblocked'
+ * (provided all other tasks it is waiting on are also completed).
+ * Symmetrically, if a completed task is reopened, dependent tasks currently in
+ * 'unblocked' move back to 'waiting_on_dependency'.
+ */
+async function handleTaskCompletionDependencies(taskId: string, userId: string, isCompleted: boolean): Promise<void> {
+  try {
+    // 1. Find all candidate tasks that are waiting on taskId:
+    // a) From taskId's own metadata: relationships where type === 'blocks'
+    const { data: currentTask } = await supabaseAdmin
+      .from('tasks')
+      .select('id, metadata')
+      .eq('id', taskId)
+      .maybeSingle();
+
+    const candidateIds = new Set<string>();
+    const rels: Array<{ type: string; target_task_id: string }> =
+      Array.isArray((currentTask as any)?.metadata?.relationships)
+        ? (currentTask as any).metadata.relationships
+        : [];
+    for (const r of rels) {
+      if (r.type === 'blocks' && r.target_task_id) {
+        candidateIds.add(r.target_task_id);
+      }
+    }
+
+    // b) Also query tasks whose metadata relationships contain waiting_on this taskId
+    try {
+      const { data: waitingTasks } = await supabaseAdmin
+        .from('tasks')
+        .select('id')
+        .contains('metadata', { relationships: [{ target_task_id: taskId, type: 'waiting_on' }] });
+      if (waitingTasks) {
+        for (const wt of waitingTasks) {
+          candidateIds.add(wt.id);
+        }
+      }
+    } catch {
+      // Ignored: candidateIds already populated from taskId's metadata
+    }
+
+    if (candidateIds.size === 0) return;
+
+    if (isCompleted) {
+      // Task completed -> check each dependent task and unblock if all its blockers are resolved
+      for (const targetId of candidateIds) {
+        const { data: depTask } = await supabaseAdmin
+          .from('tasks')
+          .select('id, status, list_id, metadata')
+          .eq('id', targetId)
+          .maybeSingle();
+        if (!depTask) continue;
+
+        // If the dependent task is already done/closed/cancelled, leave it as is
+        const isDepDone = await isTaskStatusDone((depTask as any).list_id, (depTask as any).status);
+        if (isDepDone) continue;
+
+        // Check if depTask is waiting on any OTHER tasks that are not yet done
+        const depRels: Array<{ type: string; target_task_id: string }> =
+          Array.isArray((depTask as any).metadata?.relationships)
+            ? (depTask as any).metadata.relationships
+            : [];
+        const otherWaitingOn = depRels.filter(
+          (r) => r.type === 'waiting_on' && r.target_task_id && r.target_task_id !== taskId
+        );
+
+        let allOtherBlockersDone = true;
+        if (otherWaitingOn.length > 0) {
+          const otherTargetIds = otherWaitingOn.map((r) => r.target_task_id);
+          const { data: otherTasks } = await supabaseAdmin
+            .from('tasks')
+            .select('id, status, list_id')
+            .in('id', otherTargetIds);
+
+          for (const ot of (otherTasks || [])) {
+            const otDone = await isTaskStatusDone(ot.list_id, ot.status);
+            if (!otDone) {
+              allOtherBlockersDone = false;
+              break;
+            }
+          }
+        }
+
+        if (allOtherBlockersDone && (depTask as any).status !== 'unblocked') {
+          const oldStatus = (depTask as any).status;
+          await supabaseAdmin
+            .from('tasks')
+            .update({ status: 'unblocked', last_modified_by: userId })
+            .eq('id', targetId);
+
+          await logTaskActivity(targetId, userId, [
+            {
+              event_type: 'field_change',
+              field: 'status',
+              old_value: oldStatus,
+              new_value: 'unblocked',
+            },
+          ]);
+        }
+      }
+    } else {
+      // Task reopened from done/closed -> any dependent task that is in 'unblocked'
+      // returns to 'waiting_on_dependency'
+      for (const targetId of candidateIds) {
+        const { data: depTask } = await supabaseAdmin
+          .from('tasks')
+          .select('id, status, list_id')
+          .eq('id', targetId)
+          .maybeSingle();
+        if (!depTask) continue;
+
+        if ((depTask as any).status === 'unblocked') {
+          await supabaseAdmin
+            .from('tasks')
+            .update({ status: 'waiting_on_dependency', last_modified_by: userId })
+            .eq('id', targetId);
+
+          await logTaskActivity(targetId, userId, [
+            {
+              event_type: 'field_change',
+              field: 'status',
+              old_value: 'unblocked',
+              new_value: 'waiting_on_dependency',
+            },
+          ]);
+        }
+      }
+    }
+  } catch (err) {
+    console.error('Error handling task completion dependencies:', err);
+  }
+}
+
+// GET /pm/tasks/:id/relationships — get waiting_on and blocks tasks
+router.get('/tasks/:id/relationships', async (req: Request, res: Response) => {
+  try {
+    const id = req.params.id as string;
+    const listId = await getTaskListId(id);
+    if (!listId) {
+      res.status(404).json({ success: false, error: 'Task not found' });
+      return;
+    }
+    const userLevel = await checkResourceAccess(req.userId!, 'list', listId);
+    if (!userLevel || !meetsAccessLevel(userLevel, 'viewer')) {
+      res.status(403).json({ success: false, error: 'Access denied' });
+      return;
+    }
+
+    const { data: task, error } = await supabaseAdmin
+      .from('tasks')
+      .select('id, metadata')
+      .eq('id', id)
+      .maybeSingle();
+    if (error) throw error;
+    if (!task) {
+      res.status(404).json({ success: false, error: 'Task not found' });
+      return;
+    }
+
+    const rawRels: Array<{ type: 'waiting_on' | 'blocks'; target_task_id: string; created_at?: string }> =
+      Array.isArray((task as any).metadata?.relationships) ? (task as any).metadata.relationships : [];
+
+    if (!rawRels.length) {
+      res.json({ success: true, data: { waiting_on: [], blocks: [] } });
+      return;
+    }
+
+    const targetIds = Array.from(new Set(rawRels.map((r) => r.target_task_id).filter(Boolean)));
+    const { data: targetTasks, error: targetsError } = await supabaseAdmin
+      .from('tasks')
+      .select('id, title, status, priority, list_id, lists(id, name, space_id, spaces(id, name, color)), due_date, display_number, last_status_change_at')
+      .in('id', targetIds);
+    if (targetsError) throw targetsError;
+
+    const taskMap = new Map((targetTasks || []).map((t: any) => [t.id, t]));
+
+    const waitingOnList: any[] = [];
+    const blocksList: any[] = [];
+
+    for (const rel of rawRels) {
+      const t: any = taskMap.get(rel.target_task_id);
+      if (!t) continue;
+      const cat = getTaskStatusCategory(t.status) || t.status?.toLowerCase();
+      const completed = cat === 'done' || cat === 'closed';
+      const shaped = {
+        id: t.id,
+        title: t.title,
+        status: t.status,
+        priority: t.priority,
+        display_number: t.display_number,
+        due_date: t.due_date,
+        completed,
+        list_id: t.list_id,
+        list_name: t.lists?.name || null,
+        space_id: t.lists?.spaces?.id || null,
+        space_name: t.lists?.spaces?.name || null,
+        space_color: t.lists?.spaces?.color || null,
+        created_at: rel.created_at || null,
+      };
+      if (rel.type === 'waiting_on') {
+        waitingOnList.push(shaped);
+      } else if (rel.type === 'blocks') {
+        blocksList.push(shaped);
+      }
+    }
+
+    res.json({
+      success: true,
+      data: {
+        waiting_on: waitingOnList,
+        blocks: blocksList,
+      },
+    });
+  } catch (err) {
+    console.error('Get task relationships error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// POST /pm/tasks/:id/relationships — connect tasks (waiting_on or blocks)
+router.post('/tasks/:id/relationships', async (req: Request, res: Response) => {
+  try {
+    const id = req.params.id as string;
+    const body = z.object({
+      type: z.enum(['waiting_on', 'blocks']),
+      target_task_id: z.string().uuid(),
+    }).parse(req.body);
+
+    if (id === body.target_task_id) {
+      res.status(400).json({ success: false, error: 'A task cannot have a relationship with itself' });
+      return;
+    }
+
+    const listIdA = await getTaskListId(id);
+    const listIdB = await getTaskListId(body.target_task_id);
+    if (!listIdA || !listIdB) {
+      res.status(404).json({ success: false, error: 'One or both tasks not found' });
+      return;
+    }
+
+    const [levelA, levelB] = await Promise.all([
+      checkResourceAccess(req.userId!, 'list', listIdA),
+      checkResourceAccess(req.userId!, 'list', listIdB),
+    ]);
+    if (!levelA || !meetsAccessLevel(levelA, 'member') || !levelB || !meetsAccessLevel(levelB, 'member')) {
+      res.status(403).json({ success: false, error: 'Member access required on both tasks to connect them' });
+      return;
+    }
+
+    const [{ data: taskA }, { data: taskB }] = await Promise.all([
+      supabaseAdmin.from('tasks').select('id, title, status, metadata').eq('id', id).single(),
+      supabaseAdmin.from('tasks').select('id, title, status, metadata').eq('id', body.target_task_id).single(),
+    ]);
+
+    if (!taskA || !taskB) {
+      res.status(404).json({ success: false, error: 'One or both tasks not found' });
+      return;
+    }
+
+    const relsA = (Array.isArray((taskA as any).metadata?.relationships) ? (taskA as any).metadata.relationships : [])
+      .filter((r: any) => r.target_task_id !== body.target_task_id);
+    const inverseType = body.type === 'waiting_on' ? 'blocks' : 'waiting_on';
+    const relsB = (Array.isArray((taskB as any).metadata?.relationships) ? (taskB as any).metadata.relationships : [])
+      .filter((r: any) => r.target_task_id !== id);
+
+    const now = new Date().toISOString();
+    relsA.push({ type: body.type, target_task_id: body.target_task_id, created_at: now, created_by: req.userId! });
+    relsB.push({ type: inverseType, target_task_id: id, created_at: now, created_by: req.userId! });
+
+    const nextMetaA = { ...((taskA as any).metadata || {}), relationships: relsA };
+    const nextMetaB = { ...((taskB as any).metadata || {}), relationships: relsB };
+
+    const patchA: Record<string, any> = { metadata: nextMetaA };
+    const patchB: Record<string, any> = { metadata: nextMetaB };
+
+    // Move to 'waiting_on_dependency' or 'unblocked' status:
+    // If Task A is waiting on Task B:
+    //   If Task B is already completed -> Task A moves to 'unblocked'
+    //   Otherwise -> Task A moves to 'waiting_on_dependency'
+    // If Task A blocks Task B (so Task B is waiting on Task A):
+    //   If Task A is already completed -> Task B moves to 'unblocked'
+    //   Otherwise -> Task B moves to 'waiting_on_dependency'
+    if (body.type === 'waiting_on') {
+      const isDoneB = await isTaskStatusDone(listIdB, (taskB as any).status);
+      patchA.status = isDoneB ? 'unblocked' : 'waiting_on_dependency';
+    } else if (body.type === 'blocks') {
+      const isDoneA = await isTaskStatusDone(listIdA, (taskA as any).status);
+      patchB.status = isDoneA ? 'unblocked' : 'waiting_on_dependency';
+    }
+
+    await Promise.all([
+      supabaseAdmin.from('tasks').update(patchA).eq('id', id),
+      supabaseAdmin.from('tasks').update(patchB).eq('id', body.target_task_id),
+    ]);
+
+    // Log activities
+    const eventsA: any[] = [{ event_type: 'field_change', field: 'relationships', old_value: null, new_value: { type: body.type, target_task_id: body.target_task_id } }];
+    if (patchA.status && patchA.status !== (taskA as any).status) {
+      eventsA.push({ event_type: 'field_change', field: 'status', old_value: (taskA as any).status, new_value: patchA.status });
+    }
+    await logTaskActivity(id, req.userId!, eventsA);
+
+    const eventsB: any[] = [{ event_type: 'field_change', field: 'relationships', old_value: null, new_value: { type: inverseType, target_task_id: id } }];
+    if (patchB.status && patchB.status !== (taskB as any).status) {
+      eventsB.push({ event_type: 'field_change', field: 'status', old_value: (taskB as any).status, new_value: patchB.status });
+    }
+    await logTaskActivity(body.target_task_id, req.userId!, eventsB);
+
+    res.json({
+      success: true,
+      data: {
+        task_id: id,
+        target_task_id: body.target_task_id,
+        type: body.type,
+        status_updated: body.type === 'waiting_on' ? id : body.target_task_id,
+      },
+    });
+  } catch (err) {
+    if (err instanceof z.ZodError) {
+      res.status(400).json({ success: false, error: err.errors[0]?.message || 'Validation error' });
+      return;
+    }
+    console.error('Create task relationship error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// DELETE /pm/tasks/:id/relationships/:targetTaskId — remove relationship between two tasks
+router.delete('/tasks/:id/relationships/:targetTaskId', async (req: Request, res: Response) => {
+  try {
+    const id = req.params.id as string;
+    const targetId = req.params.targetTaskId as string;
+
+    const listIdA = await getTaskListId(id);
+    const listIdB = await getTaskListId(targetId);
+    if (!listIdA || !listIdB) {
+      res.status(404).json({ success: false, error: 'One or both tasks not found' });
+      return;
+    }
+
+    const [levelA, levelB] = await Promise.all([
+      checkResourceAccess(req.userId!, 'list', listIdA),
+      checkResourceAccess(req.userId!, 'list', listIdB),
+    ]);
+    if (!levelA || !meetsAccessLevel(levelA, 'member') || !levelB || !meetsAccessLevel(levelB, 'member')) {
+      res.status(403).json({ success: false, error: 'Member access required to remove relationship' });
+      return;
+    }
+
+    const [{ data: taskA }, { data: taskB }] = await Promise.all([
+      supabaseAdmin.from('tasks').select('id, status, metadata').eq('id', id).single(),
+      supabaseAdmin.from('tasks').select('id, status, metadata').eq('id', targetId).single(),
+    ]);
+
+    if (taskA) {
+      const relsA = (Array.isArray((taskA as any).metadata?.relationships) ? (taskA as any).metadata.relationships : [])
+        .filter((r: any) => r.target_task_id !== targetId);
+      const nextMetaA = { ...((taskA as any).metadata || {}), relationships: relsA };
+      const patchA: Record<string, any> = { metadata: nextMetaA };
+      const hasOtherWaitingOn = relsA.some((r: any) => r.type === 'waiting_on');
+      const shouldUnblockA = (taskA as any).status === 'waiting_on_dependency' && !hasOtherWaitingOn;
+      if (shouldUnblockA) {
+        patchA.status = 'unblocked';
+      }
+      await supabaseAdmin.from('tasks').update(patchA).eq('id', id);
+      const eventsA: any[] = [{ event_type: 'field_change', field: 'relationships', old_value: { target_task_id: targetId }, new_value: null }];
+      if (shouldUnblockA) {
+        eventsA.push({ event_type: 'field_change', field: 'status', old_value: 'waiting_on_dependency', new_value: 'unblocked' });
+      }
+      await logTaskActivity(id, req.userId!, eventsA);
+    }
+
+    if (taskB) {
+      const relsB = (Array.isArray((taskB as any).metadata?.relationships) ? (taskB as any).metadata.relationships : [])
+        .filter((r: any) => r.target_task_id !== id);
+      const nextMetaB = { ...((taskB as any).metadata || {}), relationships: relsB };
+      const patchB: Record<string, any> = { metadata: nextMetaB };
+      const hasOtherWaitingOn = relsB.some((r: any) => r.type === 'waiting_on');
+      const shouldUnblockB = (taskB as any).status === 'waiting_on_dependency' && !hasOtherWaitingOn;
+      if (shouldUnblockB) {
+        patchB.status = 'unblocked';
+      }
+      await supabaseAdmin.from('tasks').update(patchB).eq('id', targetId);
+      const eventsB: any[] = [{ event_type: 'field_change', field: 'relationships', old_value: { target_task_id: id }, new_value: null }];
+      if (shouldUnblockB) {
+        eventsB.push({ event_type: 'field_change', field: 'status', old_value: 'waiting_on_dependency', new_value: 'unblocked' });
+      }
+      await logTaskActivity(targetId, req.userId!, eventsB);
+    }
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Delete task relationship error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
 // POST /pm/tasks — requires member access on the list
 router.post('/tasks', async (req: Request, res: Response) => {
   try {
@@ -2144,6 +2546,11 @@ router.put('/tasks/:id', async (req: Request, res: Response) => {
         await Promise.allSettled([
           recordWorkBlockCompletionIfActive(req.userId!, id),
           recordGroupRunCompletionIfActive(req.userId!, id),
+          handleTaskCompletionDependencies(id, req.userId!, true),
+        ]);
+      } else if (!isNowDone && wasDone) {
+        await Promise.allSettled([
+          handleTaskCompletionDependencies(id, req.userId!, false),
         ]);
       }
     }
