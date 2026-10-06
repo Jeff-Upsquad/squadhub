@@ -46,13 +46,43 @@ function sampleTasks(): Activity[] {
   }
   return result;
 }
+function sampleDayPlans(): Activity[] {
+  const date = dayKey();
+  const make = (key: string, startMin: number, durMin: number, title: string, project?: string): Activity => ({
+    id: `demo-plan:${key}:${startMin}`,
+    kind: 'day_plan',
+    title,
+    project,
+    start: dayStart(key) + startMin * 60000,
+    end: dayStart(key) + (startMin + durMin) * 60000,
+    seconds: durMin * 60,
+    source: 'Day Planner',
+  });
+  const result = [
+    make(date, 540, 60, 'Morning team standup & triage', 'SquadHub / General'),
+    make(date, 630, 90, 'Implement AI UI recognition models', 'Squad CRM / Product'),
+    make(date, 840, 60, 'Review transactions in kds', 'Accounts / Finance'),
+    make(date, 960, 45, 'Create an ad targeting Kerala women', 'Marketing'),
+    make(date, 1080, 60, 'GST filings checking', 'Accounts / Finance'),
+  ];
+  for (let i = 1; i <= 6; i++) {
+    const key = shiftDay(date, -i);
+    result.push(
+      make(key, 570, 60, 'Sprint planning & backlog review', 'SquadHub'),
+      make(key, 780, 90, 'Client feedback synthesis', 'Product'),
+      make(key, 960, 60, 'Design system tokens update', 'Creative'),
+    );
+  }
+  return result;
+}
 export default function DemoHomeTimer() {
   const [open, setOpen] = useState(false);
   const [sessions, setSessions] = useState<TimerSession[]>([]);
   const [tasks, setTasks] = useState<Activity[]>([]);
+  const [dayPlans, setDayPlans] = useState<Activity[]>([]);
   const [now, setNow] = useState(Date.now());
   useEffect(() => {
-    setSessions(sampleSessions()); setTasks(sampleTasks());
+    setSessions(sampleSessions()); setTasks(sampleTasks()); setDayPlans(sampleDayPlans());
     setOpen(new URLSearchParams(window.location.search).get('calendar') === 'open');
     const id = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(id);
@@ -79,6 +109,6 @@ export default function DemoHomeTimer() {
       <div className="hm-timer-ctrls">{(['work', 'break', 'no_work'] as const).map(kind => <button key={kind} className="hm-timer-btn" data-type={kind} data-on={active?.timer_type === kind} onClick={() => switchTimer(kind)} aria-label={`${active?.timer_type === kind ? 'Stop' : 'Start'} ${kind.replace('_', ' ')}`}>
         <span className="ic">{active?.timer_type === kind ? '■' : '▸'}</span><span className="lb">{kind === 'no_work' ? 'No work' : kind === 'work' ? 'Work' : 'Break'}</span></button>)}</div>
     </div>
-    {open && <TimeActivityCalendar demo onClose={() => setOpen(false)} renderData={(_from, _to, stamp) => <TimeActivityCalendar.Data commitment={9 * 3600} events={[...attendanceActivities(sessions, 9 * 3600, stamp), ...tasks]} />} />}
+    {open && <TimeActivityCalendar demo onClose={() => setOpen(false)} renderData={(_from, _to, stamp) => <TimeActivityCalendar.Data commitment={9 * 3600} events={[...attendanceActivities(sessions, 9 * 3600, stamp), ...dayPlans, ...tasks]} />} />}
   </>;
 }

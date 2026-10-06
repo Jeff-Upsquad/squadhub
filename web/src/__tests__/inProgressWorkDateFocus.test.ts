@@ -16,7 +16,8 @@ describe('In progress future work date and Focus reappearance', () => {
     userTz: string,
   ): Task[] {
     return tasks.filter((t) => {
-      if (t.status === 'done' || t.status === 'closed') return false;
+      const statusStr = typeof t.status === 'string' ? t.status : (t.status as unknown as { name?: string })?.name;
+      if (statusStr === 'done' || statusStr === 'closed') return false;
       if (isFutureDay(t.work_date, userTz) || isFutureDay((t as unknown as { start_date?: string | null }).start_date, userTz)) {
         return false;
       }

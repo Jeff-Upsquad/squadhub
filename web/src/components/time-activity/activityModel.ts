@@ -1,6 +1,6 @@
-import type { TaskTimeEntry, TimerSession, WorkBlockChildEntry } from '@squadhub/shared';
+import type { TaskDayPlan, TaskTimeEntry, TimerSession, WorkBlockChildEntry } from '@squadhub/shared';
 
-export type ActivityKind = 'work' | 'break' | 'no_work' | 'overtime' | 'block' | 'task';
+export type ActivityKind = 'work' | 'break' | 'no_work' | 'overtime' | 'day_plan' | 'block' | 'task';
 export interface Activity {
   id: string;
   kind: ActivityKind;
@@ -21,6 +21,7 @@ export const KINDS: { kind: ActivityKind; label: string; color: string }[] = [
   { kind: 'work', label: 'Work', color: '#4bc88d' },
   { kind: 'break', label: 'Break', color: '#eeb85a' },
   { kind: 'overtime', label: 'Overtime', color: '#ef8b70' },
+  { kind: 'day_plan', label: 'Day planner', color: '#38bdf8' },
   { kind: 'block', label: 'Work blocks', color: '#ad92ed' },
   { kind: 'task', label: 'Tasks', color: '#71a7ee' },
   { kind: 'no_work', label: 'No work', color: '#9b9fab' },
@@ -83,6 +84,40 @@ export function taskActivities(entries: TaskTimeEntry[]): Activity[] {
     note: e.note, source: e.source === 'manual' ? 'Manually logged' : e.source === 'work_block' ? 'Work block timer' : 'Task timer',
     isManual: e.source === 'manual', children: e.children,
   }));
+}
+export function dayPlanActivities(plans: TaskDayPlan[]): Activity[] {
+  const result: Activity[] = [];
+  for (const plan of plans) {
+    if (!plan.plan_date) continue;
+    const isAllDay = Boolean(plan.all_day || (plan.start_minute === 0 && plan.duration_minutes === 1440));
+    const startMin = isAllDay ? 9 * 60 : (plan.start_minute ?? 0);
+    const durMin = isAllDay ? 30 : Math.max(15, plan.duration_minutes || 30);
+    const start = dayStart(plan.plan_date) + startMin * 60000;
+    const end = start + durMin * 60000;
+    if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) continue;
+
+    const title = plan.task?.title || plan.container?.name || 'Scheduled task';
+    const project = plan.task?.list?.name || plan.container?.name;
+    const source = plan.kind === 'group_block'
+      ? 'Day Planner group'
+      : plan.virtual
+        ? 'Day Planner (scheduled)'
+        : 'Day Planner';
+
+    result.push({
+      id: `plan:${plan.id}`,
+      kind: 'day_plan',
+      title,
+      start,
+      end,
+      seconds: durMin * 60,
+      taskId: plan.task_id || plan.task?.id,
+      project,
+      source,
+      note: isAllDay ? 'All day task' : null,
+    });
+  }
+  return result;
 }
 /** Keep credited task time (including parallel shares) distinct from elapsed wall time. */
 export function clipActivity(event: Activity, from: number, to: number): Activity | null {
