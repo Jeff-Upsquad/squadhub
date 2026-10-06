@@ -106,9 +106,9 @@ function CalendarData({ events, commitment, loading = false, error = false, onRe
     const start = dayStart(key);
     const items = visibleEvents.filter(e => filters.includes(e.kind)).map(e => clipActivity(e, start, start + 86400000)).filter((e): e is Activity => !!e);
     // Three sections in day view:
-    // 1. Small section for work time, break time, and no work time (attendance)
-    // 2. Day planner (tasks or items appearing in the day planner)
-    // 3. Time tracker section (tracked tasks & work blocks)
+    // 1. Work and break section (compact)
+    // 2. Day planner section (less wide)
+    // 3. Time tracker section (priority / widest)
     const lanes = view === 'day'
       ? [
           items.filter(e => isAttendance(e.kind)),
@@ -116,26 +116,31 @@ function CalendarData({ events, commitment, loading = false, error = false, onRe
           items.filter(e => !isAttendance(e.kind) && e.kind !== 'day_plan'),
         ]
       : [items];
-    const layout = lanes.map(lane => layoutActivities(lane, (MIN_EVENT_HEIGHT + EVENT_GAP) / HOUR_HEIGHT * 3600000));
+    const layout = lanes.map((lane, i) =>
+      layoutActivities(lane, view === 'day' && i === 0 ? 0 : (MIN_EVENT_HEIGHT + EVENT_GAP) / HOUR_HEIGHT * 3600000)
+    );
     const columnCount = (lane: typeof layout[number]) => Math.max(1, ...lane.map(e => e.columns));
 
-    const section1Base = Math.max(120, Math.round(availableWidth * 0.16));
-    const remain = Math.max(240, availableWidth - section1Base);
-    const section2Base = Math.max(140, Math.round(remain * 0.48));
-    const section3Base = Math.max(140, remain - section2Base);
+    // Section 1: Work & Break (compact status column)
+    const section1Base = Math.max(92, Math.min(115, Math.round(availableWidth * 0.13)));
+    const section1Width = Math.max(section1Base, columnCount(layout[0]) * 55);
+
+    // Section 2: Day Planner (less wide)
+    const section2Base = Math.max(140, Math.min(220, Math.round(availableWidth * 0.25)));
+    const section2Width = Math.max(section2Base, columnCount(layout[1]) * 120);
+
+    // Section 3: Time Tracker (priority, takes the remainder)
+    const section3Base = Math.max(280, availableWidth - section1Width - section2Width);
+    const section3Width = Math.max(section3Base, columnCount(layout[2]) * 150);
 
     const widths = view === 'day'
-      ? [
-          Math.max(section1Base, columnCount(layout[0]) * 110),
-          Math.max(section2Base, columnCount(layout[1]) * 140),
-          Math.max(section3Base, columnCount(layout[2]) * 140),
-        ]
+      ? [section1Width, section2Width, section3Width]
       : [Math.max(availableWidth / 7, columnCount(layout[0]) * 140)];
     return { key, start, items, layout, widths, width: widths.reduce((sum, width) => sum + width, 0) };
   });
   const gridWidth = Math.max(calendarWidth, gutterWidth + dayLayouts.reduce((sum, day) => sum + day.width, 0));
-  const display = (event: Activity, top: number, height: number, left: string, width: string, isNarrow?: boolean) => (
-    <button key={event.id} className="ta-event" data-kind={event.kind} data-selected={event.id === selectedId} data-short={height < 43} data-narrow={isNarrow}
+  const display = (event: Activity, top: number, height: number, left: string, width: string, isNarrow?: boolean, isTight?: boolean) => (
+    <button key={event.id} className="ta-event" data-kind={event.kind} data-selected={event.id === selectedId} data-short={height < 43} data-narrow={isNarrow} data-tight={isTight}
       style={{ top, height: Math.max(MIN_EVENT_HEIGHT, height - EVENT_GAP), left, width, '--event-color': KINDS.find(k => k.kind === event.kind)?.color || '#38bdf8' } as CSSProperties}
       onClick={() => setSelectedId(event.id === selectedId ? null : event.id)}
       aria-label={`${event.title}, ${clock(event.start)} to ${event.live ? 'now' : clock(event.end)}, ${duration(event.seconds)}${event.isManual ? ', manually entered' : ''}`}
@@ -191,11 +196,11 @@ function CalendarData({ events, commitment, loading = false, error = false, onRe
                   const columnWidth = view === 'week' ? 140 : laneWidth / columns;
                   const isNarrow = view === 'day' && i === 0;
                   const cardWidth = columns === 1
-                    ? (isNarrow ? laneWidth - 8 : laneWidth - 10)
-                    : Math.max(60, columnWidth - 6);
-                  const left = `${column * columnWidth + (isNarrow ? 4 : 5)}px`;
+                    ? (isNarrow ? laneWidth - 6 : laneWidth - 10)
+                    : Math.max(38, columnWidth - 4);
+                  const left = `${column * columnWidth + (isNarrow ? 3 : 5)}px`;
                   return display(event, (event.start - start) / 3600000 * HOUR_HEIGHT, (event.end - event.start) / 3600000 * HOUR_HEIGHT,
-                    left, `${cardWidth}px`, isNarrow);
+                    left, `${cardWidth}px`, isNarrow, cardWidth < 68);
                 })}</div>)}
                 {key === dayKey(now) && <div className="ta-now" style={{ top: (now - start) / 3600000 * HOUR_HEIGHT }}><span>{clock(now)}</span><i /></div>}
                 {!items.length && <div className="ta-empty-day" style={{ top: 9 * HOUR_HEIGHT + 12 }}><Glyph name="clock" /><strong>{visibleEvents.length ? 'Nothing matches' : 'No time tracked'}</strong><span>{filters.length ? 'Your tracked sessions appear here.' : 'Select a time type above.'}</span></div>}
