@@ -1,10 +1,10 @@
 {
-  "version": "0.1.17",
-  "notes": "Quick add can start a task timer, log time, and set an estimate. Timers started in the companion appear in Squadra when you open it.",
-  "pub_date": "2026-09-24T17:30:30Z",
+  "version": "0.1.18",
+  "notes": "Quick add redesign: set task type, status, start and due dates right from the widget, with grouped What/When/Details rows, a mini calendar, and self-assign.",
+  "pub_date": "2026-10-06T19:47:49Z",
   "platforms": {
     "darwin-aarch64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUQ003TTR4K1pKdzlhTnR5eHJWbVpqQzZUU1prSjBiRFVNdmdhdWF5VUZrRk5BdElzM0hwY0hnYVRIdWxua0lyQURXRkFxQkR2dHZxRFo5WWFVeExOeUlhWmlQVlk4YXdrPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkwMjcwOTU4CWZpbGU6U3F1YWRIdWIgQ29tcGFuaW9uLmFwcC50YXIuZ3oKeVg2dXZ6dTExajhzQUE5blV6Vk9TWU1vckVOMVp1WlJkamozVWlMaHNTODBTenJDQjRaVjlCZ2FiSGJsaHV0eDRjSm56YlMwL2I5TlhnQWwwU0FMQVE9PQo=",
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUQ003TTR4K1pKdyszSkZLd1FURnhKcWY3OVQyVDZqb0ZkaDdyQkdQRE5hY0Q3dlhJSGVmMzdtNkxTbzRjbFNDaVRoSktBYlZEeEFmQlFsc2pLNEY1K2tEWkdSNU5RTnd3PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkxMzE2MDI0CWZpbGU6U3F1YWRIdWIgQ29tcGFuaW9uLmFwcC50YXIuZ3oKZkVDTUl3ZDU4SUp6VmRSOVFFaUQwZUowS1FHTjhyd0FpVFU5UWJkSUQ5QWFxOEVnU3prTUpzQTZRbVhMUHNMaVN5UGVBVGdOcVAwckVkamJlSW9HQnc9PQo=",
       "url": "https://squadhub.in/downloads/SquadHub.app.tar.gz"
     }
   }
