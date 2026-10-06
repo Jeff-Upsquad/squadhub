@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import type { TimerSession } from '@squadhub/shared';
-import { attendanceActivities, clipActivity, combineTaskSegments, dayKey, dayStart, layoutActivities, weekStart, type Activity } from '../activityModel';
+import type { TaskTimeEntry, TimerSession } from '@squadhub/shared';
+import { attendanceActivities, clipActivity, combineTaskSegments, dayKey, dayStart, layoutActivities, taskActivities, weekStart, type Activity } from '../activityModel';
 const hour = 3600000;
 const start = dayStart('2026-10-04');
 function session(id: string, from: number, to: number | null, type: TimerSession['timer_type'] = 'work'): TimerSession {
@@ -159,3 +159,53 @@ test('segments within 5s tolerance merge as contiguous while >5s gaps become sep
   assert.equal(events[1].end, start + 2 * hour);
   assert.equal(events[1].seconds, 1800);
 });
+
+test('task activities flag manually logged entries with isManual', () => {
+  const dummyTask = { id: 'task-1', title: 'Bedtime', list_id: 'list-1', time_tracked: 3600 };
+  const entries: TaskTimeEntry[] = [
+    {
+      id: 'e1',
+      task_id: 'task-1',
+      user_id: 'u1',
+      workspace_id: 'w1',
+      started_at: new Date(start + hour).toISOString(),
+      stopped_at: new Date(start + 2 * hour).toISOString(),
+      duration_seconds: 3600,
+      source: 'manual',
+      created_at: new Date().toISOString(),
+      task: dummyTask,
+    },
+    {
+      id: 'e2',
+      task_id: 'task-2',
+      user_id: 'u1',
+      workspace_id: 'w1',
+      started_at: new Date(start + 2 * hour).toISOString(),
+      stopped_at: new Date(start + 3 * hour).toISOString(),
+      duration_seconds: 3600,
+      source: 'timer',
+      created_at: new Date().toISOString(),
+      task: { id: 'task-2', title: 'Live work', list_id: 'list-1', time_tracked: 3600 },
+    },
+  ];
+
+  const activities = taskActivities(entries);
+  assert.equal(activities.length, 2);
+  assert.equal(activities[0].isManual, true);
+  assert.equal(activities[0].source, 'Manually logged');
+  assert.equal(activities[1].isManual, false);
+  assert.equal(activities[1].source, 'Task timer');
+});
+
+test('combineTaskSegments preserves isManual tag and does not merge manual entries with timer entries', () => {
+  const manual = { ...activity('manual-entry', start + hour, start + 2 * hour, 3600), taskId: 'bedtime', isManual: true, source: 'Manually logged' };
+  const timer = { ...activity('timer-entry', start + 2 * hour + 1000, start + 3 * hour, 3600), taskId: 'bedtime', isManual: false, source: 'Task timer' };
+
+  const combined = combineTaskSegments([manual, timer]);
+  assert.equal(combined.length, 2);
+  assert.equal(combined[0].isManual, true);
+  assert.equal(combined[0].source, 'Manually logged');
+  assert.equal(combined[1].isManual, false);
+  assert.equal(combined[1].source, 'Task timer');
+});
+

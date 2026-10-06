@@ -75,6 +75,24 @@ html.dark .ta-panel, html[data-theme="noir"] .ta-panel {
 .ta-event:hover, .ta-event[data-selected="true"] { background: color-mix(in srgb, var(--event-color) 23%, var(--ta-grid)); box-shadow: 0 0 0 1px var(--event-color); z-index: 3; }
 .ta-event-title { font-size: 11px; font-weight: 550; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex-shrink: 0; display: flex; align-items: center; gap: 6px; }
 .ta-event-title > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.ta-event-name { min-width: 0; display: inline-flex; align-items: center; gap: 4px; overflow: hidden; }
+.ta-event-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ta-manual-tag {
+  display: inline-flex;
+  align-items: center;
+  font-size: 8px;
+  font-weight: 550;
+  line-height: 1;
+  padding: 1.5px 4.5px;
+  border-radius: 3.5px;
+  background: color-mix(in srgb, var(--event-color, #71a7ee) 20%, transparent);
+  color: color-mix(in srgb, var(--event-color, #71a7ee) 85%, var(--ta-ink));
+  border: 1px solid color-mix(in srgb, var(--event-color, #71a7ee) 35%, transparent);
+  letter-spacing: .02em;
+  vertical-align: middle;
+  text-transform: lowercase;
+  flex-shrink: 0;
+}
 .ta-event-title > b { margin-left: auto; font-size: 9px; white-space: nowrap; font-weight: 500; flex-shrink: 0; }
 .ta-event-time { font-size: 9px; display: flex; gap: 5px; flex-wrap: wrap; opacity: .8; }
 .ta-event-time b { font-weight: 500; margin-left: auto; }
