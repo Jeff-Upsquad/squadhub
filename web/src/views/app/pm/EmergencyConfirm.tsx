@@ -19,7 +19,7 @@ export default function EmergencyConfirm({
 
   return (
     <div
-      className="fixed inset-0 z-[60] flex items-center justify-center"
+      className="fixed inset-0 z-[200] flex items-center justify-center"
       style={{ background: 'rgba(0,0,0,0.45)' }}
       onClick={onCancel}
     >

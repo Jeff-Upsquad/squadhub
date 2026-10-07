@@ -227,8 +227,10 @@ export function DateRangeField({ kind, start, end, onChange, startLabel, endLabe
   disabled?: boolean;
 }) {
   const [picker, setPicker] = useState<{ which: 'start' | 'end'; rect: DOMRect } | null>(null);
-  const pick = (which: 'start' | 'end') => (e: React.MouseEvent) =>
+  const pick = (which: 'start' | 'end') => (e: React.MouseEvent) => {
+    e.stopPropagation();
     setPicker({ which, rect: (e.currentTarget as HTMLElement).getBoundingClientRect() });
+  };
   return (
     <div className="gl-daterange" data-kind={kind}>
       <span className="gl-daterange-key" aria-hidden="true" />
@@ -247,7 +249,7 @@ export function DateRangeField({ kind, start, end, onChange, startLabel, endLabe
           <GoalIcon name="close" size={12} />
         </button>
       )}
-      {picker && (
+      {picker && typeof document !== 'undefined' && createPortal(
         <DatePicker
           anchorRect={picker.rect}
           mode="date"
@@ -259,7 +261,8 @@ export function DateRangeField({ kind, start, end, onChange, startLabel, endLabe
             else onChange(start && day && day < start ? day : start, day);
             setPicker(null);
           }}
-        />
+        />,
+        document.body,
       )}
     </div>
   );

@@ -17,7 +17,7 @@ export function useGoalDialogFocus(ref: RefObject<HTMLDivElement | null>) {
       if (dialogs[dialogs.length - 1] !== panel) return;
       if (!panel.classList.contains('gl-modal-panel') && (usePMStore.getState().activeTaskId || usePMStore.getState().peekTaskId)) return;
       // Date pickers and property menus are portaled beside their dialog.
-      const surfaces = [panel, ...document.querySelectorAll('.gl-pop, .dp-panel')];
+      const surfaces = [panel, ...document.querySelectorAll('.gl-pop, .dp-panel, .nt-menu')];
       const controls = surfaces.flatMap((surface) => Array.from(surface.querySelectorAll<HTMLElement>(FOCUSABLE)))
         .filter((element) => element.getClientRects().length > 0 && getComputedStyle(element).visibility !== 'hidden');
       const active = document.activeElement;
