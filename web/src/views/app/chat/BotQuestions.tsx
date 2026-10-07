@@ -7,8 +7,10 @@ import { createBotQuestions } from '@squad-bots/core/ui/BotQuestions';
 
 const InnerBotQuestions = createBotQuestions({ api, ManageMembersModal });
 
+type InnerBotQuestionsProps = React.ComponentProps<typeof InnerBotQuestions>;
+
 class BotQuestionsErrorBoundary extends React.Component<
-  { channelId: string; canManage?: boolean },
+  InnerBotQuestionsProps,
   { hasError: boolean }
 > {
   constructor(props: any) {
