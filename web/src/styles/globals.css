@@ -10784,6 +10784,8 @@ html[data-theme="noir"] .inbox-slider-panel {
 .td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row[data-td="type"] { order: 2; }
 .td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row[data-td="priority"] { order: 3; }
 .td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row[data-td="labels"] { order: 4; height: auto; min-height: 34px; padding-top: 4px !important; padding-bottom: 4px !important; }
+/* Create-panel Goals picker sits right after Labels (shares the break row's order — ::before wins the tie as first child). */
+.td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row[data-td="goals"] { order: 5; height: auto; min-height: 34px; padding-top: 4px !important; padding-bottom: 4px !important; }
 /* The breadcrumb already names the space — no need to repeat it as a pill */
 .td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row[data-td="space"] { display: none !important; }
 .td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"]::before { content: ''; order: 5; flex-basis: 100%; height: 0; }
@@ -11650,11 +11652,12 @@ html[data-theme="noir"] .inbox-slider-panel {
 .td-panel-luma.apple.td-shell.td-compact .td-settings-card[data-compact="true"] .td-settings-row[data-td="time"] { order: 8; }
 .td-panel-luma.apple.td-shell.td-compact .td-settings-card[data-compact="true"] .td-settings-row[data-td="elapsed"] { order: 9; }
 .td-panel-luma.apple.td-shell.td-compact .td-settings-card[data-compact="true"] .td-settings-row[data-td="labels"] { order: 10; }
-.td-panel-luma.apple.td-shell.td-compact .td-settings-card[data-compact="true"] .td-settings-row[data-half="false"] { order: 11; }
+.td-panel-luma.apple.td-shell.td-compact .td-settings-card[data-compact="true"] .td-settings-row[data-td="goals"] { order: 11; }
+.td-panel-luma.apple.td-shell.td-compact .td-settings-card[data-compact="true"] .td-settings-row[data-half="false"] { order: 12; }
 /* Create-panel-only rows (Space read-only + work-block schedule) sit with the full-width rows. */
 .td-panel-luma.apple.td-shell.td-compact .td-settings-card[data-compact="true"] .td-settings-row[data-td="space"],
-.td-panel-luma.apple.td-shell.td-compact .td-settings-card[data-compact="true"] .td-settings-row[data-td="block"] { order: 11; }
-.td-panel-luma.apple.td-shell.td-compact .td-settings-card[data-compact="true"] .td-settings-row[data-td="created"] { order: 12; }
+.td-panel-luma.apple.td-shell.td-compact .td-settings-card[data-compact="true"] .td-settings-row[data-td="block"] { order: 12; }
+.td-panel-luma.apple.td-shell.td-compact .td-settings-card[data-compact="true"] .td-settings-row[data-td="created"] { order: 13; }
 
 /* Dates row — "Start → Due", each half its own picker trigger */
 .td-panel-luma.apple.td-shell.td-compact .td-settings-row:is([data-td="dates"], [data-td="work"]) .v { gap: 2px; padding: 0; margin-left: -7px; }
