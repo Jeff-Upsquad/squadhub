@@ -31,7 +31,11 @@ export const metadata: Metadata = {
   applicationName: 'SquadHub',
   appleWebApp: { capable: true, statusBarStyle: 'default', title: 'SquadHub' },
   icons: {
-    icon: '/icon-192.png',
+    icon: [
+      { url: '/favicon.ico', sizes: 'any' },
+      { url: '/icon-192.png', type: 'image/png', sizes: '192x192' },
+      { url: '/icon-512.png', type: 'image/png', sizes: '512x512' },
+    ],
     apple: '/apple-touch-icon.png',
   },
 };
@@ -40,7 +44,7 @@ export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
   viewportFit: 'cover',
-  themeColor: '#000000',
+  themeColor: '#0a0a0a',
 };
 
 export default function RootLayout({
