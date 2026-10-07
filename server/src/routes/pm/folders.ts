@@ -45,6 +45,7 @@ const createSchema = z.object({
   parent_folder_id: z.string().uuid().optional(),
   folder_type: z.enum(['folder', 'client']).optional(),
   status_group_id: z.string().uuid().optional(),
+  task_type_group_id: z.string().uuid().optional(),
 });
 
 // GET /pm/folders?space_id=xxx
@@ -471,6 +472,21 @@ router.post('/folders', requirePermission('can_create_folders'), async (req: Req
       }
     } catch (e) {
       console.error('[pm/folders] status-group inheritance error:', e);
+    }
+
+    try {
+      const { upsertAssignment: upsertTaskTypeAssignment, getAssignmentFor: getTaskTypeAssignmentFor } =
+        await import('../../utils/taskTypeGroups');
+      let inheritedTTGroupId: string | null = body.task_type_group_id || null;
+      if (!inheritedTTGroupId && clientSpaceTemplate) {
+        const tplAssign = await getTaskTypeAssignmentFor('template', clientSpaceTemplate.id);
+        inheritedTTGroupId = tplAssign?.group_id || null;
+      }
+      if (inheritedTTGroupId) {
+        await upsertTaskTypeAssignment(inheritedTTGroupId, 'folder', data.id, req.userId!);
+      }
+    } catch (e) {
+      console.error('[pm/folders] task-type-group inheritance error:', e);
     }
 
     res.status(201).json({ success: true, data });

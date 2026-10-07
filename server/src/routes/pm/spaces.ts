@@ -36,6 +36,7 @@ const createSchema = z.object({
   icon: z.string().optional(),
   description: z.string().optional(),
   status_group_id: z.string().uuid().optional(),
+  task_type_group_id: z.string().uuid().optional(),
 });
 
 // GET /pm/spaces?workspace_id=xxx — list spaces the user has access to
@@ -356,6 +357,26 @@ router.post('/spaces', requirePermission('can_create_spaces'), async (req: Reque
       }
     } catch (e) {
       console.error('Space status-group auto-apply error:', e);
+    }
+
+    try {
+      const { upsertAssignment: upsertTaskTypeAssignment } = await import('../../utils/taskTypeGroups');
+      let ttGroupId: string | null = body.task_type_group_id || null;
+      if (!ttGroupId) {
+        const { data: defTT } = await supabaseAdmin
+          .from('task_type_groups')
+          .select('id')
+          .eq('is_default', true)
+          .eq('is_enabled', true)
+          .limit(1)
+          .maybeSingle();
+        ttGroupId = (defTT as any)?.id || null;
+      }
+      if (ttGroupId) {
+        await upsertTaskTypeAssignment(ttGroupId, 'space', inserted.id, req.userId!);
+      }
+    } catch (e) {
+      console.error('Space task-type-group auto-apply error:', e);
     }
 
     const { data, error } = await supabaseAdmin

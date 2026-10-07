@@ -18,6 +18,7 @@ const createSchema = z.object({
   default_view: z.enum(['list', 'board', 'whiteboard']).optional(),
   profile_id: z.string().uuid().optional(),
   status_group_id: z.string().uuid().optional(),
+  task_type_group_id: z.string().uuid().optional(),
 });
 
 // GET /pm/lists?space_id=xxx or ?folder_id=xxx
@@ -350,6 +351,15 @@ router.post('/lists', requirePermission('can_create_lists'), async (req: Request
         await upsertAssignment(body.status_group_id, 'list', data.id, req.userId!);
       } catch (e) {
         console.error('[pm/lists] status-group assign error:', e);
+      }
+    }
+
+    if (body.task_type_group_id) {
+      try {
+        const { upsertAssignment: upsertTaskTypeAssignment } = await import('../../utils/taskTypeGroups');
+        await upsertTaskTypeAssignment(body.task_type_group_id, 'list', data.id, req.userId!);
+      } catch (e) {
+        console.error('[pm/lists] task-type-group assign error:', e);
       }
     }
 

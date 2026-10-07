@@ -363,7 +363,12 @@ export default function TaskCreatePanel({
     for (const u of assignableUsers) m.set(u.id, { display_name: u.display_name || u.email || '', email: u.email });
     return m;
   }, [assignableUsers]);
-  const { data: taskTypes } = useTaskTypes();
+
+  const { data: taskTypes } = useTaskTypes({
+    spaceId: (selectedSpaceId as string | undefined) || initialSpaceId || undefined,
+    listId: effectiveListId || listId || undefined,
+    includeIds: designTaskTypeId ? [designTaskTypeId] : undefined,
+  });
   const openMeetingPanel = useMeetingPanelStore((s) => s.openMeetingPanel);
   const currentUser = useAuthStore((s) => s.user);
 

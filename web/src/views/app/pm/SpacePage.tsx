@@ -42,7 +42,7 @@ export default function SpacePage({ spacePageId: propSpacePageId }: { spacePageI
   const groupByScope = usePMStore((s) => s.groupByScope);
   const setScopedGroupBy = usePMStore((s) => s.setScopedGroupBy);
   const fadingTaskIds = usePMStore((s) => s.fadingTaskIds);
-  const { data: taskTypes } = useTaskTypes();
+  const { data: taskTypes } = useTaskTypes({ spaceId: activeSpacePageId || undefined });
   const isMobile = useIsMobile();
   const [folderFilter, setFolderFilter] = useState<string>('all');
   const [listFilter, setListFilter] = useState<string>('all');

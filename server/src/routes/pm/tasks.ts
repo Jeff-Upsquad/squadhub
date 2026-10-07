@@ -483,6 +483,7 @@ async function hydrateParents<T extends { parent_task_id: string | null }>(
 // GET /pm/task-types — task types the caller can use when creating a task.
 // Admins see every type. Non-admins get is_enabled types, with custom
 // (non-system) types gated by task_type_role_access or task_type_user_access.
+// ?space_id=&folder_id=&list_id= resolves the effective task type group.
 // ?include_ids=id1,id2 forces-include specific types (used when rendering a
 // task whose current type isn't in the user's accessible set).
 router.get('/task-types', async (req: Request, res: Response) => {
@@ -490,6 +491,9 @@ router.get('/task-types', async (req: Request, res: Response) => {
     const userId = req.userId!;
     const includeIds = (req.query.include_ids as string || '')
       .split(',').map((s) => s.trim()).filter(Boolean);
+    const spaceId = (req.query.space_id as string) || undefined;
+    const folderId = (req.query.folder_id as string) || undefined;
+    const listId = (req.query.list_id as string) || undefined;
 
     // Admin bypass
     const { data: me } = await supabaseAdmin
@@ -499,14 +503,48 @@ router.get('/task-types', async (req: Request, res: Response) => {
       .single();
     const isAdmin = !!(me as any)?.is_admin;
 
-    const { data: types, error: typesErr } = await supabaseAdmin
-      .from('task_types')
-      .select('*')
-      .order('position', { ascending: true })
-      .order('created_at', { ascending: true });
-    if (typesErr) {
-      res.status(500).json({ success: false, error: typesErr.message });
-      return;
+    const { resolveEffectiveTaskTypeGroup } = await import('../../utils/taskTypeGroups');
+
+    let types: any[] = [];
+    if (spaceId || folderId || listId) {
+      const resolved = await resolveEffectiveTaskTypeGroup({ spaceId, folderId, listId });
+      if (resolved && resolved.task_types.length > 0) {
+        types = resolved.task_types;
+      }
+    }
+
+    // Fallback if not resolved via container: check default group or all types
+    if (types.length === 0) {
+      const resolvedDefault = await resolveEffectiveTaskTypeGroup({});
+      if (resolvedDefault && resolvedDefault.task_types.length > 0) {
+        types = resolvedDefault.task_types;
+      } else {
+        const { data: allTypes, error: typesErr } = await supabaseAdmin
+          .from('task_types')
+          .select('*')
+          .order('position', { ascending: true })
+          .order('created_at', { ascending: true });
+        if (typesErr) {
+          res.status(500).json({ success: false, error: typesErr.message });
+          return;
+        }
+        types = allTypes || [];
+      }
+    }
+
+    // If includeIds were requested, ensure those types are also present
+    if (includeIds.length > 0) {
+      const existingIds = new Set(types.map((t: any) => t.id));
+      const missingIds = includeIds.filter((id) => !existingIds.has(id));
+      if (missingIds.length > 0) {
+        const { data: extraTypes } = await supabaseAdmin
+          .from('task_types')
+          .select('*')
+          .in('id', missingIds);
+        if (extraTypes && extraTypes.length > 0) {
+          types = [...types, ...extraTypes];
+        }
+      }
     }
 
     let visible = types || [];

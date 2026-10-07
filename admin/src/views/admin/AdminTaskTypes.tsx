@@ -1,8 +1,33 @@
 'use client';
-import { useState, useEffect, useMemo } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../services/api';
-import type { TaskType, TaskTypeField, TaskFieldType, TaskTypeFieldOption, Role, User } from '@squadhub/shared';
+import type {
+  TaskType,
+  TaskTypeGroup,
+  TaskTypeField,
+  TaskFieldType,
+  TaskTypeFieldOption,
+  Role,
+  User,
+} from '@squadhub/shared';
+
+type SubTab = 'types' | 'apply' | 'usage' | 'templates';
+type EntityType = 'space' | 'folder' | 'list' | 'template';
+
+const ENTITY_LABELS: Record<EntityType, string> = {
+  space: 'Areas',
+  folder: 'Spaces',
+  list: 'Lists',
+  template: 'Space templates',
+};
+
+const ENTITY_HINTS: Record<EntityType, string> = {
+  space: 'Areas are the top-level containers. Applying here updates the area task types.',
+  folder: 'Spaces (design, editor, …) live inside areas. Inherited by tasks via effective-group lookup.',
+  list: 'Lists live inside spaces or directly under areas.',
+  template: 'Apply to a space template so every future space created from it inherits this group automatically.',
+};
 
 const FIELD_TYPE_LABELS: Record<TaskFieldType, string> = {
   text: 'Short text',
@@ -14,14 +39,6 @@ const FIELD_TYPE_LABELS: Record<TaskFieldType, string> = {
   url: 'URL',
   checkbox: 'Checkbox',
 };
-
-const COMMON_ICONS = [
-  'check-square', 'check-circle-2', 'code', 'test-tube', 'bug', 'layout',
-  'clock', 'target', 'calendar-range', 'repeat', 'compass', 'car', 'plane',
-  'briefcase', 'users', 'phone', 'video', 'calendar', 'lightbulb',
-  'book-open', 'search', 'palette', 'zap', 'trophy', 'home', 'sparkles',
-  'clipboard-check', 'pause-circle', 'archive',
-];
 
 const RESERVED_KEYS = new Set(['format', 'audience', 'tone', 'references', 'attachments', 'custom']);
 
@@ -37,594 +54,1252 @@ export default function AdminTaskTypes() {
   const qc = useQueryClient();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
-  const [showTypeForm, setShowTypeForm] = useState(false);
-  const [preselectedGroup, setPreselectedGroup] = useState<string | null>(null);
+  const [subTab, setSubTab] = useState<SubTab>('types');
   const [showGroupForm, setShowGroupForm] = useState(false);
-  const [renamingGroup, setRenamingGroup] = useState<string | null>(null);
-  const [movingToGroup, setMovingToGroup] = useState<string | null>(null);
-  const [showFieldForm, setShowFieldForm] = useState(false);
-  const [editingField, setEditingField] = useState<TaskTypeField | null>(null);
-  const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
+  const [editingTaskType, setEditingTaskType] = useState<TaskType | null>(null);
 
+  const { data: groupsRes, isLoading } = useQuery({
+    queryKey: ['admin-task-type-groups'],
+    queryFn: () => api.get('/admin/task-type-groups').then((r) => r.data),
+  });
+  const groups: TaskTypeGroup[] = groupsRes?.data || [];
+  const selected = groups.find((g) => g.id === selectedId) || null;
+
+  // Also query all task types so we can pick from existing ones
+  const { data: allTypesRes } = useQuery({
+    queryKey: ['admin-task-types'],
+    queryFn: () => api.get('/admin/task-types').then((r) => r.data),
+  });
+  const allTypes: TaskType[] = allTypesRes?.data || [];
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return groups;
+    return groups.filter((g) =>
+      g.name.toLowerCase().includes(q) || g.key.toLowerCase().includes(q),
+    );
+  }, [groups, search]);
+
+  useEffect(() => {
+    if (!selectedId && groups.length > 0) {
+      const def = groups.find((g) => g.is_default) || groups[0];
+      setSelectedId(def.id);
+    }
+  }, [groups, selectedId]);
+
+  const invalidate = () => {
+    qc.invalidateQueries({ queryKey: ['admin-task-type-groups'] });
+    qc.invalidateQueries({ queryKey: ['admin-task-types'] });
+  };
+
+  const createGroup = useMutation({
+    mutationFn: (body: any) => api.post('/admin/task-type-groups', body).then((r) => r.data),
+    onSuccess: (res) => {
+      invalidate();
+      setShowGroupForm(false);
+      if (res?.data?.id) { setSelectedId(res.data.id); setSubTab('types'); }
+    },
+    onError: (err: any) => alert(err?.response?.data?.error || 'Failed to create task type group'),
+  });
+
+  const deleteGroup = useMutation({
+    mutationFn: (id: string) => api.delete(`/admin/task-type-groups/${id}`),
+    onSuccess: () => { invalidate(); setSelectedId(null); },
+    onError: (err: any) => alert(err?.response?.data?.error || 'Failed to delete task type group'),
+  });
+
+  return (
+    <div>
+      <div className="mb-6">
+        <h1 className="font-[family-name:var(--font-display)] text-xl font-bold text-foreground">Task Type Groups</h1>
+        <p className="mt-1 text-sm text-foreground-muted">
+          Build reusable groups of task types, then apply them to areas, spaces, lists — or to a space
+          template so future spaces inherit them automatically. The current task types serve as the default.
+        </p>
+      </div>
+
+      {isLoading ? (
+        <p className="py-8 text-center text-sm text-foreground-dim">Loading…</p>
+      ) : (
+        <div className="grid grid-cols-1 gap-5 lg:grid-cols-[300px_1fr]">
+          {/* Left: groups directory */}
+          <div className="rounded-xl border border-divider bg-surface p-3">
+            <div className="mb-2 flex items-center justify-between">
+              <p className="px-1 text-xs font-semibold uppercase tracking-wider text-foreground-dim">
+                Groups ({filtered.length})
+              </p>
+              <button
+                onClick={() => setShowGroupForm((v) => !v)}
+                className="rounded-lg bg-ink px-2.5 py-1.5 text-xs font-medium text-white hover:opacity-90"
+              >
+                + New group
+              </button>
+            </div>
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search groups…"
+              className="mb-2 w-full rounded-lg border border-divider px-3 py-2 text-sm focus:border-ink focus:outline-none"
+            />
+            {showGroupForm && <NewGroupForm onSubmit={(b) => createGroup.mutate(b)} pending={createGroup.isPending} />}
+            <div className="max-h-[60vh] space-y-1 overflow-y-auto">
+              {filtered.map((g) => (
+                <button
+                  key={g.id}
+                  onClick={() => setSelectedId(g.id)}
+                  className={`w-full rounded-lg px-3 py-2 text-left transition ${
+                    selectedId === g.id ? 'bg-ink/10 ring-1 ring-ink' : 'hover:bg-muted'
+                  }`}
+                >
+                  <span className="flex items-center gap-2">
+                    <span className="h-3 w-3 rounded-full" style={{ background: g.color }} />
+                    <span className="truncate text-sm font-medium">{g.name}</span>
+                    {g.is_default && (
+                      <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700">DEFAULT</span>
+                    )}
+                    {g.is_system && (
+                      <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-600">SYSTEM</span>
+                    )}
+                  </span>
+                  <span className="mt-0.5 block truncate text-xs text-foreground-dim">
+                    {(g.task_types || []).length} types · applied to {g.usage_count || 0} places
+                  </span>
+                </button>
+              ))}
+              {filtered.length === 0 && (
+                <p className="px-2 py-6 text-center text-xs text-foreground-dim">No groups match.</p>
+              )}
+            </div>
+          </div>
+
+          {/* Right: group detail */}
+          <div>
+            {!selected ? (
+              <div className="rounded-xl border border-divider bg-surface p-10 text-center text-sm text-foreground-dim">
+                Select a group on the left, or create a new one.
+              </div>
+            ) : (
+              <div className="space-y-5">
+                <GroupMetaCard group={selected} onChanged={invalidate} onDelete={() => deleteGroup.mutate(selected.id)} />
+                <div className="flex gap-1 border-b border-divider">
+                  {([['types', 'Task Types'], ['apply', 'Apply to…'], ['usage', `Applied to (${selected.usage_count || 0})`], ['templates', 'Space templates']] as [SubTab, string][]).map(([t, label]) => (
+                    <button
+                      key={t}
+                      onClick={() => setSubTab(t)}
+                      className={`px-4 py-2 text-sm font-medium transition border-b-2 ${
+                        subTab === t ? 'border-ink text-foreground' : 'border-transparent text-foreground-muted hover:text-foreground'
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                {subTab === 'types' && (
+                  <TypesCard
+                    group={selected}
+                    allTypes={allTypes}
+                    onChanged={invalidate}
+                    onEditType={(type) => setEditingTaskType(type)}
+                  />
+                )}
+                {subTab === 'apply' && <ApplyCard group={selected} onChanged={invalidate} />}
+                {subTab === 'usage' && <UsageCard groupId={selected.id} />}
+                {subTab === 'templates' && <TemplatesCard selectedGroupId={selected.id} onChanged={invalidate} />}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Modal to edit full task type (custom fields, access, details) */}
+      {editingTaskType && (
+        <EditTaskTypeModal
+          typeId={editingTaskType.id}
+          onClose={() => setEditingTaskType(null)}
+          onChanged={() => {
+            invalidate();
+            setEditingTaskType(null);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+// ============================================================
+// New group form
+// ============================================================
+function NewGroupForm({ onSubmit, pending }: { onSubmit: (b: any) => void; pending: boolean }) {
+  const [name, setName] = useState('');
+  const [key, setKey] = useState('');
+  const [description, setDescription] = useState('');
+  const [color, setColor] = useState('#3b82f6');
+
+  return (
+    <form
+      className="mb-2 space-y-2 rounded-lg border border-divider p-3"
+      onSubmit={(e) => {
+        e.preventDefault();
+        const finalKey = (key || slugify(name)).trim();
+        if (!name.trim() || !finalKey) { alert('Name and key are required'); return; }
+        onSubmit({ key: finalKey, name: name.trim(), description: description.trim() || null, color });
+      }}
+    >
+      <input
+        value={name}
+        onChange={(e) => { setName(e.target.value); if (!key) setKey(slugify(e.target.value)); }}
+        placeholder="Group name (e.g. Software Dev)"
+        className="w-full rounded-lg border border-divider px-3 py-2 text-sm focus:border-ink focus:outline-none"
+      />
+      <div className="flex gap-2">
+        <input
+          value={key}
+          onChange={(e) => setKey(slugify(e.target.value))}
+          placeholder="key (e.g. software_dev)"
+          className="flex-1 rounded-lg border border-divider px-3 py-2 font-mono text-xs focus:border-ink focus:outline-none"
+        />
+        <input
+          type="color"
+          value={color}
+          onChange={(e) => setColor(e.target.value)}
+          className="h-9 w-10 cursor-pointer rounded border border-divider"
+          title="Group color"
+        />
+      </div>
+      <input
+        value={description}
+        onChange={(e) => setDescription(e.target.value)}
+        placeholder="Description (optional)"
+        className="w-full rounded-lg border border-divider px-3 py-2 text-sm focus:border-ink focus:outline-none"
+      />
+      <button
+        disabled={pending}
+        className="w-full rounded-lg bg-ink py-2 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50"
+      >
+        {pending ? 'Creating…' : 'Create group'}
+      </button>
+    </form>
+  );
+}
+
+// ============================================================
+// Group meta card
+// ============================================================
+function GroupMetaCard({ group, onChanged, onDelete }: { group: TaskTypeGroup; onChanged: () => void; onDelete: () => void }) {
+  const qc = useQueryClient();
+  const [editing, setEditing] = useState(false);
+  const [name, setName] = useState(group.name);
+  const [description, setDescription] = useState(group.description || '');
+  const [color, setColor] = useState(group.color);
+
+  useEffect(() => {
+    setName(group.name);
+    setDescription(group.description || '');
+    setColor(group.color);
+    setEditing(false);
+  }, [group.id]);
+
+  const save = useMutation({
+    mutationFn: () => api.put(`/admin/task-type-groups/${group.id}`, { name, description: description || null, color }),
+    onSuccess: () => { onChanged(); setEditing(false); },
+    onError: (err: any) => alert(err?.response?.data?.error || 'Failed to update group'),
+  });
+  const toggleEnabled = useMutation({
+    mutationFn: () => api.put(`/admin/task-type-groups/${group.id}/enabled`, { is_enabled: !group.is_enabled }),
+    onSuccess: onChanged,
+  });
+  const setDefault = useMutation({
+    mutationFn: () => api.put(`/admin/task-type-groups/${group.id}/default`),
+    onSuccess: () => { onChanged(); qc.invalidateQueries({ queryKey: ['admin-task-type-groups'] }); },
+    onError: (err: any) => alert(err?.response?.data?.error || 'Failed to set default'),
+  });
+
+  return (
+    <div className="rounded-xl border border-divider bg-surface p-4">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="h-4 w-4 rounded-full" style={{ background: group.color }} />
+        {editing ? (
+          <>
+            <input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className="min-w-0 flex-1 rounded-lg border border-divider px-3 py-1.5 text-sm font-semibold focus:border-ink focus:outline-none"
+            />
+            <input
+              type="color"
+              value={color}
+              onChange={(e) => setColor(e.target.value)}
+              className="h-8 w-9 cursor-pointer rounded border border-divider"
+            />
+          </>
+        ) : (
+          <>
+            <h2 className="text-base font-bold">{group.name}</h2>
+            <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs text-foreground-dim">{group.key}</code>
+          </>
+        )}
+        <span className="ml-auto flex items-center gap-2">
+          {!group.is_default && (
+            <button
+              onClick={() => setDefault.mutate()}
+              className="rounded-lg border border-divider px-2.5 py-1 text-xs hover:bg-muted"
+            >
+              Set as default
+            </button>
+          )}
+          <button
+            onClick={() => toggleEnabled.mutate()}
+            className="rounded-lg border border-divider px-2.5 py-1 text-xs hover:bg-muted"
+          >
+            {group.is_enabled ? 'Disable' : 'Enable'}
+          </button>
+          {editing ? (
+            <>
+              <button
+                onClick={() => save.mutate()}
+                className="rounded-lg bg-ink px-2.5 py-1 text-xs font-medium text-white"
+              >
+                Save
+              </button>
+              <button
+                onClick={() => setEditing(false)}
+                className="rounded-lg border border-divider px-2.5 py-1 text-xs"
+              >
+                Cancel
+              </button>
+            </>
+          ) : (
+            <button
+              onClick={() => setEditing(true)}
+              className="rounded-lg border border-divider px-2.5 py-1 text-xs hover:bg-muted"
+            >
+              Edit
+            </button>
+          )}
+          {!group.is_system && !group.is_default && (
+            <button
+              onClick={() => {
+                if (confirm(`Delete group “${group.name}”? The task types themselves will be preserved.`)) onDelete();
+              }}
+              className="rounded-lg border border-red-200 px-2.5 py-1 text-xs text-red-600 hover:bg-red-50"
+            >
+              Delete
+            </button>
+          )}
+        </span>
+      </div>
+      {editing ? (
+        <input
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          placeholder="Description"
+          className="mt-2 w-full rounded-lg border border-divider px-3 py-1.5 text-sm focus:border-ink focus:outline-none"
+        />
+      ) : (
+        group.description && <p className="mt-1 text-sm text-foreground-muted">{group.description}</p>
+      )}
+      {!group.is_enabled && (
+        <p className="mt-1 text-xs text-amber-600">Disabled — hidden from pickers, falling back to default group.</p>
+      )}
+    </div>
+  );
+}
+
+// ============================================================
+// TypesCard — manage task types in the group
+// ============================================================
+function TypesCard({
+  group,
+  allTypes,
+  onChanged,
+  onEditType,
+}: {
+  group: TaskTypeGroup;
+  allTypes: TaskType[];
+  onChanged: () => void;
+  onEditType: (t: TaskType) => void;
+}) {
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [selectedExistingId, setSelectedExistingId] = useState('');
+  const [isCreatingNew, setIsCreatingNew] = useState(false);
+  const [newName, setNewName] = useState('');
+  const [newKey, setNewKey] = useState('');
+  const [newDesc, setNewDesc] = useState('');
+  const [newColor, setNewColor] = useState('#6b7280');
+  const [newIcon, setNewIcon] = useState('check-square');
+
+  const types: TaskType[] = group.task_types || [];
+  const existingIdsInGroup = new Set(types.map((t) => t.id));
+  const availableToPick = allTypes.filter((t) => !existingIdsInGroup.has(t.id));
+
+  const addType = useMutation({
+    mutationFn: (body: any) => api.post(`/admin/task-type-groups/${group.id}/types`, body),
+    onSuccess: () => {
+      onChanged();
+      setShowAddModal(false);
+      setSelectedExistingId('');
+      setIsCreatingNew(false);
+      setNewName('');
+      setNewKey('');
+      setNewDesc('');
+    },
+    onError: (err: any) => alert(err?.response?.data?.error || 'Failed to add task type'),
+  });
+
+  const removeType = useMutation({
+    mutationFn: (typeId: string) => api.delete(`/admin/task-type-groups/${group.id}/types/${typeId}`),
+    onSuccess: onChanged,
+    onError: (err: any) => alert(err?.response?.data?.error || 'Failed to remove task type'),
+  });
+
+  const toggleTypeEnabled = useMutation({
+    mutationFn: ({ id, is_enabled }: { id: string; is_enabled: boolean }) =>
+      api.put(`/admin/task-types/${id}/enabled`, { is_enabled }),
+    onSuccess: onChanged,
+  });
+
+  const reorderTypes = useMutation({
+    mutationFn: (items: { id: string; position: number }[]) =>
+      api.put(`/admin/task-type-groups/${group.id}/types/reorder`, { items }),
+    onSuccess: onChanged,
+  });
+
+  function move(index: number, direction: -1 | 1) {
+    const nextIdx = index + direction;
+    if (nextIdx < 0 || nextIdx >= types.length) return;
+    const reordered = [...types];
+    const [moved] = reordered.splice(index, 1);
+    reordered.splice(nextIdx, 0, moved);
+    reorderTypes.mutate(reordered.map((t, idx) => ({ id: t.id, position: idx })));
+  }
+
+  return (
+    <div className="rounded-xl border border-divider bg-surface p-4">
+      <div className="mb-4 flex items-center justify-between">
+        <div>
+          <h3 className="text-sm font-semibold text-foreground">Task Types in this Group ({types.length})</h3>
+          <p className="text-xs text-foreground-dim">
+            These task types will be presented in areas, spaces, or lists where this group is applied.
+          </p>
+        </div>
+        <button
+          onClick={() => { setShowAddModal(true); setIsCreatingNew(false); }}
+          className="rounded-lg bg-ink px-3 py-1.5 text-xs font-medium text-white hover:opacity-90"
+        >
+          + Add task type
+        </button>
+      </div>
+
+      {/* Task Types List */}
+      <div className="space-y-1.5">
+        {types.map((t, idx) => (
+          <div
+            key={t.id}
+            className="flex items-center justify-between rounded-lg border border-divider bg-surface px-3 py-2 text-sm"
+          >
+            <div className="flex items-center gap-3 min-w-0">
+              <span className="h-3 w-3 rounded-full shrink-0" style={{ background: t.color }} />
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className="font-medium text-foreground truncate">{t.name}</span>
+                  <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] text-foreground-dim">
+                    {t.key}
+                  </code>
+                  {(t.fields || []).length > 0 && (
+                    <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium text-foreground-dim">
+                      {(t.fields || []).length} custom fields
+                    </span>
+                  )}
+                  {t.is_system && (
+                    <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-600">
+                      SYSTEM
+                    </span>
+                  )}
+                </div>
+                {t.description && (
+                  <p className="truncate text-xs text-foreground-dim">{t.description}</p>
+                )}
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 shrink-0">
+              {/* Order buttons */}
+              <button
+                onClick={() => move(idx, -1)}
+                disabled={idx === 0}
+                className="rounded px-1.5 py-0.5 text-xs text-foreground-dim hover:text-foreground disabled:opacity-30"
+                title="Move up"
+              >
+                ↑
+              </button>
+              <button
+                onClick={() => move(idx, 1)}
+                disabled={idx === types.length - 1}
+                className="rounded px-1.5 py-0.5 text-xs text-foreground-dim hover:text-foreground disabled:opacity-30"
+                title="Move down"
+              >
+                ↓
+              </button>
+
+              {/* Enabled toggle */}
+              <button
+                onClick={() => toggleTypeEnabled.mutate({ id: t.id, is_enabled: !t.is_enabled })}
+                className={`rounded px-2 py-0.5 text-xs font-medium border border-divider ${
+                  t.is_enabled ? 'bg-emerald-50 text-emerald-700' : 'bg-muted text-foreground-dim'
+                }`}
+              >
+                {t.is_enabled ? 'Active' : 'Disabled'}
+              </button>
+
+              {/* Edit full details & custom fields */}
+              <button
+                onClick={() => onEditType(t)}
+                className="rounded border border-divider px-2 py-0.5 text-xs font-medium hover:bg-muted"
+              >
+                Edit
+              </button>
+
+              {/* Remove from group */}
+              <button
+                onClick={() => {
+                  if (confirm(`Remove “${t.name}” from group “${group.name}”? The task type will remain in the catalog.`)) {
+                    removeType.mutate(t.id);
+                  }
+                }}
+                className="rounded border border-red-200 px-2 py-0.5 text-xs font-medium text-red-600 hover:bg-red-50"
+              >
+                Remove
+              </button>
+            </div>
+          </div>
+        ))}
+
+        {types.length === 0 && (
+          <p className="py-6 text-center text-xs text-foreground-dim">
+            No task types in this group yet. Click &quot;+ Add task type&quot; above to add one.
+          </p>
+        )}
+      </div>
+
+      {/* Add Task Type Modal */}
+      {showAddModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+          <div className="w-full max-w-md rounded-2xl border border-divider bg-surface p-6 shadow-2xl">
+            <h3 className="text-base font-bold text-foreground mb-3">Add Task Type to {group.name}</h3>
+
+            <div className="mb-4 flex gap-2 border-b border-divider pb-2">
+              <button
+                onClick={() => setIsCreatingNew(false)}
+                className={`text-xs font-semibold pb-1 border-b-2 ${
+                  !isCreatingNew ? 'border-ink text-foreground' : 'border-transparent text-foreground-dim'
+                }`}
+              >
+                Pick from existing ({availableToPick.length})
+              </button>
+              <button
+                onClick={() => setIsCreatingNew(true)}
+                className={`text-xs font-semibold pb-1 border-b-2 ${
+                  isCreatingNew ? 'border-ink text-foreground' : 'border-transparent text-foreground-dim'
+                }`}
+              >
+                + Create new task type
+              </button>
+            </div>
+
+            {!isCreatingNew ? (
+              <div className="space-y-3">
+                <p className="text-xs text-foreground-muted">
+                  Select an existing task type from your catalog to include in this group:
+                </p>
+                <select
+                  value={selectedExistingId}
+                  onChange={(e) => setSelectedExistingId(e.target.value)}
+                  className="w-full rounded-lg border border-divider bg-surface px-3 py-2 text-sm text-foreground focus:border-ink focus:outline-none"
+                >
+                  <option value="">-- Select a task type --</option>
+                  {availableToPick.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name} ({t.key})
+                    </option>
+                  ))}
+                </select>
+                {availableToPick.length === 0 && (
+                  <p className="text-xs text-amber-600">All existing task types are already in this group.</p>
+                )}
+                <div className="flex gap-2 pt-2">
+                  <button
+                    onClick={() => setShowAddModal(false)}
+                    className="flex-1 rounded-lg border border-divider py-2 text-xs font-semibold"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    disabled={!selectedExistingId}
+                    onClick={() => addType.mutate({ task_type_id: selectedExistingId })}
+                    className="flex-1 rounded-lg bg-ink py-2 text-xs font-semibold text-white disabled:opacity-50"
+                  >
+                    Add to group
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  if (!newName.trim()) return;
+                  const finalKey = (newKey || slugify(newName)).trim();
+                  addType.mutate({
+                    name: newName.trim(),
+                    key: finalKey,
+                    description: newDesc.trim() || null,
+                    color: newColor,
+                    icon: newIcon,
+                  });
+                }}
+                className="space-y-3"
+              >
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-foreground-muted">Name</label>
+                  <input
+                    value={newName}
+                    onChange={(e) => {
+                      setNewName(e.target.value);
+                      if (!newKey) setNewKey(slugify(e.target.value));
+                    }}
+                    required
+                    placeholder="e.g. Bug Report"
+                    className="w-full rounded-lg border border-divider px-3 py-1.5 text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-foreground-muted">Key</label>
+                  <input
+                    value={newKey}
+                    onChange={(e) => setNewKey(slugify(e.target.value))}
+                    required
+                    placeholder="e.g. bug_report"
+                    className="w-full rounded-lg border border-divider px-3 py-1.5 font-mono text-xs"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-foreground-muted">Color</label>
+                  <input
+                    type="color"
+                    value={newColor}
+                    onChange={(e) => setNewColor(e.target.value)}
+                    className="h-8 w-10 cursor-pointer rounded border border-divider"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-foreground-muted">Description</label>
+                  <input
+                    value={newDesc}
+                    onChange={(e) => setNewDesc(e.target.value)}
+                    placeholder="Short description"
+                    className="w-full rounded-lg border border-divider px-3 py-1.5 text-sm"
+                  />
+                </div>
+                <div className="flex gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowAddModal(false)}
+                    className="flex-1 rounded-lg border border-divider py-2 text-xs font-semibold"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="flex-1 rounded-lg bg-ink py-2 text-xs font-semibold text-white"
+                  >
+                    Create &amp; Add
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ============================================================
+// ApplyCard — apply task type group to container
+// ============================================================
+function ApplyCard({ group, onChanged }: { group: TaskTypeGroup; onChanged: () => void }) {
+  const [entityType, setEntityType] = useState<EntityType>('space');
+  const [q, setQ] = useState('');
+
+  const { data: searchRes } = useQuery({
+    queryKey: ['admin-task-type-group-targets', entityType, q],
+    queryFn: () =>
+      api.get('/admin/task-type-groups/targets/search', { params: { type: entityType, q } }).then((r) => r.data),
+  });
+  const targets: { id: string; name: string; detail: string; assigned_group_id: string | null }[] =
+    searchRes?.data || [];
+
+  const apply = useMutation({
+    mutationFn: (entity_id: string) =>
+      api.post(`/admin/task-type-groups/${group.id}/apply`, { entity_type: entityType, entity_id }),
+    onSuccess: onChanged,
+    onError: (err: any) => alert(err?.response?.data?.error || 'Failed to apply group'),
+  });
+
+  const unapply = useMutation({
+    mutationFn: (entity_id: string) =>
+      api.delete(`/admin/task-type-groups/${group.id}/apply`, { data: { entity_type: entityType, entity_id } }),
+    onSuccess: onChanged,
+    onError: (err: any) => alert(err?.response?.data?.error || 'Failed to remove'),
+  });
+
+  return (
+    <div className="rounded-xl border border-divider bg-surface p-4">
+      <h3 className="text-sm font-semibold text-foreground">Apply “{group.name}” to…</h3>
+      <div className="mt-2 flex flex-wrap gap-1">
+        {(Object.keys(ENTITY_LABELS) as EntityType[]).map((t) => (
+          <button
+            key={t}
+            onClick={() => { setEntityType(t); setQ(''); }}
+            className={`rounded-lg px-3 py-1.5 text-xs font-medium transition ${
+              entityType === t ? 'bg-ink text-white' : 'border border-divider hover:bg-muted'
+            }`}
+          >
+            {ENTITY_LABELS[t]}
+          </button>
+        ))}
+      </div>
+      <p className="mt-2 text-xs text-foreground-dim">{ENTITY_HINTS[entityType]}</p>
+
+      <input
+        value={q}
+        onChange={(e) => setQ(e.target.value)}
+        placeholder={`Search ${ENTITY_LABELS[entityType].toLowerCase()}…`}
+        className="mt-3 w-full rounded-lg border border-divider px-3 py-2 text-sm focus:border-ink focus:outline-none"
+      />
+
+      <div className="mt-3 max-h-96 space-y-1.5 overflow-y-auto">
+        {targets.map((t) => {
+          const isCurrent = t.assigned_group_id === group.id;
+          const isOther = t.assigned_group_id && !isCurrent;
+          return (
+            <div
+              key={t.id}
+              className="flex items-center justify-between rounded-lg border border-divider px-3 py-2 text-sm"
+            >
+              <div>
+                <p className="font-medium text-foreground">{t.name}</p>
+                <p className="text-xs text-foreground-dim">{t.detail}</p>
+              </div>
+              <div>
+                {isCurrent ? (
+                  <button
+                    onClick={() => unapply.mutate(t.id)}
+                    className="rounded-lg border border-emerald-300 bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-800 hover:bg-emerald-100"
+                  >
+                    ✓ Applied (click to remove)
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => apply.mutate(t.id)}
+                    className="rounded-lg bg-ink px-3 py-1 text-xs font-medium text-white hover:opacity-90"
+                  >
+                    {isOther ? 'Replace current' : 'Apply'}
+                  </button>
+                )}
+              </div>
+            </div>
+          );
+        })}
+        {targets.length === 0 && (
+          <p className="py-6 text-center text-xs text-foreground-dim">No targets match.</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// UsageCard — where is the group applied?
+// ============================================================
+function UsageCard({ groupId }: { groupId: string }) {
+  const qc = useQueryClient();
+  const { data: usageRes, isLoading } = useQuery({
+    queryKey: ['admin-task-type-group-usage', groupId],
+    queryFn: () => api.get(`/admin/task-type-groups/${groupId}/usage`).then((r) => r.data),
+  });
+  const usage: any[] = usageRes?.data || [];
+
+  const unapply = useMutation({
+    mutationFn: ({ entity_type, entity_id }: any) =>
+      api.delete(`/admin/task-type-groups/${groupId}/apply`, { data: { entity_type, entity_id } }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin-task-type-group-usage', groupId] });
+      qc.invalidateQueries({ queryKey: ['admin-task-type-groups'] });
+    },
+    onError: (err: any) => alert(err?.response?.data?.error || 'Failed to remove'),
+  });
+
+  return (
+    <div className="rounded-xl border border-divider bg-surface p-4">
+      <h3 className="text-sm font-semibold text-foreground">Where this group is currently applied</h3>
+      <p className="text-xs text-foreground-dim">
+        Removing an assignment returns that container to its parent or default task type group.
+      </p>
+
+      {isLoading ? (
+        <p className="py-6 text-center text-xs text-foreground-dim">Loading…</p>
+      ) : usage.length === 0 ? (
+        <p className="py-8 text-center text-xs text-foreground-dim">
+          Not directly applied anywhere yet. Use &quot;Apply to…&quot; above, or set as default.
+        </p>
+      ) : (
+        <div className="mt-3 space-y-1.5">
+          {usage.map((u) => (
+            <div
+              key={u.id}
+              className="flex items-center justify-between rounded-lg border border-divider px-3 py-2 text-sm"
+            >
+              <div>
+                <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-semibold uppercase text-foreground-dim mr-2">
+                  {u.entity_label}
+                </span>
+                <span className="font-medium text-foreground">{u.entity_name}</span>
+                <span className="ml-2 text-xs text-foreground-dim">
+                  Applied {new Date(u.created_at).toLocaleDateString()}
+                </span>
+              </div>
+              <button
+                onClick={() => unapply.mutate({ entity_type: u.entity_type, entity_id: u.entity_id })}
+                className="rounded border border-red-200 px-2 py-1 text-xs text-red-600 hover:bg-red-50"
+              >
+                Remove
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ============================================================
+// TemplatesCard — space templates inheritance
+// ============================================================
+function TemplatesCard({ selectedGroupId, onChanged }: { selectedGroupId: string; onChanged: () => void }) {
+  const { data: tplRes, isLoading } = useQuery({
+    queryKey: ['admin-task-type-group-templates'],
+    queryFn: () => api.get('/admin/task-type-groups/templates').then((r) => r.data),
+  });
+  const templates: any[] = tplRes?.data || [];
+
+  const assign = useMutation({
+    mutationFn: ({ templateId, groupId }: { templateId: string; groupId: string }) =>
+      api.post(`/admin/task-type-groups/${groupId}/apply`, { entity_type: 'template', entity_id: templateId }),
+    onSuccess: onChanged,
+    onError: (err: any) => alert(err?.response?.data?.error || 'Failed to assign'),
+  });
+
+  const unassign = useMutation({
+    mutationFn: ({ templateId, groupId }: { templateId: string; groupId: string }) =>
+      api.delete(`/admin/task-type-groups/${groupId}/apply`, { data: { entity_type: 'template', entity_id: templateId } }),
+    onSuccess: onChanged,
+    onError: (err: any) => alert(err?.response?.data?.error || 'Failed to remove'),
+  });
+
+  return (
+    <div className="rounded-xl border border-divider bg-surface p-4">
+      <h3 className="text-sm font-semibold text-foreground">Space templates auto-inheritance</h3>
+      <p className="text-xs text-foreground-dim">
+        When a client space is created from a template (e.g. Developer Space, Designer Space),
+        it automatically inherits the assigned task type group.
+      </p>
+
+      {isLoading ? (
+        <p className="py-6 text-center text-xs text-foreground-dim">Loading…</p>
+      ) : templates.length === 0 ? (
+        <p className="py-6 text-center text-xs text-foreground-dim">No space templates found.</p>
+      ) : (
+        <div className="mt-3 space-y-1.5">
+          {templates.map((t) => {
+            const currentGroup = t.assignment?.task_type_groups || null;
+            const isThis = currentGroup?.id === selectedGroupId;
+            return (
+              <div
+                key={t.id}
+                className="flex items-center justify-between rounded-lg border border-divider px-3 py-2 text-sm"
+              >
+                <div>
+                  <p className="font-medium text-foreground">{t.name}</p>
+                  <p className="text-xs text-foreground-dim">slug: {t.slug}</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  {currentGroup ? (
+                    <span className="flex items-center gap-1.5 rounded-full border border-divider px-2.5 py-0.5 text-xs">
+                      <span className="h-2 w-2 rounded-full" style={{ background: currentGroup.color }} />
+                      <span>{currentGroup.name}</span>
+                    </span>
+                  ) : (
+                    <span className="text-xs text-foreground-dim">Default group</span>
+                  )}
+                  {isThis ? (
+                    <button
+                      onClick={() => unassign.mutate({ templateId: t.id, groupId: selectedGroupId })}
+                      className="rounded border border-divider px-2 py-1 text-xs hover:bg-muted"
+                    >
+                      Clear
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => assign.mutate({ templateId: t.id, groupId: selectedGroupId })}
+                      className="rounded bg-ink px-2.5 py-1 text-xs font-medium text-white hover:opacity-90"
+                    >
+                      Assign this group
+                    </button>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ============================================================
+// EditTaskTypeModal — full editor for custom fields, access, details
+// ============================================================
+function EditTaskTypeModal({
+  typeId,
+  onClose,
+  onChanged,
+}: {
+  typeId: string;
+  onClose: () => void;
+  onChanged: () => void;
+}) {
+  const qc = useQueryClient();
   const { data: typesRes } = useQuery({
     queryKey: ['admin-task-types'],
     queryFn: () => api.get('/admin/task-types').then((r) => r.data),
   });
   const types: TaskType[] = typesRes?.data || [];
-  const selected = types.find((t) => t.id === selectedId) || null;
+  const type = types.find((t) => t.id === typeId);
 
-  const existingGroups = useMemo(() => {
-    const set = new Set<string>();
-    for (const t of types) {
-      if (t.group_name && t.group_name.trim()) set.add(t.group_name.trim());
-    }
-    return Array.from(set).sort((a, b) => a.localeCompare(b));
-  }, [types]);
+  const [activeTab, setActiveTab] = useState<'details' | 'fields' | 'access'>('details');
+  const [showFieldForm, setShowFieldForm] = useState(false);
+  const [editingField, setEditingField] = useState<TaskTypeField | null>(null);
+
+  // Detail edits
+  const [name, setName] = useState('');
+  const [description, setDescription] = useState('');
+  const [icon, setIcon] = useState('check-square');
+  const [color, setColor] = useState('#6b7280');
 
   useEffect(() => {
-    if (!selectedId && types.length > 0) setSelectedId(types[0].id);
-  }, [types, selectedId]);
-
-  const createType = useMutation({
-    mutationFn: (body: any) => api.post('/admin/task-types', body).then((r) => r.data),
-    onSuccess: (res) => {
-      qc.invalidateQueries({ queryKey: ['admin-task-types'] });
-      setShowTypeForm(false);
-      setPreselectedGroup(null);
-      if (res?.data?.id) setSelectedId(res.data.id);
-    },
-    onError: (err: any) => alert(err?.response?.data?.error || 'Failed to create task type'),
-  });
+    if (type) {
+      setName(type.name);
+      setDescription(type.description || '');
+      setIcon(type.icon || 'check-square');
+      setColor(type.color || '#6b7280');
+    }
+  }, [type]);
 
   const updateType = useMutation({
-    mutationFn: ({ id, ...body }: any) => api.put(`/admin/task-types/${id}`, body),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-task-types'] }),
+    mutationFn: (body: any) => api.put(`/admin/task-types/${typeId}`, body),
+    onSuccess: () => {
+      onChanged();
+      alert('Task type updated');
+    },
     onError: (err: any) => alert(err?.response?.data?.error || 'Failed to update task type'),
   });
 
-  const toggleEnabled = useMutation({
-    mutationFn: ({ id, is_enabled }: { id: string; is_enabled: boolean }) =>
-      api.put(`/admin/task-types/${id}/enabled`, { is_enabled }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-task-types'] }),
-  });
-
-  const deleteType = useMutation({
-    mutationFn: (id: string) => api.delete(`/admin/task-types/${id}`),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['admin-task-types'] });
-      setSelectedId(null);
-    },
-    onError: (err: any) => alert(err?.response?.data?.error || 'Failed to delete task type'),
-  });
-
-  const setDefault = useMutation({
-    mutationFn: (id: string) => api.put(`/admin/task-types/${id}/default`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-task-types'] }),
-  });
-
-  const renameGroup = useMutation({
-    mutationFn: ({ old_name, new_name }: { old_name: string; new_name: string }) =>
-      api.put('/admin/task-types/groups/rename', { old_name, new_name }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['admin-task-types'] });
-      setRenamingGroup(null);
-    },
-    onError: (err: any) => alert(err?.response?.data?.error || 'Failed to rename group'),
-  });
-
-  const assignGroup = useMutation({
-    mutationFn: ({ group_name, task_type_ids }: { group_name: string; task_type_ids: string[] }) =>
-      api.put('/admin/task-types/groups/assign', { group_name, task_type_ids }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['admin-task-types'] });
-      setMovingToGroup(null);
-      setShowGroupForm(false);
-    },
-    onError: (err: any) => alert(err?.response?.data?.error || 'Failed to update group'),
-  });
-
-  const toggleGroupEnabled = useMutation({
-    mutationFn: ({
-      group_name,
-      task_type_ids,
-      is_enabled,
-    }: {
-      group_name?: string;
-      task_type_ids: string[];
-      is_enabled: boolean;
-    }) =>
-      api.put('/admin/task-types/groups/enabled', { group_name, task_type_ids, is_enabled }),
-    onMutate: async ({ task_type_ids, is_enabled }) => {
-      await qc.cancelQueries({ queryKey: ['admin-task-types'] });
-      const previousData = qc.getQueryData(['admin-task-types']);
-      qc.setQueryData(['admin-task-types'], (old: any) => {
-        if (!old?.data) return old;
-        const targetIds = new Set(task_type_ids);
-        return {
-          ...old,
-          data: old.data.map((t: TaskType) =>
-            targetIds.has(t.id) ? { ...t, is_enabled } : t
-          ),
-        };
-      });
-      return { previousData };
-    },
-    onError: (err: any, _vars, context: any) => {
-      if (context?.previousData) {
-        qc.setQueryData(['admin-task-types'], context.previousData);
-      }
-      alert(err?.response?.data?.error || 'Failed to toggle group');
-    },
-    onSettled: () => {
-      qc.invalidateQueries({ queryKey: ['admin-task-types'] });
-    },
-  });
-
   const createField = useMutation({
-    mutationFn: ({ typeId, ...body }: any) => api.post(`/admin/task-types/${typeId}/fields`, body),
+    mutationFn: (body: any) => api.post(`/admin/task-types/${typeId}/fields`, body),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['admin-task-types'] });
       setShowFieldForm(false);
-      setEditingField(null);
     },
     onError: (err: any) => alert(err?.response?.data?.error || 'Failed to create field'),
   });
 
   const updateField = useMutation({
-    mutationFn: ({ typeId, fieldId, ...body }: any) => api.put(`/admin/task-types/${typeId}/fields/${fieldId}`, body),
+    mutationFn: ({ id, ...body }: any) => api.put(`/admin/task-types/${typeId}/fields/${id}`, body),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['admin-task-types'] });
       setShowFieldForm(false);
       setEditingField(null);
     },
+    onError: (err: any) => alert(err?.response?.data?.error || 'Failed to update field'),
   });
 
   const deleteField = useMutation({
-    mutationFn: ({ typeId, fieldId }: any) => api.delete(`/admin/task-types/${typeId}/fields/${fieldId}`),
+    mutationFn: (id: string) => api.delete(`/admin/task-types/${typeId}/fields/${id}`),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-task-types'] }),
+    onError: (err: any) => alert(err?.response?.data?.error || 'Failed to delete field'),
   });
 
   const addRoleAccess = useMutation({
-    mutationFn: ({ typeId, role_id }: { typeId: string; role_id: string }) =>
-      api.post(`/admin/task-types/${typeId}/roles`, { role_id }),
+    mutationFn: (role_id: string) => api.post(`/admin/task-types/${typeId}/roles`, { role_id }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-task-types'] }),
-    onError: (err: any) => alert(err?.response?.data?.error || 'Failed to add role'),
   });
 
   const removeRoleAccess = useMutation({
-    mutationFn: ({ typeId, roleId }: { typeId: string; roleId: string }) =>
-      api.delete(`/admin/task-types/${typeId}/roles/${roleId}`),
+    mutationFn: (role_id: string) => api.delete(`/admin/task-types/${typeId}/roles/${role_id}`),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-task-types'] }),
   });
 
   const addUserAccess = useMutation({
-    mutationFn: ({ typeId, user_id }: { typeId: string; user_id: string }) =>
-      api.post(`/admin/task-types/${typeId}/users`, { user_id }),
+    mutationFn: (user_id: string) => api.post(`/admin/task-types/${typeId}/users`, { user_id }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-task-types'] }),
-    onError: (err: any) => alert(err?.response?.data?.error || 'Failed to add user'),
   });
 
   const removeUserAccess = useMutation({
-    mutationFn: ({ typeId, userId }: { typeId: string; userId: string }) =>
-      api.delete(`/admin/task-types/${typeId}/users/${userId}`),
+    mutationFn: (user_id: string) => api.delete(`/admin/task-types/${typeId}/users/${user_id}`),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-task-types'] }),
   });
 
-  // Filtered task types
-  const filteredTypes = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) return types;
-    return types.filter((t) =>
-      (t.name || '').toLowerCase().includes(q) ||
-      (t.description || '').toLowerCase().includes(q) ||
-      (t.group_name || '').toLowerCase().includes(q) ||
-      (t.key || '').toLowerCase().includes(q)
-    );
-  }, [types, search]);
-
-  // Grouped task types
-  const groupedData = useMemo(() => {
-    const map = new Map<string, TaskType[]>();
-    for (const t of filteredTypes) {
-      const g = (t.group_name && t.group_name.trim()) || 'Other';
-      const list = map.get(g) || [];
-      list.push(t);
-      map.set(g, list);
-    }
-    return Array.from(map.entries()).sort(([a], [b]) => {
-      if (a === 'Task Types') return -1;
-      if (b === 'Task Types') return 1;
-      if (a === 'Software Development') return -1;
-      if (b === 'Software Development') return 1;
-      return a.localeCompare(b);
-    });
-  }, [filteredTypes]);
-
-  const toggleGroupCollapse = (gName: string) => {
-    setCollapsedGroups((prev) => ({ ...prev, [gName]: !prev[gName] }));
-  };
-
-  // Single-click collapse-all / expand-all for the directory panel. When every
-  // visible group is already collapsed the click expands everything, otherwise
-  // it collapses everything currently shown (respects the search filter).
-  const allGroupsCollapsed =
-    groupedData.length > 0 && groupedData.every(([gName]) => collapsedGroups[gName]);
-  const toggleAllGroupsCollapse = () => {
-    if (allGroupsCollapsed) {
-      setCollapsedGroups({});
-    } else {
-      setCollapsedGroups(
-        groupedData.reduce<Record<string, boolean>>((acc, [gName]) => ({ ...acc, [gName]: true }), {}),
-      );
-    }
-  };
+  if (!type) return null;
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-divider pb-5">
-        <div>
-          <h1 className="font-[family-name:var(--font-display)] text-xl font-bold text-foreground">
-            Task Types & Groups
-          </h1>
-          <p className="mt-1 text-sm text-foreground-muted">
-            Manage task types, organize them into groups, and configure fields and access permissions.
-          </p>
-        </div>
-        <div className="flex items-center gap-2.5">
-          <button
-            onClick={() => setShowGroupForm(true)}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-divider bg-surface px-3.5 py-2 text-xs font-semibold text-foreground shadow-sm hover:bg-surface-alt transition"
-          >
-            <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-            </svg>
-            + New Group
-          </button>
-          <button
-            onClick={() => { setPreselectedGroup(null); setShowTypeForm(true); }}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-ink px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-ink-hover transition"
-          >
-            <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-            </svg>
-            + Add Task Type
-          </button>
-        </div>
-      </div>
-
-      <div className="flex flex-col lg:flex-row gap-6 items-start">
-        {/* Left Column: Grouped Task Types Directory */}
-        <div className="w-full lg:w-80 shrink-0 space-y-4">
-          <div className="rounded-xl border border-divider bg-surface overflow-hidden shadow-sm">
-            {/* Search */}
-            <div className="p-3 border-b border-divider bg-surface-alt/40">
-              <div className="relative">
-                <input
-                  type="text"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Search types, keys, or groups..."
-                  className="w-full rounded-lg border border-divider bg-surface px-3 py-1.5 text-xs text-foreground placeholder:text-foreground-dim outline-none focus:border-ink transition"
-                />
-                {search && (
-                  <button
-                    onClick={() => setSearch('')}
-                    className="absolute right-2.5 top-2 text-xs text-foreground-dim hover:text-foreground"
-                  >
-                    ×
-                  </button>
-                )}
-              </div>
-              <div className="mt-2 flex items-center justify-between text-[11px] text-foreground-dim">
-                <span>{filteredTypes.length} types in {groupedData.length} groups</span>
-                {groupedData.length > 0 && (
-                  <button
-                    type="button"
-                    onClick={toggleAllGroupsCollapse}
-                    title={allGroupsCollapsed ? 'Expand all groups' : 'Collapse all groups'}
-                    className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-semibold text-foreground-muted transition hover:bg-surface-alt hover:text-foreground"
-                  >
-                    <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                      {allGroupsCollapsed ? (
-                        <path d="M7 15l5 5 5-5M7 9l5-5 5 5" />
-                      ) : (
-                        <path d="M7 9l5 5 5-5M7 15l5-5 5 5" />
-                      )}
-                    </svg>
-                    {allGroupsCollapsed ? 'Expand all' : 'Collapse all'}
-                  </button>
-                )}
-              </div>
-            </div>
-
-            {/* Groups list */}
-            {groupedData.length === 0 ? (
-              <div className="p-8 text-center text-xs text-foreground-dim">
-                No task types found matching &quot;{search}&quot;
-              </div>
-            ) : (
-              <div className="max-h-[calc(100vh-280px)] overflow-y-auto divide-y divide-divider/50">
-                {groupedData.map(([groupName, groupItems]) => {
-                  const isCollapsed = collapsedGroups[groupName];
-                  const fullGroupTypes = types.filter(
-                    (t) => ((t.group_name && t.group_name.trim()) || 'Other') === groupName
-                  );
-                  const groupTypesToToggle = fullGroupTypes.length > 0 ? fullGroupTypes : groupItems;
-                  const allGroupEnabled =
-                    groupTypesToToggle.length > 0 && groupTypesToToggle.every((t) => t.is_enabled);
-                  const someGroupEnabled = groupTypesToToggle.some((t) => t.is_enabled);
-                  const isIndeterminate = someGroupEnabled && !allGroupEnabled;
-                  const enabledCount = groupTypesToToggle.filter((t) => t.is_enabled).length;
-
-                  const groupToggleTitle = allGroupEnabled
-                    ? `Disable all ${groupTypesToToggle.length} task types in ${groupName}`
-                    : isIndeterminate
-                    ? `${enabledCount} of ${groupTypesToToggle.length} enabled — click to enable all (Alt-click to disable all) in ${groupName}`
-                    : `Enable all ${groupTypesToToggle.length} task types in ${groupName}`;
-
-                  const handleToggleGroup = (nextVal: boolean) => {
-                    toggleGroupEnabled.mutate({
-                      group_name: groupName,
-                      task_type_ids: groupTypesToToggle.map((t) => t.id),
-                      is_enabled: nextVal,
-                    });
-                  };
-
-                  const handleGroupToggleClick = (e: React.MouseEvent) => {
-                    e.stopPropagation();
-                    const nextVal = e.altKey || e.shiftKey ? false : !allGroupEnabled;
-                    handleToggleGroup(nextVal);
-                  };
-
-                  return (
-                    <div key={groupName} className="group/section">
-                      {/* Group Header */}
-                      <div className="flex items-center justify-between px-3 py-2 bg-surface-alt/60 hover:bg-surface-alt transition">
-                        <button
-                          onClick={() => toggleGroupCollapse(groupName)}
-                          className="flex items-center gap-1.5 text-left text-xs font-semibold text-foreground min-w-0"
-                        >
-                          <svg
-                            className={`h-3 w-3 text-foreground-muted transition-transform ${isCollapsed ? '-rotate-90' : ''}`}
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="2"
-                          >
-                            <polyline points="6 9 12 15 18 9" />
-                          </svg>
-                          <span className="truncate">{groupName}</span>
-                          <span className="rounded-full bg-surface px-1.5 py-0.2 text-[10px] text-foreground-dim">
-                            {groupItems.length}
-                          </span>
-                        </button>
-                        <div className="flex items-center gap-1 shrink-0 opacity-80 hover:opacity-100">
-                          <button
-                            onClick={() => { setPreselectedGroup(groupName); setShowTypeForm(true); }}
-                            title={`Add task type to ${groupName}`}
-                            className="rounded p-1 text-[11px] font-medium text-foreground-muted hover:bg-surface hover:text-foreground"
-                          >
-                            + Add
-                          </button>
-                          <button
-                            onClick={() => setMovingToGroup(groupName)}
-                            title={`Add existing task types into ${groupName}`}
-                            className="rounded p-1 text-[11px] font-medium text-foreground-muted hover:bg-surface hover:text-foreground"
-                          >
-                            + Move
-                          </button>
-                          <button
-                            onClick={() => setRenamingGroup(groupName)}
-                            title={`Rename ${groupName}`}
-                            className="rounded p-1 text-[11px] font-medium text-foreground-dim hover:bg-surface hover:text-foreground"
-                          >
-                            ✎
-                          </button>
-                          <div className="mx-0.5 h-3.5 w-px bg-divider" />
-                          <Toggle
-                            value={allGroupEnabled}
-                            indeterminate={isIndeterminate}
-                            title={groupToggleTitle}
-                            onToggleClick={handleGroupToggleClick}
-                            onChange={handleToggleGroup}
-                            disabled={groupTypesToToggle.length === 0}
-                          />
-                        </div>
-                      </div>
-
-                      {/* Group Items */}
-                      {!isCollapsed && (
-                        <ul className="p-1 space-y-0.5">
-                          {groupItems.map((t) => {
-                            const isSelected = selectedId === t.id;
-                            return (
-                              <li key={t.id}>
-                                <div
-                                  className={`flex items-center gap-2 rounded-lg px-2.5 py-2 transition ${
-                                    isSelected
-                                      ? 'bg-blue-50/70 dark:bg-blue-950/30 text-blue-900 dark:text-blue-200 border border-blue-200/60 dark:border-blue-800/40'
-                                      : 'hover:bg-surface-alt/70 text-foreground'
-                                  }`}
-                                >
-                                  <button
-                                    onClick={() => setSelectedId(t.id)}
-                                    className="flex flex-1 items-center gap-2.5 text-left text-xs min-w-0"
-                                  >
-                                    <span
-                                      className="h-2.5 w-2.5 shrink-0 rounded-full"
-                                      style={{ backgroundColor: t.color || '#6b7280' }}
-                                    />
-                                    <div className="flex-1 min-w-0">
-                                      <div className="flex items-center gap-1.5">
-                                        <span className={`block truncate font-medium ${t.is_enabled ? '' : 'line-through opacity-50'}`}>
-                                          {t.name}
-                                        </span>
-                                        {t.is_default && (
-                                          <span className="rounded bg-emerald-100 dark:bg-emerald-950 px-1 py-0.2 text-[9px] font-medium text-emerald-800 dark:text-emerald-300">
-                                            Default
-                                          </span>
-                                        )}
-                                      </div>
-                                      <span className="block truncate text-[10px] text-foreground-dim">
-                                        {t.key}
-                                      </span>
-                                    </div>
-                                    {!t.is_system && (
-                                      <span className="rounded bg-purple-50 dark:bg-purple-950 px-1 py-0.2 text-[9px] font-medium text-purple-700 dark:text-purple-300">
-                                        Custom
-                                      </span>
-                                    )}
-                                  </button>
-                                  <Toggle
-                                    value={t.is_enabled}
-                                    onChange={(v) => toggleEnabled.mutate({ id: t.id, is_enabled: v })}
-                                  />
-                                </div>
-                              </li>
-                            );
-                          })}
-                        </ul>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+      <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-divider bg-surface p-6 shadow-2xl">
+        <div className="mb-4 flex items-center justify-between border-b border-divider pb-3">
+          <div className="flex items-center gap-2">
+            <span className="h-3.5 w-3.5 rounded-full" style={{ background: type.color }} />
+            <h2 className="text-base font-bold text-foreground">{type.name}</h2>
+            <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs text-foreground-dim">{type.key}</code>
           </div>
+          <button onClick={onClose} className="rounded p-1 text-foreground-dim hover:text-foreground">✕</button>
         </div>
 
-        {/* Right Column: Editable Details & Configuration */}
-        <div className="flex-1 min-w-0 space-y-6 w-full">
-          {!selected ? (
-            <div className="rounded-xl border border-dashed border-divider bg-surface p-12 text-center text-sm text-foreground-dim">
-              Select a task type from the list to view and edit its details.
-            </div>
-          ) : (
-            <>
-              {/* Type Details Editor (Works for BOTH System & Custom Types) */}
-              <TypeDetailForm
-                key={selected.id}
-                type={selected}
-                existingGroups={existingGroups}
-                onSave={(patch) => updateType.mutate({ id: selected.id, ...patch })}
-                onToggle={(v) => toggleEnabled.mutate({ id: selected.id, is_enabled: v })}
-                onDelete={() => {
-                  if (confirm(`Delete "${selected.name}"? Tasks currently using this type will need to be reassigned.`)) {
-                    deleteType.mutate(selected.id);
-                  }
-                }}
-                onSetDefault={() => setDefault.mutate(selected.id)}
-              />
+        {/* Tabs */}
+        <div className="mb-4 flex gap-2 border-b border-divider pb-2">
+          <button
+            onClick={() => setActiveTab('details')}
+            className={`text-xs font-semibold pb-1 border-b-2 ${
+              activeTab === 'details' ? 'border-ink text-foreground' : 'border-transparent text-foreground-dim'
+            }`}
+          >
+            General Details
+          </button>
+          <button
+            onClick={() => setActiveTab('fields')}
+            className={`text-xs font-semibold pb-1 border-b-2 ${
+              activeTab === 'fields' ? 'border-ink text-foreground' : 'border-transparent text-foreground-dim'
+            }`}
+          >
+            Custom Fields ({(type.fields || []).length})
+          </button>
+          <button
+            onClick={() => setActiveTab('access')}
+            className={`text-xs font-semibold pb-1 border-b-2 ${
+              activeTab === 'access' ? 'border-ink text-foreground' : 'border-transparent text-foreground-dim'
+            }`}
+          >
+            Access Permissions
+          </button>
+        </div>
 
-              {/* Built-in Fields or Custom Fields Card */}
-              {selected.is_system && selected.fields && selected.fields.length > 0 && (
-                <div className="rounded-xl border border-divider bg-surface p-6 shadow-sm">
-                  <h3 className="mb-1 text-sm font-semibold text-foreground">Built-in Fields</h3>
-                  <p className="mb-4 text-xs text-foreground-muted">Standard fields defined for this system task type.</p>
-                  <ul className="space-y-2">
-                    {selected.fields.map((f) => (
-                      <li key={f.id} className="flex items-center justify-between rounded-lg border border-divider bg-surface-alt px-4 py-2.5">
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <span className="text-sm font-medium text-foreground">{f.label}</span>
-                            <span className="rounded bg-surface px-1.5 py-0.5 text-[10px] text-foreground-muted">
-                              {FIELD_TYPE_LABELS[f.field_type]}
-                            </span>
-                            {f.is_required && <span className="text-[10px] font-medium text-red-500">Required</span>}
-                          </div>
-                          <div className="mt-0.5 font-[family-name:var(--font-mono)] text-[10px] text-foreground-dim">{f.key}</div>
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
+        {activeTab === 'details' && (
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              updateType.mutate({
+                name: name.trim(),
+                description: description.trim() || null,
+                icon,
+                color,
+              });
+            }}
+            className="space-y-4"
+          >
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="mb-1 block text-xs font-medium text-foreground-muted">Name</label>
+                <input
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  required
+                  className="w-full rounded-lg border border-divider px-3 py-2 text-sm"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-foreground-muted">Color</label>
+                <div className="flex gap-2">
+                  <input
+                    type="color"
+                    value={color}
+                    onChange={(e) => setColor(e.target.value)}
+                    className="h-9 w-10 cursor-pointer rounded border border-divider"
+                  />
+                  <input
+                    value={color}
+                    onChange={(e) => setColor(e.target.value)}
+                    className="flex-1 rounded-lg border border-divider px-2 py-1.5 font-mono text-xs"
+                  />
                 </div>
-              )}
+              </div>
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-foreground-muted">Description</label>
+              <textarea
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                rows={2}
+                className="w-full rounded-lg border border-divider px-3 py-2 text-sm"
+              />
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={onClose}
+                className="rounded-lg border border-divider px-4 py-2 text-xs font-semibold"
+              >
+                Close
+              </button>
+              <button
+                type="submit"
+                className="rounded-lg bg-ink px-4 py-2 text-xs font-semibold text-white"
+              >
+                Save Changes
+              </button>
+            </div>
+          </form>
+        )}
 
-              {/* Custom Fields Card for custom types */}
-              {!selected.is_system && (
-                <CustomFieldsCard
-                  type={selected}
-                  onAddField={() => { setEditingField(null); setShowFieldForm(true); }}
-                  onEditField={(f) => { setEditingField(f); setShowFieldForm(true); }}
-                  onDeleteField={(fieldId, label) => {
-                    if (confirm(`Delete field "${label}"?`)) deleteField.mutate({ typeId: selected.id, fieldId });
-                  }}
-                />
-              )}
+        {activeTab === 'fields' && (
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <p className="text-xs text-foreground-muted">Custom fields prompt assignees for extra details on tasks.</p>
+              <button
+                onClick={() => { setEditingField(null); setShowFieldForm(true); }}
+                className="rounded-lg bg-ink px-3 py-1.5 text-xs font-medium text-white hover:opacity-90"
+              >
+                + Add Custom Field
+              </button>
+            </div>
 
-              {/* Access Sharing for custom types */}
-              {!selected.is_system && (
-                <AccessCard
-                  type={selected}
-                  onAddRole={(role_id) => addRoleAccess.mutate({ typeId: selected.id, role_id })}
-                  onRemoveRole={(roleId) => removeRoleAccess.mutate({ typeId: selected.id, roleId })}
-                  onAddUser={(user_id) => addUserAccess.mutate({ typeId: selected.id, user_id })}
-                  onRemoveUser={(userId) => removeUserAccess.mutate({ typeId: selected.id, userId })}
-                />
+            <div className="space-y-1.5">
+              {(type.fields || []).map((f) => (
+                <div
+                  key={f.id}
+                  className="flex items-center justify-between rounded-lg border border-divider px-3 py-2 text-sm"
+                >
+                  <div>
+                    <span className="font-medium text-foreground">{f.label}</span>
+                    <span className="ml-2 font-mono text-xs text-foreground-dim">({f.key})</span>
+                    <span className="ml-2 rounded bg-muted px-1.5 py-0.5 text-[10px] text-foreground-dim">
+                      {FIELD_TYPE_LABELS[f.field_type] || f.field_type}
+                    </span>
+                    {f.is_required && (
+                      <span className="ml-1 text-[10px] font-semibold text-red-500">Required</span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => { setEditingField(f); setShowFieldForm(true); }}
+                      className="rounded border border-divider px-2 py-0.5 text-xs hover:bg-muted"
+                    >
+                      Edit
+                    </button>
+                    <button
+                      onClick={() => {
+                        if (confirm(`Delete custom field “${f.label}”?`)) deleteField.mutate(f.id);
+                      }}
+                      className="rounded border border-red-200 px-2 py-0.5 text-xs text-red-600 hover:bg-red-50"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              ))}
+              {(type.fields || []).length === 0 && (
+                <p className="py-6 text-center text-xs text-foreground-dim">No custom fields defined yet.</p>
               )}
-            </>
-          )}
-        </div>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'access' && (
+          <div className="space-y-4">
+            <p className="text-xs text-foreground-muted">
+              Restrict who can use this task type. If no roles or users are added, it is accessible to all members.
+            </p>
+
+            {/* Role Access */}
+            <div className="rounded-lg border border-divider p-3">
+              <div className="mb-2 flex items-center justify-between">
+                <h4 className="text-xs font-semibold text-foreground uppercase tracking-wider">Role Access</h4>
+                <RolePicker
+                  excludeIds={new Set((type.role_access || []).map((r) => r.role_id))}
+                  onPick={(roleId) => addRoleAccess.mutate(roleId)}
+                />
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {(type.role_access || []).map((ra) => (
+                  <span
+                    key={ra.id}
+                    className="inline-flex items-center gap-1.5 rounded-full border border-divider px-2.5 py-1 text-xs"
+                  >
+                    <span className="h-2 w-2 rounded-full" style={{ backgroundColor: ra.role?.color }} />
+                    <span>{ra.role?.name}</span>
+                    <button
+                      onClick={() => removeRoleAccess.mutate(ra.role_id)}
+                      className="text-foreground-dim hover:text-red-500"
+                    >
+                      ×
+                    </button>
+                  </span>
+                ))}
+                {(type.role_access || []).length === 0 && (
+                  <p className="text-xs text-foreground-dim">No role restrictions (open to all roles)</p>
+                )}
+              </div>
+            </div>
+
+            {/* User Access */}
+            <div className="rounded-lg border border-divider p-3">
+              <div className="mb-2 flex items-center justify-between">
+                <h4 className="text-xs font-semibold text-foreground uppercase tracking-wider">Specific User Access</h4>
+                <UserPicker
+                  excludeIds={new Set((type.user_access || []).map((u) => u.user_id))}
+                  onPick={(userId) => addUserAccess.mutate(userId)}
+                />
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {(type.user_access || []).map((ua) => (
+                  <span
+                    key={ua.id}
+                    className="inline-flex items-center gap-1.5 rounded-full border border-divider px-2.5 py-1 text-xs"
+                  >
+                    <span>{ua.user?.display_name || ua.user?.email}</span>
+                    <button
+                      onClick={() => removeUserAccess.mutate(ua.user_id)}
+                      className="text-foreground-dim hover:text-red-500"
+                    >
+                      ×
+                    </button>
+                  </span>
+                ))}
+                {(type.user_access || []).length === 0 && (
+                  <p className="text-xs text-foreground-dim">No specific user restrictions</p>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* Modal: Create Task Type */}
-      {showTypeForm && (
-        <TypeCreateModal
-          initialGroup={preselectedGroup}
-          existingGroups={existingGroups}
-          onCancel={() => { setShowTypeForm(false); setPreselectedGroup(null); }}
-          onSubmit={(body) => createType.mutate(body)}
-        />
-      )}
-
-      {/* Modal: Create New Task Group */}
-      {showGroupForm && (
-        <GroupCreateModal
-          allTypes={types}
-          onCancel={() => setShowGroupForm(false)}
-          onSubmit={({ groupName, selectedTypeIds }) => {
-            if (selectedTypeIds.length > 0) {
-              assignGroup.mutate({ group_name: groupName, task_type_ids: selectedTypeIds });
-            } else {
-              // Open type create modal pre-filled with this group so they can add the first type
-              setShowGroupForm(false);
-              setPreselectedGroup(groupName);
-              setShowTypeForm(true);
-            }
-          }}
-        />
-      )}
-
-      {/* Modal: Rename Group */}
-      {renamingGroup && (
-        <GroupRenameModal
-          currentName={renamingGroup}
-          onCancel={() => setRenamingGroup(null)}
-          onSubmit={(newName) => renameGroup.mutate({ old_name: renamingGroup, new_name: newName })}
-        />
-      )}
-
-      {/* Modal: Move Existing Types to Group */}
-      {movingToGroup && (
-        <AddExistingToGroupModal
-          targetGroup={movingToGroup}
-          allTypes={types}
-          onCancel={() => setMovingToGroup(null)}
-          onSubmit={(selectedIds) => assignGroup.mutate({ group_name: movingToGroup, task_type_ids: selectedIds })}
-        />
-      )}
-
-      {/* Modal: Custom Field Form */}
-      {showFieldForm && selected && !selected.is_system && (
+      {showFieldForm && (
         <FieldFormModal
           field={editingField}
           onCancel={() => { setShowFieldForm(false); setEditingField(null); }}
           onSubmit={(body) => {
             if (editingField) {
-              updateField.mutate({ typeId: selected.id, fieldId: editingField.id, ...body });
+              updateField.mutate({ id: editingField.id, ...body });
             } else {
-              createField.mutate({ typeId: selected.id, ...body });
+              createField.mutate(body);
             }
           }}
         />
@@ -633,878 +1308,9 @@ export default function AdminTaskTypes() {
   );
 }
 
-// ----------------------------------------------------------------
-// Universal Type Detail Form (Edits Both System & Custom Types)
-// ----------------------------------------------------------------
-function TypeDetailForm({
-  type, existingGroups, onSave, onToggle, onDelete, onSetDefault,
-}: {
-  type: TaskType;
-  existingGroups: string[];
-  onSave: (patch: Partial<TaskType>) => void;
-  onToggle: (v: boolean) => void;
-  onDelete: () => void;
-  onSetDefault: () => void;
-}) {
-  const [name, setName] = useState(type.name);
-  const [groupName, setGroupName] = useState(type.group_name || '');
-  const [description, setDescription] = useState(type.description || '');
-  const [icon, setIcon] = useState(type.icon || 'check-square');
-  const [color, setColor] = useState(type.color || '#6b7280');
-  const [isSaved, setIsSaved] = useState(false);
-
-  useEffect(() => {
-    setName(type.name);
-    setGroupName(type.group_name || '');
-    setDescription(type.description || '');
-    setIcon(type.icon || 'check-square');
-    setColor(type.color || '#6b7280');
-    setIsSaved(false);
-  }, [type.id]);
-
-  const dirty =
-    name !== type.name ||
-    groupName !== (type.group_name || '') ||
-    description !== (type.description || '') ||
-    icon !== (type.icon || 'check-square') ||
-    color !== (type.color || '#6b7280');
-
-  function handleSave() {
-    onSave({
-      name: name.trim(),
-      group_name: groupName.trim() || null,
-      description: description.trim() || null,
-      icon: icon.trim() || 'check-square',
-      color: color.trim() || '#6b7280',
-    });
-    setIsSaved(true);
-    setTimeout(() => setIsSaved(false), 2500);
-  }
-
-  return (
-    <div className="rounded-xl border border-divider bg-surface p-6 shadow-sm">
-      <div className="mb-5 flex flex-wrap items-center justify-between gap-3 border-b border-divider pb-4">
-        <div className="flex items-center gap-2.5">
-          <span className="h-3.5 w-3.5 rounded-full shrink-0" style={{ backgroundColor: color }} />
-          <div>
-            <div className="flex items-center gap-2">
-              <h2 className="text-base font-bold text-foreground">{type.name}</h2>
-              {type.is_system ? (
-                <span className="rounded-full bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/50 px-2 py-0.5 text-[10px] font-semibold text-amber-700 dark:text-amber-400">
-                  Built-in System Type
-                </span>
-              ) : (
-                <span className="rounded-full bg-purple-50 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-800/50 px-2 py-0.5 text-[10px] font-semibold text-purple-700 dark:text-purple-400">
-                  Custom Type
-                </span>
-              )}
-              {type.is_default && (
-                <span className="rounded-full bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 dark:text-emerald-400">
-                  Default
-                </span>
-              )}
-            </div>
-            <p className="font-[family-name:var(--font-mono)] text-[11px] text-foreground-dim mt-0.5">
-              key: {type.key}
-            </p>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <div className="flex items-center gap-2 rounded-lg border border-divider bg-surface-alt px-3 py-1.5">
-            <span className="text-xs font-medium text-foreground">{type.is_enabled ? 'Enabled' : 'Disabled'}</span>
-            <Toggle value={type.is_enabled} onChange={onToggle} />
-          </div>
-          {!type.is_default && (
-            <button
-              onClick={onSetDefault}
-              className="rounded-lg border border-divider bg-surface px-3 py-1.5 text-xs font-medium text-foreground hover:bg-surface-alt transition"
-            >
-              Set Default
-            </button>
-          )}
-          {!type.is_system && (
-            <button
-              onClick={onDelete}
-              className="rounded-lg border border-red-200 bg-surface px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 dark:hover:bg-red-950 transition"
-            >
-              Delete
-            </button>
-          )}
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {/* Name */}
-        <div>
-          <label className="mb-1 block text-xs font-medium text-foreground-muted">Display Name</label>
-          <input
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            required
-            className="w-full rounded-lg border border-divider px-3 py-2 text-sm text-foreground focus:border-ink focus:outline-none transition"
-          />
-        </div>
-
-        {/* Task Group */}
-        <div>
-          <label className="mb-1 block text-xs font-medium text-foreground-muted">Task Group / Category</label>
-          <div className="relative">
-            <input
-              list="group-datalist-edit"
-              value={groupName}
-              onChange={(e) => setGroupName(e.target.value)}
-              placeholder="e.g. Software Development"
-              className="w-full rounded-lg border border-divider px-3 py-2 text-sm text-foreground focus:border-ink focus:outline-none transition"
-            />
-            <datalist id="group-datalist-edit">
-              {existingGroups.map((g) => (
-                <option key={g} value={g} />
-              ))}
-            </datalist>
-          </div>
-          <p className="mt-1 text-[10px] text-foreground-dim">
-            Assign to an existing group or type a new group name.
-          </p>
-        </div>
-
-        {/* Description */}
-        <div className="col-span-1 md:col-span-2">
-          <label className="mb-1 block text-xs font-medium text-foreground-muted">Description</label>
-          <textarea
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            rows={2}
-            placeholder="Helpful guidance shown to users in dropdowns and tooltips"
-            className="w-full rounded-lg border border-divider px-3 py-2 text-sm text-foreground focus:border-ink focus:outline-none transition"
-          />
-        </div>
-
-        {/* Icon */}
-        <div>
-          <label className="mb-1 block text-xs font-medium text-foreground-muted">Icon Name</label>
-          <input
-            value={icon}
-            onChange={(e) => setIcon(e.target.value)}
-            placeholder="e.g. code, test-tube, layout, check-square"
-            className="w-full rounded-lg border border-divider px-3 py-2 text-sm font-[family-name:var(--font-mono)] text-foreground focus:border-ink focus:outline-none transition"
-          />
-          <div className="mt-2 flex flex-wrap gap-1">
-            {COMMON_ICONS.slice(0, 10).map((ic) => (
-              <button
-                key={ic}
-                type="button"
-                onClick={() => setIcon(ic)}
-                className={`rounded px-1.5 py-0.5 text-[10px] border transition ${
-                  icon === ic
-                    ? 'border-ink bg-ink text-white'
-                    : 'border-divider bg-surface-alt text-foreground-muted hover:text-foreground'
-                }`}
-              >
-                {ic}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Color */}
-        <div>
-          <label className="mb-1 block text-xs font-medium text-foreground-muted">Color</label>
-          <div className="flex gap-2">
-            <input
-              type="color"
-              value={color}
-              onChange={(e) => setColor(e.target.value)}
-              className="h-10 w-12 shrink-0 cursor-pointer rounded-lg border border-divider"
-            />
-            <input
-              value={color}
-              onChange={(e) => setColor(e.target.value)}
-              className="flex-1 rounded-lg border border-divider px-3 py-2 font-[family-name:var(--font-mono)] text-sm text-foreground focus:border-ink focus:outline-none transition"
-            />
-          </div>
-          <div className="mt-2 flex gap-1.5">
-            {['#3b82f6', '#0ea5e9', '#10b981', '#8b5cf6', '#ec4899', '#f97316', '#eab308', '#64748b'].map((c) => (
-              <button
-                key={c}
-                type="button"
-                onClick={() => setColor(c)}
-                className="h-5 w-5 rounded-full border border-black/10 dark:border-white/10 transition hover:scale-110"
-                style={{ backgroundColor: c }}
-                title={c}
-              />
-            ))}
-          </div>
-        </div>
-      </div>
-
-      <div className="mt-6 flex items-center justify-between border-t border-divider pt-4">
-        <p className="text-[11px] text-foreground-dim">
-          {type.is_system
-            ? 'Admins can customize name, group, description, icon, and color. Core behavior is preserved.'
-            : 'Custom task type can be shared with specific roles and users.'}
-        </p>
-        <div className="flex items-center gap-2">
-          {isSaved && (
-            <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400">
-              ✓ Saved successfully!
-            </span>
-          )}
-          <button
-            onClick={handleSave}
-            disabled={!dirty}
-            className="rounded-lg bg-ink px-5 py-2 text-xs font-semibold text-white shadow-sm hover:bg-ink-hover disabled:opacity-40 transition"
-          >
-            Save changes
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ----------------------------------------------------------------
-// Modal: Create New Task Group
-// ----------------------------------------------------------------
-function GroupCreateModal({
-  allTypes, onCancel, onSubmit,
-}: {
-  allTypes: TaskType[];
-  onCancel: () => void;
-  onSubmit: (data: { groupName: string; selectedTypeIds: string[] }) => void;
-}) {
-  const [groupName, setGroupName] = useState('');
-  const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [search, setSearch] = useState('');
-
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) return allTypes;
-    return allTypes.filter((t) =>
-      (t.name || '').toLowerCase().includes(q) ||
-      (t.group_name || '').toLowerCase().includes(q)
-    );
-  }, [allTypes, search]);
-
-  function toggleType(id: string) {
-    setSelectedIds((prev) =>
-      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
-    );
-  }
-
-  function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!groupName.trim()) return;
-    onSubmit({ groupName: groupName.trim(), selectedTypeIds: selectedIds });
-  }
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
-      <div className="w-full max-w-lg rounded-2xl bg-surface p-6 shadow-2xl border border-divider">
-        <div className="mb-4">
-          <h3 className="text-base font-bold text-foreground">Create New Task Group</h3>
-          <p className="mt-1 text-xs text-foreground-muted">
-            Group related task types together (e.g. &quot;Software Development&quot;, &quot;DevOps&quot;, &quot;Customer Support&quot;).
-          </p>
-        </div>
-
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="mb-1 block text-xs font-medium text-foreground-muted">Group Name</label>
-            <input
-              autoFocus
-              value={groupName}
-              onChange={(e) => setGroupName(e.target.value)}
-              placeholder="e.g. Software Development"
-              required
-              className="w-full rounded-lg border border-divider px-3 py-2 text-sm text-foreground focus:border-ink focus:outline-none"
-            />
-          </div>
-
-          <div>
-            <div className="mb-1.5 flex items-center justify-between">
-              <label className="block text-xs font-medium text-foreground-muted">
-                Add Task Types to this Group ({selectedIds.length} selected)
-              </label>
-              {selectedIds.length > 0 && (
-                <button
-                  type="button"
-                  onClick={() => setSelectedIds([])}
-                  className="text-xs text-foreground-dim hover:text-foreground"
-                >
-                  Clear all
-                </button>
-              )}
-            </div>
-
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Filter existing types..."
-              className="w-full rounded-lg border border-divider bg-surface-alt px-3 py-1.5 text-xs text-foreground outline-none focus:border-ink mb-2"
-            />
-
-            <div className="max-h-56 overflow-y-auto rounded-lg border border-divider p-2 space-y-1">
-              {filtered.map((t) => {
-                const checked = selectedIds.includes(t.id);
-                return (
-                  <label
-                    key={t.id}
-                    className={`flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-xs cursor-pointer transition ${
-                      checked ? 'bg-blue-50 dark:bg-blue-950/40 text-blue-900 dark:text-blue-200' : 'hover:bg-surface-alt'
-                    }`}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={checked}
-                      onChange={() => toggleType(t.id)}
-                      className="rounded border-divider"
-                    />
-                    <span className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: t.color || '#6b7280' }} />
-                    <span className="font-medium flex-1 truncate">{t.name}</span>
-                    <span className="text-[10px] text-foreground-dim truncate max-w-[130px]">
-                      currently: {t.group_name || 'None'}
-                    </span>
-                  </label>
-                );
-              })}
-            </div>
-            <p className="mt-1 text-[10px] text-foreground-dim">
-              {selectedIds.length === 0
-                ? 'Tip: You can create the group now and add new task types directly into it next.'
-                : 'Selected task types will be moved into this new group.'}
-            </p>
-          </div>
-
-          <div className="flex gap-3 pt-3 border-t border-divider">
-            <button
-              type="button"
-              onClick={onCancel}
-              className="flex-1 rounded-lg border border-divider py-2 text-xs font-semibold text-foreground-muted hover:bg-surface-alt transition"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={!groupName.trim()}
-              className="flex-1 rounded-lg bg-ink py-2 text-xs font-semibold text-white hover:bg-ink-hover disabled:opacity-40 transition shadow-sm"
-            >
-              {selectedIds.length > 0 ? 'Create & Move Types' : 'Create Group'}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
-}
-
-// ----------------------------------------------------------------
-// Modal: Rename Task Group
-// ----------------------------------------------------------------
-function GroupRenameModal({
-  currentName, onCancel, onSubmit,
-}: {
-  currentName: string;
-  onCancel: () => void;
-  onSubmit: (newName: string) => void;
-}) {
-  const [newName, setNewName] = useState(currentName);
-
-  function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!newName.trim() || newName.trim() === currentName) return;
-    onSubmit(newName.trim());
-  }
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
-      <div className="w-full max-w-sm rounded-2xl bg-surface p-6 shadow-2xl border border-divider">
-        <h3 className="mb-2 text-base font-bold text-foreground">Rename Task Group</h3>
-        <p className="mb-4 text-xs text-foreground-muted">
-          This will update the group name for all task types currently in &quot;{currentName}&quot;.
-        </p>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="mb-1 block text-xs font-medium text-foreground-muted">New Group Name</label>
-            <input
-              autoFocus
-              value={newName}
-              onChange={(e) => setNewName(e.target.value)}
-              required
-              className="w-full rounded-lg border border-divider px-3 py-2 text-sm text-foreground focus:border-ink focus:outline-none"
-            />
-          </div>
-          <div className="flex gap-3 pt-2">
-            <button
-              type="button"
-              onClick={onCancel}
-              className="flex-1 rounded-lg border border-divider py-2 text-xs font-semibold text-foreground-muted hover:bg-surface-alt transition"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={!newName.trim() || newName.trim() === currentName}
-              className="flex-1 rounded-lg bg-ink py-2 text-xs font-semibold text-white hover:bg-ink-hover disabled:opacity-40 transition"
-            >
-              Rename
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
-}
-
-// ----------------------------------------------------------------
-// Modal: Move / Add Existing Task Types into a Group
-// ----------------------------------------------------------------
-function AddExistingToGroupModal({
-  targetGroup, allTypes, onCancel, onSubmit,
-}: {
-  targetGroup: string;
-  allTypes: TaskType[];
-  onCancel: () => void;
-  onSubmit: (selectedIds: string[]) => void;
-}) {
-  const otherTypes = useMemo(
-    () => allTypes.filter((t) => (t.group_name || '').trim() !== targetGroup.trim()),
-    [allTypes, targetGroup]
-  );
-  const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [search, setSearch] = useState('');
-
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) return otherTypes;
-    return otherTypes.filter((t) =>
-      (t.name || '').toLowerCase().includes(q) ||
-      (t.group_name || '').toLowerCase().includes(q)
-    );
-  }, [otherTypes, search]);
-
-  function toggleType(id: string) {
-    setSelectedIds((prev) =>
-      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
-    );
-  }
-
-  function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (selectedIds.length === 0) return;
-    onSubmit(selectedIds);
-  }
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
-      <div className="w-full max-w-lg rounded-2xl bg-surface p-6 shadow-2xl border border-divider">
-        <h3 className="text-base font-bold text-foreground">
-          Add Task Types to &quot;{targetGroup}&quot;
-        </h3>
-        <p className="mt-1 text-xs text-foreground-muted mb-4">
-          Select existing task types from other groups to move into &quot;{targetGroup}&quot;.
-        </p>
-
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search task types..."
-            className="w-full rounded-lg border border-divider bg-surface-alt px-3 py-1.5 text-xs text-foreground outline-none focus:border-ink"
-          />
-
-          <div className="max-h-60 overflow-y-auto rounded-lg border border-divider p-2 space-y-1">
-            {filtered.length === 0 ? (
-              <p className="p-4 text-center text-xs text-foreground-dim">No other task types available</p>
-            ) : (
-              filtered.map((t) => {
-                const checked = selectedIds.includes(t.id);
-                return (
-                  <label
-                    key={t.id}
-                    className={`flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-xs cursor-pointer transition ${
-                      checked ? 'bg-blue-50 dark:bg-blue-950/40 text-blue-900 dark:text-blue-200' : 'hover:bg-surface-alt'
-                    }`}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={checked}
-                      onChange={() => toggleType(t.id)}
-                      className="rounded border-divider"
-                    />
-                    <span className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: t.color || '#6b7280' }} />
-                    <span className="font-medium flex-1 truncate">{t.name}</span>
-                    <span className="text-[10px] text-foreground-dim truncate max-w-[140px]">
-                      currently: {t.group_name || 'Other'}
-                    </span>
-                  </label>
-                );
-              })
-            )}
-          </div>
-
-          <div className="flex gap-3 pt-2">
-            <button
-              type="button"
-              onClick={onCancel}
-              className="flex-1 rounded-lg border border-divider py-2 text-xs font-semibold text-foreground-muted hover:bg-surface-alt transition"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={selectedIds.length === 0}
-              className="flex-1 rounded-lg bg-ink py-2 text-xs font-semibold text-white hover:bg-ink-hover disabled:opacity-40 transition shadow-sm"
-            >
-              Move {selectedIds.length > 0 ? `(${selectedIds.length})` : ''} into {targetGroup}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
-}
-
-// ----------------------------------------------------------------
-// Modal: Create New Task Type
-// ----------------------------------------------------------------
-function TypeCreateModal({
-  initialGroup, existingGroups, onCancel, onSubmit,
-}: {
-  initialGroup?: string | null;
-  existingGroups: string[];
-  onCancel: () => void;
-  onSubmit: (body: any) => void;
-}) {
-  const [name, setName] = useState('');
-  const [key, setKey] = useState('');
-  const [keyDirty, setKeyDirty] = useState(false);
-  const [groupName, setGroupName] = useState(initialGroup || '');
-  const [description, setDescription] = useState('');
-  const [icon, setIcon] = useState('check-square');
-  const [color, setColor] = useState('#3b82f6');
-
-  useEffect(() => {
-    if (!keyDirty) setKey(slugify(name));
-  }, [name, keyDirty]);
-
-  function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    onSubmit({
-      name: name.trim(),
-      key: key.trim(),
-      group_name: groupName.trim() || null,
-      description: description.trim() || null,
-      icon: icon.trim() || 'check-square',
-      color: color.trim() || '#6b7280',
-    });
-  }
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
-      <div className="w-full max-w-md rounded-2xl bg-surface p-6 shadow-2xl border border-divider">
-        <h3 className="mb-4 text-base font-bold text-foreground">Add Task Type</h3>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="mb-1 block text-xs font-medium text-foreground-muted">Name</label>
-            <input
-              autoFocus
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="e.g. Code Review"
-              required
-              className="w-full rounded-lg border border-divider px-3 py-2 text-sm text-foreground focus:border-ink focus:outline-none"
-            />
-          </div>
-
-          <div>
-            <label className="mb-1 block text-xs font-medium text-foreground-muted">Task Group / Category</label>
-            <div className="relative">
-              <input
-                list="group-datalist-create"
-                value={groupName}
-                onChange={(e) => setGroupName(e.target.value)}
-                placeholder="e.g. Software Development"
-                className="w-full rounded-lg border border-divider px-3 py-2 text-sm text-foreground focus:border-ink focus:outline-none"
-              />
-              <datalist id="group-datalist-create">
-                {existingGroups.map((g) => (
-                  <option key={g} value={g} />
-                ))}
-              </datalist>
-            </div>
-            <p className="mt-1 text-[10px] text-foreground-dim">
-              Select an existing group or type a new one to create it.
-            </p>
-          </div>
-
-          <div>
-            <label className="mb-1 block text-xs font-medium text-foreground-muted">Key</label>
-            <input
-              value={key}
-              onChange={(e) => { setKey(e.target.value); setKeyDirty(true); }}
-              placeholder="code_review"
-              required
-              className="w-full rounded-lg border border-divider px-3 py-2 font-[family-name:var(--font-mono)] text-sm text-foreground focus:border-ink focus:outline-none"
-            />
-            <p className="mt-1 text-[10px] text-foreground-dim">Lowercase letters, numbers, and underscores.</p>
-          </div>
-
-          <div>
-            <label className="mb-1 block text-xs font-medium text-foreground-muted">Description</label>
-            <textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              rows={2}
-              placeholder="Brief description for this task type"
-              className="w-full rounded-lg border border-divider px-3 py-2 text-sm text-foreground focus:border-ink focus:outline-none"
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="mb-1 block text-xs font-medium text-foreground-muted">Icon</label>
-              <input
-                value={icon}
-                onChange={(e) => setIcon(e.target.value)}
-                className="w-full rounded-lg border border-divider px-3 py-2 text-sm font-[family-name:var(--font-mono)] text-foreground focus:border-ink focus:outline-none"
-              />
-            </div>
-            <div>
-              <label className="mb-1 block text-xs font-medium text-foreground-muted">Color</label>
-              <input
-                type="color"
-                value={color}
-                onChange={(e) => setColor(e.target.value)}
-                className="h-10 w-full cursor-pointer rounded-lg border border-divider"
-              />
-            </div>
-          </div>
-
-          <div className="flex gap-3 pt-3 border-t border-divider">
-            <button
-              type="button"
-              onClick={onCancel}
-              className="flex-1 rounded-lg border border-divider py-2 text-xs font-semibold text-foreground-muted hover:bg-surface-alt transition"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              className="flex-1 rounded-lg bg-ink py-2 text-xs font-semibold text-white hover:bg-ink-hover transition shadow-sm"
-            >
-              Create
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
-}
-
-// ----------------------------------------------------------------
-// Toggle switch
-// ----------------------------------------------------------------
-function Toggle({
-  value,
-  onChange,
-  onToggleClick,
-  size = 'sm',
-  indeterminate = false,
-  title,
-  disabled = false,
-}: {
-  value: boolean;
-  onChange?: (v: boolean) => void;
-  onToggleClick?: (e: React.MouseEvent) => void;
-  size?: 'sm' | 'md';
-  indeterminate?: boolean;
-  title?: string;
-  disabled?: boolean;
-}) {
-  const w = size === 'md' ? 'w-10 h-5' : 'w-8 h-4';
-  const knob = size === 'md' ? 'h-4 w-4' : 'h-3 w-3';
-  const offset = size === 'md'
-    ? (indeterminate ? 'translate-x-2.5' : value ? 'translate-x-5' : 'translate-x-0.5')
-    : (indeterminate ? 'translate-x-2' : value ? 'translate-x-4' : 'translate-x-0.5');
-
-  const bg = indeterminate
-    ? 'bg-amber-500/80 dark:bg-amber-600'
-    : value
-    ? 'bg-emerald-500'
-    : 'bg-well';
-
-  return (
-    <button
-      type="button"
-      disabled={disabled}
-      title={title}
-      onClick={(e) => {
-        e.stopPropagation();
-        if (onToggleClick) {
-          onToggleClick(e);
-        } else if (onChange) {
-          onChange(!value);
-        }
-      }}
-      className={`relative ${w} shrink-0 rounded-full transition ${bg} disabled:opacity-40`}
-      aria-label={title || (indeterminate ? 'Partially enabled' : value ? 'Enabled' : 'Disabled')}
-    >
-      <span className={`absolute top-0.5 ${offset} ${knob} rounded-full bg-surface shadow transition flex items-center justify-center`}>
-        {indeterminate && <span className="h-0.5 w-1.5 rounded-full bg-amber-600 dark:bg-amber-400" />}
-      </span>
-    </button>
-  );
-}
-
-// ----------------------------------------------------------------
-// Custom fields card
-// ----------------------------------------------------------------
-function CustomFieldsCard({
-  type, onAddField, onEditField, onDeleteField,
-}: {
-  type: TaskType;
-  onAddField: () => void;
-  onEditField: (f: TaskTypeField) => void;
-  onDeleteField: (fieldId: string, label: string) => void;
-}) {
-  return (
-    <div className="rounded-xl border border-divider bg-surface p-6 shadow-sm">
-      <div className="mb-4 flex items-center justify-between">
-        <div>
-          <h3 className="text-sm font-semibold text-foreground">Custom Fields</h3>
-          <p className="text-xs text-foreground-muted">Extra fields shown when this type of task is opened.</p>
-        </div>
-        <button
-          onClick={onAddField}
-          className="rounded-lg border border-divider bg-surface px-3 py-1.5 text-xs font-medium text-foreground hover:bg-surface-alt transition"
-        >
-          + Add Field
-        </button>
-      </div>
-      {type.fields && type.fields.length > 0 ? (
-        <ul className="space-y-2">
-          {type.fields.map((f) => (
-            <li key={f.id} className="flex items-center justify-between rounded-lg border border-divider bg-surface-alt px-4 py-2.5">
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
-                  <span className="text-sm font-medium text-foreground">{f.label}</span>
-                  <span className="rounded bg-surface px-1.5 py-0.5 text-[10px] text-foreground-muted">
-                    {FIELD_TYPE_LABELS[f.field_type]}
-                  </span>
-                  {f.is_required && <span className="text-[10px] font-medium text-red-500">Required</span>}
-                </div>
-                <div className="mt-0.5 font-[family-name:var(--font-mono)] text-[10px] text-foreground-dim">{f.key}</div>
-              </div>
-              <div className="flex gap-2">
-                <button onClick={() => onEditField(f)} className="text-xs text-foreground-muted hover:text-foreground">Edit</button>
-                <button onClick={() => onDeleteField(f.id, f.label)} className="text-xs text-red-400 hover:text-red-600">Delete</button>
-              </div>
-            </li>
-          ))}
-        </ul>
-      ) : (
-        <div className="rounded-lg border border-dashed border-divider py-8 text-center text-xs text-foreground-dim">
-          No custom fields yet
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ----------------------------------------------------------------
-// Access card: roles + users sharing
-// ----------------------------------------------------------------
-function AccessCard({
-  type, onAddRole, onRemoveRole, onAddUser, onRemoveUser,
-}: {
-  type: TaskType;
-  onAddRole: (roleId: string) => void;
-  onRemoveRole: (roleId: string) => void;
-  onAddUser: (userId: string) => void;
-  onRemoveUser: (userId: string) => void;
-}) {
-  const roleAccess = type.role_access || [];
-  const userAccess = type.user_access || [];
-  const hasShares = roleAccess.length + userAccess.length > 0;
-
-  return (
-    <div className="rounded-xl border border-divider bg-surface p-6 shadow-sm">
-      <div className="mb-4">
-        <h3 className="text-sm font-semibold text-foreground">Access Permissions</h3>
-        <p className="text-xs text-foreground-muted">
-          Who can create tasks with this type. If empty, all admins can use it.
-        </p>
-      </div>
-
-      <div className="space-y-5">
-        <div>
-          <div className="mb-2 flex items-center justify-between">
-            <span className="text-xs font-medium text-foreground-muted">Roles</span>
-            <RolePicker
-              excludeIds={new Set(roleAccess.map((r) => r.role_id))}
-              onPick={(id) => onAddRole(id)}
-            />
-          </div>
-          <div className="flex flex-wrap gap-1.5">
-            {roleAccess.length === 0 && (
-              <span className="text-xs text-foreground-dim">No specific roles restricted</span>
-            )}
-            {roleAccess.map((ra) => (
-              <Chip
-                key={ra.id}
-                color={ra.role?.color || '#6b7280'}
-                label={ra.role?.name || ra.role_id.slice(0, 6)}
-                onRemove={() => onRemoveRole(ra.role_id)}
-              />
-            ))}
-          </div>
-        </div>
-
-        <div>
-          <div className="mb-2 flex items-center justify-between">
-            <span className="text-xs font-medium text-foreground-muted">Users</span>
-            <UserPicker
-              excludeIds={new Set(userAccess.map((u) => u.user_id))}
-              onPick={(id) => onAddUser(id)}
-            />
-          </div>
-          <div className="flex flex-wrap gap-1.5">
-            {userAccess.length === 0 && (
-              <span className="text-xs text-foreground-dim">No specific users restricted</span>
-            )}
-            {userAccess.map((ua) => (
-              <Chip
-                key={ua.id}
-                label={ua.user?.display_name || ua.user?.email || ua.user_id.slice(0, 6)}
-                onRemove={() => onRemoveUser(ua.user_id)}
-              />
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {!hasShares && (
-        <p className="mt-4 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200/50 dark:border-amber-900/50 px-3 py-2 text-xs text-amber-800 dark:text-amber-300">
-          Not restricted to specific roles or users — available to workspace admins.
-        </p>
-      )}
-    </div>
-  );
-}
-
-function Chip({ color, label, onRemove }: { color?: string; label: string; onRemove: () => void }) {
-  return (
-    <span className="inline-flex items-center gap-1.5 rounded-full border border-divider bg-surface px-2.5 py-1 text-xs text-foreground">
-      {color && <span className="h-2 w-2 rounded-full" style={{ backgroundColor: color }} />}
-      <span>{label}</span>
-      <button onClick={onRemove} className="text-foreground-dim hover:text-red-500" aria-label="Remove">×</button>
-    </span>
-  );
-}
-
+// ============================================================
+// FieldFormModal, RolePicker, UserPicker
+// ============================================================
 function RolePicker({ excludeIds, onPick }: { excludeIds: Set<string>; onPick: (roleId: string) => void }) {
   const [open, setOpen] = useState(false);
   const { data: rolesRes } = useQuery({
