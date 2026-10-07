@@ -19,6 +19,7 @@ import IncompleteItemsDialog from './IncompleteItemsDialog';
 import DatePicker from './DatePicker';
 import LabelPicker from './LabelPicker';
 import PriorityPicker, { PRIORITY_META } from './PriorityPicker';
+import StatusPicker from './StatusPicker';
 import EstimatePopover from '../../../components/pm/EstimatePopover';
 import LogTimePopover from '../../../components/pm/LogTimePopover';
 import TaskTypeDropdown from '../../../components/pm/TaskTypeDropdown';
@@ -143,7 +144,7 @@ export default function TaskRow({
   const [labelAnchor, setLabelAnchor] = useState<DOMRect | null>(null);
   const [estimateAnchor, setEstimateAnchor] = useState<DOMRect | null>(null);
   const [logTimeAnchor, setLogTimeAnchor] = useState<DOMRect | null>(null);
-  const [statusOpen, setStatusOpen] = useState(false);
+  const [statusAnchor, setStatusAnchor] = useState<DOMRect | null>(null);
 
   // Completion-time "no assignee" prompt. Both anchored to the checkbox.
   // `noAssigneePrompt` shows the choose-what-to-do popover; `assignCompleteAnchor`
@@ -476,7 +477,7 @@ export default function TaskRow({
       <div
         className="lv-cell lv-cell--status relative"
         data-empty={!statusLabel}
-        onClick={canEdit ? () => setStatusOpen((v) => !v) : undefined}
+        onClick={canEdit ? (e) => openPicker(e, setStatusAnchor) : undefined}
         style={{ cursor: canEdit ? 'pointer' : 'default' }}
         title={canEdit ? 'Change status' : undefined}
       >
@@ -502,30 +503,9 @@ export default function TaskRow({
         ) : (
           <span className="lv-cell-value">—</span>
         )}
-      {statusOpen && canEdit && (
-        <>
-          <div className="fixed inset-0 z-10" onClick={(e) => { e.stopPropagation(); setStatusOpen(false); }} />
-          <div className="sh-float absolute left-0 top-full z-20 mt-1 max-h-64 w-48 overflow-y-auto rounded-lg border bg-[var(--surface)] shadow-lg" style={{ borderColor: 'var(--sh-hair)' }}>
-            {statuses.map((s) => (
-              <button
-                key={s.id}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setStatusOpen(false);
-                  updateTask.mutate({ id: task.id, status: s.name } as any);
-                }}
-                className="flex w-full items-center gap-2 px-3 py-2 text-left text-[12.5px] text-[var(--sh-ink)] hover:bg-[var(--sh-hair-3)]"
-              >
-                <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: s.color }} aria-hidden />
-                <span className="truncate">{s.name}</span>
-              </button>
-            ))}
-          </div>
-        </>
-      )}
-    </div>
-  );
-};
+      </div>
+    );
+  };
 
   const renderLabelsCell = () => (
     <div
@@ -1091,6 +1071,18 @@ export default function TaskRow({
             setAssignCompleteAnchor(null);
           }}
           onClose={() => setAssignCompleteAnchor(null)}
+        />
+      )}
+
+      {statusAnchor && (
+        <StatusPicker
+          anchorRect={statusAnchor}
+          statuses={statuses}
+          currentStatus={currentStatus?.name ?? getTaskStatusDef(statusCategory)?.label ?? statusCategory}
+          onChange={(statusName) => {
+            updateTask.mutate({ id: task.id, status: statusName } as any);
+          }}
+          onClose={() => setStatusAnchor(null)}
         />
       )}
 

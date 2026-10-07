@@ -99,7 +99,8 @@ export default function TaskStatusPicker({
     };
   }, [open]);
 
-  const toggleOpen = () => {
+  const toggleOpen = (e?: React.MouseEvent) => {
+    e?.stopPropagation();
     if (open) {
       setOpen(false);
       return;
