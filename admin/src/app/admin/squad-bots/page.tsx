@@ -1,3 +1,3 @@
 'use client';
-import AdminSquadBots from '@/views/admin/AdminSquadBots';
-export default function SquadBotsPage() { return <AdminSquadBots />; }
+import SquadBotsMoved from '@/components/SquadBotsMoved';
+export default function SquadBotsPage() { return <SquadBotsMoved section="settings" />; }
