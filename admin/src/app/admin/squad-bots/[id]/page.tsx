@@ -1,9 +1,7 @@
 'use client';
-import { useParams, useRouter } from 'next/navigation';
-import AdminSquadBotDetail from '@/views/admin/AdminSquadBotDetail';
-
+import { useParams } from 'next/navigation';
+import SquadBotsMoved from '@/components/SquadBotsMoved';
 export default function SquadBotDetailPage() {
   const params = useParams();
-  const router = useRouter();
-  return <AdminSquadBotDetail botId={params.id as string} onBack={() => router.push('/admin/squad-bots')} />;
+  return <SquadBotsMoved section="settings" id={params.id as string} />;
 }

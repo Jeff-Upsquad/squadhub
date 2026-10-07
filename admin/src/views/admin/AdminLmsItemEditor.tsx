@@ -1,5 +1,6 @@
 'use client';
 import { useEffect, useState } from 'react';
+import SquadBotsMoved from '../../components/SquadBotsMoved';
 import Link from 'next/link';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../services/api';
@@ -171,6 +172,7 @@ export default function AdminLmsItemEditor({ itemId }: Props) {
   const isCourse = item.kind === 'course';
   const isSop = item.track === 'sop';
   const isKnowledge = item.track === 'knowledge';
+  if (isKnowledge) return <SquadBotsMoved section="knowledge" id={itemId} />;
   const hasPages = isCourse || isKnowledge;
   const pageLabel = isKnowledge ? 'page' : 'lesson';
   const pageRows = isKnowledge ? flattenLessonTree(item.lessons) : item.lessons.map((lesson) => ({ lesson, depth: 0 }));

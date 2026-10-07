@@ -6,6 +6,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../services/api';
 import type { LmsItem, LmsItemStatus, LmsItemKind, LmsTrack, LmsCategory, SquadBot } from '@squadhub/shared';
 import ShareModal from '../../components/lms/ShareModal';
+import SquadBotsMoved from '../../components/SquadBotsMoved';
 
 const STATUS_COLORS: Record<LmsItemStatus, string> = {
   draft: 'bg-canvas text-foreground-muted',
@@ -127,6 +128,8 @@ export default function AdminLmsLibrary() {
     mutationFn: (id: string) => api.delete(`/admin/lms/items/${id}`),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['lms-items'] }),
   });
+
+  if (String(trackFilter) === 'knowledge') return <SquadBotsMoved section="knowledge" />;
 
   return (
     <div>
