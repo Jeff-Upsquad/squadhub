@@ -557,6 +557,7 @@ export default function TaskDetailPanel({
   const [timerElapsed, setTimerElapsed] = useState(0);
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
   const [movePickerOpen, setMovePickerOpen] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
   // Desktop collapsibles — the Details card and each body section.
   const [detailsCollapsed, setDetailsCollapsed] = useState(false);
   const [collapsedSecs, setCollapsedSecs] = useState<Record<string, boolean>>({});
@@ -933,7 +934,17 @@ export default function TaskDetailPanel({
 
   const handleDelete = () => {
     if (!task) return;
-    deleteTask.mutate(task.id, { onSuccess: () => setActiveTask(null) });
+    setShowDeleteModal(true);
+  };
+
+  const handleConfirmDelete = () => {
+    if (!task) return;
+    deleteTask.mutate(task.id, {
+      onSuccess: () => {
+        setShowDeleteModal(false);
+        setActiveTask(null);
+      },
+    });
   };
 
   const handleAddComment = () => {
@@ -3361,6 +3372,53 @@ export default function TaskDetailPanel({
           originalStatus={(task?.metadata as any)?.original_status}
           onClose={() => setRelationshipsOpen(false)}
         />
+      )}
+
+      {showDeleteModal && task && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+          <div
+            className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+            onClick={() => !deleteTask.isPending && setShowDeleteModal(false)}
+          />
+          <div className="relative w-full max-w-sm rounded-xl border border-[var(--sh-hair)] bg-[var(--surface)] p-5 shadow-2xl">
+            <div className="flex items-start gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-red-100 text-red-600 dark:bg-red-950/40 dark:text-red-400">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M3 6h18" />
+                  <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
+                  <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
+                  <line x1="10" y1="11" x2="10" y2="17" />
+                  <line x1="14" y1="11" x2="14" y2="17" />
+                </svg>
+              </div>
+              <div className="min-w-0 flex-1">
+                <h3 className="text-base font-semibold text-[var(--sh-ink)]">Delete task</h3>
+                <p className="mt-0.5 text-xs text-[var(--sh-ink-3)] truncate">{task.title}</p>
+              </div>
+            </div>
+            <p className="mt-3 text-sm text-[var(--sh-ink-2)]">
+              Are you sure you want to delete this task? This action cannot be undone.
+            </p>
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setShowDeleteModal(false)}
+                disabled={deleteTask.isPending}
+                className="rounded-lg border border-[var(--sh-hair)] px-3.5 py-1.5 text-sm font-medium text-[var(--sh-ink)] hover:bg-[var(--sh-hair-3)] disabled:opacity-50 cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDelete}
+                disabled={deleteTask.isPending}
+                className="rounded-lg bg-red-600 px-3.5 py-1.5 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50 cursor-pointer"
+              >
+                {deleteTask.isPending ? 'Deleting…' : 'Delete task'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
