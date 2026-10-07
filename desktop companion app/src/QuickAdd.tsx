@@ -90,19 +90,177 @@ function initials(name: string | null | undefined, email?: string): string {
 }
 
 // ── task-type statuses (for task_type.key = 'task') ──────────────────────────
-// Compact client copy of the server TASK_STATUS_CATALOG keys used at creation.
-// Other task types use their space's space_statuses (names) instead.
-const TASK_STATUS_CATALOG: { key: string; label: string; color: string }[] = [
-  { key: 'open', label: 'Open', color: '#9ca3af' },
-  { key: 'today', label: 'Today', color: '#f97316' },
-  { key: 'tomorrow', label: 'Tomorrow', color: '#06b6d4' },
-  { key: 'this_week', label: 'This Week', color: '#22d3ee' },
-  { key: 'up_next', label: 'Up Next', color: '#38bdf8' },
-  { key: 'in_progress', label: 'In Progress', color: '#16a34a' },
-  { key: 'on_hold', label: 'On Hold', color: '#78716c' },
-  { key: 'closed', label: 'Closed', color: '#10b981' },
-  { key: 'cancelled', label: 'Cancelled', color: '#6b7280' },
+// Full client copy of the shared TASK_STATUS_CATALOG (labels, colors,
+// descriptions + picker sections). Mirrors web TaskStatusPicker so the
+// desktop quick-add status dropdown renders the same grouped, searchable
+// design. Other task types use their space's space_statuses (names) instead.
+type StatusGroup =
+  | 'priority_urgency'
+  | 'in_motion'
+  | 'up_next'
+  | 'scheduled_queued'
+  | 'routines'
+  | 'blocked_paused'
+  | 'not_started'
+  | 'done';
+
+interface CatalogStatus {
+  key: string;
+  label: string;
+  description: string;
+  group: StatusGroup;
+  groupLabel: string;
+  groupEmoji: string;
+  color: string;
+}
+
+const TASK_STATUS_CATALOG: CatalogStatus[] = [
+  { key: 'focus_now', label: 'FOCUS NOW', description: 'Requires your undivided attention right now.', group: 'priority_urgency', groupLabel: 'Priority & Urgency', groupEmoji: '⚡', color: '#e11d48' },
+  { key: 'emergency', label: 'EMERGENCY', description: 'Critical; drop everything.', group: 'priority_urgency', groupLabel: 'Priority & Urgency', groupEmoji: '⚡', color: '#b91c1c' },
+  { key: 'urgent', label: 'URGENT', description: 'Needs immediate action.', group: 'priority_urgency', groupLabel: 'Priority & Urgency', groupEmoji: '⚡', color: '#ef4444' },
+  { key: 'over_due', label: 'OVER DUE', description: 'Deadline has already passed.', group: 'priority_urgency', groupLabel: 'Priority & Urgency', groupEmoji: '⚡', color: '#dc2626' },
+  { key: 'high_priority', label: 'HIGH PRIORITY', description: 'Very important; needs attention soon.', group: 'priority_urgency', groupLabel: 'Priority & Urgency', groupEmoji: '⚡', color: '#f97316' },
+  { key: 'priority', label: 'PRIORITY', description: 'Important; above normal.', group: 'priority_urgency', groupLabel: 'Priority & Urgency', groupEmoji: '⚡', color: '#fb923c' },
+  { key: 'active', label: 'ACTIVE', description: 'Currently being worked on.', group: 'in_motion', groupLabel: 'In Motion', groupEmoji: '🏃', color: '#22c55e' },
+  { key: 'in_progress', label: 'IN PROGRESS', description: 'Work has started and is ongoing.', group: 'in_motion', groupLabel: 'In Motion', groupEmoji: '🏃', color: '#16a34a' },
+  { key: 'in_code_review', label: 'IN CODE REVIEW', description: 'PR submitted; awaiting review and approval.', group: 'in_motion', groupLabel: 'In Motion', groupEmoji: '🏃', color: '#8b5cf6' },
+  { key: 'testing_qa', label: 'TESTING / QA', description: 'Under validation on staging / test environment.', group: 'in_motion', groupLabel: 'In Motion', groupEmoji: '🏃', color: '#eab308' },
+  { key: 'ready_for_deploy', label: 'READY FOR DEPLOY', description: 'Approved and ready for production release.', group: 'in_motion', groupLabel: 'In Motion', groupEmoji: '🏃', color: '#0d9488' },
+  { key: 'time_tracked', label: 'TIME TRACKED', description: 'Timer is running / hours being logged against it.', group: 'in_motion', groupLabel: 'In Motion', groupEmoji: '🏃', color: '#0d9488' },
+  { key: 'active_daily', label: 'ACTIVE DAILY', description: 'Touched every day until resolved.', group: 'in_motion', groupLabel: 'In Motion', groupEmoji: '🏃', color: '#14b8a6' },
+  { key: 'planning', label: 'PLANNING', description: 'Architecture, RFC, spike, or scoping phase.', group: 'up_next', groupLabel: 'Up Next', groupEmoji: '🎯', color: '#a855f7' },
+  { key: 'ready_to_code', label: 'READY TO CODE', description: 'Groomed, estimated, and ready to start coding.', group: 'up_next', groupLabel: 'Up Next', groupEmoji: '🎯', color: '#22c55e' },
+  { key: 'front_burner', label: 'FRONT BURNER', description: 'Moving up the queue; active sprint priority.', group: 'scheduled_queued', groupLabel: 'Scheduled / Queued', groupEmoji: '📅', color: '#f59e0b' },
+  { key: 'scheduled', label: 'SCHEDULED', description: 'Has a specific date/time set.', group: 'scheduled_queued', groupLabel: 'Scheduled / Queued', groupEmoji: '📅', color: '#60a5fa' },
+  { key: 'today', label: 'TODAY', description: 'Must be addressed today.', group: 'scheduled_queued', groupLabel: 'Scheduled / Queued', groupEmoji: '📅', color: '#f97316' },
+  { key: 'tomorrow', label: 'TOMORROW', description: 'Planned for the next day.', group: 'scheduled_queued', groupLabel: 'Scheduled / Queued', groupEmoji: '📅', color: '#06b6d4' },
+  { key: 'this_week', label: 'THIS WEEK', description: 'To be handled sometime this week.', group: 'scheduled_queued', groupLabel: 'Scheduled / Queued', groupEmoji: '📅', color: '#22d3ee' },
+  { key: 'back_burner', label: 'BACK BURNER', description: 'Low priority; get to it eventually.', group: 'scheduled_queued', groupLabel: 'Scheduled / Queued', groupEmoji: '📅', color: '#a8a29e' },
+  { key: 'reminder', label: 'REMINDER', description: 'A nudge to do or check something later.', group: 'scheduled_queued', groupLabel: 'Scheduled / Queued', groupEmoji: '📅', color: '#93c5fd' },
+  { key: 'up_next', label: 'UP NEXT', description: 'Next in line after current work wraps up.', group: 'scheduled_queued', groupLabel: 'Scheduled / Queued', groupEmoji: '📅', color: '#38bdf8' },
+  { key: 'routines', label: 'ROUTINES', description: 'Regular recurring task.', group: 'routines', groupLabel: 'Routines', groupEmoji: '🔁', color: '#a855f7' },
+  { key: 'imp_routines', label: 'IMP ROUTINES', description: 'Important recurring task that cannot be missed.', group: 'routines', groupLabel: 'Routines', groupEmoji: '🔁', color: '#7c3aed' },
+  { key: 'waiting_on_dependency', label: 'WAITING ON – DEPENDENCY', description: 'Blocked until something/someone else moves.', group: 'blocked_paused', groupLabel: 'Blocked / Paused', groupEmoji: '⏸️', color: '#6b7280' },
+  { key: 'blocked', label: 'BLOCKED', description: 'Halted by build failure, environment issue, or critical bug.', group: 'blocked_paused', groupLabel: 'Blocked / Paused', groupEmoji: '⏸️', color: '#ef4444' },
+  { key: 'on_hold', label: 'ON HOLD', description: 'Intentionally paused for now.', group: 'blocked_paused', groupLabel: 'Blocked / Paused', groupEmoji: '⏸️', color: '#78716c' },
+  { key: 'follow_ups', label: 'FOLLOW UPS', description: 'Awaiting a reply; check back periodically.', group: 'blocked_paused', groupLabel: 'Blocked / Paused', groupEmoji: '⏸️', color: '#4b5563' },
+  { key: 'help', label: 'HELP', description: 'Stuck; needs input or assistance from someone.', group: 'blocked_paused', groupLabel: 'Blocked / Paused', groupEmoji: '⏸️', color: '#a16207' },
+  { key: 'unblocked', label: 'UNBLOCKED', description: 'Was blocked, now free to resume.', group: 'blocked_paused', groupLabel: 'Blocked / Paused', groupEmoji: '⏸️', color: '#84cc16' },
+  { key: 'open', label: 'OPEN', description: 'Newly created task, not yet triaged or planned.', group: 'not_started', groupLabel: 'Not Started', groupEmoji: '📥', color: '#9ca3af' },
+  { key: 'empty', label: 'EMPTY', description: 'Placeholder task with no details filled in yet.', group: 'not_started', groupLabel: 'Not Started', groupEmoji: '📥', color: '#d1d5db' },
+  { key: 'closed', label: 'CLOSED', description: 'Completed and archived.', group: 'done', groupLabel: 'Closed', groupEmoji: '✅', color: '#10b981' },
+  { key: 'cancelled', label: 'CANCELLED', description: 'No longer needed; closed without completing.', group: 'done', groupLabel: 'Closed', groupEmoji: '✅', color: '#6b7280' },
 ];
+
+const STATUS_GROUP_ORDER: StatusGroup[] = [
+  'priority_urgency',
+  'in_motion',
+  'up_next',
+  'scheduled_queued',
+  'routines',
+  'blocked_paused',
+  'not_started',
+  'done',
+];
+
+const TASK_STATUS_BY_KEY: Record<string, CatalogStatus> = TASK_STATUS_CATALOG.reduce(
+  (m, d) => { m[d.key] = d; return m; },
+  {} as Record<string, CatalogStatus>,
+);
+
+// Legacy StatusCategory strings map to their catalog equivalents so the pill
+// still shows a friendly label for old values (mirrors web TaskStatusPicker).
+const LEGACY_STATUS_TO_KEY: Record<string, string> = {
+  todo: 'open',
+  active: 'in_progress',
+  done: 'closed',
+  closed: 'closed',
+};
+
+function toStatusSlug(name: string): string {
+  return (name || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9_\s]/g, '')
+    .trim()
+    .replace(/\s+/g, '_');
+}
+
+function catalogDefForSpaceStatus(name: string): CatalogStatus | null {
+  const slug = toStatusSlug(name);
+  return TASK_STATUS_BY_KEY[slug] || TASK_STATUS_BY_KEY[name.toLowerCase()] || null;
+}
+
+function groupCatalogStatuses(query: string): { group: StatusGroup; label: string; emoji: string; items: CatalogStatus[] }[] {
+  const q = query.trim().toLowerCase();
+  const matched = !q
+    ? TASK_STATUS_CATALOG
+    : TASK_STATUS_CATALOG.filter(
+        (d) => d.label.toLowerCase().includes(q) || d.description.toLowerCase().includes(q),
+      );
+  const out: { group: StatusGroup; label: string; emoji: string; items: CatalogStatus[] }[] = [];
+  for (const g of STATUS_GROUP_ORDER) {
+    const items = matched.filter((d) => d.group === g);
+    if (items.length) out.push({ group: g, label: items[0].groupLabel, emoji: items[0].groupEmoji, items });
+  }
+  return out;
+}
+
+type GroupedSpaceStatus = {
+  groupName: string;
+  emoji: string;
+  items: { status: SpaceStatus; description: string }[];
+};
+
+function groupSpaceStatuses(statuses: SpaceStatus[], query: string): GroupedSpaceStatus[] {
+  const q = query.trim().toLowerCase();
+  const enriched = statuses.map((s) => {
+    const def = catalogDefForSpaceStatus(s.name);
+    let groupKey: string;
+    let groupName: string;
+    let emoji: string;
+    if (def) {
+      groupKey = def.group;
+      groupName = def.groupLabel;
+      emoji = def.groupEmoji;
+    } else if (s.category === 'todo') {
+      groupKey = 'not_started';
+      groupName = 'Not Started';
+      emoji = '📥';
+    } else if (s.category === 'closed' || s.category === 'done') {
+      groupKey = 'done';
+      groupName = 'Closed';
+      emoji = '✅';
+    } else {
+      groupKey = 'in_motion';
+      groupName = 'In Motion';
+      emoji = '🏃';
+    }
+    return { status: s, description: def?.description || '', groupKey, groupName, emoji };
+  });
+  const filtered = enriched.filter(
+    (e) =>
+      !q ||
+      e.status.name.toLowerCase().includes(q) ||
+      e.description.toLowerCase().includes(q) ||
+      e.groupName.toLowerCase().includes(q),
+  );
+  const map = new Map<string, GroupedSpaceStatus>();
+  for (const e of filtered) {
+    const hit = map.get(e.groupKey);
+    if (hit) hit.items.push({ status: e.status, description: e.description });
+    else map.set(e.groupKey, { groupName: e.groupName, emoji: e.emoji, items: [{ status: e.status, description: e.description }] });
+  }
+  const ordered: GroupedSpaceStatus[] = [];
+  for (const g of STATUS_GROUP_ORDER) {
+    const hit = map.get(g);
+    if (hit) {
+      ordered.push(hit);
+      map.delete(g);
+    }
+  }
+  for (const [, grp] of map) ordered.push(grp);
+  return ordered;
+}
 
 // ── task-type grouping (mirrors web TaskTypeDropdown order) ─────────────────
 const TYPE_GROUP_ORDER = [
@@ -296,6 +454,8 @@ export default function QuickAdd() {
   const [taskTypeId, setTaskTypeId] = useState<string | null>(null);
   const [typeSearch, setTypeSearch] = useState('');
   const [typeHi, setTypeHi] = useState(0);
+  const [statusSearch, setStatusSearch] = useState('');
+  const [statusHi, setStatusHi] = useState(0);
   const [spaceStatuses, setSpaceStatuses] = useState<SpaceStatus[]>([]);
   const [status, setStatus] = useState('open');
   // Mark the task being created as completed on add.
@@ -363,6 +523,8 @@ export default function QuickAdd() {
     setAssigneeIds([]);
     setTypeSearch('');
     setTypeHi(0);
+    setStatusSearch('');
+    setStatusHi(0);
     if (defaultListRef.current) setSelectedList(defaultListRef.current);
     void getRecentLists().then(setRecents);
     setTimeout(() => inputRef.current?.focus(), 0);
@@ -712,6 +874,10 @@ export default function QuickAdd() {
         setTypeSearch('');
         setTypeHi(0);
       }
+      if (key === 'status') {
+        setStatusSearch('');
+        setStatusHi(0);
+      }
       return key;
     });
   const pickList = (l: SelectedList) => {
@@ -878,10 +1044,42 @@ export default function QuickAdd() {
     }
   };
   const statusDef = isTaskCatalogType
-    ? TASK_STATUS_CATALOG.find((c) => c.key === status)
+    ? (TASK_STATUS_BY_KEY[status] || (LEGACY_STATUS_TO_KEY[status] ? TASK_STATUS_BY_KEY[LEGACY_STATUS_TO_KEY[status]] : undefined))
     : spaceStatuses.find((s) => s.name === status);
+  const spaceStatusDef = !isTaskCatalogType && typeof status === 'string' ? catalogDefForSpaceStatus(status) : null;
   const statusLabel = isTaskCatalogType ? (statusDef as { label: string } | undefined)?.label ?? status : status;
-  const statusColor = (statusDef as { color: string } | undefined)?.color ?? '#6b7280';
+  const statusColor = ((statusDef as { color: string } | undefined)?.color ?? spaceStatusDef?.color ?? '#6b7280');
+
+  // ── status menu (web parity: searchable, grouped, described) ──────────────
+  const catalogGroups = groupCatalogStatuses(statusSearch);
+  const catalogFlat = catalogGroups.flatMap((g) => g.items);
+  const spaceGroups = groupSpaceStatuses(spaceStatuses, statusSearch);
+  const spaceFlat = spaceGroups.flatMap((g) => g.items);
+  const statusFlatCount = isTaskCatalogType ? catalogFlat.length : spaceFlat.length;
+  const pickStatus = (value: string) => {
+    setStatus(value);
+    setOpenMenu(null);
+  };
+  const onStatusKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setStatusHi((i) => (statusFlatCount ? (i + 1) % statusFlatCount : 0));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setStatusHi((i) => (statusFlatCount ? (i - 1 + statusFlatCount) % statusFlatCount : 0));
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      if (isTaskCatalogType) {
+        const hit = catalogFlat[statusHi];
+        if (hit) pickStatus(hit.key);
+      } else {
+        const hit = spaceFlat[statusHi];
+        if (hit) pickStatus(hit.status.name);
+      }
+    } else if (e.key === 'Escape') {
+      setOpenMenu(null);
+    }
+  };
 
   // ── self-assign circle ────────────────────────────────────────────────────
   const selfId = useAuthStore.getState().userId;
@@ -1426,28 +1624,135 @@ export default function QuickAdd() {
 
       {openMenu === 'status' && (
         <div className="qa-menu">
+          <div className="qa-status-search">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <circle cx="11" cy="11" r="8" />
+              <path d="m21 21-4.3-4.3" />
+            </svg>
+            <input
+              className="qa-status-search-input"
+              autoFocus
+              placeholder="Search statuses (e.g. Focus, In Progress)…"
+              value={statusSearch}
+              onChange={(e) => {
+                setStatusSearch(e.target.value);
+                setStatusHi(0);
+              }}
+              onKeyDown={onStatusKeyDown}
+            />
+            {statusSearch && (
+              <button
+                type="button"
+                className="qa-status-search-clear"
+                onClick={() => setStatusSearch('')}
+                aria-label="Clear search"
+              >
+                ×
+              </button>
+            )}
+          </div>
           <div className="qa-menu-hint">
             {isTaskCatalogType ? 'Task workflow statuses' : `Space statuses · ${currentType?.name || ''}`}
           </div>
-          <div className="qa-menu-scroll">
-            {isTaskCatalogType
-              ? TASK_STATUS_CATALOG.map((s) => (
-                  <button key={s.key} type="button" className="qa-opt-row" onClick={() => { setStatus(s.key); setOpenMenu(null); }}>
-                    <span className="qa-dot" style={{ background: s.color }} />
-                    <span className="qa-opt-main">{s.label}</span>
-                    {status === s.key && <span className="qa-check">✓</span>}
-                  </button>
+          <div className="qa-menu-scroll qa-status-scroll">
+            {isTaskCatalogType ? (
+              catalogGroups.length === 0 ? (
+                <div className="qa-menu-empty">
+                  <div className="qa-empty-title">No statuses match “{statusSearch}”</div>
+                  <div className="qa-empty-sub">Try searching with a different term</div>
+                </div>
+              ) : (
+                catalogGroups.map((g) => (
+                  <div key={g.group}>
+                    <div className="qa-grouphead qa-status-group">
+                      <span className="qa-status-group-label">
+                        <span aria-hidden>{g.emoji}</span>
+                        <span>{g.label}</span>
+                      </span>
+                      <span className="qa-type-count">{g.items.length}</span>
+                    </div>
+                    {g.items.map((s) => {
+                      const flatIdx = catalogFlat.indexOf(s);
+                      const selected = status === s.key;
+                      return (
+                        <button
+                          key={s.key}
+                          type="button"
+                          className={`qa-opt-row qa-status-row${selected ? ' selected' : ''}${flatIdx === statusHi ? ' hi' : ''}`}
+                          onClick={() => pickStatus(s.key)}
+                          onMouseEnter={() => setStatusHi(flatIdx)}
+                        >
+                          <span className="qa-status-badge" style={{ backgroundColor: `${s.color}29`, color: s.color }}>
+                            <span className="qa-dot" style={{ background: s.color }} />
+                          </span>
+                          <span className="qa-status-main">
+                            <span className="qa-status-name">{s.label}</span>
+                            {!!s.description && <span className="qa-status-desc">{s.description}</span>}
+                          </span>
+                          {selected && (
+                            <svg width="14" height="14" viewBox="0 0 20 20" fill="currentColor" aria-hidden>
+                              <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                            </svg>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
                 ))
-              : spaceStatuses.map((s) => (
-                  <button key={s.id} type="button" className="qa-opt-row" onClick={() => { setStatus(s.name); setOpenMenu(null); }}>
-                    <span className="qa-dot" style={{ background: s.color }} />
-                    <span className="qa-opt-main">{s.name}</span>
-                    {status === s.name && <span className="qa-check">✓</span>}
-                  </button>
-                ))}
-            {!isTaskCatalogType && spaceStatuses.length === 0 && (
+              )
+            ) : spaceStatuses.length === 0 ? (
               <div className="qa-menu-empty">Loading statuses…</div>
+            ) : spaceGroups.length === 0 ? (
+              <div className="qa-menu-empty">
+                <div className="qa-empty-title">No statuses found</div>
+                <div className="qa-empty-sub">Try searching with a different term</div>
+              </div>
+            ) : (
+              spaceGroups.map((g) => (
+                <div key={g.groupName}>
+                  <div className="qa-grouphead qa-status-group">
+                    <span className="qa-status-group-label">
+                      <span aria-hidden>{g.emoji}</span>
+                      <span>{g.groupName}</span>
+                    </span>
+                    <span className="qa-type-count">{g.items.length}</span>
+                  </div>
+                  {g.items.map(({ status: s, description }) => {
+                    const flatIdx = spaceFlat.findIndex((f) => f.status.id === s.id);
+                    const selected = status === s.name;
+                    return (
+                      <button
+                        key={s.id}
+                        type="button"
+                        className={`qa-opt-row qa-status-row${selected ? ' selected' : ''}${flatIdx === statusHi ? ' hi' : ''}`}
+                        onClick={() => pickStatus(s.name)}
+                        onMouseEnter={() => setStatusHi(flatIdx)}
+                      >
+                        <span className="qa-status-badge" style={{ backgroundColor: `${s.color}29`, color: s.color }}>
+                          <span className="qa-dot" style={{ background: s.color }} />
+                        </span>
+                        <span className="qa-status-main">
+                          <span className="qa-status-name">
+                            {s.name}
+                            {s.is_default && <span className="qa-type-default">Default</span>}
+                          </span>
+                          {!!description && <span className="qa-status-desc">{description}</span>}
+                        </span>
+                        {selected && (
+                          <svg width="14" height="14" viewBox="0 0 20 20" fill="currentColor" aria-hidden>
+                            <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                          </svg>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              ))
             )}
+          </div>
+          <div className="qa-menu-foot">
+            <span>{statusFlatCount} status{statusFlatCount !== 1 ? 'es' : ''} available</span>
+            <span>↑↓ navigate · ↵ pick</span>
           </div>
         </div>
       )}

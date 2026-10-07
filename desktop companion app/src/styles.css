@@ -1179,3 +1179,131 @@ body.qa-window {
   line-height: 1.35;
   white-space: normal;
 }
+
+/* Quick-add: status picker (web parity — searchable, grouped, described) */
+.qa-status-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 11px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-muted);
+}
+
+.qa-status-search-input {
+  flex: 1;
+  min-width: 0;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  color: var(--text);
+  font-size: 12px;
+  font-family: inherit;
+  padding: 6px 9px;
+  outline: none;
+}
+
+.qa-status-search-input::placeholder {
+  color: var(--text-muted);
+}
+
+.qa-status-search-input:focus {
+  border-color: var(--primary);
+}
+
+.qa-status-search-clear {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 2px 4px;
+}
+
+.qa-status-search-clear:hover {
+  color: var(--text);
+}
+
+.qa-status-scroll {
+  max-height: 260px;
+}
+
+.qa-status-group {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.qa-status-group-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.qa-status-badge {
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.qa-status-row {
+  align-items: flex-start;
+}
+
+.qa-status-row.hi {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.qa-status-row.selected {
+  background: rgba(99, 102, 241, 0.16);
+}
+
+.qa-status-row.selected.hi {
+  background: rgba(99, 102, 241, 0.22);
+}
+
+.qa-status-row svg {
+  flex-shrink: 0;
+  margin-top: 3px;
+  color: var(--primary);
+}
+
+.qa-status-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.qa-status-name {
+  font-size: 12.5px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.qa-status-desc {
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.35;
+  white-space: normal;
+}
+
+.qa-empty-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.qa-empty-sub {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
