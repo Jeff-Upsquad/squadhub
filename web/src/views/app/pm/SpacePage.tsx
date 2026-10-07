@@ -6,6 +6,7 @@ import { usePMStore } from '../../../stores/pmStore';
 import { useSpace } from '../../../hooks/useSpaces';
 import { useTaskTypes } from '../../../hooks/useTaskTypes';
 import { useIsMobile } from '../../../hooks/useIsMobile';
+import { useTaskWorkflowCatalog } from '../../../hooks/useTaskWorkflowCatalog';
 import TaskGroupCard from './TaskGroupCard';
 import { GROUP_BY_OPTIONS, groupTasks, partitionByCompletion, buildFocusTodayGroup, isTaskCompleted, isTaskUpcoming, nestSubtasks, filterWithSubtasks, sortByCreationOrder, type GroupBy } from '../../../lib/taskGrouping';
 import MinimalGroupFilterBar from '../../../components/pm/MinimalGroupFilterBar';
@@ -195,10 +196,37 @@ export default function SpacePage({ spacePageId: propSpacePageId }: { spacePageI
     return sortByCreationOrder(arr);
   }, [nestedTasks, filters, tz, searchQuery]);
 
-  const spaceStatuses: SpaceStatus[] = useMemo(
-    () => ((space as unknown as { space_statuses?: SpaceStatus[] } | undefined)?.space_statuses ?? []),
-    [space],
-  );
+  const { defs: catalogDefs, assignment } = useTaskWorkflowCatalog({
+    spaceId: activeSpacePageId,
+  });
+
+  const spaceStatuses: SpaceStatus[] = useMemo(() => {
+    const rawStatuses: SpaceStatus[] = (space as unknown as { space_statuses?: SpaceStatus[] } | undefined)?.space_statuses ?? [];
+    if (catalogDefs && catalogDefs.length > 0 && assignment && !assignment.is_default_fallback) {
+      return catalogDefs.map((d, idx) => ({
+        id: d.key,
+        space_id: activeSpacePageId || '',
+        name: d.label,
+        color: d.color,
+        position: idx,
+        is_default: !!d.is_default,
+        category: d.category,
+      }));
+    }
+    if (rawStatuses.length > 0) return rawStatuses;
+    if (catalogDefs && catalogDefs.length > 0) {
+      return catalogDefs.map((d, idx) => ({
+        id: d.key,
+        space_id: activeSpacePageId || '',
+        name: d.label,
+        color: d.color,
+        position: idx,
+        is_default: !!d.is_default,
+        category: d.category,
+      }));
+    }
+    return [];
+  }, [space, catalogDefs, assignment, activeSpacePageId]);
   const assigneeOptions = useMemo(() => deriveAssigneeOptions(tasksAfterPills), [tasksAfterPills]);
   const tagOptions = useMemo(() => deriveTagOptions(tasksAfterPills), [tasksAfterPills]);
   const activeFilterCount = countActiveFilters(filters);

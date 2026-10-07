@@ -147,6 +147,22 @@ export async function getAssignmentFor(
   return data as any;
 }
 
+export async function syncAllSpacesForGroup(groupId: string) {
+  const { data: assignments } = await supabaseAdmin
+    .from('status_group_assignments')
+    .select('entity_id')
+    .eq('group_id', groupId)
+    .eq('entity_type', 'space');
+  if (!assignments || assignments.length === 0) return;
+  for (const a of assignments) {
+    try {
+      await syncSpaceToGroup(a.entity_id, groupId);
+    } catch (e) {
+      console.error(`[statusGroups] Failed to sync space ${a.entity_id} to group ${groupId}:`, e);
+    }
+  }
+}
+
 /**
  * Resolve the effective group for a task container.
  * Pass whichever ids are known; nearest assignment wins.
@@ -185,24 +201,24 @@ export async function resolveEffectiveGroup(opts: {
   // 1. list-level
   if (listId) {
     const a = await getAssignmentFor('list', listId);
-    if (a) return { assignment: a, statuses: await getGroupStatuses(a.group_id) };
+    if (a && a.status_groups?.is_enabled !== false) return { assignment: a, statuses: await getGroupStatuses(a.group_id) };
   }
   // 2. folder-level
   const fid = resolvedFolderId || folder?.id;
   if (fid) {
     const a = await getAssignmentFor('folder', fid);
-    if (a) return { assignment: a, statuses: await getGroupStatuses(a.group_id) };
+    if (a && a.status_groups?.is_enabled !== false) return { assignment: a, statuses: await getGroupStatuses(a.group_id) };
   }
   // 3. space-level
   if (finalSpaceId) {
     const a = await getAssignmentFor('space', finalSpaceId);
-    if (a) return { assignment: a, statuses: await getGroupStatuses(a.group_id) };
+    if (a && a.status_groups?.is_enabled !== false) return { assignment: a, statuses: await getGroupStatuses(a.group_id) };
   }
   // 4. template-level (future design/editor spaces inherit from here)
   const tplId = folder?.client_space_template_id || null;
   if (tplId) {
     const a = await getAssignmentFor('template', tplId);
-    if (a) return { assignment: a, statuses: await getGroupStatuses(a.group_id) };
+    if (a && a.status_groups?.is_enabled !== false) return { assignment: a, statuses: await getGroupStatuses(a.group_id) };
   } else if (fid) {
     // Folder row may not have been fetched with template above (list path);
     // already covered. Skip extra query.

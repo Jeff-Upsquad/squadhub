@@ -212,6 +212,8 @@ export default function NewTaskRow({
   const reviewTask = useReviewTask();
   const focusTask = useFocusTask();
   const tListId = (task as any).list_id || (task as any).list?.id || undefined;
+  const tSpaceId = (task as any).space_id || (task as any).space?.id || undefined;
+  const tFolderId = (task as any).folder_id || (task as any).folder?.id || undefined;
   const tTypeId = (task as any).task_type_id as string | undefined;
   const { data: taskTypesFallback } = useTaskTypes({
     listId: tListId,
@@ -483,6 +485,9 @@ export default function NewTaskRow({
         <TaskStatusPicker
           value={t.status}
           originalStatus={(t.metadata as any)?.original_status}
+          spaceId={tSpaceId}
+          folderId={tFolderId}
+          listId={tListId}
           onChange={(key) => applyEdit({ status: key })}
           buttonClassName="nt-cellbtn nt-status-btn"
         />

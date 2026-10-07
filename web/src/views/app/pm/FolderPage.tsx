@@ -6,6 +6,7 @@ import { usePMStore } from '../../../stores/pmStore';
 import { useSpace, useReorderLists } from '../../../hooks/useSpaces';
 import { useTaskTypes } from '../../../hooks/useTaskTypes';
 import { useIsMobile } from '../../../hooks/useIsMobile';
+import { useTaskWorkflowCatalog } from '../../../hooks/useTaskWorkflowCatalog';
 import TaskGroupCard from './TaskGroupCard';
 import { GROUP_BY_OPTIONS, groupTasks, partitionByCompletion, buildFocusTodayGroup, isTaskCompleted, isTaskUpcoming, nestSubtasks, filterWithSubtasks, sortByCreationOrder, type GroupBy } from '../../../lib/taskGrouping';
 import MinimalGroupFilterBar from '../../../components/pm/MinimalGroupFilterBar';
@@ -88,10 +89,38 @@ export default function FolderPage({ folderId: propFolderId }: { folderId?: stri
   const lists: List[] = useMemo(() => folder?.lists ?? [], [folder]);
 
   const { data: parentSpace } = useSpace(folder?.space_id ?? null);
-  const spaceStatuses: SpaceStatus[] = useMemo(
-    () => ((parentSpace as unknown as { space_statuses?: SpaceStatus[] } | undefined)?.space_statuses ?? []),
-    [parentSpace],
-  );
+  const { defs: catalogDefs, assignment } = useTaskWorkflowCatalog({
+    spaceId: folder?.space_id ?? null,
+    folderId: activeFolderId ?? null,
+  });
+
+  const spaceStatuses: SpaceStatus[] = useMemo(() => {
+    const rawStatuses: SpaceStatus[] = (parentSpace as unknown as { space_statuses?: SpaceStatus[] } | undefined)?.space_statuses ?? [];
+    if (catalogDefs && catalogDefs.length > 0 && assignment && !assignment.is_default_fallback) {
+      return catalogDefs.map((d, idx) => ({
+        id: d.key,
+        space_id: folder?.space_id || '',
+        name: d.label,
+        color: d.color,
+        position: idx,
+        is_default: !!d.is_default,
+        category: d.category,
+      }));
+    }
+    if (rawStatuses.length > 0) return rawStatuses;
+    if (catalogDefs && catalogDefs.length > 0) {
+      return catalogDefs.map((d, idx) => ({
+        id: d.key,
+        space_id: folder?.space_id || '',
+        name: d.label,
+        color: d.color,
+        position: idx,
+        is_default: !!d.is_default,
+        category: d.category,
+      }));
+    }
+    return [];
+  }, [parentSpace, catalogDefs, assignment, folder?.space_id]);
 
   const taskQueries = useQueries({
     queries: lists.map((l) => ({

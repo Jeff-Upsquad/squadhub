@@ -6,6 +6,7 @@ import { supabaseAdmin } from '../supabase';
 import {
   getGroupStatuses,
   syncSpaceToGroup,
+  syncAllSpacesForGroup,
   upsertAssignment,
   spaceHasSeedStatuses,
   loadTaskStatusOverrides,
@@ -594,6 +595,7 @@ router.post('/:id/statuses', async (req: Request, res: Response) => {
       return;
     }
     refreshTaskOverrides();
+    syncAllSpacesForGroup(req.params.id as string);
     res.status(201).json({ success: true, data });
   } catch (err) {
     if (zodErr(err, res)) return;
@@ -618,6 +620,7 @@ router.put('/:id/statuses/reorder', async (req: Request, res: Response) => {
       }
     }
     refreshTaskOverrides();
+    syncAllSpacesForGroup(req.params.id as string);
     res.json({ success: true });
   } catch (err) {
     if (zodErr(err, res)) return;
@@ -672,6 +675,7 @@ router.put('/:id/statuses/:statusId', async (req: Request, res: Response) => {
       return;
     }
     refreshTaskOverrides();
+    syncAllSpacesForGroup(req.params.id as string);
     res.json({ success: true, data });
   } catch (err) {
     if (zodErr(err, res)) return;
@@ -706,6 +710,7 @@ router.delete('/:id/statuses/:statusId', async (req: Request, res: Response) => 
       return;
     }
     refreshTaskOverrides();
+    syncAllSpacesForGroup(req.params.id as string);
     res.json({ success: true });
   } catch (err) {
     console.error('Delete group status error:', err);
