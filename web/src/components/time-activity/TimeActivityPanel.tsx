@@ -50,6 +50,10 @@ function CalendarData({ workspaceId, context, from, to, now, days = [], onClose 
     return all;
   }, [sessions.data, entries.data, dayPlansByDate, commitment, now, timers, segmentStart, activeBlock.data]);
   return <TimeActivityCalendar.Data events={events} commitment={commitment}
+    sessions={sessions.data || []}
+    canEdit={stats.data?.data?.time_log_edit?.can_edit === true}
+    editWindowHours={stats.data?.data?.time_log_edit?.window_hours ?? 0}
+    workspaceId={workspaceId} context={context}
     onOpenTask={id => { usePMStore.getState().setActiveTask(id); onClose(); }}
     loading={sessions.isPending || entries.isPending || stats.isPending || activeBlock.isPending}
     error={sessions.isError || entries.isError || stats.isError || activeBlock.isError}

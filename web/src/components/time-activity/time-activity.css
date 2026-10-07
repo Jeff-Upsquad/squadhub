@@ -202,3 +202,28 @@ html.dark .ta-panel, html[data-theme="noir"] .ta-panel {
 
 .ta-day-head > button { position: sticky; left: 76px; width: max-content; margin-left: 12px; margin-right: 0; }
 
+/* Reduce-only resize handles on work/break blocks. Only the outer edges of a
+   session are trimmable; the middle work→overtime split gets no handle. */
+.ta-event .ta-resize { position: absolute; left: 4px; right: 4px; height: 10px; cursor: ns-resize; z-index: 2; touch-action: none; }
+.ta-event .ta-resize::after { content: ''; position: absolute; left: 50%; top: 50%; width: 26px; height: 4px; transform: translate(-50%, -50%); border-radius: 3px; background: color-mix(in srgb, var(--event-color) 55%, transparent); opacity: 0; transition: opacity .15s; }
+.ta-event:hover .ta-resize::after, .ta-event[data-selected="true"] .ta-resize::after { opacity: .9; }
+.ta-resize-top { top: -2px; }
+.ta-resize-bottom { bottom: -2px; }
+.ta-resize:focus-visible { outline: 2px solid var(--event-color); outline-offset: 1px; border-radius: 4px; }
+
+/* Inline trim editor in the detail panel (mirrors the logged-time editor). */
+.ta-edit-row { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
+.ta-edit-row .ta-open-task { margin-top: 0; }
+.ta-edit-hint { font-size: 10px; color: var(--ta-muted); }
+.ta-edit { margin-top: 10px; padding: 10px; border: 1px solid var(--ta-line); border-radius: 10px; background: var(--ta-raised); }
+.ta-edit-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.ta-edit-grid label { display: grid; gap: 4px; font-size: 9px; text-transform: uppercase; letter-spacing: .08em; color: var(--ta-muted); }
+.ta-edit-grid input { width: 100%; box-sizing: border-box; padding: 6px 8px; border: 1px solid var(--ta-line); border-radius: 7px; background: var(--ta-bg); color: var(--ta-ink); font-size: 12px; }
+.ta-edit-foot { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
+.ta-foot-hint { flex: 1; font-size: 10px; color: var(--ta-muted); }
+.ta-foot-hint.is-bad { color: #d4573d; }
+.ta-edit-error { color: #d4573d !important; }
+.ta-save { padding: 4px 12px; border-radius: 7px; border: 0; background: #4bc88d; color: #10231a; font-size: 11px; font-weight: 600; }
+.ta-save:disabled { opacity: .45; cursor: default; }
+@media (max-width: 640px) { .ta-edit-grid { grid-template-columns: 1fr; } }
+

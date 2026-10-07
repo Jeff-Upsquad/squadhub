@@ -2,6 +2,9 @@
 
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode, type CSSProperties } from 'react';
 import { createPortal } from 'react-dom';
+import { useQueryClient } from '@tanstack/react-query';
+import type { TimerSession } from '@squadhub/shared';
+import api from '../../services/api';
 import { KINDS, clipActivity, combineTaskSegments, clock, dateLabel, dayKey, dayStart, duration, isAttendance, layoutActivities, shiftDay, weekStart, type Activity, type ActivityKind } from './activityModel';
 import './time-activity.css';
 
@@ -55,13 +58,43 @@ function TimeActivityCalendar({ onClose, renderData, demo = false, initialDate }
     </dialog>, document.body);
 }
 
-function CalendarData({ events, commitment, loading = false, error = false, onRetry, onOpenTask }: {
+function sessionIdOf(event: Activity): string | null {
+  if (!isAttendance(event.kind)) return null;
+  const idx = event.id.indexOf(':');
+  if (idx <= 0) return null;
+  const sid = event.id.slice(0, idx);
+  if (sid.length < 32 || !sid.includes('-')) return null;
+  return sid;
+}
+
+function toLocalInput(iso: string): string {
+  const d = new Date(iso);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function fromLocalInput(local: string): string {
+  return new Date(local).toISOString();
+}
+
+function isWithinWindow(endIso: string | null, windowHours: number): boolean {
+  if (windowHours <= 0) return true;
+  if (!endIso) return false;
+  return Date.now() - new Date(endIso).getTime() <= windowHours * 3600 * 1000;
+}
+
+function CalendarData({ events, commitment, loading = false, error = false, onRetry, onOpenTask, sessions = [], canEdit = false, editWindowHours = 0, workspaceId, context }: {
   events: Activity[]; commitment: number; loading?: boolean; error?: boolean; onRetry?: () => void; onOpenTask?: (id: string) => void;
+  sessions?: TimerSession[]; canEdit?: boolean; editWindowHours?: number; workspaceId?: string; context?: string;
 }) {
   const { date, setDate, view, setView, now, from, to, days } = useContext(CalendarContext)!;
+  const qc = useQueryClient();
   const [filters, setFilters] = useState<ActivityKind[]>(KINDS.map(k => k.kind));
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [picker, setPicker] = useState(false);
+  const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
+  const [dragError, setDragError] = useState<string | null>(null);
+  const [drag, setDrag] = useState<null | { sessionId: string; edge: 'start' | 'end'; origStart: number; origEnd: number; curMs: number; startY: number }>(null);
   const scroller = useRef<HTMLDivElement>(null);
   const [calendarWidth, setCalendarWidth] = useState(850);
   useEffect(() => {
@@ -72,6 +105,74 @@ function CalendarData({ events, commitment, loading = false, error = false, onRe
   }, [loading, error]);
   const visibleEvents = useMemo(() => combineTaskSegments(events.map(e => clipActivity(e, from, to)).filter((e): e is Activity => !!e)), [events, from, to]);
   const selected = visibleEvents.find(e => e.id === selectedId);
+  const sessionById = useMemo(() => new Map((sessions || []).map(s => [s.id, s])), [sessions]);
+  // All attendance pieces per underlying timer session (work may split into work + overtime).
+  const piecesBySession = useMemo(() => {
+    const map = new Map<string, Activity[]>();
+    for (const e of visibleEvents) {
+      const sid = sessionIdOf(e);
+      if (!sid) continue;
+      const list = map.get(sid) || [];
+      list.push(e);
+      map.set(sid, list);
+    }
+    for (const list of map.values()) list.sort((a, b) => a.start - b.start);
+    return map;
+  }, [visibleEvents]);
+  const selectedSessionId = selected ? sessionIdOf(selected) : null;
+  const selectedSession = selectedSessionId ? sessionById.get(selectedSessionId) || null : null;
+  const selectedEditable = !!(
+    selected && selectedSession && selectedSession.end_time && !selected.live &&
+    canEdit && isWithinWindow(selectedSession.end_time, editWindowHours) &&
+    (selected.kind === 'work' || selected.kind === 'break' || selected.kind === 'overtime' || selected.kind === 'no_work')
+  );
+  useEffect(() => { setEditingSessionId(null); setDragError(null); }, [selectedId]);
+  const invalidateTime = () => {
+    qc.invalidateQueries({ queryKey: ['timer-sessions'] });
+    qc.invalidateQueries({ queryKey: ['timer-stats'] });
+    qc.invalidateQueries({ queryKey: ['timer-active'] });
+  };
+  const saveSessionResize = async (sessionId: string, patch: { start_time?: string; end_time?: string }) => {
+    try {
+      await api.patch(`/timer/sessions/${sessionId}`, patch);
+      invalidateTime();
+      setDragError(null);
+    } catch (err: any) {
+      setDragError(err?.response?.data?.error || 'Could not save that change');
+    }
+  };
+  // Drag-to-trim: pointermove/up listeners while a resize handle is held.
+  // Reduce-only by construction: the dragged edge clamps inside the original
+  // session range, so time can be trimmed but never extended.
+  const dragRef = useRef<typeof drag>(null);
+  dragRef.current = drag;
+  useEffect(() => {
+    if (!drag) return;
+    const { sessionId, edge, origStart, origEnd, startY } = drag;
+    const move = (e: PointerEvent) => {
+      const deltaMs = Math.round((e.clientY - startY) / HOUR_HEIGHT * 3600000 / 60000) * 60000;
+      if (edge === 'start') {
+        const clamped = Math.min(Math.max(origStart + deltaMs, origStart), origEnd - 60000);
+        setDrag(d => (d && d.curMs !== clamped ? { ...d, curMs: clamped } : d));
+      } else {
+        const clamped = Math.max(Math.min(origEnd + deltaMs, origEnd), origStart + 60000);
+        setDrag(d => (d && d.curMs !== clamped ? { ...d, curMs: clamped } : d));
+      }
+    };
+    const up = () => {
+      const d = dragRef.current;
+      setDrag(null);
+      if (!d || d.sessionId !== sessionId) return;
+      const changed = edge === 'start' ? d.curMs !== origStart : d.curMs !== origEnd;
+      if (!changed) return;
+      const iso = new Date(d.curMs).toISOString();
+      void saveSessionResize(sessionId, edge === 'start' ? { start_time: iso } : { end_time: iso });
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up, { once: true });
+    window.addEventListener('pointercancel', up, { once: true });
+    return () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); window.removeEventListener('pointercancel', up); };
+  }, [drag ? `${drag.sessionId}:${drag.edge}:${drag.startY}` : null]);
   const totals = Object.fromEntries(KINDS.map(k => [k.kind, visibleEvents.filter(e => e.kind === k.kind).reduce((sum, e) => sum + e.seconds, 0)])) as Record<ActivityKind, number>;
   const work = totals.work + totals.overtime;
   const trackedDays = new Set(visibleEvents.filter(e => e.kind === 'work' || e.kind === 'overtime').map(e => dayKey(e.start))).size;
@@ -139,12 +240,56 @@ function CalendarData({ events, commitment, loading = false, error = false, onRe
     return { key, start, items, layout, widths, width: widths.reduce((sum, width) => sum + width, 0) };
   });
   const gridWidth = Math.max(calendarWidth, gutterWidth + dayLayouts.reduce((sum, day) => sum + day.width, 0));
-  const display = (event: Activity, top: number, height: number, left: string, width: string, isNarrow?: boolean, isTight?: boolean) => (
-    <button key={event.id} className="ta-event" data-kind={event.kind} data-selected={event.id === selectedId} data-short={height < 43} data-narrow={isNarrow} data-tight={isTight}
-      style={{ top, height: Math.max(MIN_EVENT_HEIGHT, height - EVENT_GAP), left, width, '--event-color': KINDS.find(k => k.kind === event.kind)?.color || '#38bdf8' } as CSSProperties}
+  const beginResize = (e: React.PointerEvent, session: TimerSession, edge: 'start' | 'end') => {
+    e.preventDefault();
+    e.stopPropagation();
+    const origStart = Date.parse(session.start_time);
+    const origEnd = session.end_time ? Date.parse(session.end_time) : NaN;
+    if (!Number.isFinite(origStart) || !Number.isFinite(origEnd)) return;
+    setSelectedId(null);
+    setDrag({ sessionId: session.id, edge, origStart, origEnd, curMs: edge === 'start' ? origStart : origEnd, startY: e.clientY });
+  };
+  const display = (event: Activity, top: number, height: number, left: string, width: string, isNarrow?: boolean, isTight?: boolean, dayStartMs?: number) => {
+    const sid = sessionIdOf(event);
+    const session = sid ? sessionById.get(sid) : undefined;
+    const editable = !!(sid && session?.end_time && !event.live && canEdit && isWithinWindow(session.end_time, editWindowHours));
+    // Only the outer edges of a session are trimmable. A work session split
+    // into work + overtime shares a middle boundary (the commitment split)
+    // that must not move, so it gets no handle.
+    let topHandle = false, bottomHandle = false;
+    if (editable && session?.end_time && dayStartMs != null && height >= 40) {
+      const sStart = Date.parse(session.start_time), sEnd = Date.parse(session.end_time);
+      const insideDay = sStart >= dayStartMs - 1000 && sEnd <= dayStartMs + 86400000 + 1000;
+      if (insideDay) {
+        const pieces = piecesBySession.get(sid!) || [];
+        const isFirst = pieces.length ? pieces[0].id === event.id : true;
+        const isLast = pieces.length ? pieces[pieces.length - 1].id === event.id : true;
+        topHandle = isFirst;
+        bottomHandle = isLast;
+      }
+    }
+    let adjTop = top, adjHeight = height;
+    if (drag && sid && drag.sessionId === sid && session) {
+      const pieces = piecesBySession.get(sid) || [];
+      const isFirst = pieces.length ? pieces[0].id === event.id : true;
+      const isLast = pieces.length ? pieces[pieces.length - 1].id === event.id : true;
+      if (drag.edge === 'start' && isFirst && dayStartMs != null) {
+        const ns = Math.min(Math.max(drag.curMs, drag.origStart), drag.origEnd - 60000);
+        adjTop = (ns - dayStartMs) / 3600000 * HOUR_HEIGHT;
+        adjHeight = (event.end - ns) / 3600000 * HOUR_HEIGHT;
+      } else if (drag.edge === 'end' && isLast) {
+        const ne = Math.max(Math.min(drag.curMs, drag.origEnd), drag.origStart + 60000);
+        adjHeight = (ne - event.start) / 3600000 * HOUR_HEIGHT;
+      }
+    }
+    return (
+    <button key={event.id} className="ta-event" data-kind={event.kind} data-selected={event.id === selectedId} data-short={adjHeight < 43} data-narrow={isNarrow} data-tight={isTight}
+      style={{ top: adjTop, height: Math.max(MIN_EVENT_HEIGHT, adjHeight - EVENT_GAP), left, width, '--event-color': KINDS.find(k => k.kind === event.kind)?.color || '#38bdf8' } as CSSProperties}
       onClick={() => setSelectedId(event.id === selectedId ? null : event.id)}
-      aria-label={`${event.title}, ${clock(event.start)} to ${event.live ? 'now' : clock(event.end)}, ${duration(event.seconds)}${event.isManual ? ', manually entered' : ''}`}
-      title={`${event.title} · ${clock(event.start)}–${event.live ? 'now' : clock(event.end)} · ${duration(event.seconds)}${event.isManual ? ' · Manually entered' : ''}`}>
+      aria-label={`${event.title}, ${clock(event.start)} to ${event.live ? 'now' : clock(event.end)}, ${duration(event.seconds)}${event.isManual ? ', manually entered' : ''}${editable ? ', editable: open details to trim time or drag the edges' : ''}`}
+      title={`${event.title} · ${clock(event.start)}–${event.live ? 'now' : clock(event.end)} · ${duration(event.seconds)}${event.isManual ? ' · Manually entered' : ''}${editable ? ' · Drag edges to trim (reduce only)' : ''}`}>
+      {topHandle && session && <span className="ta-resize ta-resize-top" role="slider" aria-label={`Trim ${event.title} start (reduce only)`} aria-valuemin={Date.parse(session.start_time)} aria-valuemax={Date.parse(session.end_time!)} aria-valuenow={drag?.sessionId === sid && drag.edge === 'start' ? drag.curMs : Date.parse(session.start_time)}
+        onPointerDown={e => beginResize(e, session, 'start')} onClick={e => e.stopPropagation()} />}
       <span className="ta-event-title">
         <span className="ta-event-name">
           {event.live && <i className="ta-live-dot" />}
@@ -153,11 +298,14 @@ function CalendarData({ events, commitment, loading = false, error = false, onRe
         </span>
         <b title="Logged time">{duration(event.seconds)}</b>
       </span>
-      {height >= 43 && <span className="ta-event-time">{clock(event.start)} – {event.live ? 'now' : clock(event.end)}</span>}
-      {height >= 78 && event.project && <span className="ta-event-project">{event.project}</span>}
-      {height >= 105 && event.kind === 'block' && <span className="ta-event-badge">{event.children?.length || 0} tasks in this block</span>}
+      {adjHeight >= 43 && <span className="ta-event-time">{clock(drag?.sessionId === sid && drag.edge === 'start' ? drag.curMs : event.start)} – {event.live ? 'now' : clock(event.end)}</span>}
+      {adjHeight >= 78 && event.project && <span className="ta-event-project">{event.project}</span>}
+      {adjHeight >= 105 && event.kind === 'block' && <span className="ta-event-badge">{event.children?.length || 0} tasks in this block</span>}
+      {bottomHandle && session && <span className="ta-resize ta-resize-bottom" role="slider" aria-label={`Trim ${event.title} end (reduce only)`} aria-valuemin={Date.parse(session.start_time)} aria-valuemax={Date.parse(session.end_time!)} aria-valuenow={drag?.sessionId === sid && drag.edge === 'end' ? drag.curMs : Date.parse(session.end_time!)}
+        onPointerDown={e => beginResize(e, session, 'end')} onClick={e => e.stopPropagation()} />}
     </button>
-  );
+    );
+  };
   return <>
     <div className="ta-summary">
       <div className="ta-summary-main"><span>{view === 'day' ? 'Work tracked' : 'Work this week'}</span><strong>{duration(work)}</strong>
@@ -200,7 +348,7 @@ function CalendarData({ events, commitment, loading = false, error = false, onRe
                     : Math.max(38, columnWidth - 4);
                   const left = `${column * columnWidth + (isNarrow ? 3 : 5)}px`;
                   return display(event, (event.start - start) / 3600000 * HOUR_HEIGHT, (event.end - event.start) / 3600000 * HOUR_HEIGHT,
-                    left, `${cardWidth}px`, isNarrow, cardWidth < 68);
+                    left, `${cardWidth}px`, isNarrow, cardWidth < 68, start);
                 })}</div>)}
                 {key === dayKey(now) && <div className="ta-now" style={{ top: (now - start) / 3600000 * HOUR_HEIGHT }}><span>{clock(now)}</span><i /></div>}
                 {!items.length && <div className="ta-empty-day" style={{ top: 9 * HOUR_HEIGHT + 12 }}><Glyph name="clock" /><strong>{visibleEvents.length ? 'Nothing matches' : 'No time tracked'}</strong><span>{filters.length ? 'Your tracked sessions appear here.' : 'Select a time type above.'}</span></div>}
@@ -212,6 +360,18 @@ function CalendarData({ events, commitment, loading = false, error = false, onRe
     {selected && <div className="ta-detail" aria-live="polite">
       <><div className="ta-detail-top"><i style={{ background: KINDS.find(k => k.kind === selected.kind)!.color }} /><strong>{selected.title}</strong>{selected.isManual && <span className="ta-manual-tag">manual</span>}<span>{duration(selected.seconds)}</span><button className="ta-icon-btn" onClick={() => setSelectedId(null)} aria-label="Dismiss session details"><Glyph name="close" /></button></div>
         <p>{clock(selected.start)} – {selected.live ? 'Now · tracking' : clock(selected.end)}<span>·</span>{selected.source}{selected.project && <><span>·</span>{selected.project}</>}</p>
+        {dragError && <p className="ta-edit-error" role="alert">{dragError}</p>}
+        {selectedEditable && selectedSession && (
+          <div className="ta-edit-row">
+            <button className="ta-open-task" onClick={() => setEditingSessionId(editingSessionId === selectedSession.id ? null : selectedSession.id)}>
+              {editingSessionId === selectedSession.id ? 'Close editor' : 'Edit time'}<Glyph name="arrow" />
+            </button>
+            <span className="ta-edit-hint">Reduce only · drag edges or trim below</span>
+          </div>
+        )}
+        {selectedEditable && selectedSession && editingSessionId === selectedSession.id && (
+          <AttendanceEditForm session={selectedSession} onClose={() => setEditingSessionId(null)} onSaved={() => { setEditingSessionId(null); invalidateTime(); }} />
+        )}
         {selected.note && <p>{selected.note}</p>}
         {!!selected.segments?.length && <details className="ta-segments"><summary>{selected.segments.length} time segments · {duration(selected.seconds)} tracked</summary>
           {selected.segments.map(segment => <div key={`${segment.id}:${segment.start}`}><span>{clock(segment.start)} – {segment.live ? 'Now · tracking' : clock(segment.end)}<small>{segment.source}{segment.isManual ? ' · manual' : ''}{segment.note ? ` · ${segment.note}` : ''}</small></span><b>{duration(segment.seconds)}</b></div>)}
@@ -222,6 +382,63 @@ function CalendarData({ events, commitment, loading = false, error = false, onRe
     </div>}
     <footer className="ta-footer"><span>Task and block time can overlap with attendance.</span><span>Overtime = work beyond daily commitment</span></footer>
   </>;
+}
+
+function AttendanceEditForm({ session, onClose, onSaved }: { session: TimerSession; onClose: () => void; onSaved: () => void }) {
+  const origStart = Date.parse(session.start_time);
+  const origEnd = session.end_time ? Date.parse(session.end_time) : NaN;
+  const origSeconds = session.duration_seconds ?? Math.round((origEnd - origStart) / 1000);
+  const [startLocal, setStartLocal] = useState(toLocalInput(session.start_time));
+  const [endLocal, setEndLocal] = useState(session.end_time ? toLocalInput(session.end_time) : '');
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const startMs = Date.parse(fromLocalInput(startLocal));
+  const endMs = endLocal ? Date.parse(fromLocalInput(endLocal)) : NaN;
+  const validRange = Number.isFinite(startMs) && Number.isFinite(endMs) && endMs > startMs;
+  const newSeconds = validRange ? Math.round((endMs - startMs) / 1000) : 0;
+  const expands = validRange && (startMs < origStart || endMs > origEnd || newSeconds > origSeconds);
+  const tooShort = validRange && newSeconds < 60;
+  const blocked = expands || tooShort || !validRange;
+  const trimmed = validRange ? Math.max(0, origSeconds - newSeconds) : 0;
+  const save = async () => {
+    if (saving) return;
+    if (!validRange) { setError('Pick a valid start and end'); return; }
+    if (expands) { setError('Time can only be reduced, not increased'); return; }
+    if (tooShort) { setError('Sessions must keep at least 1 minute'); return; }
+    if (startMs === origStart && endMs === origEnd) { onClose(); return; }
+    setSaving(true);
+    setError(null);
+    try {
+      await api.patch(`/timer/sessions/${session.id}`, {
+        start_time: new Date(startMs).toISOString(),
+        end_time: new Date(endMs).toISOString(),
+      });
+      onSaved();
+    } catch (err: any) {
+      setError(err?.response?.data?.error || 'Could not save that change');
+      setSaving(false);
+    }
+  };
+  return (
+    <div className="ta-edit" onKeyDown={e => { if (e.key === 'Enter') void save(); if (e.key === 'Escape') onClose(); }}>
+      <div className="ta-edit-grid">
+        <label>Start<input type="datetime-local" value={startLocal} min={toLocalInput(session.start_time)} max={endLocal || undefined}
+          onChange={e => { setStartLocal(e.target.value); setError(null); }} /></label>
+        <label>End<input type="datetime-local" value={endLocal} min={startLocal || undefined} max={session.end_time ? toLocalInput(session.end_time) : undefined}
+          onChange={e => { setEndLocal(e.target.value); setError(null); }} /></label>
+      </div>
+      <div className="ta-edit-foot">
+        <span className={`ta-foot-hint${error || blocked ? ' is-bad' : ''}`}>
+          {error || (expands ? 'Time can only be reduced, not increased'
+            : tooShort ? 'Sessions must keep at least 1 minute'
+            : trimmed > 0 ? `−${duration(trimmed)} · ${duration(newSeconds)} remaining`
+            : `Reduce only · up to ${duration(origSeconds)}`)}
+        </span>
+        <button type="button" className="ta-today" onClick={onClose}>Cancel</button>
+        <button type="button" className="ta-save" disabled={blocked || saving} onClick={() => void save()}>{saving ? 'Saving…' : 'Save'}</button>
+      </div>
+    </div>
+  );
 }
 
 function DatePicker({ date, onPick, onClose }: { date: string; onPick: (date: string) => void; onClose: () => void }) {
