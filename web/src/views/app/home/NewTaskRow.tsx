@@ -210,7 +210,12 @@ export default function NewTaskRow({
   const updateTask = useUpdateTask(null);
   const reviewTask = useReviewTask();
   const focusTask = useFocusTask();
-  const { data: taskTypesFallback } = useTaskTypes();
+  const tListId = (task as any).list_id || (task as any).list?.id || undefined;
+  const tTypeId = (task as any).task_type_id as string | undefined;
+  const { data: taskTypesFallback } = useTaskTypes({
+    listId: tListId,
+    includeIds: tTypeId ? [tTypeId] : undefined,
+  });
   const taskTypes = taskTypesProp ?? taskTypesFallback;
   const workspaceId = useWorkspaceStore((s) => s.currentWorkspace?.id);
   const addToLists = useAddTaskToLists(task.id);

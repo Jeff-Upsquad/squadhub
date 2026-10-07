@@ -946,6 +946,48 @@ export interface TaskType {
   user_access?: TaskTypeUserAccess[];
 }
 
+// ---- Task Type Groups (admin-managed reusable task-type sets) ----
+export type TaskTypeGroupEntityType = 'space' | 'folder' | 'list' | 'template';
+
+export interface TaskTypeGroupItem {
+  id: string;
+  group_id: string;
+  task_type_id: string;
+  position: number;
+  created_at?: string;
+  task_type?: TaskType;
+}
+
+export interface TaskTypeGroup {
+  id: string;
+  key: string;
+  name: string;
+  description: string | null;
+  icon: string;
+  color: string;
+  position: number;
+  is_default: boolean;
+  is_system: boolean;
+  is_enabled: boolean;
+  created_at: string;
+  updated_at: string;
+  items?: TaskTypeGroupItem[];
+  task_types?: TaskType[];
+  usage_count?: number;
+}
+
+export interface TaskTypeGroupAssignment {
+  id: string;
+  group_id: string;
+  entity_type: TaskTypeGroupEntityType;
+  entity_id: string;
+  created_by?: string | null;
+  created_at: string;
+  entity_name?: string;
+  entity_detail?: string;
+  group?: TaskTypeGroup;
+}
+
 export interface TaskChecklistItem {
   id: string;
   checklist_id: string;

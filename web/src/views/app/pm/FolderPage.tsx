@@ -41,7 +41,6 @@ export default function FolderPage({ folderId: propFolderId }: { folderId?: stri
   const groupByScope = usePMStore((s) => s.groupByScope);
   const setScopedGroupBy = usePMStore((s) => s.setScopedGroupBy);
   const fadingTaskIds = usePMStore((s) => s.fadingTaskIds);
-  const { data: taskTypes } = useTaskTypes();
   const isMobile = useIsMobile();
   const [listFilter, setListFilter] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
@@ -84,6 +83,7 @@ export default function FolderPage({ folderId: propFolderId }: { folderId?: stri
     },
     enabled: !!activeFolderId,
   });
+  const { data: taskTypes } = useTaskTypes({ folderId: activeFolderId || undefined, spaceId: folder?.space_id || undefined });
 
   const lists: List[] = useMemo(() => folder?.lists ?? [], [folder]);
 

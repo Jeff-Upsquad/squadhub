@@ -91,9 +91,11 @@ export default function TaskRow({
   const isFocused = isTaskFocused(task);
   const effectiveListId = listId || (task as any).list_id || task.list?.id || null;
   const updateTask = useUpdateTask(effectiveListId);
-  // Task list endpoints don't hydrate the `task_type` join — only the id —
-  // so resolve from the cached useTaskTypes() list to drive type-based styling.
-  const { data: taskTypesList } = useTaskTypes();
+  const currentTypeId = task?.task_type_id || undefined;
+  const { data: taskTypesList } = useTaskTypes({
+    listId: effectiveListId || undefined,
+    includeIds: currentTypeId ? [currentTypeId] : undefined,
+  });
   const resolvedTaskType = (task as any).task_type
     || taskTypesList?.find((t) => t.id === task.task_type_id)
     || null;

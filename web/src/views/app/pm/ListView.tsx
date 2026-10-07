@@ -46,7 +46,7 @@ export default function ListView({
   // parent row gets the expandable subtask dropdown (TaskRow's chevron) instead
   // of subtasks cluttering the top level.
   const { data: flatTasks, isLoading } = useTasks(listId, { includeSubtasks: true });
-  const { data: taskTypes } = useTaskTypes();
+  const { data: taskTypes } = useTaskTypes({ listId });
   const tasks = useMemo(() => nestSubtasks(flatTasks ?? []), [flatTasks]);
   const updateTask = useUpdateTask(listId);
   const { selectedTasks, clearSelection, fadingTaskIds } = usePMStore();

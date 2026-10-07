@@ -427,7 +427,17 @@ export default function TaskDetailPanel({
       document.querySelector(`[data-comment-id="${id}"]`)?.scrollIntoView({ block: 'center', behavior: 'smooth' });
     });
   }, [pendingCommentId, comments]);
-  const { data: taskTypes } = useTaskTypes();
+
+  const resolvedSpaceId = spaceId || (task as any)?.space_id || undefined;
+  const resolvedFolderId = folderId || (task as any)?.folder_id || undefined;
+  const resolvedListId = listId || (task as any)?.list_id || undefined;
+  const currentTypeId = task?.task_type_id || undefined;
+  const { data: taskTypes } = useTaskTypes({
+    spaceId: resolvedSpaceId,
+    folderId: resolvedFolderId,
+    listId: resolvedListId,
+    includeIds: currentTypeId ? [currentTypeId] : undefined,
+  });
   const { data: checklists } = useChecklists(effectiveTaskId);
   const updateTask = useUpdateTask(listId);
   const detachLabel = useDetachLabel(effectiveTaskId ?? '');
