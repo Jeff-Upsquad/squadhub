@@ -30,6 +30,8 @@ import { useParallelTimers } from '../../../hooks/useParallelTimers';
 import { formatDuration, parseDuration } from '../../../lib/timeDuration';
 import AddEntrySplitButton from './AddEntrySplitButton';
 import { useIsMobile } from '../../../hooks/useIsMobile';
+import { useQueryClient } from '@tanstack/react-query';
+import { useGoalsData } from '../goals/goalsApi';
 
 /* -------------------------------------------------------------------------- */
 /* Helpers (duplicated from TaskDetailPanel — keep in sync if they change)    */
@@ -171,6 +173,12 @@ const META_ICONS: Record<string, React.ReactNode> = {
       <path d="M12 7v5l3 2" />
     </svg>
   ),
+  Goal: (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z" />
+      <path d="M4 22V15" />
+    </svg>
+  ),
 };
 
 /* -------------------------------------------------------------------------- */
@@ -197,6 +205,7 @@ type Draft = {
   due_date: string | null;
   task_type_id: string | null;
   time_estimate: number | null;
+  goal_ids: string[];
   recurrence: TaskRecurrence | null;
   subtaskSections: DraftSubtaskSection[];
   subtasks: DraftSubtask[];
@@ -219,6 +228,7 @@ function makeDraft(defaultStatus: string | undefined): Draft {
     due_date: null,
     task_type_id: null,
     time_estimate: null,
+    goal_ids: [],
     recurrence: null,
     subtaskSections: [],
     subtasks: [],
@@ -232,6 +242,7 @@ function isDraftNonEmpty(d: Draft): boolean {
     d.title.trim().length > 0 ||
     d.description.trim().length > 0 ||
     d.assignee_ids.length > 0 ||
+    (d.goal_ids?.length || 0) > 0 ||
     d.subtaskSections.length > 0 ||
     d.subtasks.length > 0 ||
     d.checklists.length > 0 ||
@@ -392,11 +403,20 @@ export default function TaskCreatePanel({
   const initialStatus = defaultStatus || effectiveStatuses[0]?.name || 'todo';
   const [draft, setDraft] = useState<Draft>(() => {
     if (initialDraft) {
-      // Older persisted drafts predate recurrence and subtask sections.
-      return { ...makeDraft(initialStatus), ...initialDraft, pendingFiles: [] };
+      // Older persisted drafts predate recurrence, subtask sections, and goals.
+      const merged = { ...makeDraft(initialStatus), ...initialDraft, pendingFiles: [] };
+      return { ...merged, goal_ids: Array.isArray((merged as Draft).goal_ids) ? (merged as Draft).goal_ids : [] };
     }
     return makeDraft(initialStatus);
   });
+  const qc = useQueryClient();
+  const { data: goalsData } = useGoalsData();
+  const goals = goalsData?.goals || [];
+  const goalProjects = useMemo(() => new Map((goalsData?.projects || []).map((p) => [p.id, p])), [goalsData]);
+  const selectedGoals = useMemo(
+    () => (draft.goal_ids || []).map((id) => goals.find((g) => g.id === id)).filter((g): g is NonNullable<typeof g> => !!g),
+    [draft.goal_ids, goals],
+  );
   const [mounted, setMounted] = useState(false);
   const { requestStartTimer } = useParallelTimers();
   const [draftTimerStartedAt, setDraftTimerStartedAt] = useState<number | null>(null);
@@ -445,6 +465,9 @@ export default function TaskCreatePanel({
   useEffect(() => { setDraftLabels([]); }, [effectiveListId]);
   const [labelPickerOpen, setLabelPickerOpen] = useState(false);
   const [labelAnchor, setLabelAnchor] = useState<DOMRect | null>(null);
+  const [goalPickerOpen, setGoalPickerOpen] = useState(false);
+  const [goalAnchor, setGoalAnchor] = useState<DOMRect | null>(null);
+  const [goalSearch, setGoalSearch] = useState('');
   const [priorityAnchor, setPriorityAnchor] = useState<DOMRect | null>(null);
   const [pendingEmergency, setPendingEmergency] = useState(false);
   // Work-block fields — only used when currentType.key === 'work_block'.
@@ -752,6 +775,31 @@ export default function TaskCreatePanel({
           await api.post(`/pm/tasks/${newTask.id}/labels`, { tag_id: tag.id });
         } catch (err) {
           console.error('Failed to attach label:', err);
+        }
+      }
+
+      // Goals picked in the panel are linked after the task exists. A failure
+      // here doesn't roll back the task — the user can link from the task menu.
+      if ((draft.goal_ids || []).length > 0) {
+        let goalFailures = 0;
+        let firstReason: string | null = null;
+        for (const goalId of draft.goal_ids) {
+          try {
+            const res = await api.post(`/pm/goals/${goalId}/tasks`, { task_ids: [newTask.id] });
+            const skipped = res.data?.data?.skipped as { id: string; reason: string }[] | undefined;
+            if (skipped?.length) {
+              goalFailures++;
+              firstReason = skipped[0].reason;
+            }
+          } catch (err) {
+            console.error('Failed to link task to goal:', err);
+            goalFailures++;
+            firstReason = (err as any)?.response?.data?.error || firstReason;
+          }
+        }
+        void qc.invalidateQueries({ queryKey: ['goals'] });
+        if (goalFailures > 0) {
+          showToast(firstReason || 'Task created, but couldn’t add it to the goal');
         }
       }
 
@@ -1480,6 +1528,40 @@ export default function TaskCreatePanel({
                     ))
                   ) : (
                     <span className="td-prop-empty">{effectiveListId ? '+ Add' : 'Pick a list'}</span>
+                  )}
+                </span>
+              </div>
+
+              {/* Goals — picked now, linked once the task exists. Goals are
+                  workspace-level so no list is required to choose them. */}
+              <div
+                data-td="goals" className="td-settings-row"
+                data-half="true"
+                style={{ cursor: 'pointer' }}
+                title={goals.length ? 'Add this task to a goal' : 'No goals yet — create one in Goals first'}
+                onClick={(e) => {
+                  setGoalAnchor((e.currentTarget as HTMLElement).getBoundingClientRect());
+                  setGoalSearch('');
+                  setGoalPickerOpen((v) => !v);
+                }}
+              >
+                <span className="k">{META_ICONS.Goal}Goals</span>
+                <span className="v">
+                  {selectedGoals.length > 0 ? (
+                    selectedGoals.slice(0, 2).map((g) => {
+                      const color = goalProjects.get(g.project_id)?.color || '#7c5cff';
+                      return (
+                        <span key={g.id} className="td-prop-chip" style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                          <span style={{ width: 7, height: 7, borderRadius: 9999, background: color }} aria-hidden />
+                          {g.name}
+                        </span>
+                      );
+                    })
+                  ) : (
+                    <span className="td-prop-empty">+ Add</span>
+                  )}
+                  {selectedGoals.length > 2 && (
+                    <span className="td-prop-empty">+{selectedGoals.length - 2} more</span>
                   )}
                 </span>
               </div>
@@ -2257,6 +2339,106 @@ export default function TaskCreatePanel({
         />
 
       )}
+
+      {goalPickerOpen && goalAnchor && (() => {
+        const needle = goalSearch.trim().toLowerCase();
+        const visible = goals
+          .filter((g) => g.status !== 'achieved')
+          .concat(goals.filter((g) => g.status === 'achieved'))
+          .filter((g) => !needle || g.name.toLowerCase().includes(needle));
+        return (
+          <>
+            <div className="fixed inset-0 z-[55]" onClick={() => setGoalPickerOpen(false)} />
+            <div
+              className="fixed z-[56] w-64 overflow-hidden rounded-xl border shadow-lg"
+              style={{
+                borderColor: 'var(--sh-hair)',
+                background: 'var(--surface)',
+                top: Math.min(goalAnchor.bottom + 4, window.innerHeight - 320),
+                left: Math.min(goalAnchor.left, window.innerWidth - 272),
+              }}
+            >
+              <div className="px-3 pt-2.5 pb-1.5">
+                <input
+                  autoFocus
+                  value={goalSearch}
+                  onChange={(e) => setGoalSearch(e.target.value)}
+                  placeholder="Find a goal…"
+                  className="w-full rounded-lg border bg-transparent px-2.5 py-1.5 text-[13px] outline-none"
+                  style={{ borderColor: 'var(--sh-hair)' }}
+                />
+              </div>
+              <div className="max-h-60 overflow-y-auto pb-1.5">
+                {visible.map((g) => {
+                  const project = goalProjects.get(g.project_id);
+                  const checked = (draft.goal_ids || []).includes(g.id);
+                  return (
+                    <button
+                      key={g.id}
+                      type="button"
+                      onClick={() => {
+                        setDraft((d) => ({
+                          ...d,
+                          goal_ids: checked
+                            ? (d.goal_ids || []).filter((id) => id !== g.id)
+                            : [...(d.goal_ids || []), g.id],
+                        }));
+                      }}
+                      className="flex w-full items-center gap-2 px-3 py-2 text-left text-[13px] hover:bg-[color:var(--sh-hair-3)]"
+                    >
+                      <span
+                        className="flex h-4 w-4 shrink-0 items-center justify-center rounded border"
+                        style={{
+                          borderColor: checked ? 'var(--sh-accent, #8b5cf6)' : 'var(--sh-hair-3)',
+                          background: checked ? 'var(--sh-accent, #8b5cf6)' : 'transparent',
+                          color: '#fff',
+                        }}
+                        aria-hidden
+                      >
+                        {checked && (
+                          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round">
+                            <path d="M5 12l5 5 9-11" />
+                          </svg>
+                        )}
+                      </span>
+                      <span
+                        className="h-2 w-2 shrink-0 rounded-full"
+                        style={{ background: project?.color || '#7c5cff' }}
+                        aria-hidden
+                      />
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate font-medium">{g.name}</span>
+                        <span className="block truncate text-[11px] text-[color:var(--sh-ink-4)]">
+                          {project?.name || 'Goal'}{g.status === 'achieved' ? ' · achieved' : ''}
+                        </span>
+                      </span>
+                    </button>
+                  );
+                })}
+                {!visible.length && (
+                  <div className="px-3 py-4 text-center text-[12.5px] text-[color:var(--sh-ink-4)]">
+                    {goals.length ? 'No goals match.' : 'No goals yet — create one in Goals first.'}
+                  </div>
+                )}
+              </div>
+              {(draft.goal_ids || []).length > 0 && (
+                <div className="flex items-center justify-between border-t px-3 py-2" style={{ borderColor: 'var(--sh-hair)' }}>
+                  <span className="text-[11.5px] text-[color:var(--sh-ink-4)]">
+                    {(draft.goal_ids || []).length} selected
+                  </span>
+                  <button
+                    type="button"
+                    className="text-[11.5px] font-medium text-[color:var(--sh-ink-2)] hover:underline"
+                    onClick={() => setDraft((d) => ({ ...d, goal_ids: [] }))}
+                  >
+                    Clear
+                  </button>
+                </div>
+              )}
+            </div>
+          </>
+        );
+      })()}
 
       {priorityMenuOpen && priorityAnchor && (
         <>

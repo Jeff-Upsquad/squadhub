@@ -18,6 +18,7 @@ export type SerializableDraft = {
   due_date: string | null;
   task_type_id: string | null;
   time_estimate: number | null;
+  goal_ids?: string[];
   recurrence?: TaskRecurrence | null;
   subtaskSections?: { id: string; title: string }[];
   subtasks: { id: string; title: string; section_id?: string | null }[];
