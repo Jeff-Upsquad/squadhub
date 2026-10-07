@@ -18,6 +18,7 @@ import RepeatPicker from './RepeatPicker';
 import EmergencyConfirm from './EmergencyConfirm';
 import ListPickerCombobox from './ListPickerCombobox';
 import TaskStatusPicker from './TaskStatusPicker';
+import StatusPicker from './StatusPicker';
 import { nextQuickDate, groupDesignFields } from './taskHelpers';
 import { useDraftTaskStore, type SerializableDraft } from '../../../stores/draftTaskStore';
 import { usePMStore } from '../../../stores/pmStore';
@@ -437,6 +438,7 @@ export default function TaskCreatePanel({
 
   // Popover / menu anchors
   const [statusMenuOpen, setStatusMenuOpen] = useState(false);
+  const [statusAnchor, setStatusAnchor] = useState<DOMRect | null>(null);
   const [priorityMenuOpen, setPriorityMenuOpen] = useState(false);
   // Labels chosen before the task exists; attached right after creation.
   const [draftLabels, setDraftLabels] = useState<TaskTag[]>([]);
@@ -1381,7 +1383,6 @@ export default function TaskCreatePanel({
                 data-td="status" className="td-settings-row"
                 data-half="true"
                 style={{ cursor: 'pointer' }}
-                onClick={currentType?.key !== 'task' ? () => setStatusMenuOpen((v) => !v) : undefined}
               >
                 <span className="k">{META_ICONS.Status}Status</span>
                 <span className="v">
@@ -1391,10 +1392,14 @@ export default function TaskCreatePanel({
                       onChange={(key) => setDraft((d) => ({ ...d, status: key }))}
                     />
                   ) : (
-                    <div className="relative">
+                    <>
                       <button
                         type="button"
-                        onClick={(e) => { e.stopPropagation(); setStatusMenuOpen((v) => !v); }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setStatusAnchor((e.currentTarget as HTMLElement).getBoundingClientRect());
+                          setStatusMenuOpen(true);
+                        }}
                         className="td-prop-chip"
                         style={{
                           background: currentStatus?.color ? `color-mix(in oklch, ${currentStatus.color} 14%, transparent)` : 'var(--surface-alt)',
@@ -1405,29 +1410,18 @@ export default function TaskCreatePanel({
                         {currentStatus?.name || draft.status || 'No status'}
                       </button>
                       {statusMenuOpen && (
-                        <>
-                          <div className="fixed inset-0 z-10" onClick={() => setStatusMenuOpen(false)} />
-                          <div
-                            className="absolute left-0 top-full z-20 mt-1 w-44 overflow-hidden rounded-xl border shadow-lg"
-                            style={{ borderColor: 'var(--sh-hair)', background: 'var(--surface)' }}
-                          >
-                            {effectiveStatuses.map((s) => (
-                              <button
-                                key={s.id}
-                                onClick={() => {
-                                  setDraft((d) => ({ ...d, status: s.name }));
-                                  setStatusMenuOpen(false);
-                                }}
-                                className="flex w-full items-center gap-2 px-3 py-2 text-left text-[13px] hover:bg-[color:var(--sh-hair-3)]"
-                              >
-                                <span className="td-dot" style={{ background: s.color }} />
-                                {s.name}
-                              </button>
-                            ))}
-                          </div>
-                        </>
+                        <StatusPicker
+                          anchorRect={statusAnchor}
+                          statuses={effectiveStatuses}
+                          currentStatus={currentStatus?.name || draft.status}
+                          onChange={(name) => setDraft((d) => ({ ...d, status: name }))}
+                          onClose={() => {
+                            setStatusMenuOpen(false);
+                            setStatusAnchor(null);
+                          }}
+                        />
                       )}
-                    </div>
+                    </>
                   )}
                 </span>
               </div>

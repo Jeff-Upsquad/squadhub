@@ -62,6 +62,7 @@ export default function TaskStatusPicker({
   const { defs: catalog } = useTaskWorkflowCatalog();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
+  const [highlightedIndex, setHighlightedIndex] = useState(0);
   const [anchor, setAnchor] = useState<DOMRect | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
@@ -107,6 +108,8 @@ export default function TaskStatusPicker({
       return;
     }
     if (buttonRef.current) setAnchor(buttonRef.current.getBoundingClientRect());
+    setQuery('');
+    setHighlightedIndex(0);
     setOpen(true);
   };
 
@@ -121,14 +124,22 @@ export default function TaskStatusPicker({
   const origLabel = origDef?.label || originalStatus || null;
   const origColor = origDef?.color || '#6b7280';
 
-  const filtered = useMemo(() => {
+  const { grouped: filtered, flatList } = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return groupCatalog(catalog);
-    const matched = catalog.filter(
-      (d) => d.label.toLowerCase().includes(q) || d.description.toLowerCase().includes(q)
-    );
-    return groupCatalog(matched);
+    const matched = !q
+      ? catalog
+      : catalog.filter(
+          (d) => d.label.toLowerCase().includes(q) || d.description.toLowerCase().includes(q)
+        );
+    const grouped = groupCatalog(matched);
+    const flat: TaskStatusDef[] = [];
+    for (const g of grouped) flat.push(...g.items);
+    return { grouped, flatList: flat };
   }, [query, catalog]);
+
+  useEffect(() => {
+    setHighlightedIndex(0);
+  }, [query]);
 
   const pick = (key: TaskStatusKey) => {
     onChange(key);
@@ -136,12 +147,29 @@ export default function TaskStatusPicker({
     setQuery('');
   };
 
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Escape') {
+      setOpen(false);
+    } else if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setHighlightedIndex((prev) => (prev + 1 < flatList.length ? prev + 1 : 0));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setHighlightedIndex((prev) => (prev - 1 >= 0 ? prev - 1 : flatList.length - 1));
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      if (flatList[highlightedIndex]) {
+        pick(flatList[highlightedIndex].key);
+      }
+    }
+  };
+
   // Fixed popover position: default to anchor.bottom, but flip above the button
-  // if there isn't enough room below.
+  // if there isn't enough room below. Matches TaskTypeDropdown sizing.
   const popoverStyle = useMemo<React.CSSProperties>(() => {
     if (!anchor || typeof window === 'undefined') return { visibility: 'hidden' };
-    const width = 320;
-    const maxHeight = Math.min(460, window.innerHeight - 24);
+    const width = 330;
+    const maxHeight = Math.min(420, window.innerHeight - 24);
     const spaceBelow = window.innerHeight - anchor.bottom;
     const spaceAbove = anchor.top;
     const openUpward = spaceBelow < 320 && spaceAbove > spaceBelow;
@@ -227,6 +255,7 @@ export default function TaskStatusPicker({
               boxShadow: '0 12px 36px -4px rgba(0,0,0,0.22), 0 4px 12px -2px rgba(0,0,0,0.12)',
             }}
             onMouseDown={(e) => e.stopPropagation()}
+            onKeyDown={handleKeyDown}
           >
             {/* Search Header */}
             <div className="p-2.5 border-b border-[var(--sh-hair)] bg-[var(--surface)] shrink-0">
@@ -295,14 +324,19 @@ export default function TaskStatusPicker({
                     <div className="space-y-0.5 px-1">
                       {g.items.map((d) => {
                         const selected = d.key === value;
+                        const flatIdx = flatList.indexOf(d);
+                        const isHighlighted = flatIdx === highlightedIndex;
                         return (
                           <button
                             key={d.key}
                             type="button"
                             onClick={() => pick(d.key)}
+                            onMouseEnter={() => setHighlightedIndex(flatIdx)}
                             className={`group w-full flex items-start gap-2.5 px-2.5 py-1.5 rounded-lg text-left transition-colors ${
                               selected
                                 ? 'bg-[#2962FF]/10 text-[var(--sh-ink)]'
+                                : isHighlighted
+                                ? 'bg-[var(--sh-hair-3)] text-[var(--sh-ink)]'
                                 : 'hover:bg-[var(--sh-hair-3)] text-[var(--sh-ink)]'
                             }`}
                           >
@@ -355,6 +389,11 @@ export default function TaskStatusPicker({
                   </div>
                 ))
               )}
+            </div>
+
+            <div className="px-3 py-1.5 bg-[var(--surface-alt)] border-t border-[var(--sh-hair)] text-[10.5px] text-[var(--sh-ink-4)] flex items-center justify-between shrink-0">
+              <span>{flatList.length} status{flatList.length !== 1 ? 'es' : ''} available</span>
+              <span className="text-[9.5px]">Use ↑↓ to navigate, ↵ to pick</span>
             </div>
           </div>
         </>,
