@@ -10,11 +10,12 @@ import { useTaskWorkflowCatalog, findTaskStatusDef } from '../../../hooks/useTas
 
 const GROUP_ORDER: TaskStatusGroup[] = [
   'priority_urgency',
-  'not_started',
-  'scheduled_queued',
   'in_motion',
+  'up_next',
+  'scheduled_queued',
   'routines',
   'blocked_paused',
+  'not_started',
   'done',
 ];
 
@@ -209,100 +210,153 @@ export default function TaskStatusPicker({
       </button>
 
       {open && typeof document !== 'undefined' && createPortal(
-        <div
-          ref={popoverRef}
-          className="flex flex-col overflow-hidden rounded-xl border shadow-xl"
-          style={popoverStyle}
-          onMouseDown={(e) => e.stopPropagation()}
-        >
-          <div className="p-3">
-            <div
-              className="flex items-center gap-2 rounded-md border px-2 py-1.5"
-              style={{ borderColor: 'var(--sh-hair)', background: 'var(--surface)' }}
-            >
-              <svg
-                width="13"
-                height="13"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                className="text-[color:var(--sh-ink-4)]"
-              >
-                <circle cx="11" cy="11" r="7" />
-                <path d="m21 21-4.3-4.3" />
-              </svg>
-              <input
-                ref={searchRef}
-                type="text"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search statuses…"
-                className="flex-1 bg-transparent outline-none text-[13px] placeholder:text-[color:var(--sh-ink-4)]"
-              />
+        <>
+          <div
+            className="fixed inset-0"
+            style={{ zIndex: 9998 }}
+            onClick={() => setOpen(false)}
+          />
+
+          <div
+            ref={popoverRef}
+            className="flex flex-col rounded-xl border overflow-hidden animate-in fade-in-0 zoom-in-95 duration-100"
+            style={{
+              ...popoverStyle,
+              zIndex: 9999,
+              boxShadow: '0 12px 36px -4px rgba(0,0,0,0.22), 0 4px 12px -2px rgba(0,0,0,0.12)',
+            }}
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            {/* Search Header */}
+            <div className="p-2.5 border-b border-[var(--sh-hair)] bg-[var(--surface)] shrink-0">
+              <div className="relative flex items-center">
+                <svg
+                  className="absolute left-2.5 w-3.5 h-3.5 pointer-events-none text-[var(--sh-ink-4)]"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <circle cx="11" cy="11" r="8" />
+                  <path d="m21 21-4.3-4.3" />
+                </svg>
+                <input
+                  ref={searchRef}
+                  type="text"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="Search statuses (e.g. Focus, In Progress)..."
+                  className="w-full pl-8 pr-7 py-1.5 text-xs bg-[var(--surface-alt)] border border-[var(--sh-hair)] rounded-lg text-[var(--sh-ink)] placeholder-[var(--sh-ink-4)] outline-none focus:border-[#2962FF] focus:ring-1 focus:ring-[#2962FF]/20"
+                />
+                {query && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setQuery('');
+                      searchRef.current?.focus();
+                    }}
+                    className="absolute right-2 text-xs text-[var(--sh-ink-4)] hover:text-[var(--sh-ink-2)]"
+                  >
+                    ×
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* List */}
+            <div className="overflow-y-auto flex-1 py-1 divide-y divide-[var(--sh-hair)]/40 scrollbar-thin">
+              {filtered.length === 0 ? (
+                <div className="px-4 py-8 text-center">
+                  <div className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-[var(--surface-alt)] text-[var(--sh-ink-4)] mb-2">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <circle cx="11" cy="11" r="8" />
+                      <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                    </svg>
+                  </div>
+                  <p className="text-xs font-medium text-[var(--sh-ink-2)]">No statuses match &ldquo;{query}&rdquo;</p>
+                  <p className="text-[11px] text-[var(--sh-ink-4)] mt-0.5">Try searching with a different term</p>
+                </div>
+              ) : (
+                filtered.map((g) => (
+                  <div key={g.group} className="py-1">
+                    {/* Group Header */}
+                    <div className="px-3 py-1 flex items-center justify-between text-[10px] font-semibold tracking-wider uppercase text-[var(--sh-ink-4)] bg-[var(--surface)] select-none">
+                      <span className="flex items-center gap-1.5">
+                        <span aria-hidden>{g.emoji}</span>
+                        <span>{g.label}</span>
+                      </span>
+                      <span className="text-[9px] opacity-70 font-normal">{g.items.length}</span>
+                    </div>
+
+                    {/* Group Items */}
+                    <div className="space-y-0.5 px-1">
+                      {g.items.map((d) => {
+                        const selected = d.key === value;
+                        return (
+                          <button
+                            key={d.key}
+                            type="button"
+                            onClick={() => pick(d.key)}
+                            className={`group w-full flex items-start gap-2.5 px-2.5 py-1.5 rounded-lg text-left transition-colors ${
+                              selected
+                                ? 'bg-[#2962FF]/10 text-[var(--sh-ink)]'
+                                : 'hover:bg-[var(--sh-hair-3)] text-[var(--sh-ink)]'
+                            }`}
+                          >
+                            {/* Icon badge */}
+                            <div
+                              className="mt-0.5 w-5 h-5 rounded-md flex items-center justify-center shrink-0"
+                              style={{
+                                backgroundColor: `color-mix(in srgb, ${d.color || '#6b7280'} 16%, transparent)`,
+                                color: d.color || 'var(--sh-ink-3)',
+                              }}
+                            >
+                              <span
+                                className="h-2 w-2 rounded-full"
+                                style={{ background: d.color || 'var(--sh-ink-4)' }}
+                              />
+                            </div>
+
+                            {/* Name + Description */}
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-[12.5px] font-medium text-[var(--sh-ink)] leading-snug truncate">
+                                  {d.label}
+                                </span>
+                              </div>
+                              {d.description && (
+                                <p className="text-[11px] text-[var(--sh-ink-3)] leading-tight mt-0.5 line-clamp-2 opacity-85">
+                                  {d.description}
+                                </p>
+                              )}
+                            </div>
+
+                            {/* Selection checkmark */}
+                            {selected && (
+                              <svg
+                                className="w-4 h-4 text-[#2962FF] shrink-0 mt-0.5"
+                                viewBox="0 0 20 20"
+                                fill="currentColor"
+                              >
+                                <path
+                                  fillRule="evenodd"
+                                  d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                                  clipRule="evenodd"
+                                />
+                              </svg>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
           </div>
-
-          <div className="flex-1 min-h-0 overflow-y-auto px-2 pb-3">
-            {filtered.length === 0 ? (
-              <div className="px-2 py-4 text-center text-[12px] text-[color:var(--sh-ink-4)]">
-                No statuses match &ldquo;{query}&rdquo;
-              </div>
-            ) : (
-              filtered.map((g) => (
-                <div key={g.group} className="mb-1">
-                  <div className="flex items-center gap-1.5 px-2 pt-2 pb-1 text-[11px] uppercase tracking-wider text-[color:var(--sh-ink-4)]">
-                    <span aria-hidden>{g.emoji}</span>
-                    <span>{g.label}</span>
-                  </div>
-                  {g.items.map((d) => {
-                    const selected = d.key === value;
-                    return (
-                      <button
-                        key={d.key}
-                        type="button"
-                        onClick={() => pick(d.key)}
-                        className={`flex w-full items-start gap-2 rounded-md px-2 py-1.5 text-left transition ${
-                          selected
-                            ? 'bg-[color:rgba(34,197,94,0.12)] text-[#16a34a]'
-                            : 'hover:bg-[color:var(--sh-hair-3)]'
-                        }`}
-                      >
-                        <span
-                          className="mt-1 h-1.5 w-1.5 rounded-full shrink-0"
-                          style={{ background: d.color }}
-                        />
-                        <span className="flex-1 min-w-0">
-                          <span className="block text-[13px] font-medium truncate">{d.label}</span>
-                          <span className="block text-[11px] text-[color:var(--sh-ink-4)] truncate">
-                            {d.description}
-                          </span>
-                        </span>
-                        {selected && (
-                          <svg
-                            width="13"
-                            height="13"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="2.5"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            className="mt-0.5 shrink-0"
-                          >
-                            <path d="M5 12l5 5 9-11" />
-                          </svg>
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
-              ))
-            )}
-          </div>
-        </div>,
+        </>,
         document.body
       )}
     </div>
