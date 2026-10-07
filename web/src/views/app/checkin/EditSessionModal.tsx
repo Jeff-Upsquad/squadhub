@@ -49,6 +49,23 @@ export default function EditSessionModal({ session, onClose, workspaceId, contex
         setError('End time must be after start time');
         return;
       }
+      // Reduce-only: the edited range must sit inside the original range.
+      const origStartMs = Date.parse(session.start_time);
+      const origEndMs = session.end_time ? Date.parse(session.end_time) : NaN;
+      const startMs = Date.parse(startIso);
+      const endMs = Date.parse(endIso);
+      if (Number.isFinite(origStartMs) && Number.isFinite(origEndMs)) {
+        const origSeconds = session.duration_seconds ?? Math.round((origEndMs - origStartMs) / 1000);
+        const newSeconds = Math.round((endMs - startMs) / 1000);
+        if (startMs < origStartMs || endMs > origEndMs || newSeconds > origSeconds) {
+          setError('Time can only be reduced, not increased');
+          return;
+        }
+        if (newSeconds < 60) {
+          setError('Sessions must keep at least 1 minute');
+          return;
+        }
+      }
       await updateMut.mutateAsync({
         session_id: session.id,
         start_time: startIso,
@@ -111,6 +128,8 @@ export default function EditSessionModal({ session, onClose, workspaceId, contex
             <input
               type="datetime-local"
               value={startLocal}
+              min={toLocalInput(session.start_time)}
+              max={endLocal || undefined}
               onChange={(e) => setStartLocal(e.target.value)}
               className="w-full rounded-md border border-divider px-3 py-2 text-sm text-foreground focus:border-accent focus:outline-none"
             />
@@ -121,12 +140,15 @@ export default function EditSessionModal({ session, onClose, workspaceId, contex
             <input
               type="datetime-local"
               value={endLocal}
+              min={startLocal || undefined}
+              max={session.end_time ? toLocalInput(session.end_time) : undefined}
               onChange={(e) => setEndLocal(e.target.value)}
               className="w-full rounded-md border border-divider px-3 py-2 text-sm text-foreground focus:border-accent focus:outline-none"
             />
           </div>
 
           {error && <p className="text-sm text-red-600">{error}</p>}
+          <p className="text-xs text-foreground-muted">Reduce only — tracked time can be trimmed, never extended.</p>
 
           <div className="flex items-center justify-between pt-2">
             <button

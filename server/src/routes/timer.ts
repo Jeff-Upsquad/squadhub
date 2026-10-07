@@ -524,7 +524,9 @@ router.get('/daily-summaries', async (req: Request, res: Response) => {
 });
 
 // PATCH /timer/sessions/:id — edit an owned session (start/end/type).
-// Enforces: ownership, primary-role can_edit_time_logs, edit window.
+// Enforces: ownership, primary-role can_edit_time_logs, edit window,
+// plus reduce-only: the new range must sit inside the original range so
+// tracked work/break time can be trimmed but never extended.
 const patchSchema = z.object({
   start_time: z.string().datetime().optional(),
   end_time: z.string().datetime().optional(),
@@ -584,7 +586,22 @@ router.patch('/sessions/:id', async (req: Request, res: Response) => {
       return;
     }
 
+    // Reduce-only: the edited range must be contained within the original
+    // range. Start may move later and end may move earlier, but neither may
+    // expand outward — tracked time can be trimmed, never increased.
+    const origStartMs = new Date(session.start_time).getTime();
+    const origEndMs = new Date(session.end_time).getTime();
+    const origDuration = session.duration_seconds
+      ?? Math.round((origEndMs - origStartMs) / 1000);
     const duration = Math.round((endMs - startMs) / 1000);
+    if (startMs < origStartMs || endMs > origEndMs || duration > origDuration) {
+      res.status(403).json({ success: false, error: 'Time can only be reduced, not increased' });
+      return;
+    }
+    if (duration < 60) {
+      res.status(400).json({ success: false, error: 'Sessions must keep at least 1 minute' });
+      return;
+    }
 
     const { data: updated, error } = await supabaseAdmin
       .from('timer_sessions')
