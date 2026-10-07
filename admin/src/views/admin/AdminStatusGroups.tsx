@@ -300,16 +300,17 @@ function GroupMetaCard({ group, onChanged, onDelete }: { group: StatusGroup; onC
 // ============================================================
 const TASK_SECTIONS = [
   { key: 'priority_urgency', label: 'Priority & Urgency', emoji: '⚡' },
-  { key: 'not_started', label: 'Not Started', emoji: '📥' },
-  { key: 'scheduled_queued', label: 'Scheduled / Queued', emoji: '📅' },
   { key: 'in_motion', label: 'In Motion', emoji: '🏃' },
+  { key: 'up_next', label: 'Up Next', emoji: '🎯' },
+  { key: 'scheduled_queued', label: 'Scheduled / Queued', emoji: '📅' },
   { key: 'routines', label: 'Routines', emoji: '🔁' },
   { key: 'blocked_paused', label: 'Blocked / Paused', emoji: '⏸️' },
+  { key: 'not_started', label: 'Not Started', emoji: '📥' },
   { key: 'done', label: 'Closed', emoji: '✅' },
 ];
 
 function StatusesCard({ group, onChanged }: { group: StatusGroup; onChanged: () => void }) {
-  const isTaskWorkflow = group.key === 'task_workflow';
+  const isTaskWorkflow = group.key === 'task_workflow' || group.key === 'coding_workflow' || !!group.statuses?.some((s) => !!s.section);
   const [name, setName] = useState('');
   const [color, setColor] = useState('#6b7280');
   const [category, setCategory] = useState<StatusCategory>('todo');
