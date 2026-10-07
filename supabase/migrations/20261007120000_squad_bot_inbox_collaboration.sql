@@ -1,0 +1,1 @@
+../../../squad-bots/database/migrations/20261007120000_squad_bot_inbox_collaboration.sql
