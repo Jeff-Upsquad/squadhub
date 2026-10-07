@@ -1,10 +1,10 @@
 {
-  "version": "0.1.18",
-  "notes": "Quick add redesign: set task type, status, start and due dates right from the widget, with grouped What/When/Details rows, a mini calendar, and self-assign.",
-  "pub_date": "2026-10-06T19:47:49Z",
+  "version": "0.1.19",
+  "notes": "Status picker in quick add now matches the web design: search statuses, browse grouped sections with descriptions, and pick with arrow keys + enter.",
+  "pub_date": "2026-10-07T02:47:09Z",
   "platforms": {
     "darwin-aarch64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUQ003TTR4K1pKdyszSkZLd1FURnhKcWY3OVQyVDZqb0ZkaDdyQkdQRE5hY0Q3dlhJSGVmMzdtNkxTbzRjbFNDaVRoSktBYlZEeEFmQlFsc2pLNEY1K2tEWkdSNU5RTnd3PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkxMzE2MDI0CWZpbGU6U3F1YWRIdWIgQ29tcGFuaW9uLmFwcC50YXIuZ3oKZkVDTUl3ZDU4SUp6VmRSOVFFaUQwZUowS1FHTjhyd0FpVFU5UWJkSUQ5QWFxOEVnU3prTUpzQTZRbVhMUHNMaVN5UGVBVGdOcVAwckVkamJlSW9HQnc9PQo=",
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUQ003TTR4K1pKd3c1emtPVThjVlYzQkhYN1BZN2liK1hDQm5XVVNHQ3JLVVZnRzB5VTFTbHRYa0NLdGw4ZnJsYmphK2hQdTFxUHJ5c0NLYlJpdi9JQVkrcnFQT3BLcHdzPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkxMzQxMjE1CWZpbGU6U3F1YWRIdWIgQ29tcGFuaW9uLmFwcC50YXIuZ3oKc1NNMkdxSlNOOUVweEo0NWx3VmRHOTdaZzVya1F3cjlHWFRNaGNaeVhhblZsbkJLYXp1S3ZVRzMxV2M2bmRLVnNiMGZucWVITzhweEpJSjl5dDVtREE9PQo=",
       "url": "https://squadhub.in/downloads/SquadHub.app.tar.gz"
     }
   }
