@@ -49,16 +49,22 @@ export async function getGroupByKey(key: string) {
  */
 export async function loadTaskStatusOverrides(): Promise<void> {
   try {
-    const group = await getGroupByKey('task_workflow');
-    const rows = group?.statuses || [];
-    // Empty registry when the group is missing/disabled so every call
-    // site falls back to the static catalog uniformly.
-    registerTaskStatusDefs(
-      [...rows]
-        .sort((a: any, b: any) => a.position - b.position)
-        .map((r: any) => statusGroupRowToTaskDef(r))
-        .filter((d) => !!d.key),
-    );
+    const { data: groups } = await supabaseAdmin
+      .from('status_groups')
+      .select('id, key')
+      .in('key', ['task_workflow', 'coding_workflow'])
+      .eq('is_enabled', true);
+    const defs: any[] = [];
+    for (const g of groups || []) {
+      const statuses = await getGroupStatuses(g.id);
+      defs.push(
+        ...statuses
+          .sort((a: any, b: any) => a.position - b.position)
+          .map((r: any) => statusGroupRowToTaskDef(r))
+          .filter((d: any) => !!d.key),
+      );
+    }
+    registerTaskStatusDefs(defs);
   } catch (e) {
     console.error('[statusGroups] task workflow override load failed:', e);
   }

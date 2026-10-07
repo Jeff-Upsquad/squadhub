@@ -310,6 +310,7 @@ const TASK_SECTIONS = [
 ];
 
 function StatusesCard({ group, onChanged }: { group: StatusGroup; onChanged: () => void }) {
+  const qc = useQueryClient();
   const isTaskWorkflow = group.key === 'task_workflow' || group.key === 'coding_workflow' || !!group.statuses?.some((s) => !!s.section);
   const [name, setName] = useState('');
   const [color, setColor] = useState('#6b7280');
@@ -322,6 +323,8 @@ function StatusesCard({ group, onChanged }: { group: StatusGroup; onChanged: () 
   const [editCategory, setEditCategory] = useState<StatusCategory>('todo');
   const [editDescription, setEditDescription] = useState('');
   const [editSection, setEditSection] = useState('not_started');
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const statuses: StatusGroupStatus[] = [...(group.statuses || [])].sort((a, b) => a.position - b.position);
 
@@ -392,8 +395,37 @@ function StatusesCard({ group, onChanged }: { group: StatusGroup; onChanged: () 
   });
   const remove = useMutation({
     mutationFn: (id: string) => api.delete(`/admin/status-groups/${group.id}/statuses/${id}`),
-    onSuccess: onChanged,
-    onError: (err: any) => alert(err?.response?.data?.error || 'Failed to delete status'),
+    onMutate: async (id: string) => {
+      setDeleteError(null);
+      await qc.cancelQueries({ queryKey: ['admin-status-groups'] });
+      const previous = qc.getQueryData(['admin-status-groups']);
+      qc.setQueryData(['admin-status-groups'], (old: any) => {
+        if (!old || !old.data) return old;
+        return {
+          ...old,
+          data: old.data.map((g: any) => {
+            if (g.id !== group.id) return g;
+            return {
+              ...g,
+              statuses: (g.statuses || []).filter((st: any) => st.id !== id),
+            };
+          }),
+        };
+      });
+      return { previous };
+    },
+    onError: (err: any, _id, context: any) => {
+      if (context?.previous) {
+        qc.setQueryData(['admin-status-groups'], context.previous);
+      }
+      const msg = err?.response?.data?.error || 'Failed to delete status';
+      setDeleteError(msg);
+      alert(msg);
+    },
+    onSettled: () => {
+      setConfirmDeleteId(null);
+      onChanged();
+    },
   });
   const move = useMutation({
     mutationFn: (ordered: StatusGroupStatus[]) =>
@@ -519,6 +551,13 @@ function StatusesCard({ group, onChanged }: { group: StatusGroup; onChanged: () 
         <input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Description shown under the status in the picker (optional)" className="w-full rounded-lg border border-divider px-3 py-2 text-sm focus:border-ink focus:outline-none" />
       </form>
 
+      {deleteError && (
+        <div className="mb-2 flex items-center justify-between rounded-lg bg-red-50 dark:bg-red-950/50 border border-red-200 dark:border-red-900 px-3 py-1.5 text-xs text-red-700 dark:text-red-300">
+          <span>{deleteError}</span>
+          <button type="button" onClick={() => setDeleteError(null)} className="font-bold ml-2 cursor-pointer">×</button>
+        </div>
+      )}
+
       <div className="space-y-1.5">
         {displayOrder.map((s, i) => {
           const showHeader = isTaskWorkflow &&
@@ -584,10 +623,37 @@ function StatusesCard({ group, onChanged }: { group: StatusGroup; onChanged: () 
                         )}
                         {isSystem ? (
                           <span className="rounded px-1.5 py-0.5 text-[11px] font-medium text-foreground-dim bg-muted/60" title="System default status cannot be edited or changed">Locked</span>
+                        ) : confirmDeleteId === s.id ? (
+                          <div className="flex items-center gap-1.5 rounded bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 px-2 py-0.5">
+                            <span className="text-[11px] font-medium text-red-600 dark:text-red-400">Delete “{s.name}”?</span>
+                            <button
+                              type="button"
+                              disabled={remove.isPending}
+                              onClick={() => remove.mutate(s.id)}
+                              className="rounded bg-red-600 px-1.5 py-0.5 text-[10px] font-semibold text-white hover:bg-red-700 disabled:opacity-50 cursor-pointer"
+                            >
+                              {remove.isPending && remove.variables === s.id ? 'Deleting…' : 'Yes'}
+                            </button>
+                            <button
+                              type="button"
+                              disabled={remove.isPending}
+                              onClick={() => setConfirmDeleteId(null)}
+                              className="rounded border border-divider px-1.5 py-0.5 text-[10px] font-medium text-foreground-dim hover:text-foreground cursor-pointer"
+                            >
+                              Cancel
+                            </button>
+                          </div>
                         ) : (
                           <>
                             <button onClick={() => { setEditingId(s.id); setEditName(s.name); setEditColor(s.color); setEditCategory(s.category); setEditDescription(s.description || ''); setEditSection(s.section || 'not_started'); }} className="rounded px-1 text-xs text-foreground-dim hover:text-foreground">Edit</button>
-                            <button onClick={() => { if (confirm(`Delete status “${s.name}”?${s.key ? ' Tasks already on this status will keep working and show the old label.' : ''}`)) remove.mutate(s.id); }} className="rounded px-1 text-xs text-red-500 hover:text-red-700">Delete</button>
+                            <button
+                              type="button"
+                              disabled={remove.isPending && remove.variables === s.id}
+                              onClick={() => setConfirmDeleteId(s.id)}
+                              className="rounded px-1 text-xs text-red-500 hover:text-red-700 disabled:opacity-50 cursor-pointer"
+                            >
+                              Delete
+                            </button>
                           </>
                         )}
                       </>

@@ -595,7 +595,7 @@ router.post('/:id/statuses', async (req: Request, res: Response) => {
       return;
     }
     refreshTaskOverrides();
-    syncAllSpacesForGroup(req.params.id as string);
+    await syncAllSpacesForGroup(req.params.id as string);
     res.status(201).json({ success: true, data });
   } catch (err) {
     if (zodErr(err, res)) return;
@@ -620,7 +620,7 @@ router.put('/:id/statuses/reorder', async (req: Request, res: Response) => {
       }
     }
     refreshTaskOverrides();
-    syncAllSpacesForGroup(req.params.id as string);
+    await syncAllSpacesForGroup(req.params.id as string);
     res.json({ success: true });
   } catch (err) {
     if (zodErr(err, res)) return;
@@ -634,7 +634,7 @@ router.put('/:id/statuses/:statusId', async (req: Request, res: Response) => {
   try {
     const { data: existing } = await supabaseAdmin
       .from('status_group_statuses')
-      .select('id, key, is_system')
+      .select('id, key, name, is_system')
       .eq('id', (req.params.statusId as string))
       .eq('group_id', (req.params.id as string))
       .maybeSingle();
@@ -675,7 +675,7 @@ router.put('/:id/statuses/:statusId', async (req: Request, res: Response) => {
       return;
     }
     refreshTaskOverrides();
-    syncAllSpacesForGroup(req.params.id as string);
+    await syncAllSpacesForGroup(req.params.id as string);
     res.json({ success: true, data });
   } catch (err) {
     if (zodErr(err, res)) return;
@@ -689,7 +689,7 @@ router.delete('/:id/statuses/:statusId', async (req: Request, res: Response) => 
   try {
     const { data: existing } = await supabaseAdmin
       .from('status_group_statuses')
-      .select('id, key, is_system')
+      .select('id, key, name, is_system')
       .eq('id', (req.params.statusId as string))
       .eq('group_id', (req.params.id as string))
       .maybeSingle();
@@ -710,7 +710,7 @@ router.delete('/:id/statuses/:statusId', async (req: Request, res: Response) => 
       return;
     }
     refreshTaskOverrides();
-    syncAllSpacesForGroup(req.params.id as string);
+    await syncAllSpacesForGroup(req.params.id as string);
     res.json({ success: true });
   } catch (err) {
     console.error('Delete group status error:', err);
