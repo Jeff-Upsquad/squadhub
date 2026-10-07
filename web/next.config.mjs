@@ -1,7 +1,9 @@
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { createRequire } from 'module';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const require = createRequire(import.meta.url);
 
 const API_URL = process.env.INTERNAL_API_URL || 'http://localhost:4000';
 
@@ -110,6 +112,7 @@ const nextConfig = {
     if (dev) config.cache = false;
     config.resolve.alias = {
       ...config.resolve.alias,
+      '@tanstack/react-query': path.dirname(require.resolve('@tanstack/react-query/package.json')),
       // Two source roots for `@`, tried in order. web/src always wins, so no
       // import that resolves today can change meaning; admin/src only catches
       // specifiers that would otherwise fail to resolve — which is exactly the

@@ -2,7 +2,7 @@
 FROM node:20-alpine AS squad-bots-core
 WORKDIR /squad-bots/packages/core
 COPY --from=squad_bots . .
-RUN npm install --legacy-peer-deps && npm run build
+RUN npm install --legacy-peer-deps && npm run build && rm -rf node_modules
 
 FROM node:20-alpine AS builder
 WORKDIR /app
