@@ -32,6 +32,7 @@ import RepeatPicker from './RepeatPicker';
 import { nextQuickDate, groupDesignFields, statusIsComplete } from './taskHelpers';
 import EmergencyConfirm from './EmergencyConfirm';
 import TaskStatusPicker from './TaskStatusPicker';
+import { useTaskWorkflowCatalog, findTaskStatusDef } from '../../../hooks/useTaskWorkflowCatalog';
 import ListPickerCombobox from './ListPickerCombobox';
 import LabelPicker from './LabelPicker';
 import { useDetachLabel } from '../../../hooks/useLabels';
@@ -432,6 +433,11 @@ export default function TaskDetailPanel({
   const resolvedFolderId = folderId || (task as any)?.folder_id || undefined;
   const resolvedListId = listId || (task as any)?.list_id || undefined;
   const currentTypeId = task?.task_type_id || undefined;
+  const { defs: taskCatalog } = useTaskWorkflowCatalog({
+    spaceId: resolvedSpaceId,
+    folderId: resolvedFolderId,
+    listId: resolvedListId,
+  });
   const { data: taskTypes } = useTaskTypes({
     spaceId: resolvedSpaceId,
     folderId: resolvedFolderId,
@@ -890,7 +896,7 @@ export default function TaskDetailPanel({
   if (!effectiveTaskId) return null;
 
   const taskStatusCategory = task ? (task as any).status as string | undefined : undefined;
-  const catalogDef = getTaskStatusDef(taskStatusCategory);
+  const catalogDef = findTaskStatusDef(taskCatalog, taskStatusCategory) || getTaskStatusDef(taskStatusCategory);
   const isTaskType = currentType?.key === 'task';
   const status = task
     ? isTaskType
@@ -2191,14 +2197,28 @@ export default function TaskDetailPanel({
                 >
                   <span className="k">{META_ICONS.Status}Status</span>
                   <span className="v">
-                    {isTaskType && canEdit ? (
-                      <TaskStatusPicker
-                        value={taskStatusCategory || null}
-                        originalStatus={(task?.metadata as any)?.original_status}
-                        onChange={(key: TaskStatusKey) => {
-                          updateTask.mutate({ id: task.id, status: key } as any);
-                        }}
-                      />
+                    {isTaskType ? (
+                      canEdit ? (
+                        <TaskStatusPicker
+                          value={taskStatusCategory || null}
+                          originalStatus={(task?.metadata as any)?.original_status}
+                          spaceId={resolvedSpaceId}
+                          folderId={resolvedFolderId}
+                          listId={resolvedListId}
+                          defs={taskCatalog}
+                          onChange={(key: TaskStatusKey) => {
+                            updateTask.mutate({ id: task.id, status: key } as any);
+                          }}
+                        />
+                      ) : (
+                        <span className="inline-flex items-center gap-1.5 text-xs text-[var(--sh-ink)]">
+                          <span
+                            className="h-2 w-2 rounded-full shrink-0"
+                            style={{ background: catalogDef?.color || 'var(--sh-ink-4)' }}
+                          />
+                          {catalogDef?.label || taskStatusCategory || 'No status'}
+                        </span>
+                      )
                     ) : (
                       <SpaceStatusPicker
                         statuses={statuses}

@@ -53,13 +53,24 @@ export default function TaskStatusPicker({
   originalStatus,
   onChange,
   buttonClassName,
+  spaceId,
+  folderId,
+  listId,
+  defs: propsDefs,
 }: {
   value: string | null | undefined;
   originalStatus?: string | null;
   onChange: (key: TaskStatusKey) => void;
   buttonClassName?: string;
+  spaceId?: string | null;
+  folderId?: string | null;
+  listId?: string | null;
+  defs?: TaskStatusDef[];
 }) {
-  const { defs: catalog } = useTaskWorkflowCatalog();
+  const { defs: catalogFromHook } = useTaskWorkflowCatalog(
+    propsDefs ? undefined : { spaceId, folderId, listId }
+  );
+  const catalog = propsDefs || catalogFromHook;
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [highlightedIndex, setHighlightedIndex] = useState(0);

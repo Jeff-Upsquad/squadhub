@@ -24,6 +24,7 @@ import { LIST_GROUP_BY_OPTIONS, SORT_BY_OPTIONS, isTaskCompleted, type SortBy } 
 import { type ListGroupBy } from '../../../stores/pmStore';
 import { EMPTY_FILTER, deriveAssigneeOptions, deriveTagOptions, filterTasks, type TaskFilterState } from '../../../lib/filters';
 import { useIsMobile } from '../../../hooks/useIsMobile';
+import { useTaskWorkflowCatalog } from '../../../hooks/useTaskWorkflowCatalog';
 
 export default function ListPage({
   listId: propListId,
@@ -128,13 +129,14 @@ export default function ListPage({
     enabled: !!activeListId,
   });
 
+  const effectiveSpaceId = activeSpaceId || listData?.space_id || null;
   const { data: spaceData } = useQuery({
-    queryKey: ['space', activeSpaceId],
+    queryKey: ['space', effectiveSpaceId],
     queryFn: async () => {
-      const res = await api.get(`/pm/spaces/${activeSpaceId}`);
+      const res = await api.get(`/pm/spaces/${effectiveSpaceId}`);
       return res.data.data;
     },
-    enabled: !!activeSpaceId,
+    enabled: !!effectiveSpaceId,
   });
 
   const folderId: string | null = listData?.folder_id || null;
@@ -147,10 +149,39 @@ export default function ListPage({
     enabled: !!folderId,
   });
 
-  const statuses: SpaceStatus[] = useMemo(
-    () => spaceData?.space_statuses || spaceData?.statuses || listData?.space_statuses || [],
-    [spaceData, listData],
-  );
+  const { defs: catalogDefs, assignment } = useTaskWorkflowCatalog({
+    spaceId: effectiveSpaceId,
+    folderId,
+    listId: activeListId,
+  });
+
+  const statuses: SpaceStatus[] = useMemo(() => {
+    const rawStatuses: SpaceStatus[] = spaceData?.space_statuses || spaceData?.statuses || listData?.space_statuses || [];
+    if (catalogDefs && catalogDefs.length > 0 && assignment && !assignment.is_default_fallback) {
+      return catalogDefs.map((d, idx) => ({
+        id: d.key,
+        space_id: effectiveSpaceId || '',
+        name: d.label,
+        color: d.color,
+        position: idx,
+        is_default: !!d.is_default,
+        category: d.category,
+      }));
+    }
+    if (rawStatuses.length > 0) return rawStatuses;
+    if (catalogDefs && catalogDefs.length > 0) {
+      return catalogDefs.map((d, idx) => ({
+        id: d.key,
+        space_id: effectiveSpaceId || '',
+        name: d.label,
+        color: d.color,
+        position: idx,
+        is_default: !!d.is_default,
+        category: d.category,
+      }));
+    }
+    return [];
+  }, [spaceData, listData, catalogDefs, assignment, effectiveSpaceId]);
 
   const myAccess: AccessLevel | undefined = spaceData?.my_access_level || listData?.my_access_level;
   const isManager = canAtLeast(myAccess, 'manager');

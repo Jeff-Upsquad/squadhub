@@ -401,6 +401,7 @@ export interface TaskStatusDef {
   category: StatusCategory;
   color: string;
   is_system?: boolean;
+  is_default?: boolean;
 }
 
 export const TASK_STATUS_CATALOG: TaskStatusDef[] = [
@@ -470,7 +471,7 @@ const TASK_STATUS_BY_KEY: Record<string, TaskStatusDef> = TASK_STATUS_CATALOG.re
 let TASK_STATUS_OVERRIDES: Record<string, TaskStatusDef> | null = null;
 
 export function registerTaskStatusDefs(defs: TaskStatusDef[]): void {
-  const next: Record<string, TaskStatusDef> = {};
+  const next: Record<string, TaskStatusDef> = { ...(TASK_STATUS_OVERRIDES || {}) };
   for (const d of defs) {
     if (d && d.key) next[d.key] = d;
   }
@@ -608,17 +609,39 @@ export const SYSTEM_STATUS_PRESETS: SystemStatusPreset[] = [
   { key: 'reminder', name: 'REMINDER', label: 'Reminder', category: 'active', color: '#93c5fd', description: 'A nudge to do or check something later.', section: 'scheduled_queued', section_label: 'Scheduled / Queued', section_emoji: '📅' },
 ];
 
+function slugifyStatusKey(s: string): string {
+  return (s || 'status')
+    .toLowerCase()
+    .replace(/[^a-z0-9_\s]/g, '')
+    .trim()
+    .replace(/\s+/g, '_');
+}
+
 export function statusGroupRowToTaskDef(r: StatusGroupStatus): TaskStatusDef {
+  const effectiveKey = (r.key || slugifyStatusKey(r.name)) as TaskStatusKey;
+  let effectiveGroup = r.section as TaskStatusGroup;
+  if (!effectiveGroup) {
+    if (r.category === 'todo') effectiveGroup = 'not_started';
+    else if (r.category === 'closed' || (r.category as string) === 'done') effectiveGroup = 'done';
+    else effectiveGroup = 'in_motion';
+  }
+  const groupLabel = r.section_label || (
+    effectiveGroup === 'not_started' ? 'Not Started' :
+    effectiveGroup === 'done' ? 'Closed' :
+    effectiveGroup === 'in_motion' ? 'In Motion' :
+    effectiveGroup
+  );
   return {
-    key: (r.key || '') as TaskStatusKey,
+    key: effectiveKey,
     label: r.name,
     description: r.description || '',
-    group: (r.section || 'not_started') as TaskStatusGroup,
-    groupLabel: r.section_label || r.section || 'Not Started',
-    groupEmoji: r.section_emoji || '',
+    group: effectiveGroup,
+    groupLabel,
+    groupEmoji: r.section_emoji || (effectiveGroup === 'not_started' ? '📥' : effectiveGroup === 'done' ? '✅' : '🏃'),
     category: r.category,
     color: r.color,
     is_system: isSystemStatus(r),
+    is_default: r.is_default,
   };
 }
 

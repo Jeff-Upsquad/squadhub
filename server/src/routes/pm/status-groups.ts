@@ -16,11 +16,6 @@ router.get('/status-groups/effective', async (req: Request, res: Response) => {
     const folderId = (req.query.folder_id as string) || undefined;
     const listId = (req.query.list_id as string) || undefined;
 
-    if (!spaceId && !folderId && !listId) {
-      res.status(400).json({ success: false, error: 'space_id, folder_id or list_id is required' });
-      return;
-    }
-
     const resolved = await resolveEffectiveGroup({
       spaceId,
       folderId: folderId || null,

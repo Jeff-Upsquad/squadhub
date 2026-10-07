@@ -18,6 +18,7 @@ import RepeatPicker from './RepeatPicker';
 import EmergencyConfirm from './EmergencyConfirm';
 import ListPickerCombobox from './ListPickerCombobox';
 import TaskStatusPicker from './TaskStatusPicker';
+import { useTaskWorkflowCatalog, findTaskStatusDef } from '../../../hooks/useTaskWorkflowCatalog';
 import StatusPicker from './StatusPicker';
 import { nextQuickDate, groupDesignFields } from './taskHelpers';
 import { useDraftTaskStore, type SerializableDraft } from '../../../stores/draftTaskStore';
@@ -376,9 +377,15 @@ export default function TaskCreatePanel({
     return m;
   }, [assignableUsers]);
 
+  const targetSpaceId = (selectedSpaceId as string | undefined) || initialSpaceId || undefined;
+  const targetListId = effectiveListId || listId || undefined;
+  const { defs: taskCatalog } = useTaskWorkflowCatalog({
+    spaceId: targetSpaceId,
+    listId: targetListId,
+  });
   const { data: taskTypes } = useTaskTypes({
-    spaceId: (selectedSpaceId as string | undefined) || initialSpaceId || undefined,
-    listId: effectiveListId || listId || undefined,
+    spaceId: targetSpaceId,
+    listId: targetListId,
     includeIds: designTaskTypeId ? [designTaskTypeId] : undefined,
   });
   const openMeetingPanel = useMeetingPanelStore((s) => s.openMeetingPanel);
@@ -440,21 +447,22 @@ export default function TaskCreatePanel({
   useEffect(() => {
     const typeKey = (taskTypes?.find((t) => t.id === draft.task_type_id) as { key?: string } | undefined)?.key;
     if (typeKey === 'task') {
-      if (!getTaskStatusDef(draft.status)) {
+      if (!findTaskStatusDef(taskCatalog, draft.status) && !getTaskStatusDef(draft.status)) {
         const legacyMap: Record<string, TaskStatusKey> = {
           todo: 'open',
           active: 'in_progress',
           done: 'closed',
           closed: 'closed',
         };
-        setDraft((d) => ({ ...d, status: legacyMap[d.status] || 'open' }));
+        const defaultDef = taskCatalog.find((d) => d.is_default);
+        setDraft((d) => ({ ...d, status: legacyMap[d.status] || (defaultDef?.key ?? 'open') }));
       }
       return;
     }
     if (!effectiveStatuses.length) return;
     if (effectiveStatuses.some((s) => s.name === draft.status)) return;
     setDraft((d) => ({ ...d, status: effectiveStatuses[0].name }));
-  }, [effectiveStatuses, draft.status, draft.task_type_id, taskTypes]);
+  }, [effectiveStatuses, draft.status, draft.task_type_id, taskTypes, taskCatalog]);
 
   // Popover / menu anchors
   const [statusMenuOpen, setStatusMenuOpen] = useState(false);
@@ -1437,6 +1445,9 @@ export default function TaskCreatePanel({
                   {currentType?.key === 'task' ? (
                     <TaskStatusPicker
                       value={draft.status}
+                      spaceId={targetSpaceId}
+                      listId={targetListId}
+                      defs={taskCatalog}
                       onChange={(key) => setDraft((d) => ({ ...d, status: key }))}
                     />
                   ) : (
