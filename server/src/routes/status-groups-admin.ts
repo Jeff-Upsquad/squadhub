@@ -684,15 +684,64 @@ router.put('/:id/statuses/:statusId', async (req: Request, res: Response) => {
   }
 });
 
-// DELETE /admin/status-groups/:id/statuses/:statusId
-router.delete('/:id/statuses/:statusId', async (req: Request, res: Response) => {
+// GET /admin/status-groups/:id/statuses/:statusId/usage — count tasks currently using this status
+router.get('/:id/statuses/:statusId/usage', async (req: Request, res: Response) => {
   try {
+    const groupId = req.params.id as string;
+    const statusId = req.params.statusId as string;
+
     const { data: existing } = await supabaseAdmin
       .from('status_group_statuses')
       .select('id, key, name, is_system')
-      .eq('id', (req.params.statusId as string))
-      .eq('group_id', (req.params.id as string))
+      .eq('id', statusId)
+      .eq('group_id', groupId)
       .maybeSingle();
+
+    if (!existing) {
+      res.status(404).json({ success: false, error: 'Status not found' });
+      return;
+    }
+
+    const candidates = Array.from(new Set([
+      existing.key,
+      existing.name,
+      existing.key?.toLowerCase(),
+      existing.key?.toUpperCase(),
+      existing.name?.toLowerCase(),
+      existing.name?.toUpperCase(),
+    ].filter(Boolean))) as string[];
+
+    const { count, error } = await supabaseAdmin
+      .from('tasks')
+      .select('*', { count: 'exact', head: true })
+      .in('status', candidates);
+
+    if (error) {
+      res.status(500).json({ success: false, error: error.message });
+      return;
+    }
+
+    res.json({ success: true, count: count || 0 });
+  } catch (err) {
+    console.error('Get group status usage error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// DELETE /admin/status-groups/:id/statuses/:statusId
+router.delete('/:id/statuses/:statusId', async (req: Request, res: Response) => {
+  try {
+    const groupId = req.params.id as string;
+    const statusId = req.params.statusId as string;
+    const targetStatusId = (req.body?.target_status_id || req.query.target_status_id) as string | undefined;
+
+    const { data: existing } = await supabaseAdmin
+      .from('status_group_statuses')
+      .select('id, key, name, is_system')
+      .eq('id', statusId)
+      .eq('group_id', groupId)
+      .maybeSingle();
+
     if (!existing) {
       res.status(404).json({ success: false, error: 'Status not found' });
       return;
@@ -701,17 +750,70 @@ router.delete('/:id/statuses/:statusId', async (req: Request, res: Response) => 
       res.status(400).json({ success: false, error: 'System default status cannot be deleted' });
       return;
     }
-    const { error } = await supabaseAdmin
+
+    const candidates = Array.from(new Set([
+      existing.key,
+      existing.name,
+      existing.key?.toLowerCase(),
+      existing.key?.toUpperCase(),
+      existing.name?.toLowerCase(),
+      existing.name?.toUpperCase(),
+    ].filter(Boolean))) as string[];
+
+    const { count: taskCount } = await supabaseAdmin
+      .from('tasks')
+      .select('*', { count: 'exact', head: true })
+      .in('status', candidates);
+
+    if (taskCount && taskCount > 0) {
+      if (!targetStatusId) {
+        res.status(400).json({
+          success: false,
+          error: `There are ${taskCount} task(s) with this status. Please select a replacement status before deleting.`,
+          count: taskCount,
+        });
+        return;
+      }
+
+      const { data: targetStatus } = await supabaseAdmin
+        .from('status_group_statuses')
+        .select('id, key, name, group_id')
+        .eq('id', targetStatusId)
+        .eq('group_id', groupId)
+        .maybeSingle();
+
+      if (!targetStatus || targetStatus.id === statusId) {
+        res.status(400).json({ success: false, error: 'Invalid replacement status selected' });
+        return;
+      }
+
+      const replacementValue = targetStatus.name || targetStatus.key;
+
+      const { error: updateError } = await supabaseAdmin
+        .from('tasks')
+        .update({ status: replacementValue })
+        .in('status', candidates);
+
+      if (updateError) {
+        console.error('Failed to reassign tasks on status delete:', updateError);
+        res.status(500).json({ success: false, error: 'Failed to reassign tasks to new status' });
+        return;
+      }
+    }
+
+    const { error: deleteError } = await supabaseAdmin
       .from('status_group_statuses')
       .delete()
-      .eq('id', (req.params.statusId as string));
-    if (error) {
-      res.status(500).json({ success: false, error: error.message });
+      .eq('id', statusId);
+
+    if (deleteError) {
+      res.status(500).json({ success: false, error: deleteError.message });
       return;
     }
+
     refreshTaskOverrides();
-    await syncAllSpacesForGroup(req.params.id as string);
-    res.json({ success: true });
+    await syncAllSpacesForGroup(groupId);
+    res.json({ success: true, reassigned_tasks: taskCount || 0 });
   } catch (err) {
     console.error('Delete group status error:', err);
     res.status(500).json({ success: false, error: 'Internal server error' });

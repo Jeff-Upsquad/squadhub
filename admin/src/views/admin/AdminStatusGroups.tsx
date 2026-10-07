@@ -309,6 +309,131 @@ const TASK_SECTIONS = [
   { key: 'done', label: 'Closed', emoji: '✅' },
 ];
 
+function DeleteStatusModal({
+  status,
+  group,
+  onClose,
+  onConfirm,
+  isPending,
+}: {
+  status: StatusGroupStatus;
+  group: StatusGroup;
+  onClose: () => void;
+  onConfirm: (targetStatusId?: string) => void;
+  isPending: boolean;
+}) {
+  const [selectedTargetId, setSelectedTargetId] = useState<string>('');
+
+  const usageQuery = useQuery({
+    queryKey: ['status-usage', group.id, status.id],
+    queryFn: () => api.get(`/admin/status-groups/${group.id}/statuses/${status.id}/usage`).then((r) => r.data),
+  });
+
+  const count: number = usageQuery.data?.count ?? 0;
+  const availableReplacements = (group.statuses || []).filter((s) => s.id !== status.id);
+
+  useEffect(() => {
+    if (!selectedTargetId && availableReplacements.length > 0) {
+      const defaultStatus = availableReplacements.find((s) => s.is_default);
+      setSelectedTargetId(defaultStatus ? defaultStatus.id : availableReplacements[0].id);
+    }
+  }, [availableReplacements, selectedTargetId]);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div
+        className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+        onClick={() => !isPending && onClose()}
+      />
+      <div className="relative w-full max-w-md rounded-xl border border-divider bg-surface p-6 shadow-2xl">
+        <div className="flex items-start gap-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-red-100 text-red-600 dark:bg-red-950/40 dark:text-red-400">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M3 6h18" />
+              <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
+              <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
+              <line x1="10" y1="11" x2="10" y2="17" />
+              <line x1="14" y1="11" x2="14" y2="17" />
+            </svg>
+          </div>
+          <div className="flex-1 min-w-0">
+            <h3 className="text-base font-semibold text-foreground">Delete Status</h3>
+            <div className="mt-1 flex items-center gap-2">
+              <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ backgroundColor: status.color || '#94A3B8' }} />
+              <span className="text-sm font-medium text-foreground truncate">{status.name}</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-4">
+          {usageQuery.isLoading ? (
+            <div className="flex items-center gap-2 py-4 text-xs text-foreground-dim">
+              <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+              Checking tasks using this status…
+            </div>
+          ) : usageQuery.isError ? (
+            <div className="rounded-lg bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900 p-3 text-xs text-red-600 dark:text-red-400">
+              Failed to check task usage.
+            </div>
+          ) : count > 0 ? (
+            <div className="space-y-3">
+              <div className="rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/60 p-3">
+                <p className="text-xs font-semibold text-amber-800 dark:text-amber-300">
+                  ⚠️ {count} {count === 1 ? 'task currently has' : 'tasks currently have'} this status.
+                </p>
+                <p className="mt-1 text-xs text-amber-700/90 dark:text-amber-400/90">
+                  Select another status to move {count === 1 ? 'this task' : 'these tasks'} to before deleting:
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-foreground-dim mb-1.5">
+                  Change {count === 1 ? 'task' : 'tasks'} to:
+                </label>
+                <select
+                  value={selectedTargetId}
+                  onChange={(e) => setSelectedTargetId(e.target.value)}
+                  disabled={isPending}
+                  className="w-full rounded-lg border border-divider bg-surface px-3 py-2 text-sm text-foreground focus:border-ink focus:outline-none"
+                >
+                  {availableReplacements.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name} {s.section_label ? `(${s.section_label})` : `(${s.category})`}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          ) : (
+            <p className="text-sm text-foreground-dim">
+              Are you sure you want to delete <span className="font-semibold text-foreground">“{status.name}”</span>? No tasks are currently using this status.
+            </p>
+          )}
+        </div>
+
+        <div className="mt-6 flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={isPending}
+            className="rounded-lg border border-divider px-3.5 py-1.5 text-xs font-medium text-foreground-dim hover:text-foreground disabled:opacity-50 cursor-pointer"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            disabled={isPending || usageQuery.isLoading || (count > 0 && !selectedTargetId)}
+            onClick={() => onConfirm(count > 0 ? selectedTargetId : undefined)}
+            className="rounded-lg bg-red-600 px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-red-700 disabled:opacity-50 cursor-pointer"
+          >
+            {isPending ? 'Deleting…' : count > 0 ? 'Change Status & Delete' : 'Delete Status'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function StatusesCard({ group, onChanged }: { group: StatusGroup; onChanged: () => void }) {
   const qc = useQueryClient();
   const isTaskWorkflow = group.key === 'task_workflow' || group.key === 'coding_workflow' || !!group.statuses?.some((s) => !!s.section);
@@ -323,7 +448,7 @@ function StatusesCard({ group, onChanged }: { group: StatusGroup; onChanged: () 
   const [editCategory, setEditCategory] = useState<StatusCategory>('todo');
   const [editDescription, setEditDescription] = useState('');
   const [editSection, setEditSection] = useState('not_started');
-  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [statusPendingDelete, setStatusPendingDelete] = useState<StatusGroupStatus | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const statuses: StatusGroupStatus[] = [...(group.statuses || [])].sort((a, b) => a.position - b.position);
@@ -394,8 +519,11 @@ function StatusesCard({ group, onChanged }: { group: StatusGroup; onChanged: () 
     onError: (err: any) => alert(err?.response?.data?.error || 'Failed to update status'),
   });
   const remove = useMutation({
-    mutationFn: (id: string) => api.delete(`/admin/status-groups/${group.id}/statuses/${id}`),
-    onMutate: async (id: string) => {
+    mutationFn: (args: { id: string; target_status_id?: string }) =>
+      api.delete(`/admin/status-groups/${group.id}/statuses/${args.id}`, {
+        data: args.target_status_id ? { target_status_id: args.target_status_id } : undefined,
+      }),
+    onMutate: async (args: { id: string; target_status_id?: string }) => {
       setDeleteError(null);
       await qc.cancelQueries({ queryKey: ['admin-status-groups'] });
       const previous = qc.getQueryData(['admin-status-groups']);
@@ -407,14 +535,14 @@ function StatusesCard({ group, onChanged }: { group: StatusGroup; onChanged: () 
             if (g.id !== group.id) return g;
             return {
               ...g,
-              statuses: (g.statuses || []).filter((st: any) => st.id !== id),
+              statuses: (g.statuses || []).filter((st: any) => st.id !== args.id),
             };
           }),
         };
       });
       return { previous };
     },
-    onError: (err: any, _id, context: any) => {
+    onError: (err: any, _args, context: any) => {
       if (context?.previous) {
         qc.setQueryData(['admin-status-groups'], context.previous);
       }
@@ -423,7 +551,7 @@ function StatusesCard({ group, onChanged }: { group: StatusGroup; onChanged: () 
       alert(msg);
     },
     onSettled: () => {
-      setConfirmDeleteId(null);
+      setStatusPendingDelete(null);
       onChanged();
     },
   });
@@ -623,33 +751,13 @@ function StatusesCard({ group, onChanged }: { group: StatusGroup; onChanged: () 
                         )}
                         {isSystem ? (
                           <span className="rounded px-1.5 py-0.5 text-[11px] font-medium text-foreground-dim bg-muted/60" title="System default status cannot be edited or changed">Locked</span>
-                        ) : confirmDeleteId === s.id ? (
-                          <div className="flex items-center gap-1.5 rounded bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 px-2 py-0.5">
-                            <span className="text-[11px] font-medium text-red-600 dark:text-red-400">Delete “{s.name}”?</span>
-                            <button
-                              type="button"
-                              disabled={remove.isPending}
-                              onClick={() => remove.mutate(s.id)}
-                              className="rounded bg-red-600 px-1.5 py-0.5 text-[10px] font-semibold text-white hover:bg-red-700 disabled:opacity-50 cursor-pointer"
-                            >
-                              {remove.isPending && remove.variables === s.id ? 'Deleting…' : 'Yes'}
-                            </button>
-                            <button
-                              type="button"
-                              disabled={remove.isPending}
-                              onClick={() => setConfirmDeleteId(null)}
-                              className="rounded border border-divider px-1.5 py-0.5 text-[10px] font-medium text-foreground-dim hover:text-foreground cursor-pointer"
-                            >
-                              Cancel
-                            </button>
-                          </div>
                         ) : (
                           <>
                             <button onClick={() => { setEditingId(s.id); setEditName(s.name); setEditColor(s.color); setEditCategory(s.category); setEditDescription(s.description || ''); setEditSection(s.section || 'not_started'); }} className="rounded px-1 text-xs text-foreground-dim hover:text-foreground">Edit</button>
                             <button
                               type="button"
-                              disabled={remove.isPending && remove.variables === s.id}
-                              onClick={() => setConfirmDeleteId(s.id)}
+                              disabled={remove.isPending && (remove.variables as any)?.id === s.id}
+                              onClick={() => setStatusPendingDelete(s)}
                               className="rounded px-1 text-xs text-red-500 hover:text-red-700 disabled:opacity-50 cursor-pointer"
                             >
                               Delete
@@ -673,6 +781,18 @@ function StatusesCard({ group, onChanged }: { group: StatusGroup; onChanged: () 
         })}
         {statuses.length === 0 && <p className="py-4 text-center text-xs text-foreground-dim">No statuses yet — add the first one above.</p>}
       </div>
+
+      {statusPendingDelete && (
+        <DeleteStatusModal
+          status={statusPendingDelete}
+          group={group}
+          onClose={() => setStatusPendingDelete(null)}
+          onConfirm={(targetStatusId) =>
+            remove.mutate({ id: statusPendingDelete.id, target_status_id: targetStatusId })
+          }
+          isPending={remove.isPending}
+        />
+      )}
     </div>
   );
 }
