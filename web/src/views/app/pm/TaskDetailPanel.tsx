@@ -3828,7 +3828,7 @@ function SpaceStatusPicker({
   const popStyle = useMemo<React.CSSProperties>(() => {
     if (!rect) return { visibility: 'hidden' as const };
     const maxH = 420;
-    const popW = Math.min(320, window.innerWidth - 24);
+    const popW = Math.min(330, window.innerWidth - 24);
     const spaceBelow = window.innerHeight - rect.bottom;
     const openUp = spaceBelow < 260 && rect.top > spaceBelow;
     let left = rect.left;
@@ -4042,6 +4042,11 @@ function SpaceStatusPicker({
                   </div>
                 ))
               )}
+            </div>
+
+            <div className="px-3 py-1.5 bg-[var(--surface-alt)] border-t border-[var(--sh-hair)] text-[10.5px] text-[var(--sh-ink-4)] flex items-center justify-between shrink-0">
+              <span>{flatList.length} status{flatList.length !== 1 ? 'es' : ''} available</span>
+              <span className="text-[9.5px]">Use ↑↓ to navigate, ↵ to pick</span>
             </div>
           </div>
         </>,
