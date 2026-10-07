@@ -90,7 +90,8 @@ export default function TaskStatusPicker({
   // Keep the popover anchored to the button when the viewport scrolls/resizes.
   useEffect(() => {
     if (!open) return;
-    const reposition = () => {
+    const reposition = (e?: Event) => {
+      if (e?.target instanceof Node && popoverRef.current?.contains(e.target)) return;
       if (buttonRef.current) setAnchor(buttonRef.current.getBoundingClientRect());
     };
     window.addEventListener('scroll', reposition, true);
@@ -248,11 +249,12 @@ export default function TaskStatusPicker({
 
           <div
             ref={popoverRef}
-            className="flex flex-col rounded-xl border overflow-hidden animate-in fade-in-0 zoom-in-95 duration-100"
+            className="flex flex-col rounded-xl border overflow-hidden overscroll-contain animate-in fade-in-0 zoom-in-95 duration-100"
             style={{
               ...popoverStyle,
               zIndex: 9999,
               boxShadow: '0 12px 36px -4px rgba(0,0,0,0.22), 0 4px 12px -2px rgba(0,0,0,0.12)',
+              overscrollBehavior: 'contain',
             }}
             onMouseDown={(e) => e.stopPropagation()}
             onKeyDown={handleKeyDown}
@@ -296,7 +298,10 @@ export default function TaskStatusPicker({
             </div>
 
             {/* List */}
-            <div className="overflow-y-auto flex-1 py-1 divide-y divide-[var(--sh-hair)]/40 scrollbar-thin">
+            <div
+              className="overflow-y-auto overscroll-contain flex-1 py-1 divide-y divide-[var(--sh-hair)]/40 scrollbar-thin"
+              style={{ overscrollBehavior: 'contain' }}
+            >
               {filtered.length === 0 ? (
                 <div className="px-4 py-8 text-center">
                   <div className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-[var(--surface-alt)] text-[var(--sh-ink-4)] mb-2">

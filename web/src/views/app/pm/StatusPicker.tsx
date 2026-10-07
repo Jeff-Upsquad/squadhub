@@ -56,17 +56,23 @@ export default function StatusPicker({
         onClose();
       }
     };
-    const onScrollOrResize = () => onClose();
+    const onScroll = (e: Event) => {
+      if (ref.current && e.target instanceof Node && ref.current.contains(e.target)) {
+        return;
+      }
+      onClose();
+    };
+    const onResize = () => onClose();
 
     document.addEventListener('keydown', onKey);
     document.addEventListener('mousedown', onDown);
-    window.addEventListener('scroll', onScrollOrResize, true);
-    window.addEventListener('resize', onScrollOrResize);
+    window.addEventListener('scroll', onScroll, true);
+    window.addEventListener('resize', onResize);
     return () => {
       document.removeEventListener('keydown', onKey);
       document.removeEventListener('mousedown', onDown);
-      window.removeEventListener('scroll', onScrollOrResize, true);
-      window.removeEventListener('resize', onScrollOrResize);
+      window.removeEventListener('scroll', onScroll, true);
+      window.removeEventListener('resize', onResize);
     };
   }, [onClose]);
 
@@ -194,7 +200,7 @@ export default function StatusPicker({
       />
       <div
         ref={ref}
-        className="flex flex-col rounded-xl border overflow-hidden animate-in fade-in-0 zoom-in-95 duration-100"
+        className="flex flex-col rounded-xl border overflow-hidden overscroll-contain animate-in fade-in-0 zoom-in-95 duration-100"
         style={{
           position: 'fixed',
           top,
@@ -205,6 +211,7 @@ export default function StatusPicker({
           borderColor: 'var(--sh-hair)',
           background: 'var(--surface)',
           boxShadow: '0 12px 36px -4px rgba(0,0,0,0.22), 0 4px 12px -2px rgba(0,0,0,0.12)',
+          overscrollBehavior: 'contain',
         }}
         onClick={(e) => e.stopPropagation()}
         onKeyDown={handleKeyDown}
@@ -246,7 +253,10 @@ export default function StatusPicker({
           </div>
         </div>
 
-        <div className="overflow-y-auto flex-1 py-1 divide-y divide-[var(--sh-hair)]/40 scrollbar-thin">
+        <div
+          className="overflow-y-auto overscroll-contain flex-1 py-1 divide-y divide-[var(--sh-hair)]/40 scrollbar-thin"
+          style={{ overscrollBehavior: 'contain' }}
+        >
           {grouped.length === 0 ? (
             <div className="px-4 py-8 text-center">
               <div className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-[var(--surface-alt)] text-[var(--sh-ink-4)] mb-2">
