@@ -71,8 +71,12 @@ export default function PriorityPicker({
   if (left + width > window.innerWidth - 8) left = window.innerWidth - width - 8;
   const top = Math.min(anchorRect.bottom + 4, window.innerHeight - 300);
 
+  // z-index must sit above goal surfaces (.gl-modal: 120, .dp-panel: 130,
+  // .gl-pop: 140). At 100 the menu painted underneath the New-goal modal
+  // backdrop, so clicks hit the modal and the picker instantly closed —
+  // priority looked unchangeable.
   return createPortal(
-    <div ref={ref} className="nt-menu" style={{ position: 'fixed', top, left, width, zIndex: 100 }}>
+    <div ref={ref} className="nt-menu" style={{ position: 'fixed', top, left, width, zIndex: 160 }}>
       {STANDARD.map((p) => {
         const m = PRIORITY_META[p];
         return (
