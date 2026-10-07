@@ -13,6 +13,8 @@ import { computeSnoozeTargets } from '../../../hooks/useDayPlanner';
 import { useIsMobile } from '../../../hooks/useIsMobile';
 import { formatTracked } from '../../../lib/formatDuration';
 import { formatTaskDates } from '../pm/taskHelpers';
+import { GoalTaskFlag } from '../goals/GoalIntegration';
+import TaskRelationshipsButton from '../../../components/pm/TaskRelationshipsButton';
 import AssigneePicker from '../pm/AssigneePicker';
 import IncompleteItemsDialog from '../pm/IncompleteItemsDialog';
 import NoAssigneeCompleteDialog from '../pm/NoAssigneeCompleteDialog';
@@ -336,9 +338,13 @@ function DashboardTaskRowInner({
         onClick={onToggleDone}
       />
       <div className="body">
-        <div className="title">
-          {isSubtask && <span style={{ color: 'var(--sh-ink-4)', marginRight: 4 }}>↳</span>}
-          {task.title}
+        <div className="title" style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+          {isSubtask && <span style={{ color: 'var(--sh-ink-4)', marginRight: 4, flex: 'none' }}>↳</span>}
+          <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{task.title}</span>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2, flex: 'none' }}>
+            <GoalTaskFlag taskId={task.id} size={14} />
+            <TaskRelationshipsButton task={task} />
+          </span>
         </div>
         <div className="meta">
           {isSubtask && parentTitle && <span>From: {parentTitle}</span>}

@@ -4156,6 +4156,8 @@ body.sb-resizing { user-select: none; -webkit-user-select: none; cursor: col-res
   flex-shrink: 0;
 }
 .lv-row:hover .lv-relation-btn,
+.hm-home .hm-task:hover .lv-relation-btn,
+.hm-home .hmp-task:hover .lv-relation-btn,
 .lv-relation-btn:focus-visible,
 .lv-relation-btn[data-active] {
   opacity: 1;
@@ -4168,7 +4170,9 @@ body.sb-resizing { user-select: none; -webkit-user-select: none; cursor: col-res
   color: #3b82f6;
 }
 @media (hover: none) {
-  .lv-row .lv-relation-btn { opacity: 1; }
+  .lv-row .lv-relation-btn,
+  .hm-home .hm-task .lv-relation-btn,
+  .hm-home .hmp-task .lv-relation-btn { opacity: 1; }
 }
 
 /* Tracked time chip on list view rows — mirrors .hm-home .hm-task .hm-tracked */

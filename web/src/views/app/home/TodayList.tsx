@@ -17,6 +17,8 @@ import { formatTracked, toLocalDateKey } from '../../../lib/formatDuration';
 import { groupTasks, isFutureDay, isTaskFocused, collapseGroupedTasks, isGroupedRow, GROUP_BY_OPTIONS, isTaskCompleted } from '../../../lib/taskGrouping';
 import GroupedTaskRow from './GroupedTaskRow';
 import DayCalendar from '../day-planner/DayCalendar';
+import { GoalTaskFlag } from '../goals/GoalIntegration';
+import TaskRelationshipsButton from '../../../components/pm/TaskRelationshipsButton';
 import { planDateKey, computeSnoozeTargets } from '../../../hooks/useDayPlanner';
 import { useIsMobile } from '../../../hooks/useIsMobile';
 
@@ -868,6 +870,8 @@ function TodayRow({ task: t, onOpen, secondsToday = 0, liveSecs = 0, isInProgres
             {subsDone}/{subtasks.length}
           </span>
         )}
+        <GoalTaskFlag taskId={t.id} size={14} />
+        <TaskRelationshipsButton task={t} />
         {isSubtask && parentTitle && <span className="hm-parent">↳ {parentTitle}</span>}
         {label && <span className="hm-tag">{label}</span>}
       </div>
@@ -1080,6 +1084,8 @@ function HomeSubtaskRow({ sub: s, onOpen }: { sub: Task; onOpen: (id: string) =>
           }}
         />
         <span className="t">{s.title}</span>
+        <GoalTaskFlag taskId={s.id} size={13} />
+        <TaskRelationshipsButton task={s} />
         {when.text && (
           <span className="hm-when" data-overdue={when.overdue || undefined}>
             {when.text}
