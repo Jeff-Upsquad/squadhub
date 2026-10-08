@@ -451,6 +451,172 @@ function DeleteStatusModal({
   );
 }
 
+function ReplaceStatusModal({
+  status,
+  group,
+  sections,
+  onClose,
+  onSuccess,
+}: {
+  status: StatusGroupStatus;
+  group: StatusGroup;
+  sections: { key: string; label: string; emoji: string }[];
+  onClose: () => void;
+  onSuccess: () => void;
+}) {
+  const isEditingExisting = Boolean(status.is_replacement);
+  const targetKey = status.replaces_key || status.key || status.id;
+  const originalName = status.replaces_name || status.name;
+
+  const [name, setName] = useState(status.is_replacement ? status.name : '');
+  const [color, setColor] = useState(status.color || '#6b7280');
+  const [category, setCategory] = useState<StatusCategory>(status.category || 'todo');
+  const [section, setSection] = useState(status.section || 'not_started');
+  const [description, setDescription] = useState(status.description || '');
+
+  const replaceMutation = useMutation({
+    mutationFn: (body: any) =>
+      api.put(`/admin/status-groups/${group.id}/statuses/${targetKey}/replace`, body),
+    onSuccess: () => {
+      onSuccess();
+      onClose();
+    },
+    onError: (err: any) => alert(err?.response?.data?.error || 'Failed to replace status'),
+  });
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => !replaceMutation.isPending && onClose()} />
+      <div className="relative w-full max-w-lg rounded-xl border border-divider bg-surface p-6 shadow-2xl">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="inline-block h-3 w-3 rounded-full" style={{ backgroundColor: status.color || '#94A3B8' }} />
+              <h3 className="text-base font-semibold text-foreground">
+                {isEditingExisting ? `Edit Replacement for “${originalName}”` : `Replace “${originalName}” with Custom Status`}
+              </h3>
+            </div>
+            <p className="mt-1.5 text-xs text-foreground-dim leading-relaxed">
+              This custom status will appear in place of <strong className="text-foreground">“{originalName}”</strong> everywhere this group is applied. In Default Task Statuses, <strong className="text-foreground">“{originalName}”</strong> remains unchanged.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={replaceMutation.isPending}
+            className="text-foreground-dim hover:text-foreground text-xl leading-none cursor-pointer"
+          >
+            ×
+          </button>
+        </div>
+
+        <form
+          className="mt-5 space-y-3.5"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (!name.trim()) { alert('Status name is required'); return; }
+            const sec = sections.find((s) => s.key === section);
+            replaceMutation.mutate({
+              name: name.trim(),
+              color,
+              category,
+              section,
+              section_label: sec?.label,
+              section_emoji: sec?.emoji,
+              description: description.trim() || null,
+            });
+          }}
+        >
+          <div>
+            <label className="block text-xs font-medium text-foreground-dim mb-1">Custom Status Name *</label>
+            <input
+              required
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder={`e.g. ${originalName === 'OPEN' ? 'Backlog / New Request' : originalName === 'IN PROGRESS' ? 'Building' : 'Custom Status'}`}
+              className="w-full rounded-lg border border-divider bg-surface px-3 py-2 text-sm text-foreground focus:border-ink focus:outline-none"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-foreground-dim mb-1">Color</label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="color"
+                  value={color}
+                  onChange={(e) => setColor(e.target.value)}
+                  className="h-9 w-11 cursor-pointer rounded border border-divider shrink-0"
+                />
+                <input
+                  type="text"
+                  value={color}
+                  onChange={(e) => setColor(e.target.value)}
+                  className="min-w-0 flex-1 rounded-lg border border-divider bg-surface px-2.5 py-1.5 text-xs font-mono text-foreground focus:border-ink focus:outline-none"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-foreground-dim mb-1">Category</label>
+              <select
+                value={category}
+                onChange={(e) => setCategory(e.target.value as StatusCategory)}
+                className="w-full rounded-lg border border-divider bg-surface px-3 py-2 text-sm text-foreground focus:border-ink focus:outline-none"
+              >
+                {(Object.keys(CATEGORY_LABELS) as StatusCategory[]).map((c) => (
+                  <option key={c} value={c}>{CATEGORY_LABELS[c]}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-foreground-dim mb-1">Picker Section</label>
+            <select
+              value={section}
+              onChange={(e) => setSection(e.target.value)}
+              className="w-full rounded-lg border border-divider bg-surface px-3 py-2 text-sm text-foreground focus:border-ink focus:outline-none"
+            >
+              {sections.map((s) => (
+                <option key={s.key} value={s.key}>{s.emoji} {s.label}</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-foreground-dim mb-1">Description (optional)</label>
+            <input
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="Description shown under status in picker"
+              className="w-full rounded-lg border border-divider bg-surface px-3 py-2 text-sm text-foreground focus:border-ink focus:outline-none"
+            />
+          </div>
+
+          <div className="mt-6 flex justify-end gap-2 pt-3 border-t border-divider">
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={replaceMutation.isPending}
+              className="rounded-lg border border-divider px-3.5 py-1.5 text-xs font-medium text-foreground-dim hover:text-foreground cursor-pointer"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={replaceMutation.isPending || !name.trim()}
+              className="rounded-lg bg-ink px-4 py-1.5 text-xs font-semibold text-white hover:opacity-90 disabled:opacity-50 cursor-pointer"
+            >
+              {replaceMutation.isPending ? 'Saving…' : (isEditingExisting ? 'Save Replacement' : 'Replace Status')}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 function StatusesCard({ group, onChanged }: { group: StatusGroup; onChanged: () => void }) {
   const qc = useQueryClient();
   const isTaskWorkflow = true;
@@ -483,6 +649,8 @@ function StatusesCard({ group, onChanged }: { group: StatusGroup; onChanged: () 
   const [editSection, setEditSection] = useState('not_started');
   const [statusPendingDelete, setStatusPendingDelete] = useState<StatusGroupStatus | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [replacingStatus, setReplacingStatus] = useState<StatusGroupStatus | null>(null);
+  const [statusFilter, setStatusFilter] = useState<'all' | 'enabled' | 'disabled' | 'replaced'>('all');
 
   const statuses: StatusGroupStatus[] = [...(group.statuses || [])].sort((a, b) => a.position - b.position);
 
@@ -496,6 +664,17 @@ function StatusesCard({ group, onChanged }: { group: StatusGroup; onChanged: () 
         ...statuses.filter((s) => !(s.section || '') || !sections.some((sec) => sec.key === s.section)),
       ]
     : statuses;
+
+  const filteredDisplayOrder: StatusGroupStatus[] = useMemo(() => {
+    if (statusFilter === 'enabled') return displayOrder.filter((s) => !s.is_disabled);
+    if (statusFilter === 'disabled') return displayOrder.filter((s) => s.is_disabled);
+    if (statusFilter === 'replaced') return displayOrder.filter((s) => s.is_replacement);
+    return displayOrder;
+  }, [displayOrder, statusFilter]);
+
+  const enabledCount = statuses.filter((s) => !s.is_disabled).length;
+  const disabledCount = statuses.filter((s) => s.is_disabled).length;
+  const replacedCount = statuses.filter((s) => s.is_replacement).length;
 
   const sectionOf = (s: StatusGroupStatus) =>
     sections.find((sec) => sec.key === (s.section || '')) || null;
@@ -622,6 +801,56 @@ function StatusesCard({ group, onChanged }: { group: StatusGroup; onChanged: () 
     onError: (err: any) => alert(err?.response?.data?.error || 'Failed to add system status'),
   });
 
+  const toggleStatus = useMutation({
+    mutationFn: (args: { key: string; enabled: boolean }) =>
+      api.put(`/admin/status-groups/${group.id}/statuses/${args.key}/toggle`, { enabled: args.enabled }),
+    onMutate: async (args) => {
+      await qc.cancelQueries({ queryKey: ['admin-status-groups'] });
+      const previous = qc.getQueryData(['admin-status-groups']);
+      qc.setQueryData(['admin-status-groups'], (old: any) => {
+        if (!old?.data) return old;
+        return {
+          ...old,
+          data: old.data.map((g: any) => {
+            if (g.id !== group.id) return g;
+            const curDisabled = Array.isArray(g.disabled_status_keys) ? [...g.disabled_status_keys] : [];
+            const nextDisabled = args.enabled
+              ? curDisabled.filter((k: string) => k !== args.key)
+              : curDisabled.includes(args.key) ? curDisabled : [...curDisabled, args.key];
+            return {
+              ...g,
+              disabled_status_keys: nextDisabled,
+              statuses: (g.statuses || []).map((st: any) => {
+                const match = st.key === args.key || st.id === args.key || st.replaces_key === args.key;
+                if (!match) return st;
+                return { ...st, is_disabled: !args.enabled };
+              }),
+            };
+          }),
+        };
+      });
+      return { previous };
+    },
+    onError: (_err, _args, context: any) => {
+      if (context?.previous) qc.setQueryData(['admin-status-groups'], context.previous);
+      alert('Failed to toggle status');
+    },
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: ['admin-status-groups'] });
+      onChanged();
+    },
+  });
+
+  const revertReplacement = useMutation({
+    mutationFn: (statusKey: string) =>
+      api.delete(`/admin/status-groups/${group.id}/statuses/${statusKey}/replace`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin-status-groups'] });
+      onChanged();
+    },
+    onError: (err: any) => alert(err?.response?.data?.error || 'Failed to revert replacement'),
+  });
+
   const availableSystemPresets = SYSTEM_STATUS_PRESETS.filter(
     (preset) => !statuses.some((s) => s.key === preset.key || isSystemStatus(s) && (s.key === preset.key || s.name.toLowerCase().trim() === preset.label.toLowerCase().trim() || s.name.toUpperCase().trim() === preset.name))
   );
@@ -655,7 +884,65 @@ function StatusesCard({ group, onChanged }: { group: StatusGroup; onChanged: () 
         </p>
       )}
 
-      {group.base_group_id && <p className="mb-3 rounded-lg border border-divider bg-muted px-3 py-2 text-xs text-foreground-muted">Primary group: Default Task Statuses. Inherited statuses are read-only here; edit them in the default group. Add local statuses below.</p>}
+      {group.base_group_id && (
+        <div className="mb-3 rounded-lg border border-divider bg-muted/30 p-3 text-xs text-foreground-muted space-y-2">
+          <div>
+            <span className="font-semibold text-foreground">Linked to Default Task Statuses:</span>
+            <span className="ml-1 text-foreground-dim">Inherited statuses update automatically. You can toggle statuses on/off so they won’t show up where this group is applied, or replace an inherited status with a custom status in place. In Default Task Statuses, nothing is changed.</span>
+          </div>
+          <div className="flex flex-wrap items-center gap-1.5 pt-1">
+            <span className="text-[11px] font-medium text-foreground-dim mr-1">Filter:</span>
+            <button
+              type="button"
+              onClick={() => setStatusFilter('all')}
+              className={`rounded-md px-2 py-0.5 text-xs font-medium transition cursor-pointer ${
+                statusFilter === 'all'
+                  ? 'bg-ink text-white'
+                  : 'border border-divider bg-surface text-foreground hover:bg-muted'
+              }`}
+            >
+              All ({statuses.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setStatusFilter('enabled')}
+              className={`rounded-md px-2 py-0.5 text-xs font-medium transition cursor-pointer ${
+                statusFilter === 'enabled'
+                  ? 'bg-emerald-600 text-white'
+                  : 'border border-divider bg-surface text-emerald-700 dark:text-emerald-400 hover:bg-muted'
+              }`}
+            >
+              Active ({enabledCount})
+            </button>
+            {disabledCount > 0 && (
+              <button
+                type="button"
+                onClick={() => setStatusFilter('disabled')}
+                className={`rounded-md px-2 py-0.5 text-xs font-medium transition cursor-pointer ${
+                  statusFilter === 'disabled'
+                    ? 'bg-amber-600 text-white'
+                    : 'border border-divider bg-surface text-amber-700 dark:text-amber-400 hover:bg-muted'
+                }`}
+              >
+                Toggled Off ({disabledCount})
+              </button>
+            )}
+            {replacedCount > 0 && (
+              <button
+                type="button"
+                onClick={() => setStatusFilter('replaced')}
+                className={`rounded-md px-2 py-0.5 text-xs font-medium transition cursor-pointer ${
+                  statusFilter === 'replaced'
+                    ? 'bg-purple-600 text-white'
+                    : 'border border-divider bg-surface text-purple-700 dark:text-purple-400 hover:bg-muted'
+                }`}
+              >
+                Replaced ({replacedCount})
+              </button>
+            )}
+          </div>
+        </div>
+      )}
       {/* System default statuses quick-add / info box */}
       {!group.base_group_id && (
       <div className="mb-3 rounded-lg border border-divider/70 bg-muted/20 p-2.5">
@@ -737,15 +1024,15 @@ function StatusesCard({ group, onChanged }: { group: StatusGroup; onChanged: () 
       )}
 
       <div className="space-y-1.5">
-        {displayOrder.map((s, i) => {
+        {filteredDisplayOrder.map((s, i) => {
           const showHeader = isTaskWorkflow &&
-            (i === 0 || (displayOrder[i - 1].section || '') !== (s.section || ''));
+            (i === 0 || (filteredDisplayOrder[i - 1].section || '') !== (s.section || ''));
           const secInfo = sectionOf(s);
           const sectionCount = isTaskWorkflow
-            ? displayOrder.filter((x) => (x.section || '') === (s.section || '')).length
+            ? filteredDisplayOrder.filter((x) => (x.section || '') === (s.section || '')).length
             : 0;
           return (
-          <Fragment key={s.id}>
+          <Fragment key={s.id || s.key}>
           {showHeader && (
             <div className="flex items-center gap-1.5 px-1 pt-2 text-[11px] font-semibold uppercase tracking-wider text-foreground-dim">
               <span aria-hidden>{secInfo?.emoji || '📋'}</span>
@@ -753,7 +1040,11 @@ function StatusesCard({ group, onChanged }: { group: StatusGroup; onChanged: () 
               <span className="font-normal normal-case tracking-normal">({sectionCount})</span>
             </div>
           )}
-          <div className="rounded-lg border border-divider px-3 py-2">
+          <div className={`rounded-lg border px-3 py-2 transition ${
+            s.is_disabled
+              ? 'border-dashed border-divider/60 bg-muted/20 opacity-70'
+              : 'border-divider bg-surface'
+          }`}>
             <div className="flex items-center gap-2">
               <span className="h-3 w-3 shrink-0 rounded-full" style={{ background: s.color }} />
               {editingId === s.id ? (
@@ -783,16 +1074,26 @@ function StatusesCard({ group, onChanged }: { group: StatusGroup; onChanged: () 
                 </>
               ) : (
                 <>
-                  <span className="min-w-0 flex-1 truncate text-sm font-medium">{s.name}</span>
+                  <span className={`min-w-0 flex-1 truncate text-sm font-medium ${s.is_disabled ? 'line-through text-foreground-dim' : ''}`}>{s.name}</span>
                   {s.key && <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] text-foreground-dim">{s.key}</code>}
                   <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium text-foreground-dim">{CATEGORY_LABELS[s.category]}</span>
+                  {s.is_replacement && (
+                    <span className="rounded bg-purple-100 dark:bg-purple-900/40 px-1.5 py-0.5 text-[10px] font-semibold text-purple-700 dark:text-purple-300" title={`Replaces inherited status “${s.replaces_name || s.replaces_key}” in this group`}>
+                      REPLACES {s.replaces_name || s.replaces_key}
+                    </span>
+                  )}
+                  {s.is_disabled && (
+                    <span className="rounded bg-amber-100 dark:bg-amber-950/60 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700 dark:text-amber-400" title="Toggled off — will not show where this group is applied">
+                      OFF
+                    </span>
+                  )}
                   {s.is_default && <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700">DEFAULT</span>}
                   {(() => {
                     const isSystem = isSystemStatus(s);
-                    const locked = s.is_inherited || (isSystem && !canEditSystem);
+                    const locked = (s.is_inherited && !s.is_replacement) || (isSystem && !canEditSystem);
                     return (
                       <>
-                        {isSystem && (
+                        {isSystem && !s.is_replacement && (
                           <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-600">SYSTEM</span>
                         )}
                         <button onClick={() => shift(i, -1)} disabled={atSectionEdge(i, -1)} className="rounded px-1 text-foreground-dim hover:text-foreground disabled:opacity-30" title="Move up">↑</button>
@@ -800,9 +1101,73 @@ function StatusesCard({ group, onChanged }: { group: StatusGroup; onChanged: () 
                         {!s.is_default && !locked && !group.base_group_id && (
                           <button onClick={() => update.mutate({ id: s.id, body: { is_default: true } })} className="rounded px-1 text-xs text-foreground-dim hover:text-foreground" title="Mark as default">★</button>
                         )}
-                        {locked ? (
+
+                        {/* Linked group toggle ON/OFF control */}
+                        {group.base_group_id && (
+                          <button
+                            type="button"
+                            disabled={toggleStatus.isPending}
+                            onClick={() => toggleStatus.mutate({ key: s.replaces_key || s.key || s.id, enabled: Boolean(s.is_disabled) })}
+                            className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-semibold transition cursor-pointer ${
+                              s.is_disabled
+                                ? 'bg-slate-200/80 text-slate-600 hover:bg-slate-300 dark:bg-slate-800 dark:text-slate-400'
+                                : 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300'
+                            }`}
+                            title={s.is_disabled ? "Status is OFF in this group — click to turn ON" : "Status is ON — click to toggle OFF (will not show where this group is applied)"}
+                          >
+                            <span className={`inline-block h-1.5 w-1.5 rounded-full ${s.is_disabled ? 'bg-slate-400' : 'bg-emerald-500'}`} />
+                            <span>{s.is_disabled ? 'OFF' : 'ON'}</span>
+                          </button>
+                        )}
+
+                        {/* Replace / Edit replacement controls for linked groups */}
+                        {group.base_group_id && s.is_replacement && (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => setReplacingStatus(s)}
+                              className="rounded-md border border-purple-200 dark:border-purple-800 bg-purple-50 dark:bg-purple-950/40 px-2 py-0.5 text-xs font-semibold text-purple-700 dark:text-purple-300 hover:bg-purple-100 dark:hover:bg-purple-900/60 cursor-pointer"
+                              title="Edit custom replacement status"
+                            >
+                              Edit
+                            </button>
+                            <button
+                              type="button"
+                              disabled={revertReplacement.isPending}
+                              onClick={() => {
+                                if (confirm(`Revert back to “${s.replaces_name || s.replaces_key}”? The custom replacement will be removed and original inherited status restored.`)) {
+                                  revertReplacement.mutate(s.replaces_key || s.key || s.id);
+                                }
+                              }}
+                              className="rounded px-1.5 py-0.5 text-xs text-amber-600 hover:text-amber-700 hover:bg-amber-50 dark:hover:bg-amber-950/30 cursor-pointer"
+                              title="Revert back to original inherited status"
+                            >
+                              Revert
+                            </button>
+                          </>
+                        )}
+
+                        {group.base_group_id && s.is_inherited && !s.is_replacement && (
+                          <>
+                            <span className="rounded px-1.5 py-0.5 text-[11px] font-medium text-foreground-dim bg-muted/60" title="Inherited from Default Task Statuses">
+                              Inherited
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => setReplacingStatus(s)}
+                              className="rounded-md border border-purple-200 dark:border-purple-800 bg-purple-50 dark:bg-purple-950/40 px-2 py-0.5 text-xs font-semibold text-purple-700 dark:text-purple-300 hover:bg-purple-100 dark:hover:bg-purple-900/60 cursor-pointer"
+                              title={`Replace “${s.name}” with a custom status in this group`}
+                            >
+                              Replace
+                            </button>
+                          </>
+                        )}
+
+                        {!group.base_group_id && locked && (
                           <span className="rounded px-1.5 py-0.5 text-[11px] font-medium text-foreground-dim bg-muted/60" title={s.is_inherited ? "Edit in Default Task Statuses" : "System default status"}>{s.is_inherited ? 'Inherited' : 'Locked'}</span>
-                        ) : (
+                        )}
+
+                        {!s.is_inherited && !s.is_replacement && (
                           <>
                             <button onClick={() => { setEditingId(s.id); setEditName(s.name); setEditColor(s.color); setEditCategory(s.category); setEditDescription(s.description || ''); setEditSection(s.section || 'not_started'); }} className="rounded px-1 text-xs text-foreground-dim hover:text-foreground">Edit</button>
                             <button
@@ -830,7 +1195,11 @@ function StatusesCard({ group, onChanged }: { group: StatusGroup; onChanged: () 
           </Fragment>
           );
         })}
-        {statuses.length === 0 && <p className="py-4 text-center text-xs text-foreground-dim">No statuses yet — add the first one above.</p>}
+        {filteredDisplayOrder.length === 0 && (
+          <p className="py-4 text-center text-xs text-foreground-dim">
+            {statusFilter !== 'all' ? `No statuses found matching filter “${statusFilter}”.` : 'No statuses yet — add the first one above.'}
+          </p>
+        )}
       </div>
 
       {statusPendingDelete && (
@@ -842,6 +1211,19 @@ function StatusesCard({ group, onChanged }: { group: StatusGroup; onChanged: () 
             remove.mutate({ id: statusPendingDelete.id, target_status_id: targetStatusId })
           }
           isPending={remove.isPending}
+        />
+      )}
+
+      {replacingStatus && (
+        <ReplaceStatusModal
+          status={replacingStatus}
+          group={group}
+          sections={sections}
+          onClose={() => setReplacingStatus(null)}
+          onSuccess={() => {
+            qc.invalidateQueries({ queryKey: ['admin-status-groups'] });
+            onChanged();
+          }}
         />
       )}
     </div>

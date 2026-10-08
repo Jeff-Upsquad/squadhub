@@ -567,6 +567,14 @@ export interface StatusGroupStatus {
   is_system?: boolean;
   /** Inherited rows retain their source group and are read-only in linked groups. */
   is_inherited?: boolean;
+  /** True when toggled off in the group; excluded from applied spaces/boards. */
+  is_disabled?: boolean;
+  /** True when this row replaces an inherited status in this group. */
+  is_replacement?: boolean;
+  replaces_key?: string | null;
+  replaces_name?: string | null;
+  replaces_id?: string | null;
+  original_status?: any;
 }
 
 /** Convert a managed task_workflow row into the catalog shape the picker renders. */
@@ -677,6 +685,21 @@ export interface StatusGroupSection {
   emoji: string;
 }
 
+export interface StatusReplacement {
+  name: string;
+  key?: string;
+  color?: string;
+  category?: StatusCategory;
+  section?: string | null;
+  section_label?: string | null;
+  section_emoji?: string | null;
+  description?: string | null;
+  replaces_key?: string;
+  replaces_name?: string;
+  replaces_id?: string;
+  replaced_at?: string;
+}
+
 export interface StatusGroup {
   id: string;
   key: string;
@@ -693,6 +716,8 @@ export interface StatusGroup {
   base_group_id?: string | null;
   custom_sections?: StatusGroupSection[];
   effective_sections?: StatusGroupSection[];
+  disabled_status_keys?: string[];
+  status_replacements?: Record<string, StatusReplacement>;
   statuses?: StatusGroupStatus[];
   usage_count?: number;
 }
