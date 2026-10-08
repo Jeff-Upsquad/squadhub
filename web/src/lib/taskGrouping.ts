@@ -7,7 +7,7 @@ import { getTaskStatusCategory, getTaskStatusDef, TASK_BUCKETS, TASK_PLANS, task
 // keep a task in its pre-fade bucket while the slide-out animation plays.
 export const EMPTY_FADING_MAP: ReadonlyMap<string, string> = new Map();
 
-export type GroupBy = 'none' | 'status' | 'work_date' | 'due_date' | 'priority' | 'task_type' | 'space' | 'folder' | 'list' | 'label' | 'bucket' | 'plan';
+export type GroupBy = 'none' | 'status' | 'work_date' | 'due_date' | 'priority' | 'task_type' | 'space' | 'folder' | 'list' | 'label' | 'bucket' | 'plan' | 'stage' | 'assignee';
 
 export const GROUP_BY_OPTIONS: { value: GroupBy; label: string }[] = [
   { value: 'none', label: 'None' },

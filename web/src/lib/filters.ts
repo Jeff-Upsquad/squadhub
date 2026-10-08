@@ -27,6 +27,8 @@ export interface TaskFilterState {
   tagIds?: string[];
   dueDate?: DueDatePreset[];
   workDate?: WorkDatePreset[];
+  /** Only tasks that have a due date. */
+  hasDueDate?: boolean;
 }
 
 export const EMPTY_FILTER: TaskFilterState = {};
@@ -39,7 +41,8 @@ export function countActiveFilters(f: TaskFilterState | undefined | null): numbe
     (f.assigneeIds?.length ?? 0) +
     (f.tagIds?.length ?? 0) +
     (f.dueDate?.length ?? 0) +
-    (f.workDate?.length ?? 0)
+    (f.workDate?.length ?? 0) +
+    (f.hasDueDate ? 1 : 0)
   );
 }
 
@@ -121,6 +124,8 @@ export function filterTasks(tasks: Task[], filters: TaskFilterState | undefined 
     if (f.workDate && f.workDate.length > 0) {
       if (!matchesWorkDate(t, f.workDate, tz)) return false;
     }
+
+    if (f.hasDueDate && !t.due_date) return false;
 
     return true;
   });

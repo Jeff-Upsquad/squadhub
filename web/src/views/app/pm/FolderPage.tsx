@@ -1,85 +1,29 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQueries, useQuery } from '@tanstack/react-query';
 import type { Folder, List, SpaceStatus, Task } from '@squadhub/shared';
 import api from '../../../services/api';
 import { usePMStore } from '../../../stores/pmStore';
-import { useSpace, useReorderLists } from '../../../hooks/useSpaces';
-import { useTaskTypes } from '../../../hooks/useTaskTypes';
-import { useIsMobile } from '../../../hooks/useIsMobile';
-import { useTaskWorkflowCatalog } from '../../../hooks/useTaskWorkflowCatalog';
-import TaskGroupCard from './TaskGroupCard';
-import { SectionedGroups } from './ListSection';
-import { useStatusDirectory } from '../../../hooks/useStatusDirectory';
-import { groupTasksByStatusDirectory } from '../../../lib/stageWorkflow';
-import { statusSection, taskTypeSection, type ListSectionMeta } from '../../../lib/listSections';
-import { GROUP_ORDER as TASK_TYPE_GROUP_ORDER, getTaskTypeGroup } from '../../../components/pm/TaskTypeDropdown';
-import { GROUP_BY_OPTIONS, groupTasks, partitionByCompletion, buildFocusTodayGroup, isTaskCompleted, isTaskUpcoming, nestSubtasks, filterWithSubtasks, sortByCreationOrder, type GroupBy } from '../../../lib/taskGrouping';
-import MinimalGroupFilterBar from '../../../components/pm/MinimalGroupFilterBar';
-import FieldManagerPanel from '../../../components/pm/FieldManagerPanel';
-import { useColumnPrefs } from '../../../hooks/useColumnPrefs';
-import { visibleColumnIds } from '../../../lib/columns';
-import ViewSearchInput from '../../../components/pm/ViewSearchInput';
+import { useSpace } from '../../../hooks/useSpaces';
 import ContainerChatButton from '../../../components/pm/ContainerChatButton';
-import ListChipsFilter from '../../../components/pm/ListChipsFilter';
 import ClientFolderReport from './client-design/ClientFolderReport';
-import {
-  EMPTY_FILTER,
-  countActiveFilters,
-  deriveAssigneeOptions,
-  deriveTagOptions,
-  filterTasks,
-} from '../../../lib/filters';
+import TaskOverview from './TaskOverview';
 
 type FolderWithLists = Folder & { lists?: List[] };
 
 export default function FolderPage({ folderId: propFolderId }: { folderId?: string } = {}) {
-  const qc = useQueryClient();
-  const reorderLists = useReorderLists();
   // When a folderId is passed (the tab strip renders each open tab from its own
   // snapshot), it overrides the global store so sibling tabs can show different
   // folders at once. Falls back to the store for normal single-view navigation.
   const storeFolderId = usePMStore((s) => s.activeFolderId);
   const activeFolderId = propFolderId ?? storeFolderId;
   const setContextListId = usePMStore((s) => s.setContextListId);
-  const filtersByScope = usePMStore((s) => s.filtersByScope);
-  const setScopeFilters = usePMStore((s) => s.setScopeFilters);
-  const clearScopeFilters = usePMStore((s) => s.clearScopeFilters);
-  const groupByScope = usePMStore((s) => s.groupByScope);
-  const setScopedGroupBy = usePMStore((s) => s.setScopedGroupBy);
-  const groupDirByScope = usePMStore((s) => s.groupDirByScope);
-  const setScopedGroupDir = usePMStore((s) => s.setScopedGroupDir);
-  const fadingTaskIds = usePMStore((s) => s.fadingTaskIds);
-  const isMobile = useIsMobile();
   const [listFilter, setListFilter] = useState<string>('all');
-  const [searchQuery, setSearchQuery] = useState('');
-  const groupScopeKey = activeFolderId ? `folder:${activeFolderId}` : '';
-  const groupBy = (groupScopeKey && groupByScope[groupScopeKey]) || 'none';
-  const groupDir = (groupScopeKey && groupDirByScope[groupScopeKey]) || 'asc';
 
-  const scopeKey = activeFolderId ? `folder:${activeFolderId}` : '';
-  const filters = (scopeKey && filtersByScope[scopeKey]) || EMPTY_FILTER;
+  useEffect(() => {
+    setListFilter('all');
+  }, [activeFolderId]);
 
-  const [fieldsOpen, setFieldsOpen] = useState(false);
-
-  // Field (column) visibility + order for this folder view (personal, synced).
-  const {
-    columns: folderColumnStates,
-    hasPersonalOverride: hasFolderColumnOverride,
-    setColumns: setFolderColumns,
-    resetColumns: resetFolderColumns,
-  } = useColumnPrefs(scopeKey);
-  const folderVisibleColumns = useMemo(() => visibleColumnIds(folderColumnStates), [folderColumnStates]);
-  const folderColumnControls = useMemo(
-    () => ({
-      states: folderColumnStates,
-      onChange: setFolderColumns,
-      onReset: resetFolderColumns,
-      hasOverride: hasFolderColumnOverride,
-      onOpenManager: () => setFieldsOpen(true),
-    }),
-    [folderColumnStates, hasFolderColumnOverride, setFolderColumns, resetFolderColumns],
-  );
-
+  // New tasks created from this page land in the selected list.
   useEffect(() => {
     setContextListId(listFilter === 'all' ? null : listFilter);
   }, [listFilter, setContextListId]);
@@ -92,53 +36,10 @@ export default function FolderPage({ folderId: propFolderId }: { folderId?: stri
     },
     enabled: !!activeFolderId,
   });
-  const { data: taskTypes } = useTaskTypes({ folderId: activeFolderId || undefined, spaceId: folder?.space_id || undefined });
 
   const lists: List[] = useMemo(() => folder?.lists ?? [], [folder]);
 
   const { data: parentSpace } = useSpace(folder?.space_id ?? null);
-  const { defs: catalogDefs, assignment } = useTaskWorkflowCatalog({
-    spaceId: folder?.space_id ?? null,
-    folderId: activeFolderId ?? null,
-  });
-
-  const spaceStatuses: SpaceStatus[] = useMemo(() => {
-    const rawStatuses: SpaceStatus[] = (parentSpace as unknown as { space_statuses?: SpaceStatus[] } | undefined)?.space_statuses ?? [];
-    if (catalogDefs && catalogDefs.length > 0 && assignment && !assignment.is_default_fallback) {
-      return catalogDefs.map((d, idx) => ({
-        id: d.key,
-        space_id: folder?.space_id || '',
-        name: d.label,
-        color: d.color,
-        position: idx,
-        is_default: !!d.is_default,
-        category: d.category,
-        group: d.group,
-        groupLabel: d.groupLabel,
-        groupEmoji: d.groupEmoji,
-        description: d.description,
-        is_placeholder: d.is_placeholder,
-      }));
-    }
-    if (rawStatuses.length > 0) return rawStatuses;
-    if (catalogDefs && catalogDefs.length > 0) {
-      return catalogDefs.map((d, idx) => ({
-        id: d.key,
-        space_id: folder?.space_id || '',
-        name: d.label,
-        color: d.color,
-        position: idx,
-        is_default: !!d.is_default,
-        category: d.category,
-        group: d.group,
-        groupLabel: d.groupLabel,
-        groupEmoji: d.groupEmoji,
-        description: d.description,
-        is_placeholder: d.is_placeholder,
-      }));
-    }
-    return [];
-  }, [parentSpace, catalogDefs, assignment, folder?.space_id]);
 
   const taskQueries = useQueries({
     queries: lists.map((l) => ({
@@ -151,18 +52,7 @@ export default function FolderPage({ folderId: propFolderId }: { folderId?: stri
     })),
   });
 
-  const isLoading = taskQueries.some((q) => q.isLoading || q.isFetching);
-
-  // Live per-list OPEN task counts for the list chips (completed/closed
-  // and subtasks excluded, matching how the view itself partitions tasks).
-  const listCounts = useMemo(() => {
-    const m: Record<string, number> = {};
-    for (const q of taskQueries) {
-      if (q.data) m[q.data.listId] = q.data.tasks.filter((t) => !isTaskCompleted(t) && !t.parent_task_id).length;
-    }
-    return m;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [taskQueries.map((q) => q.dataUpdatedAt).join('|')]);
+  const isLoading = taskQueries.some((q) => q.isLoading);
 
   const allTasks = useMemo<Task[]>(() => {
     const out: Task[] = [];
@@ -179,102 +69,12 @@ export default function FolderPage({ folderId: propFolderId }: { folderId?: stri
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [taskQueries.map((q) => q.dataUpdatedAt).join('|')]);
 
-  const tz = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC', []);
-
-  // Per-list snoozed (future-dated) open counts for the list chips. A list
-  // whose open tasks are ALL upcoming collapses into the "No open tasks"
-  // dropdown with its upcoming count shown on the row.
-  const upcomingCounts = useMemo(() => {
-    const m: Record<string, number> = {};
-    for (const q of taskQueries) {
-      if (!q.data) continue;
-      m[q.data.listId] = q.data.tasks.filter((t) => !isTaskCompleted(t) && !t.parent_task_id && isTaskUpcoming(t, tz)).length;
-    }
-    return m;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [taskQueries.map((q) => q.dataUpdatedAt).join('|'), tz]);
-
-  const tasksAfterPills = useMemo(() => {
-    if (listFilter === 'all') return allTasks;
-    return allTasks.filter((t) => t.list?.id === listFilter);
-  }, [allTasks, listFilter]);
-
-  const nestedTasks = useMemo(() => nestSubtasks(tasksAfterPills), [tasksAfterPills]);
-
-  const filteredTasks = useMemo(() => {
-    // Default order is creation order (oldest first) so a newly added task
-    // lands at the bottom of its group. Explicit group-by buckets only reorder
-    // the groups themselves — tasks stay in creation order within each group.
-    const q = searchQuery.trim().toLowerCase();
-    const matches = (t: Task): boolean => {
-      if (filterTasks([t], filters, tz).length === 0) return false;
-      if (q && !t.title.toLowerCase().includes(q)) return false;
-      return true;
-    };
-    let arr = filterWithSubtasks(nestedTasks, matches);
-    return sortByCreationOrder(arr);
-  }, [nestedTasks, filters, tz, searchQuery]);
-
-  const optionSourceTasks = useMemo(
-    () => (listFilter === 'all' ? allTasks : allTasks.filter((t) => t.list?.id === listFilter)),
-    [allTasks, listFilter],
+  // Space-level statuses resolve lists still on the basic To Do / In
+  // Progress / Done set; managed workflows come from the status directory.
+  const spaceStatuses: SpaceStatus[] = useMemo(
+    () => (parentSpace as unknown as { space_statuses?: SpaceStatus[] } | undefined)?.space_statuses ?? [],
+    [parentSpace],
   );
-  const assigneeOptions = useMemo(() => deriveAssigneeOptions(optionSourceTasks), [optionSourceTasks]);
-  const tagOptions = useMemo(() => deriveTagOptions(optionSourceTasks), [optionSourceTasks]);
-  const activeFilterCount = countActiveFilters(filters);
-
-  const { open: openTasks, completed: completedTasks } = useMemo(
-    () => partitionByCompletion(filteredTasks, fadingTaskIds),
-    [filteredTasks, fadingTaskIds],
-  );
-
-  // "Upcoming" — snoozed future-dated tasks, collapsed just above Completed.
-  // Bypasses date filters (so a "Today" filter can't hide a future task) while
-  // still respecting the list chip, every other filter, and search. A task
-  // automatically rejoins the main list once its day arrives.
-  const upcomingTasks = useMemo(() => {
-    const hasDateFilter = (filters.dueDate?.length ?? 0) > 0 || (filters.workDate?.length ?? 0) > 0;
-    if (!hasDateFilter) return sortByCreationOrder(openTasks.filter((t) => isTaskUpcoming(t, tz)));
-    const noDateFilters = { ...filters, dueDate: undefined, workDate: undefined };
-    const q = searchQuery.trim().toLowerCase();
-    const matches = (t: Task): boolean => {
-      if (filterTasks([t], noDateFilters, tz).length === 0) return false;
-      if (q && !t.title.toLowerCase().includes(q)) return false;
-      return true;
-    };
-    const base = filterWithSubtasks(nestedTasks, matches);
-    const { open } = partitionByCompletion(base, fadingTaskIds);
-    return sortByCreationOrder(open.filter((t) => isTaskUpcoming(t, tz)));
-  }, [nestedTasks, filters, tz, searchQuery, openTasks, fadingTaskIds]);
-
-  const upcomingIds = useMemo(() => new Set(upcomingTasks.map((t) => t.id)), [upcomingTasks]);
-
-  // Main groups exclude snoozed tasks so a future task never shows twice.
-  const currentOpenTasks = useMemo(
-    () => openTasks.filter((t) => !upcomingIds.has(t.id)),
-    [openTasks, upcomingIds],
-  );
-
-  // Lists here can run different workflows (Design vs Software stages), so
-  // status grouping resolves labels + sections from every status group.
-  const statusDirectory = useStatusDirectory();
-  const groups = useMemo((): { key: string; label: string; color?: string; tasks: Task[]; section: ListSectionMeta | null }[] => {
-    if (groupBy === 'none') return [];
-    if (groupBy === 'status') {
-      return groupTasksByStatusDirectory(currentOpenTasks, statusDirectory, fadingTaskIds, spaceStatuses)
-        .map((g) => ({ key: g.key, label: g.label, color: g.color, tasks: g.tasks, section: g.status ? statusSection(g.status) : null }));
-    }
-    return groupTasks(currentOpenTasks, groupBy, tz, fadingTaskIds, taskTypes, spaceStatuses).map((g) => ({
-      ...g,
-      section: groupBy === 'task_type'
-        ? taskTypeSection((taskTypes || []).find((t) => t.id === g.key || t.key === g.key) || null, getTaskTypeGroup)
-        : null,
-    }));
-  }, [currentOpenTasks, groupBy, tz, fadingTaskIds, taskTypes, spaceStatuses, statusDirectory]);
-
-  const focusGroup = useMemo(() => {
-    return buildFocusTodayGroup(currentOpenTasks);
-  }, [currentOpenTasks]);
 
   if (!activeFolderId) {
     return (
@@ -295,201 +95,25 @@ export default function FolderPage({ folderId: propFolderId }: { folderId?: stri
     return <ClientFolderReport folder={folder} />;
   }
 
-  const totalCount = allTasks.filter((t) => !t.parent_task_id).length;
-  const visibleCount = filteredTasks.length - openTasks.filter((t) => upcomingIds.has(t.id)).length + upcomingTasks.length;
-  const noopStatusChange = () => {};
-
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
-      {isMobile && (
-        <div className="mtk-phone-head">
-          <h1>{folder?.name || 'Folder'}</h1>
-          <p>{totalCount === 0 ? 'No tasks' : `${totalCount} task${totalCount === 1 ? '' : 's'}`}</p>
-        </div>
-      )}
-      {/* Header */}
-      <div className="flex items-center justify-between border-b border-[var(--sh-hair)] bg-[var(--surface)] px-4 py-2.5">
-        <div className="flex items-center gap-2">
-          <svg className="h-4 w-4 text-[var(--sh-ink-3)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
-          </svg>
-          <span className="text-sm font-medium text-[var(--sh-ink)]">{folder?.name || 'Folder'}</span>
-          <span className="text-xs text-[var(--sh-ink-3)]">· {totalCount} task{totalCount === 1 ? '' : 's'}</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <ViewSearchInput value={searchQuery} onChange={setSearchQuery} />
-          {activeFolderId && (
-            <ContainerChatButton
-              resourceType="folder"
-              resourceId={activeFolderId}
-              name={folder?.name || 'Folder'}
-              accessLevel={(folder as { my_access_level?: string } | undefined)?.my_access_level}
-            />
-          )}
-        </div>
-      </div>
-
-      {/* List chips (with task counts; empty lists collapse into a dropdown).
-          Drag chips to reorder — persists via POST /pm/lists/reorder. */}
-      <ListChipsFilter
-        label="List"
-        lists={lists}
-        counts={listCounts}
-        upcomingCounts={upcomingCounts}
-        value={listFilter}
-        onChange={setListFilter}
-        myAccess={folder?.my_access_level}
-        onReorder={(orderedIds) => {
-          if (!folder) return;
-          reorderLists.mutate({ space_id: folder.space_id, folder_id: activeFolderId, ordered_ids: orderedIds });
-        }}
-        onSettingsClosed={() => qc.invalidateQueries({ queryKey: ['folder', activeFolderId] })}
-      />
-
-      {/* Minimal Group + Filter bar */}
-      <MinimalGroupFilterBar
-        groupOptions={GROUP_BY_OPTIONS as { value: string; label: string }[]}
-        groupBy={groupBy}
-        onGroupChange={(v) => groupScopeKey && setScopedGroupBy(groupScopeKey, v as GroupBy)}
-        groupDirection={groupDir}
-        onGroupDirectionChange={(d) => groupScopeKey && setScopedGroupDir(groupScopeKey, d)}
-        filters={filters}
-        onFiltersChange={(next) => scopeKey && setScopeFilters(scopeKey, next)}
-        statuses={spaceStatuses}
-        assigneeOptions={assigneeOptions}
-        tagOptions={tagOptions}
-      />
-
-      {/* Body */}
-      <div className="td-scroll lv-card-canvas" style={{ flex: 1, overflowY: 'auto' }}>
-        {isLoading && allTasks.length === 0 ? (
-          <div style={{ padding: 24, fontSize: 12, color: 'var(--sh-ink-3)' }}>Loading…</div>
-        ) : lists.length === 0 ? (
-          <div style={{ padding: '28px 20px', fontSize: 13, color: 'var(--sh-ink-3)' }}>
-            This folder has no lists yet.
-          </div>
-        ) : visibleCount === 0 ? (
-          <div style={{ padding: '28px 20px', fontSize: 13, color: 'var(--sh-ink-3)' }}>
-            {activeFilterCount > 0 ? (
-              <>
-                No tasks match the current filters.{' '}
-                <button
-                  type="button"
-                  onClick={() => scopeKey && clearScopeFilters(scopeKey)}
-                  style={{ color: 'var(--sh-ink)', textDecoration: 'underline', background: 'none', border: 'none', cursor: 'pointer', padding: 0, font: 'inherit' }}
-                >
-                  Clear filters
-                </button>
-              </>
-            ) : (
-              'No tasks in this folder yet.'
-            )}
-          </div>
-        ) : (
-          <>
-            {focusGroup && (
-              <TaskGroupCard
-                groupKey="focus_today"
-                label={focusGroup.label}
-                dotColor="#f59e0b"
-                variant="focus"
-                tasks={focusGroup.tasks}
-                allStatuses={spaceStatuses}
-                columns={folderVisibleColumns}
-                columnControls={folderColumnControls}
-                listId={null}
-                onStatusChange={noopStatusChange}
-                canEdit
-                showAddRow={false}
-              />
-            )}
-            {groupBy === 'none' ? (
-              (currentOpenTasks.length > 0 || (upcomingTasks.length === 0 && completedTasks.length === 0)) && (
-                <TaskGroupCard
-                  groupKey="fl-all"
-                  label="All tasks"
-                  tasks={currentOpenTasks}
-                  allStatuses={spaceStatuses}
-                columns={folderVisibleColumns}
-                columnControls={folderColumnControls}
-                  listId={null}
-                  onStatusChange={noopStatusChange}
-                  canEdit
-                  showAddRow={false}
-                  dimFocused={!!focusGroup}
-                />
-              )
-            ) : (
-              <SectionedGroups
-                scope={`flsec:${activeFolderId}:${groupBy}`}
-                groups={groups}
-                sectionOf={(g) => g.section}
-                countOf={(g) => g.tasks.length}
-                order={groupBy === 'task_type' ? TASK_TYPE_GROUP_ORDER : undefined}
-                direction={groupDir}
-                render={(g) => (
-                <TaskGroupCard
-                  key={g.key}
-                  groupKey={`fl:${g.key}`}
-                  label={g.label}
-                  dotColor={g.color}
-                  tasks={g.tasks}
-                  allStatuses={spaceStatuses}
-                columns={folderVisibleColumns}
-                columnControls={folderColumnControls}
-                  listId={null}
-                  onStatusChange={noopStatusChange}
-                  canEdit
-                  showAddRow={false}
-                  dimFocused={!!focusGroup}
-                />
-                )}
-              />
-            )}
-            {upcomingTasks.length > 0 && (
-              <TaskGroupCard
-                groupKey="fl-upcoming"
-                label="Upcoming"
-                dotColor="#0ea5e9"
-                tasks={upcomingTasks}
-                allStatuses={spaceStatuses}
-                columns={folderVisibleColumns}
-                columnControls={folderColumnControls}
-                listId={null}
-                onStatusChange={noopStatusChange}
-                canEdit
-                showAddRow={false}
-                dimFocused={!!focusGroup}
-                defaultCollapsed
-              />
-            )}
-            {completedTasks.length > 0 && (
-              <TaskGroupCard
-                groupKey="fl-completed"
-                label="Completed"
-                dotColor="#7c3aed"
-                tasks={completedTasks}
-                allStatuses={spaceStatuses}
-                columns={folderVisibleColumns}
-                columnControls={folderColumnControls}
-                listId={null}
-                onStatusChange={noopStatusChange}
-                canEdit
-                showAddRow={false}
-                defaultCollapsed
-              />
-            )}
-          </>
-        )}
-      </div>
-
-      <FieldManagerPanel
-        open={fieldsOpen}
-        onClose={() => setFieldsOpen(false)}
-        columns={folderColumnStates}
-        onChange={setFolderColumns}
-        onReset={resetFolderColumns}
-        hasOverride={hasFolderColumnOverride}
+      <TaskOverview
+        title={folder?.name || 'Folder'}
+        tasks={allTasks}
+        lists={lists.map((l) => ({ id: l.id, name: l.name }))}
+        listFilter={listFilter}
+        onListFilter={setListFilter}
+        scopeKey={`folder:${activeFolderId}`}
+        statusFallback={spaceStatuses}
+        loading={isLoading}
+        headerExtra={
+          <ContainerChatButton
+            resourceType="folder"
+            resourceId={activeFolderId}
+            name={folder?.name || 'Folder'}
+            accessLevel={(folder as { my_access_level?: string } | undefined)?.my_access_level}
+          />
+        }
       />
     </div>
   );
