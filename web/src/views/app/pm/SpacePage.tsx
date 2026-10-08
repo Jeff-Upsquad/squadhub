@@ -273,8 +273,8 @@ export default function SpacePage({ spacePageId: propSpacePageId }: { spacePageI
 
   const groups = useMemo(() => {
     if (groupBy === 'none') return [];
-    return groupTasks(currentOpenTasks, groupBy, tz, fadingTaskIds, taskTypes);
-  }, [currentOpenTasks, groupBy, tz, fadingTaskIds, taskTypes]);
+    return groupTasks(currentOpenTasks, groupBy, tz, fadingTaskIds, taskTypes, spaceStatuses);
+  }, [currentOpenTasks, groupBy, tz, fadingTaskIds, taskTypes, spaceStatuses]);
 
   const focusGroup = useMemo(() => {
     return buildFocusTodayGroup(currentOpenTasks);

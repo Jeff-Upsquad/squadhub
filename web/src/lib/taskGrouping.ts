@@ -1,4 +1,4 @@
-import type { Task, TaskType } from '@squadhub/shared';
+import type { Task, TaskType, SpaceStatus } from '@squadhub/shared';
 import { getTaskStatusCategory, getTaskStatusDef } from '@squadhub/shared';
 
 // Sentinel for callers that genuinely have no fading state to thread through
@@ -293,6 +293,7 @@ export function groupByPriority(tasks: Task[]): Group[] {
 export function groupByStatus(
   tasks: Task[],
   fadingMap: ReadonlyMap<string, string>,
+  orderedStatuses?: SpaceStatus[],
 ): Group[] {
   const map = new Map<string, Group>();
   for (const t of tasks) {
@@ -331,7 +332,29 @@ export function groupByStatus(
     if (!map.has(key)) map.set(key, { key, label, sort, tasks: [] });
     map.get(key)!.tasks.push(t);
   }
-  return [...map.values()].sort((a, b) => {
+  const out = [...map.values()];
+  // When the caller's workflow order is known (Space / Folder views), follow
+  // the original status-group position instead of alphabetical order.
+  if (orderedStatuses && orderedStatuses.length > 0) {
+    const order = new Map<string, number>();
+    orderedStatuses.forEach((s, idx) => {
+      const idKey = (s.id || '').toLowerCase().trim();
+      const nameKey = (s.name || '').toLowerCase().trim();
+      if (idKey && !order.has(idKey)) order.set(idKey, idx);
+      if (nameKey && !order.has(nameKey)) order.set(nameKey, idx);
+    });
+    return out.sort((a, b) => {
+      const ai = order.get(a.key.toLowerCase().trim());
+      const bi = order.get(b.key.toLowerCase().trim());
+      const aKnown = ai !== undefined;
+      const bKnown = bi !== undefined;
+      if (aKnown && bKnown) return (ai as number) - (bi as number);
+      if (aKnown) return -1;
+      if (bKnown) return 1;
+      return a.label.toLowerCase().localeCompare(b.label.toLowerCase());
+    });
+  }
+  return out.sort((a, b) => {
     if (typeof a.sort === 'number' && typeof b.sort === 'number') return a.sort - b.sort;
     if (typeof a.sort === 'number') return -1;
     if (typeof b.sort === 'number') return 1;
@@ -456,6 +479,7 @@ export function groupTasks(
   tz: string,
   fadingMap: ReadonlyMap<string, string>,
   taskTypes?: TaskType[],
+  orderedStatuses?: SpaceStatus[],
 ): Group[] {
   switch (by) {
     case 'work_date':
@@ -465,7 +489,7 @@ export function groupTasks(
     case 'priority':
       return groupByPriority(tasks);
     case 'status':
-      return groupByStatus(tasks, fadingMap);
+      return groupByStatus(tasks, fadingMap, orderedStatuses);
     case 'task_type':
       return groupByTaskType(tasks, taskTypes);
     case 'space':

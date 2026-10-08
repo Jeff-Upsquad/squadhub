@@ -247,8 +247,8 @@ export default function FolderPage({ folderId: propFolderId }: { folderId?: stri
 
   const groups = useMemo(() => {
     if (groupBy === 'none') return [];
-    return groupTasks(currentOpenTasks, groupBy, tz, fadingTaskIds, taskTypes);
-  }, [currentOpenTasks, groupBy, tz, fadingTaskIds, taskTypes]);
+    return groupTasks(currentOpenTasks, groupBy, tz, fadingTaskIds, taskTypes, spaceStatuses);
+  }, [currentOpenTasks, groupBy, tz, fadingTaskIds, taskTypes, spaceStatuses]);
 
   const focusGroup = useMemo(() => {
     return buildFocusTodayGroup(currentOpenTasks);
