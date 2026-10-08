@@ -2027,7 +2027,8 @@ export default function MainLayout() {
             — creation now lives in the small global bottom-right quick-create
             FAB (plus each surface's own header actions). */}
         <EmergencyBanner />
-        <ActiveTimer />
+        {/* Running timers float in a dock at the bottom of the content area. */}
+        <ActiveTimer floating />
         <TimerConflictDialog />
         <TimerModeDialog />
         {/* Fallback for the brief window before the tab strip is seeded (a brand
