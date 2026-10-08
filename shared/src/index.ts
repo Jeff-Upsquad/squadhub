@@ -533,6 +533,13 @@ export interface SpaceStatus {
   position: number;
   is_default: boolean;
   category: StatusCategory;
+  /** Optional picker grouping carried through when built from a managed
+   *  task_workflow catalog def. Lets pickers render admin's section
+   *  without re-guessing it from the (renamable) status name. */
+  group?: string | null;
+  groupLabel?: string | null;
+  groupEmoji?: string | null;
+  description?: string | null;
 }
 
 // ---- Status Groups (admin-managed reusable status sets) ----

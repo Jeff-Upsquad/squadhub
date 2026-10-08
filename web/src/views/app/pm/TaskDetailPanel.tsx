@@ -3826,8 +3826,12 @@ function SpaceStatusPicker({
         .replace(/[^a-z0-9_\s]/g, '')
         .trim()
         .replace(/\s+/g, '_');
-      const def = getTaskStatusDef(slug) || getTaskStatusDef(s.name.toLowerCase());
-      let groupKey = def?.group;
+      // Same fix as StatusPicker: prefer stable key + carried group over the
+      // renamable name so admin section moves (e.g. Normal Priority) render
+      // in the same bucket as admin.
+      const def = getTaskStatusDef(s.id) || getTaskStatusDef(slug) || getTaskStatusDef(s.name.toLowerCase());
+      const carriedGroup = s.group || null;
+      let groupKey = carriedGroup || def?.group;
       if (!groupKey) {
         if (s.category === 'todo') groupKey = 'not_started';
         else if (s.category === 'closed' || s.category === 'done') groupKey = 'done';
@@ -3835,12 +3839,12 @@ function SpaceStatusPicker({
       }
       const groupCfg = SPACE_STATUS_GROUP_CONFIG.find((c) => c.key === groupKey) || {
         key: groupKey,
-        label: def?.groupLabel || (s.category === 'todo' ? 'Not Started' : s.category === 'closed' ? 'Closed' : 'In Motion'),
-        emoji: def?.groupEmoji || '📋',
+        label: s.groupLabel || def?.groupLabel || (s.category === 'todo' ? 'Not Started' : s.category === 'closed' ? 'Closed' : 'In Motion'),
+        emoji: s.groupEmoji || def?.groupEmoji || '📋',
       };
       return {
         status: s,
-        description: def?.description || '',
+        description: s.description || def?.description || '',
         groupKey,
         groupName: groupCfg.label,
         emoji: groupCfg.emoji,
