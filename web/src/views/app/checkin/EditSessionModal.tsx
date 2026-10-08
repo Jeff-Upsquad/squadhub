@@ -49,15 +49,19 @@ export default function EditSessionModal({ session, onClose, workspaceId, contex
         setError('End time must be after start time');
         return;
       }
-      // Reduce-only: the edited range must sit inside the original range.
-      const origStartMs = Date.parse(session.start_time);
-      const origEndMs = session.end_time ? Date.parse(session.end_time) : NaN;
+      // Reduce-only against the TRUE original bounds: re-adjusting back up to
+      // the pre-trim range is allowed, but never past it.
+      const boundStartMs = Date.parse(session.original_start_time ?? session.start_time);
+      const boundEndIso = session.original_end_time ?? session.end_time;
+      const boundEndMs = boundEndIso ? Date.parse(boundEndIso) : NaN;
       const startMs = Date.parse(startIso);
       const endMs = Date.parse(endIso);
-      if (Number.isFinite(origStartMs) && Number.isFinite(origEndMs)) {
-        const origSeconds = session.duration_seconds ?? Math.round((origEndMs - origStartMs) / 1000);
+      if (Number.isFinite(boundStartMs) && Number.isFinite(boundEndMs)) {
+        const boundSeconds = session.original_duration_seconds
+          ?? session.duration_seconds
+          ?? Math.round((boundEndMs - boundStartMs) / 1000);
         const newSeconds = Math.round((endMs - startMs) / 1000);
-        if (startMs < origStartMs || endMs > origEndMs || newSeconds > origSeconds) {
+        if (startMs < boundStartMs || endMs > boundEndMs || newSeconds > boundSeconds) {
           setError('Time can only be reduced, not increased');
           return;
         }
@@ -128,7 +132,7 @@ export default function EditSessionModal({ session, onClose, workspaceId, contex
             <input
               type="datetime-local"
               value={startLocal}
-              min={toLocalInput(session.start_time)}
+              min={toLocalInput(session.original_start_time ?? session.start_time)}
               max={endLocal || undefined}
               onChange={(e) => setStartLocal(e.target.value)}
               className="w-full rounded-md border border-divider px-3 py-2 text-sm text-foreground focus:border-accent focus:outline-none"
@@ -141,7 +145,7 @@ export default function EditSessionModal({ session, onClose, workspaceId, contex
               type="datetime-local"
               value={endLocal}
               min={startLocal || undefined}
-              max={session.end_time ? toLocalInput(session.end_time) : undefined}
+              max={toLocalInput(session.original_end_time ?? session.end_time ?? session.start_time)}
               onChange={(e) => setEndLocal(e.target.value)}
               className="w-full rounded-md border border-divider px-3 py-2 text-sm text-foreground focus:border-accent focus:outline-none"
             />
