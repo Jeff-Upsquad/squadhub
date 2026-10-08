@@ -447,11 +447,44 @@ router.put('/:id/enabled', async (req: Request, res: Response) => {
   }
 });
 
-// DELETE /admin/task-types/:id
+// GET /admin/task-types/:id/usage — count tasks currently using this type
+router.get('/:id/usage', async (req: Request, res: Response) => {
+  try {
+    const id = req.params.id as string;
+    const { data: type } = await supabaseAdmin
+      .from('task_types')
+      .select('id')
+      .eq('id', id)
+      .maybeSingle();
+    if (!type) {
+      res.status(404).json({ success: false, error: 'Task type not found' });
+      return;
+    }
+    const { count, error } = await supabaseAdmin
+      .from('tasks')
+      .select('*', { count: 'exact', head: true })
+      .eq('task_type_id', id);
+    if (error) {
+      res.status(500).json({ success: false, error: error.message });
+      return;
+    }
+    res.json({ success: true, count: count || 0 });
+  } catch (err) {
+    console.error('Get task type usage error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// DELETE /admin/task-types/:id — permanent delete with optional reassignment
 router.delete('/:id', async (req: Request, res: Response) => {
   try {
     const id = req.params.id as string;
-    const reassignTo = (req.query.reassign_to as string) || null;
+    const reassignTo =
+      (req.body?.reassign_to as string) ||
+      (req.body?.target_task_type_id as string) ||
+      (req.query.reassign_to as string) ||
+      (req.query.target_task_type_id as string) ||
+      null;
 
     const { data: type } = await supabaseAdmin
       .from('task_types')
@@ -481,9 +514,23 @@ router.delete('/:id', async (req: Request, res: Response) => {
       if (!reassignTo) {
         res.status(409).json({
           success: false,
-          error: `${count} task(s) use this type. Pass ?reassign_to=<type_id> to reassign before deleting.`,
+          error: `${count} task(s) use this type. Select a replacement type to move them before deleting.`,
           in_use_count: count,
+          count,
         });
+        return;
+      }
+      if (reassignTo === id) {
+        res.status(400).json({ success: false, error: 'Replacement type must be different from the type being deleted' });
+        return;
+      }
+      const { data: target } = await supabaseAdmin
+        .from('task_types')
+        .select('id')
+        .eq('id', reassignTo)
+        .maybeSingle();
+      if (!target) {
+        res.status(400).json({ success: false, error: 'Replacement task type not found' });
         return;
       }
 
@@ -504,7 +551,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
       return;
     }
 
-    res.json({ success: true, message: 'Task type deleted' });
+    res.json({ success: true, message: 'Task type deleted', reassigned_tasks: count || 0 });
   } catch (err) {
     console.error('Delete task type error:', err);
     res.status(500).json({ success: false, error: 'Internal server error' });

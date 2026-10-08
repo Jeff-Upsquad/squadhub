@@ -397,23 +397,29 @@ function DeleteStatusModal({
                 </p>
               </div>
 
-              <div>
-                <label className="block text-xs font-medium text-foreground-dim mb-1.5">
-                  Change {count === 1 ? 'task' : 'tasks'} to:
-                </label>
-                <select
-                  value={selectedTargetId}
-                  onChange={(e) => setSelectedTargetId(e.target.value)}
-                  disabled={isPending}
-                  className="w-full rounded-lg border border-divider bg-surface px-3 py-2 text-sm text-foreground focus:border-ink focus:outline-none"
-                >
-                  {availableReplacements.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name} {s.section_label ? `(${s.section_label})` : `(${s.category})`}
-                    </option>
-                  ))}
-                </select>
-              </div>
+              {availableReplacements.length === 0 ? (
+                <p className="rounded-lg border border-divider bg-muted px-3 py-2 text-xs text-foreground-muted">
+                  This is the only status left in the group. Add another status first so tasks have somewhere to go.
+                </p>
+              ) : (
+                <div>
+                  <label className="block text-xs font-medium text-foreground-dim mb-1.5">
+                    Change {count === 1 ? 'task' : 'tasks'} to:
+                  </label>
+                  <select
+                    value={selectedTargetId}
+                    onChange={(e) => setSelectedTargetId(e.target.value)}
+                    disabled={isPending}
+                    className="w-full rounded-lg border border-divider bg-surface px-3 py-2 text-sm text-foreground focus:border-ink focus:outline-none"
+                  >
+                    {availableReplacements.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name} {s.section_label ? `(${s.section_label})` : `(${s.category})`}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
             </div>
           ) : (
             <p className="text-sm text-foreground-dim">
