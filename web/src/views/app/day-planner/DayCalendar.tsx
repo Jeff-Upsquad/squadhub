@@ -2,7 +2,9 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { getTaskStatusCategory } from '@squadhub/shared';
 import { usePMStore, focusBucketForMinute } from '../../../stores/pmStore';
+import { showToast } from '../../../components/Toast';
 import { useUpdateTask } from '../../../hooks/useTasks';
+import { useLinkTaskToWorkBlock } from '../../../hooks/useWorkBlocks';
 import {
   planDateKey,
   useDayPlans,
@@ -22,6 +24,8 @@ import {
   DND_GROUP_CONTAINER_NAME,
   DND_GROUP_ESTIMATE_TOTAL,
   DND_TASK_RECURRING_PARENT,
+  dragIsTask,
+  dragTaskId,
 } from '../calendar/calendarUtils';
 import { useSlotDragCreate, SlotCreatePanel } from './SlotCreate';
 import DayPlannerDatePopup from './DayPlannerDatePopup';
@@ -176,6 +180,10 @@ export default function DayCalendar({ date, today, onDateChange, keyboard = fals
   // Snapped minute under the cursor while a palette row is dragged over the
   // grid — drives the "drop here" ghost so the landing time is visible.
   const [dragOverMin, setDragOverMin] = useState<number | null>(null);
+  // Time Block currently under a dragged task — drives the link-drop highlight.
+  const [wbOver, setWbOver] = useState<string | null>(null);
+  // Dropping a task onto a Time Block links it to that block.
+  const linkToBlock = useLinkTaskToWorkBlock();
   // Click-and-drag on empty grid space → new task in that slot.
   const slotCreate = useSlotDragCreate(PX_PER_MIN);
   const [allDayOver, setAllDayOver] = useState(false);
@@ -811,7 +819,47 @@ export default function DayCalendar({ date, today, onDateChange, keyboard = fals
                 right: 'auto',
                 ...(isWorkBlock ? ({ '--dp-accent': wbColor } as React.CSSProperties) : {}),
               }}
-              title={`${blockTitle} · ${fmtTimeRange(renderStart, renderDur)}${isWorkBlock ? ' · Work block' : ''}`}
+              title={`${blockTitle} · ${fmtTimeRange(renderStart, renderDur)}${isWorkBlock ? ' · Time block — drop a task here to link it' : ''}`}
+              data-wbdrop={isWorkBlock && wbOver === p.id ? 'true' : undefined}
+              onDragOver={(e) => {
+                // Time Blocks are link targets: accept a dragged task so it
+                // links instead of falling through to the hour slot below.
+                if (!isWorkBlock || !dragIsTask(e.dataTransfer)) return;
+                e.preventDefault();
+                e.stopPropagation();
+                // 'move' — every task drag source sets effectAllowed to
+                // copyMove, and a dropEffect outside that set is rejected.
+                e.dataTransfer.dropEffect = 'move';
+                if (wbOver !== p.id) {
+                  setWbOver(p.id);
+                  // Drop the "drop at …" ghost — it would otherwise paint over
+                  // this block while the task hovers here.
+                  setDragOverMin(null);
+                }
+              }}
+              onDragLeave={(e) => {
+                if (!isWorkBlock) return;
+                if (e.currentTarget.contains(e.relatedTarget as Node | null)) return;
+                setWbOver((c) => (c === p.id ? null : c));
+              }}
+              onDrop={(e) => {
+                if (!isWorkBlock) return;
+                const dropped = dragTaskId(e.dataTransfer);
+                if (!dropped || dropped === p.task_id) return;
+                e.preventDefault();
+                e.stopPropagation();
+                setWbOver(null);
+                linkToBlock.mutate(
+                  { work_block_task_id: p.task_id, linked_task_id: dropped },
+                  {
+                    onSuccess: () => showToast('Task linked to the time block', 'success'),
+                    onError: (err) => {
+                      console.error('Failed to link task to time block:', err);
+                      showToast('Could not link that task to the time block', 'error');
+                    },
+                  },
+                );
+              }}
             >
               {/* Top resize handle — drag to extend earlier */}
               <div
@@ -860,7 +908,7 @@ export default function DayCalendar({ date, today, onDateChange, keyboard = fals
                   {isGroup
                     ? <span className="b-src">Group</span>
                     : isWorkBlock
-                      ? <span className="b-src">Work block</span>
+                      ? <span className="b-src">Time block</span>
                       : p.date_field && <span className="b-src">{dateFieldLabel(p.date_field)}</span>}
                 </div>
               </div>

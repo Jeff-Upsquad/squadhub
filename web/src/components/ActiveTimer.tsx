@@ -84,7 +84,7 @@ export default function ActiveTimer() {
             <span className="absolute inline-flex h-full w-full animate-ping rounded-full opacity-75" style={{ background: '#a78bfa' }} />
             <span className="relative inline-flex h-2 w-2 rounded-full" style={{ background: '#8b5cf6' }} />
           </span>
-          <span className="text-xs font-medium" style={{ color: '#6d28d9' }}>Work block</span>
+          <span className="text-xs font-medium" style={{ color: '#6d28d9' }}>Time block</span>
           <button
             onClick={() => setActiveTask(wbRun.task.id)}
             className="max-w-[200px] truncate text-xs font-medium text-[#0F172B] hover:text-[#2962FF]"
@@ -100,7 +100,7 @@ export default function ActiveTimer() {
           <button
             onClick={handleStopWorkBlock}
             className="flex items-center gap-1 rounded bg-red-500 px-2 py-0.5 text-xs font-medium text-white transition hover:bg-red-600"
-            title="Stop work-block run"
+            title="Stop time-block run"
           >
             <svg className="h-3 w-3" fill="currentColor" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="1" /></svg>
             Stop

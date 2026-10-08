@@ -260,7 +260,7 @@ function EntryRow({
                 className="shrink-0 rounded-[4px] px-1.5 py-[1px] text-[10px] font-semibold uppercase tracking-wide"
                 style={{ backgroundColor: 'rgba(139,92,246,0.14)', color: '#8b5cf6' }}
               >
-                Work block
+                Time block
               </span>
             )}
           </div>
@@ -280,7 +280,7 @@ function EntryRow({
             ) : entry.source === 'work_block' ? (
               <span className="rounded-[4px] px-1.5 py-[1px] text-[10px] font-medium lowercase"
                 style={{ backgroundColor: 'rgba(139,92,246,0.14)', color: '#8b5cf6' }}>
-                block
+                time block
               </span>
             ) : (
               <>

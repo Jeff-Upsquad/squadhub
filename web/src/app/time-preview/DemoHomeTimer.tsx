@@ -22,7 +22,7 @@ function sampleTasks(): Activity[] {
   const date = dayKey();
   const make = (key: string, start: number, end: number, kind: 'task' | 'block', title: string, project: string): Activity => ({
     id: `sample:${key}:${start}:${kind}`, kind, title, project, start: dayStart(key) + start * 60000, end: dayStart(key) + end * 60000,
-    seconds: (end - start) * 60, source: kind === 'task' ? 'Task timer' : 'Work block timer',
+    seconds: (end - start) * 60, source: kind === 'task' ? 'Task timer' : 'Time block timer',
   });
   const result = [
     make(date, 555, 600, 'task', 'Booking engine', 'Squad CRM / Product'),

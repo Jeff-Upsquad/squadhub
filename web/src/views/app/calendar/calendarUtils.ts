@@ -23,6 +23,19 @@ export const DND_GROUP_CONTAINER_TYPE = 'application/x-group-container-type';
 export const DND_GROUP_CONTAINER_NAME = 'application/x-group-container-name';
 export const DND_GROUP_ESTIMATE_TOTAL = 'application/x-group-estimate-total';
 
+// Is the current drag payload a plain task? The time-block drop targets use
+// this during `dragover` (where `types` is readable but values are not) so a
+// block can decide to accept the drop — and light up — before it happens.
+// Group-container drags carry their own MIME and are deliberately excluded.
+export function dragIsTask(dt: DataTransfer | null): boolean {
+  return !!dt && Array.from(dt.types || []).includes(DND_TASK_ID);
+}
+
+// Task id out of a completed drop payload ('' when the drag wasn't a task).
+export function dragTaskId(dt: DataTransfer): string {
+  return dt.getData(DND_TASK_ID) || '';
+}
+
 // Build the group-run panel target for a calendar group block. The block only
 // carries the container, so we recover its member tasks from the day-planner
 // tasks cache (same source the palette collapses into the "Grouped tasks under

@@ -46,7 +46,7 @@ function CalendarData({ workspaceId, context, from, to, now, days = [], onClose 
     }
     const block = activeBlock.data;
     if (block && !block.run.ended_at) all.push({ id: `block:${block.run.id}`, kind: 'block', title: block.task.title,
-      start: Date.parse(block.run.started_at), end: now, seconds: Math.max(0, (now - Date.parse(block.run.started_at)) / 1000), live: true, taskId: block.task.id, source: 'Running work block' });
+      start: Date.parse(block.run.started_at), end: now, seconds: Math.max(0, (now - Date.parse(block.run.started_at)) / 1000), live: true, taskId: block.task.id, source: 'Running time block' });
     return all;
   }, [sessions.data, entries.data, dayPlansByDate, commitment, now, timers, segmentStart, activeBlock.data]);
   return <TimeActivityCalendar.Data events={events} commitment={commitment}
