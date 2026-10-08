@@ -2027,7 +2027,7 @@ router.get('/tasks/:id/relationships', async (req: Request, res: Response) => {
     const targetIds = Array.from(new Set(rawRels.map((r) => r.target_task_id).filter(Boolean)));
     const { data: targetTasks, error: targetsError } = await supabaseAdmin
       .from('tasks')
-      .select('id, title, status, priority, list_id, lists(id, name, space_id, spaces(id, name, color)), due_date, display_number, last_status_change_at, metadata')
+      .select('id, title, status, priority, list_id, lists(id, name, space_id, spaces(id, name, color)), due_date, display_number, metadata')
       .in('id', targetIds);
     if (targetsError) throw targetsError;
 
