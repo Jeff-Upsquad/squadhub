@@ -38,6 +38,8 @@ const reorderSchema = z.object({
 const applySchema = z.object({
   entity_type: z.enum(ENTITY_TYPES),
   entity_id: z.string().uuid(),
+  allow_replace: z.boolean().optional(),
+  task_type_mapping: z.record(z.string(), z.string().uuid()).optional(),
 });
 
 const addTypeSchema = z.object({
@@ -48,6 +50,7 @@ const addTypeSchema = z.object({
   description: z.string().nullable().optional(),
   icon: z.string().max(64).optional(),
   color: z.string().max(16).optional(),
+  group_name: z.string().min(1).max(100).nullable().optional(),
 });
 
 async function getGroup(id: string) {
@@ -73,6 +76,55 @@ function zodErr(err: unknown, res: Response) {
     return true;
   }
   return false;
+}
+
+/** Resolve the list ids that own tasks for a given assignment target. */
+async function getListIdsForEntity(entityType: string, entityId: string): Promise<string[]> {
+  if (entityType === 'list') return [entityId];
+  if (entityType === 'template') return [];
+  if (entityType === 'folder') {
+    const { data, error } = await supabaseAdmin
+      .from('lists')
+      .select('id')
+      .eq('folder_id', entityId)
+      .limit(2000);
+    if (error) throw new Error(error.message);
+    return (data || []).map((l: any) => l.id);
+  }
+  const { data, error } = await supabaseAdmin
+    .from('lists')
+    .select('id')
+    .eq('space_id', entityId)
+    .limit(2000);
+  if (error) throw new Error(error.message);
+  return (data || []).map((l: any) => l.id);
+}
+
+/** Count tasks in scope grouped by their task_type_id. */
+async function getTaskTypeBreakdown(listIds: string[]): Promise<{ task_type_id: string | null; count: number }[]> {
+  if (!listIds.length) return [];
+  const { data, error } = await supabaseAdmin
+    .from('tasks')
+    .select('task_type_id')
+    .in('list_id', listIds)
+    .limit(5000);
+  if (error) throw new Error(error.message);
+  const counts = new Map<string | null, number>();
+  for (const t of (data || []) as any[]) {
+    const key = t.task_type_id || null;
+    counts.set(key, (counts.get(key) || 0) + 1);
+  }
+  return [...counts.entries()]
+    .map(([task_type_id, count]) => ({ task_type_id, count }))
+    .sort((a, b) => b.count - a.count);
+}
+
+async function getEntityName(entityType: string, entityId: string): Promise<string> {
+  const table = entityType === 'space' ? 'spaces'
+    : entityType === 'folder' ? 'folders'
+    : entityType === 'list' ? 'lists' : 'client_space_templates';
+  const { data } = await supabaseAdmin.from(table).select('id, name').eq('id', entityId).maybeSingle();
+  return (data as any)?.name || entityId;
 }
 
 // ------------------------------------------------------------
@@ -327,6 +379,88 @@ router.get('/templates', async (_req: Request, res: Response) => {
 });
 
 // ------------------------------------------------------------
+// GET /admin/task-type-groups/:id/replace-preview?entity_type=&entity_id=
+// What would change if this group replaced the entity's current group?
+// Returns the current group, both groups' effective task types, and the
+// tasks in scope grouped by their exact current task_type_id so the
+// admin UI can offer an old → new mapping.
+// ------------------------------------------------------------
+router.get('/:id/replace-preview', async (req: Request, res: Response) => {
+  try {
+    const newGroupId = req.params.id as string;
+    const entityType = req.query.entity_type as string;
+    const entityId = req.query.entity_id as string;
+    if (!ENTITY_TYPES.includes(entityType as any) || !entityId) {
+      res.status(400).json({ success: false, error: 'entity_type and entity_id are required' });
+      return;
+    }
+    const newGroup = await getGroup(newGroupId);
+    if (!newGroup) {
+      res.status(404).json({ success: false, error: 'Task type group not found' });
+      return;
+    }
+    const { data: current } = await supabaseAdmin
+      .from('task_type_group_assignments')
+      .select('*, task_type_groups(id, key, name, color)')
+      .eq('entity_type', entityType)
+      .eq('entity_id', entityId)
+      .maybeSingle();
+    if (!current || (current as any).group_id === newGroupId) {
+      res.json({ success: true, data: { has_existing: false } });
+      return;
+    }
+    const currentGroup = (current as any).task_type_groups || { id: (current as any).group_id };
+    const [oldTypes, newTypes] = await Promise.all([
+      getGroupTaskTypes((current as any).group_id),
+      getGroupTaskTypes(newGroupId),
+    ]);
+    const listIds = await getListIdsForEntity(entityType, entityId);
+    const rawBreakdown = await getTaskTypeBreakdown(listIds);
+    const totalTasks = rawBreakdown.reduce((n, b) => n + b.count, 0);
+
+    const typeIds = rawBreakdown.map((b) => b.task_type_id).filter(Boolean) as string[];
+    let typeRows: any[] = [];
+    if (typeIds.length > 0) {
+      const { data } = await supabaseAdmin
+        .from('task_types')
+        .select('id, name, key, color, icon, group_name')
+        .in('id', typeIds);
+      typeRows = data || [];
+    }
+    const typeMap = new Map(typeRows.map((t: any) => [t.id, t]));
+    const breakdown = rawBreakdown.map((b) => {
+      const t = b.task_type_id ? typeMap.get(b.task_type_id) : null;
+      return {
+        task_type_id: b.task_type_id,
+        name: t?.name || (b.task_type_id ? 'Unknown Type' : 'No Task Type'),
+        key: t?.key || '',
+        color: t?.color || '#94A3B8',
+        group_name: t?.group_name || null,
+        count: b.count,
+      };
+    });
+
+    res.json({
+      success: true,
+      data: {
+        has_existing: true,
+        entity: { type: entityType, id: entityId, name: await getEntityName(entityType, entityId) },
+        current_group: { id: currentGroup.id || (current as any).group_id, key: currentGroup.key, name: currentGroup.name || 'Current group' },
+        new_group: { id: newGroup.id, name: newGroup.name },
+        old_types: oldTypes,
+        new_types: newTypes,
+        breakdown,
+        total_tasks: totalTasks,
+        list_count: listIds.length,
+      },
+    });
+  } catch (err) {
+    console.error('Task type replace preview error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// ------------------------------------------------------------
 // GET /admin/task-type-groups/:id/usage — where is this group applied?
 // ------------------------------------------------------------
 router.get('/:id/usage', async (req: Request, res: Response) => {
@@ -570,7 +704,7 @@ router.post('/:id/types', async (req: Request, res: Response) => {
           is_default: false,
           is_system: false,
           is_enabled: true,
-          group_name: group.name,
+          group_name: body.group_name || group.name,
         })
         .select()
         .single();
@@ -630,14 +764,94 @@ router.post('/:id/types', async (req: Request, res: Response) => {
   }
 });
 
-// DELETE /admin/task-type-groups/:id/types/:typeId — remove from group
+// GET /admin/task-type-groups/:id/types/:typeId/usage — check how many tasks use this type in scope
+router.get('/:id/types/:typeId/usage', async (req: Request, res: Response) => {
+  try {
+    const groupId = req.params.id as string;
+    const typeId = req.params.typeId as string;
+    const group = await getGroup(groupId);
+    if (!group) {
+      res.status(404).json({ success: false, error: 'Task type group not found' });
+      return;
+    }
+
+    let count = 0;
+    if (group.is_default) {
+      const { count: c } = await supabaseAdmin
+        .from('tasks')
+        .select('*', { count: 'exact', head: true })
+        .eq('task_type_id', typeId);
+      count = c || 0;
+    } else {
+      const { data: assignments } = await supabaseAdmin
+        .from('task_type_group_assignments')
+        .select('entity_type, entity_id')
+        .eq('group_id', groupId);
+
+      const listIdsSet = new Set<string>();
+      for (const a of assignments || []) {
+        const ids = await getListIdsForEntity(a.entity_type, a.entity_id);
+        for (const lid of ids) listIdsSet.add(lid);
+      }
+      const listIds = [...listIdsSet];
+      if (listIds.length > 0) {
+        const { count: c } = await supabaseAdmin
+          .from('tasks')
+          .select('*', { count: 'exact', head: true })
+          .in('list_id', listIds)
+          .eq('task_type_id', typeId);
+        count = c || 0;
+      }
+    }
+
+    res.json({ success: true, count });
+  } catch (err) {
+    console.error('Task type usage check error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// DELETE /admin/task-type-groups/:id/types/:typeId — remove from group (with optional reassign)
 router.delete('/:id/types/:typeId', async (req: Request, res: Response) => {
   try {
+    const groupId = req.params.id as string;
+    const typeId = req.params.typeId as string;
+    const targetTypeId = (req.body?.target_task_type_id as string) || (req.query?.target_task_type_id as string);
+
+    if (targetTypeId) {
+      const group = await getGroup(groupId);
+      if (group?.is_default) {
+        await supabaseAdmin
+          .from('tasks')
+          .update({ task_type_id: targetTypeId })
+          .eq('task_type_id', typeId);
+      } else {
+        const { data: assignments } = await supabaseAdmin
+          .from('task_type_group_assignments')
+          .select('entity_type, entity_id')
+          .eq('group_id', groupId);
+
+        const listIdsSet = new Set<string>();
+        for (const a of assignments || []) {
+          const ids = await getListIdsForEntity(a.entity_type, a.entity_id);
+          for (const lid of ids) listIdsSet.add(lid);
+        }
+        const listIds = [...listIdsSet];
+        if (listIds.length > 0) {
+          await supabaseAdmin
+            .from('tasks')
+            .update({ task_type_id: targetTypeId })
+            .in('list_id', listIds)
+            .eq('task_type_id', typeId);
+        }
+      }
+    }
+
     const { error } = await supabaseAdmin
       .from('task_type_group_items')
       .delete()
-      .eq('group_id', (req.params.id as string))
-      .eq('task_type_id', (req.params.typeId as string));
+      .eq('group_id', groupId)
+      .eq('task_type_id', typeId);
 
     if (error) {
       res.status(500).json({ success: false, error: error.message });
@@ -678,10 +892,10 @@ router.put('/:id/types/reorder', async (req: Request, res: Response) => {
 // Apply / unapply
 // ------------------------------------------------------------
 
-// POST /admin/task-type-groups/:id/apply {entity_type, entity_id}
+// POST /admin/task-type-groups/:id/apply {entity_type, entity_id, allow_replace?, task_type_mapping?}
 router.post('/:id/apply', async (req: Request, res: Response) => {
   try {
-    const { entity_type, entity_id } = applySchema.parse(req.body);
+    const { entity_type, entity_id, allow_replace, task_type_mapping } = applySchema.parse(req.body);
     const group = await getGroup((req.params.id as string));
     if (!group) {
       res.status(404).json({ success: false, error: 'Task type group not found' });
@@ -708,13 +922,76 @@ router.post('/:id/apply', async (req: Request, res: Response) => {
       return;
     }
 
+    // Replace guard: swapping groups re-points live tasks, so require an
+    // explicit mapping pass instead of silently overwriting.
+    const { data: current } = await supabaseAdmin
+      .from('task_type_group_assignments')
+      .select('group_id')
+      .eq('entity_type', entity_type)
+      .eq('entity_id', entity_id)
+      .maybeSingle();
+    const currentGroupId = (current as any)?.group_id as string | undefined;
+    if (currentGroupId && currentGroupId !== (req.params.id as string) && !allow_replace) {
+      res.status(409).json({
+        success: false,
+        error: 'This place already has a task type group. Use Replace to remap its tasks.',
+        code: 'ALREADY_APPLIED',
+        current_group_id: currentGroupId,
+      });
+      return;
+    }
+
+    let remapped = 0;
+    if (currentGroupId && currentGroupId !== (req.params.id as string) && allow_replace) {
+      const listIds = await getListIdsForEntity(entity_type, entity_id);
+      const breakdown = await getTaskTypeBreakdown(listIds);
+      if (breakdown.length > 0) {
+        const mapping = task_type_mapping || {};
+        const unmapped = breakdown
+          .map((b) => b.task_type_id || '__null__')
+          .filter((id) => !mapping[id]);
+        if (unmapped.length > 0) {
+          res.status(400).json({
+            success: false,
+            error: 'Map every existing task type before replacing.',
+            unmapped,
+            breakdown,
+          });
+          return;
+        }
+
+        const newTypes = await getGroupTaskTypes(req.params.id as string);
+        const byId = new Map(newTypes.map((t: any) => [t.id, t]));
+        for (const [oldTypeId, newTypeId] of Object.entries(mapping)) {
+          const row = byId.get(newTypeId);
+          if (!row) {
+            res.status(400).json({ success: false, error: 'Invalid task type in mapping' });
+            return;
+          }
+          if (listIds.length === 0) continue;
+          let query = supabaseAdmin
+            .from('tasks')
+            .update({ task_type_id: newTypeId })
+            .in('list_id', listIds);
+          if (oldTypeId === '__null__' || oldTypeId === 'null') {
+            query = query.is('task_type_id', null);
+          } else {
+            query = query.eq('task_type_id', oldTypeId);
+          }
+          const { error: updateError } = await query;
+          if (updateError) throw new Error(updateError.message);
+          remapped += breakdown.find((b) => (b.task_type_id || '__null__') === oldTypeId)?.count || 0;
+        }
+      }
+    }
+
     const assignment = await upsertAssignment(
       (req.params.id as string),
       entity_type,
       entity_id,
       (req as any).userId,
     );
-    res.status(201).json({ success: true, data: assignment });
+    res.status(201).json({ success: true, data: assignment, remapped_tasks: remapped });
   } catch (err) {
     if (zodErr(err, res)) return;
     console.error('Apply task type group error:', err);

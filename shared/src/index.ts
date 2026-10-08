@@ -1037,6 +1037,88 @@ export interface TaskTypeGroupAssignment {
   group?: TaskTypeGroup;
 }
 
+export const DEFAULT_TASK_TYPE_GROUPS: Record<string, string> = {
+  task: 'Task Types',
+  todo: 'Task Types',
+  work_block: 'Task Types',
+  focus_task: 'Task Types',
+  multi_day_task: 'Task Types',
+  routine: 'Task Types',
+  plan: 'Task Types',
+
+  commute: 'Location-Based',
+  travel: 'Location-Based',
+  out_of_office: 'Location-Based',
+
+  meeting: 'Meetings & Collaboration',
+  call: 'Meetings & Collaboration',
+  e_meet: 'Meetings & Collaboration',
+  in_person_meeting: 'Meetings & Collaboration',
+  events: 'Meetings & Collaboration',
+  brainstorm_session: 'Meetings & Collaboration',
+
+  learning: 'Learning & Exploration',
+  research: 'Learning & Exploration',
+  course: 'Learning & Exploration',
+  sop: 'Learning & Exploration',
+  knowledge: 'Learning & Exploration',
+
+  follow_ups: 'Follow-ups & Monitoring',
+
+  recording: 'Media Creation',
+  design_task: 'Media Creation',
+  video_edit_task: 'Media Creation',
+  post: 'Media Creation',
+
+  activities: 'Action-Oriented Activities',
+
+  milestone: 'Goals & Milestones',
+  goal: 'Goals & Milestones',
+
+  chores: 'Personal',
+
+  coding: 'Software Development',
+  testing: 'Software Development',
+  ui_designing: 'Software Development',
+
+  quick_wins: 'Planning & Review',
+  review: 'Planning & Review',
+  on_hold: 'Planning & Review',
+  parked_task: 'Planning & Review',
+};
+
+export const GROUP_ORDER = [
+  'Task Types',
+  'Software Development',
+  'Location-Based',
+  'Meetings & Collaboration',
+  'Learning & Exploration',
+  'Follow-ups & Monitoring',
+  'Media Creation',
+  'Action-Oriented Activities',
+  'Goals & Milestones',
+  'Personal',
+  'Planning & Review',
+];
+
+export const TASK_TYPE_GROUP_EMOJIS: Record<string, string> = {
+  'Task Types': '⚡',
+  'Software Development': '💻',
+  'Location-Based': '📍',
+  'Meetings & Collaboration': '🤝',
+  'Learning & Exploration': '📚',
+  'Follow-ups & Monitoring': '👀',
+  'Media Creation': '🎨',
+  'Action-Oriented Activities': '🏃',
+  'Goals & Milestones': '🎯',
+  'Personal': '🏠',
+  'Planning & Review': '📋',
+};
+
+export function getTaskTypeGroup(t: { group_name?: string | null; key?: string }): string {
+  return t.group_name || (t.key ? DEFAULT_TASK_TYPE_GROUPS[t.key] : null) || 'Other';
+}
+
 export interface TaskChecklistItem {
   id: string;
   checklist_id: string;
