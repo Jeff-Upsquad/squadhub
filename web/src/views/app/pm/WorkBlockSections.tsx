@@ -1,9 +1,13 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { useQuery } from '@tanstack/react-query';
 import type { Task } from '@squadhub/shared';
 import { usePMStore } from '../../../stores/pmStore';
 import { useWorkspaceStore } from '../../../stores/workspaceStore';
 import { showToast } from '../../../components/Toast';
+import { useIsMobile } from '../../../hooks/useIsMobile';
+import api from '../../../services/api';
+import AddEntrySplitButton from './AddEntrySplitButton';
 import {
   useWorkBlock,
   useActiveWorkBlockRun,
@@ -184,6 +188,52 @@ function ScheduleEditor({
   );
 }
 
+// ── Link-a-task quick search ────────────────────────────────────────────────
+// Deliberately narrower than useWorkspaceSearch (which also sweeps chat
+// messages): the inline link row only needs task titles, and this fires on
+// every keystroke while the row is open.
+interface LinkSearchTask {
+  id: string;
+  title: string;
+  status: string | null;
+  priority: string | null;
+  list_name: string | null;
+  space_name: string | null;
+}
+
+const UUID_RE = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
+
+// The row accepts a bare task id, a pasted task URL, or a typed title.
+function taskIdFromInput(raw: string): string | null {
+  const match = raw.match(UUID_RE);
+  return match ? match[0] : null;
+}
+
+function useTaskSearch(workspaceId: string | undefined, query: string, enabled: boolean) {
+  const q = query.trim();
+  const [debounced, setDebounced] = useState('');
+  useEffect(() => {
+    if (!enabled || !q) {
+      setDebounced('');
+      return undefined;
+    }
+    const timer = window.setTimeout(() => setDebounced(q), 180);
+    return () => window.clearTimeout(timer);
+  }, [q, enabled]);
+
+  return useQuery<LinkSearchTask[]>({
+    queryKey: ['pm-task-link-search', workspaceId ?? '', debounced],
+    queryFn: async () => {
+      const res = await api.get('/pm/search', {
+        params: { workspace_id: workspaceId, q: debounced, limit: 8 },
+      });
+      return (res.data?.data?.tasks || []) as LinkSearchTask[];
+    },
+    enabled: !!workspaceId && !!debounced && enabled,
+    staleTime: 30_000,
+  });
+}
+
 export default function WorkBlockSections({ task, canEdit }: Props) {
   const { data: bundle } = useWorkBlock(task.id);
   const { data: active } = useActiveWorkBlockRun();
@@ -191,8 +241,34 @@ export default function WorkBlockSections({ task, canEdit }: Props) {
   const link = useLinkTaskToWorkBlock();
   const workspaceId = useWorkspaceStore((s) => s.currentWorkspace?.id);
   const [editing, setEditing] = useState(false);
-  const [linkInput, setLinkInput] = useState('');
   const [creating, setCreating] = useState(false);
+  // Linked tasks — mirrors the Subtasks tray: collapsible header, inline
+  // add row, rows that open the task they point at.
+  const isMobile = useIsMobile();
+  const [linksCollapsed, setLinksCollapsed] = useState(false);
+  const [adding, setAdding] = useState(false);
+  const [linkQuery, setLinkQuery] = useState('');
+  const linkInputRef = useRef<HTMLInputElement | null>(null);
+  const linksOpen = isMobile || !linksCollapsed;
+  const links = bundle?.links || [];
+  const search = useTaskSearch(workspaceId, linkQuery, adding);
+  const candidates = (search.data || []).filter(
+    (t) => t.id !== task.id && !links.some((l) => l.linked_task_id === t.id),
+  );
+  const setPeekTask = usePMStore((s) => s.setPeekTask);
+  const linkToBlock = (linkedTaskId: string) => {
+    if (linkedTaskId === task.id) {
+      showToast('A time block cannot link to itself', 'error');
+      return;
+    }
+    link.mutate(
+      { work_block_task_id: task.id, linked_task_id: linkedTaskId },
+      {
+        onSuccess: () => setLinkQuery(''),
+        onError: () => showToast('Could not link that task', 'error'),
+      },
+    );
+  };
 
   const config = bundle?.config || null;
   const activeRunForThisBlock: WorkBlockRun | null = useMemo(() => {
@@ -256,65 +332,155 @@ export default function WorkBlockSections({ task, canEdit }: Props) {
         />
       )}
 
-      {/* Manually linked tasks */}
-      <section>
-        <div className="mb-2 flex items-center justify-between gap-2">
-          <h4 className="text-[11px] font-semibold uppercase tracking-wide opacity-60">Linked tasks</h4>
+      {/* Manually linked tasks — a first-class tray, structured exactly like
+          the Subtasks tray so the panel reads as one system. */}
+      <div className="td-section-rule" style={{ margin: 0 }} />
+      <section className="td-tray" data-sec="linked-tasks" data-open={linksOpen ? 'true' : undefined}>
+        <div className="td-section-strong">
+          <button
+            type="button"
+            className="td-sec-toggle"
+            data-open={linksOpen ? 'true' : undefined}
+            aria-expanded={linksOpen}
+            onClick={() => setLinksCollapsed((prev) => !prev)}
+          >
+            <svg className="chev" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <path d="m6 9 6 6 6-6" />
+            </svg>
+            <span className="title">Linked tasks</span>
+          </button>
+          {links.length > 0 && <span className="td-section-count-strong">{links.length}</span>}
           {canEdit && (
-            <button
-              type="button"
-              onClick={() => setCreating(true)}
-              className="rounded border border-[color:var(--sh-hair-3)] px-2 py-0.5 text-[11px] font-medium opacity-80 hover:border-[color:var(--sh-accent)] hover:opacity-100"
-              title="Create a task and link it to this time block"
-            >
-              + New task
-            </button>
+            <AddEntrySplitButton
+              label="Link task"
+              sectionLabel="New task…"
+              onAdd={() => {
+                setLinksCollapsed(false);
+                setAdding(true);
+                window.setTimeout(() => linkInputRef.current?.focus(), 0);
+              }}
+              onAddSection={() => {
+                setLinksCollapsed(false);
+                setCreating(true);
+              }}
+              disabled={adding}
+            />
           )}
         </div>
-        <ul className="flex flex-col gap-1.5">
-          {(bundle?.links || []).map((l) => (
-            <li key={l.linked_task_id} className="flex items-center gap-2 text-[12px]">
-              <span className="flex-1">{l.task?.title ?? l.linked_task_id}</span>
-              {canEdit && (
+        <div className="td-tray-card">
+          {linksOpen && (links.length > 0 || canEdit || adding) && (
+            <div className="td-subtask-list">
+              {links.map((l) => {
+                const linked = l.task;
+                return (
+                  <button
+                    key={l.linked_task_id}
+                    type="button"
+                    className="td-subtask-row"
+                    onClick={() => setPeekTask(l.linked_task_id)}
+                    title={linked?.title ?? l.linked_task_id}
+                  >
+                    <span className="td-link-ico" aria-hidden>
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+                        <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+                      </svg>
+                    </span>
+                    <span className="title">{linked?.title ?? 'Untitled task'}</span>
+                    {linked?.status && <span className="td-subtask-code">{linked.status}</span>}
+                    {canEdit && (
+                      <span
+                        role="button"
+                        tabIndex={0}
+                        className="td-link-x"
+                        title="Unlink"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          unlink.mutate(
+                            { work_block_task_id: task.id, linked_task_id: l.linked_task_id },
+                            { onError: () => showToast('Could not unlink that task', 'error') },
+                          );
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key !== 'Enter' && e.key !== ' ') return;
+                          e.preventDefault();
+                          e.stopPropagation();
+                          unlink.mutate(
+                            { work_block_task_id: task.id, linked_task_id: l.linked_task_id },
+                            { onError: () => showToast('Could not unlink that task', 'error') },
+                          );
+                        }}
+                      >
+                        ×
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+
+              {adding && candidates.length > 0 && (
+                <div className="td-link-results">
+                  {candidates.map((t) => (
+                    <button
+                      key={t.id}
+                      type="button"
+                      className="td-link-result"
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => linkToBlock(t.id)}
+                    >
+                      <span className="title">{t.title}</span>
+                      <span className="td-subtask-mini">
+                        {[t.space_name, t.list_name].filter(Boolean).join(' / ') || '—'}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {canEdit && adding ? (
+                <input
+                  ref={linkInputRef}
+                  autoFocus
+                  value={linkQuery}
+                  onChange={(e) => setLinkQuery(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      const uuid = taskIdFromInput(linkQuery);
+                      if (uuid) linkToBlock(uuid);
+                      else if (candidates[0]) linkToBlock(candidates[0].id);
+                      else if (linkQuery.trim()) showToast('No matching task found', 'error');
+                    } else if (e.key === 'Escape') {
+                      e.stopPropagation();
+                      setAdding(false);
+                    }
+                  }}
+                  onBlur={() => setAdding(false)}
+                  placeholder="Search a task to link…"
+                  className="td-link-input"
+                />
+              ) : canEdit ? (
                 <button
                   type="button"
-                  onClick={() => unlink.mutate({ work_block_task_id: task.id, linked_task_id: l.linked_task_id })}
-                  className="opacity-50 hover:opacity-100"
-                  title="Unlink"
+                  className="td-subtask-add-row"
+                  onPointerDown={(e) => {
+                    e.preventDefault();
+                    setAdding(true);
+                  }}
+                  onClick={() => setAdding(true)}
                 >
-                  ×
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                    <path d="M12 5v14M5 12h14" />
+                  </svg>
+                  <span>Link a task</span>
                 </button>
-              )}
-            </li>
-          ))}
-          {(bundle?.links || []).length === 0 && (
-            <li className="text-[12px] opacity-60">No linked tasks.</li>
+              ) : null}
+            </div>
           )}
-        </ul>
-        {canEdit && (
-          <div className="mt-2 flex gap-2">
-            <input
-              type="text"
-              value={linkInput}
-              onChange={(e) => setLinkInput(e.target.value)}
-              placeholder="Paste task ID to link…"
-              className="flex-1 rounded border border-[color:var(--sh-hair-3)] bg-[color:var(--surface)] px-2 py-1 text-[12px]"
-            />
-            <button
-              type="button"
-              disabled={!linkInput.trim() || link.isPending}
-              onClick={() => {
-                link.mutate(
-                  { work_block_task_id: task.id, linked_task_id: linkInput.trim() },
-                  { onSuccess: () => setLinkInput('') },
-                );
-              }}
-              className="rounded bg-[color:var(--sh-ink)] px-2 py-1 text-[12px] font-medium text-[color:var(--surface)] disabled:opacity-40"
-            >
-              Link
-            </button>
-          </div>
-        )}
+          {linksOpen && links.length === 0 && !canEdit && !adding && (
+            <p className="text-[12.5px] text-[color:var(--sh-ink-4)]">No linked tasks.</p>
+          )}
+        </div>
       </section>
 
       {/* Run history */}
