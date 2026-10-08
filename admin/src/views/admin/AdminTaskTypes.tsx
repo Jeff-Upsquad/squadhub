@@ -489,23 +489,29 @@ function RemoveTaskTypeModal({
                 </p>
               </div>
 
-              <div>
-                <label className="block text-xs font-medium text-foreground-dim mb-1.5">
-                  Change {count === 1 ? 'task' : 'tasks'} to:
-                </label>
-                <select
-                  value={selectedTargetId}
-                  onChange={(e) => setSelectedTargetId(e.target.value)}
-                  disabled={isPending}
-                  className="w-full rounded-lg border border-divider bg-surface px-3 py-2 text-sm text-foreground focus:border-ink focus:outline-none"
-                >
-                  {availableReplacements.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.name} ({getTaskTypeGroup(t)})
-                    </option>
-                  ))}
-                </select>
-              </div>
+              {availableReplacements.length === 0 ? (
+                <p className="rounded-lg border border-divider bg-muted px-3 py-2 text-xs text-foreground-muted">
+                  This is the only type left in the group. Add another type to the group first so tasks have somewhere to go.
+                </p>
+              ) : (
+                <div>
+                  <label className="block text-xs font-medium text-foreground-dim mb-1.5">
+                    Change {count === 1 ? 'task' : 'tasks'} to:
+                  </label>
+                  <select
+                    value={selectedTargetId}
+                    onChange={(e) => setSelectedTargetId(e.target.value)}
+                    disabled={isPending}
+                    className="w-full rounded-lg border border-divider bg-surface px-3 py-2 text-sm text-foreground focus:border-ink focus:outline-none"
+                  >
+                    {availableReplacements.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.name} ({getTaskTypeGroup(t)})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
             </div>
           ) : (
             <p className="text-sm text-foreground-dim">
@@ -1427,6 +1433,142 @@ function TemplatesCard({ selectedGroupId, onChanged }: { selectedGroupId: string
 }
 
 // ============================================================
+// DeleteTaskTypeModal — permanent catalog delete with task reassignment.
+// Same format as DeleteStatusModal / Replace group modals: usage check,
+// amber warning when tasks are affected, replacement picker, red confirm.
+// ============================================================
+function DeleteTaskTypeModal({
+  type,
+  allTypes,
+  onClose,
+  onConfirm,
+  isPending,
+}: {
+  type: TaskType;
+  allTypes: TaskType[];
+  onClose: () => void;
+  onConfirm: (targetTypeId?: string) => void;
+  isPending: boolean;
+}) {
+  const [selectedTargetId, setSelectedTargetId] = useState<string>('');
+
+  const usageQuery = useQuery({
+    queryKey: ['task-type-usage-catalog', type.id],
+    queryFn: () => api.get(`/admin/task-types/${type.id}/usage`).then((r) => r.data),
+  });
+
+  const count: number = usageQuery.data?.count ?? 0;
+  const availableReplacements = (allTypes || []).filter((t) => t.id !== type.id);
+
+  useEffect(() => {
+    if (!selectedTargetId && availableReplacements.length > 0) {
+      const defaultType = availableReplacements.find((t) => t.is_default);
+      setSelectedTargetId(defaultType ? defaultType.id : availableReplacements[0].id);
+    }
+  }, [availableReplacements, selectedTargetId]);
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+      <div
+        className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+        onClick={() => !isPending && onClose()}
+      />
+      <div className="relative w-full max-w-md rounded-xl border border-divider bg-surface p-6 shadow-2xl">
+        <div className="flex items-start gap-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-red-100 text-red-600 dark:bg-red-950/40 dark:text-red-400">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M3 6h18" />
+              <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
+              <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
+              <line x1="10" y1="11" x2="10" y2="17" />
+              <line x1="14" y1="11" x2="14" y2="17" />
+            </svg>
+          </div>
+          <div className="flex-1 min-w-0">
+            <h3 className="text-base font-semibold text-foreground">Delete Task Type</h3>
+            <div className="mt-1 flex items-center gap-2">
+              <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ backgroundColor: type.color || '#94A3B8' }} />
+              <span className="text-sm font-medium text-foreground truncate">{type.name}</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-4">
+          {usageQuery.isLoading ? (
+            <div className="flex items-center gap-2 py-4 text-xs text-foreground-dim">
+              <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+              Checking tasks using this type…
+            </div>
+          ) : usageQuery.isError ? (
+            <div className="rounded-lg bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900 p-3 text-xs text-red-600 dark:text-red-400">
+              Failed to check task usage.
+            </div>
+          ) : count > 0 ? (
+            <div className="space-y-3">
+              <div className="rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/60 p-3">
+                <p className="text-xs font-semibold text-amber-800 dark:text-amber-300">
+                  ⚠️ {count} {count === 1 ? 'task currently has' : 'tasks currently have'} this task type.
+                </p>
+                <p className="mt-1 text-xs text-amber-700/90 dark:text-amber-400/90">
+                  Select another task type to move {count === 1 ? 'this task' : 'these tasks'} to before deleting:
+                </p>
+              </div>
+
+              {availableReplacements.length === 0 ? (
+                <p className="rounded-lg border border-divider bg-muted px-3 py-2 text-xs text-foreground-muted">
+                  No other task types exist yet. Create another type first so tasks have somewhere to go.
+                </p>
+              ) : (
+                <div>
+                  <label className="block text-xs font-medium text-foreground-dim mb-1.5">
+                    Change {count === 1 ? 'task' : 'tasks'} to:
+                  </label>
+                  <select
+                    value={selectedTargetId}
+                    onChange={(e) => setSelectedTargetId(e.target.value)}
+                    disabled={isPending}
+                    className="w-full rounded-lg border border-divider bg-surface px-3 py-2 text-sm text-foreground focus:border-ink focus:outline-none"
+                  >
+                    {availableReplacements.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.name} ({getTaskTypeGroup(t)})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+            </div>
+          ) : (
+            <p className="text-sm text-foreground-dim">
+              Are you sure you want to permanently delete <span className="font-semibold text-foreground">“{type.name}”</span>? No tasks are currently using this type. It will also be removed from every group.
+            </p>
+          )}
+        </div>
+
+        <div className="mt-6 flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={isPending}
+            className="rounded-lg border border-divider px-3.5 py-1.5 text-xs font-medium text-foreground-dim hover:text-foreground disabled:opacity-50 cursor-pointer"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            disabled={isPending || usageQuery.isLoading || usageQuery.isError || (count > 0 && !selectedTargetId)}
+            onClick={() => onConfirm(count > 0 ? selectedTargetId : undefined)}
+            className="rounded-lg bg-red-600 px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-red-700 disabled:opacity-50 cursor-pointer"
+          >
+            {isPending ? 'Deleting…' : count > 0 ? 'Change Type & Delete' : 'Delete Task Type'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
 // EditTaskTypeModal — full editor for custom fields, access, details
 // ============================================================
 function EditTaskTypeModal({
@@ -1449,6 +1591,7 @@ function EditTaskTypeModal({
   const [activeTab, setActiveTab] = useState<'details' | 'fields' | 'access'>('details');
   const [showFieldForm, setShowFieldForm] = useState(false);
   const [editingField, setEditingField] = useState<TaskTypeField | null>(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   // Detail edits
   const [name, setName] = useState('');
@@ -1534,7 +1677,23 @@ function EditTaskTypeModal({
     onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-task-types'] }),
   });
 
+  const deleteType = useMutation({
+    mutationFn: (targetTypeId?: string) =>
+      api.delete(`/admin/task-types/${typeId}`, {
+        data: targetTypeId ? { reassign_to: targetTypeId } : undefined,
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin-task-types'] });
+      qc.invalidateQueries({ queryKey: ['admin-task-type-groups'] });
+      setShowDeleteConfirm(false);
+      onChanged();
+    },
+    onError: (err: any) => alert(err?.response?.data?.error || 'Failed to delete task type'),
+  });
+
   if (!type) return null;
+
+  const canDelete = !type.is_system && !type.is_default;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
@@ -1797,7 +1956,43 @@ function EditTaskTypeModal({
             </div>
           </div>
         )}
+
+        {/* Danger zone — permanent delete with replacement */}
+        <div className="mt-6 rounded-xl border border-red-200 bg-red-50/50 p-4 dark:border-red-900 dark:bg-red-950/20">
+          <h4 className="text-xs font-semibold uppercase tracking-wider text-red-700 dark:text-red-300">
+            Danger zone
+          </h4>
+          {!canDelete ? (
+            <p className="mt-1 text-xs text-foreground-dim">
+              {type.is_system
+                ? 'System task types cannot be deleted.'
+                : 'The default task type cannot be deleted. Set another type as default first.'}
+            </p>
+          ) : (
+            <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+              <p className="text-xs text-foreground-muted">
+                Permanently delete this type. Tasks using it will be moved to a replacement you choose.
+              </p>
+              <button
+                onClick={() => setShowDeleteConfirm(true)}
+                className="rounded-lg border border-red-300 px-3 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-100 cursor-pointer"
+              >
+                Delete task type…
+              </button>
+            </div>
+          )}
+        </div>
       </div>
+
+      {showDeleteConfirm && canDelete && (
+        <DeleteTaskTypeModal
+          type={type}
+          allTypes={types}
+          onClose={() => setShowDeleteConfirm(false)}
+          onConfirm={(targetTypeId) => deleteType.mutate(targetTypeId)}
+          isPending={deleteType.isPending}
+        />
+      )}
 
       {showFieldForm && (
         <FieldFormModal
