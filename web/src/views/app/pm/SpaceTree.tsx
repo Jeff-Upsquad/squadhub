@@ -110,15 +110,19 @@ function AdminLockIcon() {
   );
 }
 
-// ---- Small triangle chevron (matches client row style) ----
+// ---- Tree chevron — points down when open, right when closed ----
 function TriangleChevron({ open }: { open: boolean }) {
   return (
     <svg
-      className={`h-3 w-3 transition-transform ${open ? '' : '-rotate-90'}`}
-      viewBox="0 0 18 18"
-      fill="currentColor"
+      className={`h-3 w-3 transition-transform duration-[140ms] ${open ? '' : '-rotate-90'}`}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      viewBox="0 0 24 24"
     >
-      <path d="M5 7h8L9 11z" />
+      <path d="m8 10 4 4 4-4" />
     </svg>
   );
 }
@@ -126,8 +130,8 @@ function TriangleChevron({ open }: { open: boolean }) {
 // ---- List icon ----
 function ListIconSmall() {
   return (
-    <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+    <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+      <path d="M5 7a4 4 0 0 1 4-4h6a4 4 0 0 1 4 4v10a4 4 0 0 1-4 4H9a4 4 0 0 1-4-4z M9 8h6 M9 12h6 M9 16h3" />
     </svg>
   );
 }
@@ -135,8 +139,8 @@ function ListIconSmall() {
 // ---- Folder icon ----
 function FolderIconSmall() {
   return (
-    <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+    <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+      <path d="M3.5 8.5a3 3 0 0 1 3-3h3l2 2h6a3 3 0 0 1 3 3v6a3 3 0 0 1-3 3h-11a3 3 0 0 1-3-3z" />
     </svg>
   );
 }
@@ -303,12 +307,12 @@ function ListItem({ list, isManager = false, myAccess, dnd }: { list: List; isMa
         onDragOver={dnd?.onDragOver}
         onDrop={dnd?.onDrop}
         onDragEnd={dnd?.onDragEnd}
-        className={`sh-tree-row flex w-full items-center gap-2 rounded-[6px] px-2 py-[5px] text-left text-[13px] transition ${
+        className={`sh-tree-row sb-tree-node relative mb-[1px] flex w-full items-center gap-2 rounded-[6px] border px-2 py-[5px] text-left text-[13px] transition ${
           dnd?.draggable ? 'cursor-grab active:cursor-grabbing' : ''
         } ${
           isActive
-            ? 'bg-[var(--surface)] text-[var(--sh-ink)] font-medium border border-[var(--sh-hair)]'
-            : 'text-[var(--sh-ink-2)] hover:bg-[var(--sh-hair-3)] hover:text-[var(--sh-ink)]'
+            ? 'bg-[var(--surface)] text-[var(--sh-ink)] font-medium border-[var(--sh-hair)]'
+            : 'border-transparent text-[var(--sh-ink-2)] hover:bg-[var(--sh-hair-3)] hover:text-[var(--sh-ink)]'
         }`}
         style={rowStyle}
       >
@@ -324,7 +328,9 @@ function ListItem({ list, isManager = false, myAccess, dnd }: { list: List; isMa
           </span>
         )}
         {isManager && !list.is_locked && (
-          <EllipsisButton onClick={() => setShowSettings(true)} title="List settings" />
+          <div className="sb-row-acts sb-row-acts--row">
+            <EllipsisButton onClick={() => setShowSettings(true)} title="List settings" />
+          </div>
         )}
       </div>
 
@@ -378,8 +384,8 @@ function InlineInput({
 // ---- Space icon for template-based spaces ----
 function SpaceIconSmall() {
   return (
-    <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+    <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+      <path d="M12 3.5l7.5 4.2v8.6L12 20.5l-7.5-4.2V7.7z M4.5 7.7L12 12l7.5-4.3 M12 12v8.5" />
     </svg>
   );
 }
@@ -419,10 +425,10 @@ function FolderItem({ folder, spaceId, canAdd, canDelete, isManager, myAccess }:
 
   return (
     <div>
-      <div className="group flex items-center">
+      <div className="sb-tree-node relative mb-[1px] flex items-center">
         <button
           onClick={(e) => { e.stopPropagation(); toggleFolderExpanded(folder.id); }}
-          className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-[var(--sh-ink-4)] hover:text-[var(--sh-ink)]"
+          className="flex h-6 w-4 shrink-0 items-center justify-center text-[var(--sh-ink-4)] hover:text-[var(--sh-ink)]"
           aria-label={open ? 'Collapse' : 'Expand'}
         >
           <TriangleChevron open={open} />
@@ -442,7 +448,7 @@ function FolderItem({ folder, spaceId, canAdd, canDelete, isManager, myAccess }:
           </span>
           <span className="truncate">{folder.name}</span>
         </button>
-        <div className="mr-1 hidden items-center gap-0.5 group-hover:flex">
+        <div className="sb-row-acts">
           {folder.is_locked && <AdminLockIcon />}
           {folder.is_private && !folder.is_locked && <LockIcon />}
           {canDelete && !folder.is_locked && <EllipsisButton onClick={() => setShowSettings(true)} title={isTemplateSpace ? 'Space settings' : 'Folder settings'} />}
@@ -451,7 +457,7 @@ function FolderItem({ folder, spaceId, canAdd, canDelete, isManager, myAccess }:
       </div>
 
       {open && (
-        <div className="pb-1 pl-8 pr-2">
+        <div className="ml-2 border-l border-[var(--sh-hair)] pb-1 pl-[7px]">
           {/* Template-based spaces seed status lists (Briefs / In Progress / Reviews /
               Completed) plus a general "Tasks" list — all surface as views inside the
               Design Space page, not as sidebar children. Hide those; show only lists
@@ -492,9 +498,12 @@ function FolderItem({ folder, spaceId, canAdd, canDelete, isManager, myAccess }:
 // ---- Person icon for client folders ----
 function PersonIconSmall() {
   return (
-    <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-    </svg>
+    <span className="flex h-5 w-5 items-center justify-center rounded-[6px] bg-[var(--sh-hair-3)] shadow-[inset_0_0_0_1px_var(--sh-hair-2)]">
+      <svg className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+        <circle cx="12" cy="8.5" r="3.5" />
+        <path d="M5.5 19.5a6.5 6.5 0 0 1 13 0" />
+      </svg>
+    </span>
   );
 }
 
@@ -512,17 +521,17 @@ function ClientItem({ folder, childSpaces, spaceId, canAddLists, canAddSpaces, c
   const { activeFolderId, setActiveFolder, setActiveSpace } = usePMStore();
   const expandedClients = usePMStore((s) => s.expandedClients);
   const toggleClientExpanded = usePMStore((s) => s.toggleClientExpanded);
-  const open = expandedClients[folder.id] ?? true;
+  const open = expandedClients[folder.id] ?? false;
   const [adding, setAdding] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const isActive = activeFolderId === folder.id;
 
   return (
     <div>
-      <div className="group flex items-center">
+      <div className="sb-tree-node relative mb-[1px] flex items-center">
         <button
           onClick={(e) => { e.stopPropagation(); toggleClientExpanded(folder.id); }}
-          className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-[var(--sh-ink-4)] hover:text-[var(--sh-ink)]"
+          className="flex h-6 w-4 shrink-0 items-center justify-center text-[var(--sh-ink-4)] hover:text-[var(--sh-ink)]"
           aria-label={open ? 'Collapse' : 'Expand'}
         >
           <TriangleChevron open={open} />
@@ -541,7 +550,7 @@ function ClientItem({ folder, childSpaces, spaceId, canAddLists, canAddSpaces, c
           </span>
           <span className="truncate">{folder.name}</span>
         </button>
-        <div className="mr-1 hidden items-center gap-0.5 group-hover:flex">
+        <div className="sb-row-acts">
           {folder.is_locked && <AdminLockIcon />}
           {folder.is_private && !folder.is_locked && <LockIcon />}
           {canDelete && !folder.is_locked && <EllipsisButton onClick={() => setShowSettings(true)} title="Client settings" />}
@@ -550,7 +559,7 @@ function ClientItem({ folder, childSpaces, spaceId, canAddLists, canAddSpaces, c
       </div>
 
       {open && (
-        <div className="pb-1 pl-8 pr-2">
+        <div className="ml-2 border-l border-[var(--sh-hair)] pb-1 pl-[7px]">
           {childSpaces.map(spaceFolder => (
             <FolderItem key={spaceFolder.id} folder={spaceFolder} spaceId={spaceId} canAdd={canAddLists} canDelete={canDelete} isManager={isManager} myAccess={myAccess} />
           ))}
@@ -626,11 +635,11 @@ function SpaceItem({ spaceId, initial }: { spaceId: string; initial?: Space }) {
   const isRowActive = isSpacePageActive || (isActive && open);
 
   return (
-    <div className="px-2">
-      <div className="group flex items-center">
+    <div>
+      <div className="sb-tree-node relative mb-[1px] flex items-center">
         <button
           onClick={handleToggle}
-          className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-[var(--sh-ink-4)] hover:text-[var(--sh-ink)]"
+          className="flex h-6 w-4 shrink-0 items-center justify-center text-[var(--sh-ink-4)] hover:text-[var(--sh-ink)]"
           aria-label={open ? 'Collapse' : 'Expand'}
         >
           <TriangleChevron open={open} />
@@ -645,12 +654,12 @@ function SpaceItem({ spaceId, initial }: { spaceId: string; initial?: Space }) {
           }`}
           style={isRowActive ? { boxShadow: 'var(--sh-shadow-sm)' } : undefined}
         >
-          <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-[4px] bg-[var(--sh-hair-3)] text-[9px] font-semibold uppercase text-[var(--sh-ink-2)]">
+          <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-[6px] bg-[var(--sh-hair-3)] text-[9px] font-semibold uppercase text-[var(--sh-ink-2)] shadow-[inset_0_0_0_1px_var(--sh-hair-2)]">
             {space?.name?.slice(0, 2).toUpperCase() || 'S'}
           </span>
           <span className="truncate">{space?.name || 'Loading...'}</span>
         </button>
-        <div className="mr-1 hidden items-center gap-0.5 group-hover:flex">
+        <div className="sb-row-acts">
           {space?.is_locked && <AdminLockIcon />}
           {space?.is_private && !space?.is_locked && <LockIcon />}
           {isManager && !space?.is_locked && <EllipsisButton onClick={() => setShowSettings(true)} title="Area settings" />}
@@ -688,7 +697,7 @@ function SpaceItem({ spaceId, initial }: { spaceId: string; initial?: Space }) {
       </div>
 
       {open && space && (
-        <div className="pb-1 pl-8 pr-2">
+        <div className="ml-2 border-l border-[var(--sh-hair)] pb-1 pl-[7px]">
           {(() => {
             // Build folder hierarchy
             const allFolders = space.folders || [];
@@ -824,7 +833,7 @@ function WorkspaceRoot({ workspaceId }: { workspaceId: string }) {
   const standaloneSpaces = rootFolders.filter((f) => f.client_space_template_id);
 
   return (
-    <div className="px-1.5">
+    <div>
       {clientFolders.map((folder) => (
         <ClientItem
           key={folder.id}
@@ -901,7 +910,7 @@ function PartnerSharedRoots({ workspaceId }: { workspaceId: string }) {
   if (!clientFolders.length && !folders.length && !lists.length) return null;
 
   return (
-    <div className="px-1.5">
+    <div>
       {clientFolders.map((folder) => {
         const isManager = canAtLeast(folder.my_access_level, 'manager');
         return (
@@ -961,7 +970,7 @@ export default function SpaceTree({ workspaceId, onRequestCreate }: { workspaceI
 
   return (
     <div className="flex w-full flex-col">
-      <div className="px-1.5">
+      <div>
         {isLoading && (
           <p className="px-3 py-[5px] text-[11.5px] text-[var(--sh-ink-4)]">Loading…</p>
         )}
