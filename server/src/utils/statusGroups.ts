@@ -12,17 +12,45 @@ import { registerTaskStatusDefs, statusGroupRowToTaskDef, isSystemStatus } from 
 
 export type StatusGroupEntityType = 'space' | 'folder' | 'list' | 'template';
 
-export async function getGroupStatuses(groupId: string) {
+/** Resolve live inheritance, preserving source ids for read-only admin rows. */
+export function composeGroupStatuses(group: any, local: any[], inherited: any[] = []) {
+  const base = inherited.map((s: any) => ({ ...s, is_inherited: true }));
+  const localRows = local
+    .filter((s: any) => !base.some((b: any) =>
+      (b.key && b.key === s.key) || b.name.toLowerCase() === s.name.toLowerCase()))
+    .map((s: any) => ({ ...s, is_inherited: false,
+      is_system: group.key === 'task_workflow' || isSystemStatus(s),
+      // The primary group owns the initial status in linked workflows.
+      is_default: group.base_group_id ? false : s.is_default,
+    }));
+  return [...base, ...localRows].map((s, position) => ({ ...s, position }));
+}
+
+export async function getGroupStatuses(groupId: string, visited = new Set<string>()): Promise<any[]> {
+  if (visited.has(groupId)) throw new Error('Circular status group inheritance');
+  visited.add(groupId);
+  const { data: group, error: groupError } = await supabaseAdmin
+    .from('status_groups').select('*').eq('id', groupId).maybeSingle();
+  if (groupError) throw new Error(groupError.message);
+  if (!group) return [];
   const { data, error } = await supabaseAdmin
-    .from('status_group_statuses')
-    .select('*')
-    .eq('group_id', groupId)
+    .from('status_group_statuses').select('*').eq('group_id', groupId)
     .order('position', { ascending: true });
   if (error) throw new Error(error.message);
-  return (data || []).map((s: any) => ({
-    ...s,
-    is_system: isSystemStatus(s),
-  }));
+  const inherited = group.base_group_id ? await getGroupStatuses(group.base_group_id, visited) : [];
+  const sections = await getGroupSections(group);
+  return composeGroupStatuses(group, data || [], inherited).map((s: any) => {
+    const section = sections.find((sec: any) => sec.key === s.section);
+    return section ? { ...s, section_label: section.label, section_emoji: section.emoji } : s;
+  });
+}
+
+export async function getGroupSections(group: any) {
+  const { data: base, error } = group.base_group_id
+    ? await supabaseAdmin.from('status_groups').select('custom_sections').eq('id', group.base_group_id).maybeSingle()
+    : { data: null, error: null };
+  if (error) throw new Error(error.message);
+  return [...(base?.custom_sections || []), ...(group.custom_sections || [])];
 }
 
 /** Fetch an enabled group by key with ordered statuses (null when missing/disabled). */
@@ -37,6 +65,7 @@ export async function getGroupByKey(key: string) {
   return {
     ...(group as any),
     statuses: await getGroupStatuses((group as any).id),
+    effective_sections: await getGroupSections(group),
   };
 }
 
@@ -52,10 +81,9 @@ export async function loadTaskStatusOverrides(): Promise<void> {
     const { data: groups } = await supabaseAdmin
       .from('status_groups')
       .select('id, key')
-      .in('key', ['task_workflow', 'coding_workflow'])
       .eq('is_enabled', true);
     const defs: any[] = [];
-    for (const g of groups || []) {
+    for (const g of [...(groups || [])].sort((a: any, b: any) => Number(a.key === 'task_workflow') - Number(b.key === 'task_workflow'))) {
       const statuses = await getGroupStatuses(g.id);
       defs.push(
         ...statuses
@@ -154,15 +182,19 @@ export async function getAssignmentFor(
 }
 
 export async function syncAllSpacesForGroup(groupId: string) {
-  const { data: assignments } = await supabaseAdmin
+  const { data: children, error: childError } = await supabaseAdmin
+    .from('status_groups').select('id').eq('base_group_id', groupId);
+  if (childError) throw new Error(childError.message);
+  const { data: assignments, error } = await supabaseAdmin
     .from('status_group_assignments')
-    .select('entity_id')
-    .eq('group_id', groupId)
+    .select('entity_id, group_id')
+    .in('group_id', [groupId, ...(children || []).map((g: any) => g.id)])
     .eq('entity_type', 'space');
+  if (error) throw new Error(error.message);
   if (!assignments || assignments.length === 0) return;
   for (const a of assignments) {
     try {
-      await syncSpaceToGroup(a.entity_id, groupId);
+      await syncSpaceToGroup(a.entity_id, a.group_id);
     } catch (e) {
       console.error(`[statusGroups] Failed to sync space ${a.entity_id} to group ${groupId}:`, e);
     }

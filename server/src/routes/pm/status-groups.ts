@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { requireAuth } from '../../middleware/auth';
 import { supabaseAdmin } from '../../supabase';
-import { resolveEffectiveGroup, getGroupStatuses, getGroupByKey } from '../../utils/statusGroups';
+import { resolveEffectiveGroup, getGroupStatuses, getGroupByKey, getGroupSections } from '../../utils/statusGroups';
 
 const router = Router();
 
@@ -75,7 +75,7 @@ router.get('/status-groups', async (_req: Request, res: Response) => {
     }
     const out: any[] = [];
     for (const g of groups || []) {
-      out.push({ ...g, statuses: await getGroupStatuses(g.id) });
+      out.push({ ...g, statuses: await getGroupStatuses(g.id), effective_sections: await getGroupSections(g) });
     }
     res.json({ success: true, data: out });
   } catch (err) {

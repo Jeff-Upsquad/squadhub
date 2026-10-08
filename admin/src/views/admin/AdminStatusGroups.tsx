@@ -90,10 +90,9 @@ export default function AdminStatusGroups() {
   return (
     <div>
       <div className="mb-6">
-        <h1 className="font-[family-name:var(--font-display)] text-xl font-bold text-foreground">Status Groups</h1>
+        <h1 className="font-[family-name:var(--font-display)] text-xl font-bold text-foreground">Task Statuses</h1>
         <p className="mt-1 text-sm text-foreground-muted">
-          Build reusable sets of statuses, then apply them to areas, spaces, lists — or to a space
-          template so future spaces inherit them automatically.
+          Manage system defaults, create independent workflows, or extend Default Task Statuses with local additions. Apply groups to areas, spaces, lists, and templates.
         </p>
       </div>
 
@@ -120,7 +119,7 @@ export default function AdminStatusGroups() {
               placeholder="Search groups…"
               className="mb-2 w-full rounded-lg border border-divider px-3 py-2 text-sm focus:border-ink focus:outline-none"
             />
-            {showGroupForm && <NewGroupForm onSubmit={(b) => createGroup.mutate(b)} pending={createGroup.isPending} />}
+            {showGroupForm && <NewGroupForm defaultGroup={groups.find((g) => g.key === 'task_workflow')} onSubmit={(b) => createGroup.mutate(b)} pending={createGroup.isPending} />}
             <div className="max-h-[60vh] space-y-1 overflow-y-auto">
               {filtered.map((g) => (
                 <button
@@ -132,10 +131,11 @@ export default function AdminStatusGroups() {
                 >
                   <span className="flex items-center gap-2">
                     <span className="h-3 w-3 rounded-full" style={{ background: g.color }} />
-                    <span className="truncate text-sm font-medium">{g.name}</span>
+                    <span className="min-w-0 flex-1 text-sm font-medium" title={g.name}>{g.name}</span>
                     {g.is_default && (
                       <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700">DEFAULT</span>
                     )}
+                    {g.base_group_id && <span className="rounded bg-blue-100 px-1.5 py-0.5 text-[10px] font-semibold text-blue-700">LINKED</span>}
                     {g.is_system && (
                       <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-600">SYSTEM</span>
                     )}
@@ -159,7 +159,7 @@ export default function AdminStatusGroups() {
               </div>
             ) : (
               <div className="space-y-5">
-                <GroupMetaCard group={selected} onChanged={invalidate} onDelete={() => deleteGroup.mutate(selected.id)} />
+                <GroupMetaCard defaultGroup={groups.find((g) => g.key === 'task_workflow')} group={selected} onChanged={invalidate} onDelete={() => deleteGroup.mutate(selected.id)} />
                 <div className="flex gap-1 border-b border-divider">
                   {([['statuses', 'Statuses'], ['apply', 'Apply to…'], ['usage', `Applied to (${selected.usage_count || 0})`], ['templates', 'Space templates']] as [SubTab, string][]).map(([t, label]) => (
                     <button
@@ -173,7 +173,7 @@ export default function AdminStatusGroups() {
                     </button>
                   ))}
                 </div>
-                {subTab === 'statuses' && <StatusesCard group={selected} onChanged={invalidate} />}
+                {subTab === 'statuses' && <StatusesCard key={selected.id} group={selected} onChanged={invalidate} />}
                 {subTab === 'apply' && <ApplyCard group={selected} onChanged={invalidate} />}
                 {subTab === 'usage' && <UsageCard groupId={selected.id} />}
                 {subTab === 'templates' && <TemplatesCard selectedGroupId={selected.id} onChanged={invalidate} />}
@@ -189,7 +189,8 @@ export default function AdminStatusGroups() {
 // ============================================================
 // New group form
 // ============================================================
-function NewGroupForm({ onSubmit, pending }: { onSubmit: (b: any) => void; pending: boolean }) {
+function NewGroupForm({ defaultGroup, onSubmit, pending }: { defaultGroup?: StatusGroup; onSubmit: (b: any) => void; pending: boolean }) {
+  const [linked, setLinked] = useState(false);
   const [name, setName] = useState('');
   const [key, setKey] = useState('');
   const [description, setDescription] = useState('');
@@ -202,9 +203,16 @@ function NewGroupForm({ onSubmit, pending }: { onSubmit: (b: any) => void; pendi
         e.preventDefault();
         const finalKey = (key || slugify(name)).trim();
         if (!name.trim() || !finalKey) { alert('Name and key are required'); return; }
-        onSubmit({ key: finalKey, name: name.trim(), description: description.trim() || null, color });
+        onSubmit({ key: finalKey, name: name.trim(), description: description.trim(), color, base_group_id: linked ? defaultGroup?.id : null });
       }}
     >
+      <label className="block text-xs font-medium">Group type
+        <select value={linked ? 'linked' : 'independent'} onChange={(e) => setLinked(e.target.value === 'linked')} className="mt-1 w-full rounded-lg border border-divider px-2 py-2 text-sm">
+          <option value="independent">Independent status group</option>
+          <option value="linked" disabled={!defaultGroup}>Linked to Default Task Statuses</option>
+        </select>
+      </label>
+      <p className="text-xs text-foreground-dim">{linked ? 'Inherits all default statuses and future edits. Add your own statuses and sections.' : 'Create a separate set of statuses for this workflow.'}</p>
       <input value={name} onChange={(e) => { setName(e.target.value); if (!key) setKey(slugify(e.target.value)); }} placeholder="Group name (e.g. Design Workflow)" className="w-full rounded-lg border border-divider px-3 py-2 text-sm focus:border-ink focus:outline-none" />
       <div className="flex gap-2">
         <input value={key} onChange={(e) => setKey(slugify(e.target.value))} placeholder="key (e.g. design_workflow)" className="flex-1 rounded-lg border border-divider px-3 py-2 font-mono text-xs focus:border-ink focus:outline-none" />
@@ -221,8 +229,7 @@ function NewGroupForm({ onSubmit, pending }: { onSubmit: (b: any) => void; pendi
 // ============================================================
 // Group meta card
 // ============================================================
-function GroupMetaCard({ group, onChanged, onDelete }: { group: StatusGroup; onChanged: () => void; onDelete: () => void }) {
-  const qc = useQueryClient();
+function GroupMetaCard({ defaultGroup, group, onChanged, onDelete }: { defaultGroup?: StatusGroup; group: StatusGroup; onChanged: () => void; onDelete: () => void }) {
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(group.name);
   const [description, setDescription] = useState(group.description || '');
@@ -239,10 +246,10 @@ function GroupMetaCard({ group, onChanged, onDelete }: { group: StatusGroup; onC
     mutationFn: () => api.put(`/admin/status-groups/${group.id}/enabled`, { is_enabled: !group.is_enabled }),
     onSuccess: onChanged,
   });
-  const setDefault = useMutation({
-    mutationFn: () => api.put(`/admin/status-groups/${group.id}/default`),
-    onSuccess: () => { onChanged(); qc.invalidateQueries({ queryKey: ['admin-status-groups'] }); },
-    onError: (err: any) => alert(err?.response?.data?.error || 'Failed to set default'),
+  const changePrimary = useMutation({
+    mutationFn: (linked: boolean) => api.put(`/admin/status-groups/${group.id}`, { base_group_id: linked ? defaultGroup?.id : null }),
+    onSuccess: onChanged,
+    onError: (err: any) => alert(err?.response?.data?.error || 'Failed to change primary group'),
   });
 
   return (
@@ -261,12 +268,9 @@ function GroupMetaCard({ group, onChanged, onDelete }: { group: StatusGroup; onC
           </>
         )}
         <span className="ml-auto flex items-center gap-2">
-          {!group.is_default && (
-            <button onClick={() => setDefault.mutate()} className="rounded-lg border border-divider px-2.5 py-1 text-xs hover:bg-muted">Set as default</button>
-          )}
-          <button onClick={() => toggleEnabled.mutate()} className="rounded-lg border border-divider px-2.5 py-1 text-xs hover:bg-muted">
+          {group.key !== 'task_workflow' && <button onClick={() => toggleEnabled.mutate()} className="rounded-lg border border-divider px-2.5 py-1 text-xs hover:bg-muted">
             {group.is_enabled ? 'Disable' : 'Enable'}
-          </button>
+          </button>}
           {editing ? (
             <>
               <button onClick={() => save.mutate()} className="rounded-lg bg-ink px-2.5 py-1 text-xs font-medium text-white">Save</button>
@@ -290,6 +294,13 @@ function GroupMetaCard({ group, onChanged, onDelete }: { group: StatusGroup; onC
       ) : (
         group.description && <p className="mt-1 text-sm text-foreground-muted">{group.description}</p>
       )}
+      {group.key !== 'task_workflow' && <label className="mt-3 block text-xs font-medium">Primary status group
+        <select value={group.base_group_id ? 'linked' : 'independent'} disabled={changePrimary.isPending} onChange={(e) => changePrimary.mutate(e.target.value === 'linked')} className="ml-2 rounded-lg border border-divider px-2 py-1.5 text-sm">
+          <option value="independent">None — independent group</option>
+          <option value="linked" disabled={!defaultGroup}>Default Task Statuses</option>
+        </select>
+      </label>}
+      {group.base_group_id && <p className="mt-2 text-xs text-foreground-dim">Default statuses update automatically. Your local additions stay in this group. Switching to independent removes inherited rows from this group.</p>}
       {!group.is_enabled && <p className="mt-1 text-xs text-amber-600">Disabled — hidden from pickers, existing boards keep working.</p>}
     </div>
   );
@@ -422,7 +433,7 @@ function DeleteStatusModal({
           </button>
           <button
             type="button"
-            disabled={isPending || usageQuery.isLoading || (count > 0 && !selectedTargetId)}
+            disabled={isPending || usageQuery.isLoading || usageQuery.isError || (count > 0 && !selectedTargetId)}
             onClick={() => onConfirm(count > 0 ? selectedTargetId : undefined)}
             className="rounded-lg bg-red-600 px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-red-700 disabled:opacity-50 cursor-pointer"
           >
@@ -436,7 +447,23 @@ function DeleteStatusModal({
 
 function StatusesCard({ group, onChanged }: { group: StatusGroup; onChanged: () => void }) {
   const qc = useQueryClient();
-  const isTaskWorkflow = group.key === 'task_workflow' || group.key === 'coding_workflow' || !!group.statuses?.some((s) => !!s.section);
+  const isTaskWorkflow = true;
+  const canEditSystem = group.key === 'task_workflow';
+  const [sectionName, setSectionName] = useState('');
+  const [sectionEmoji, setSectionEmoji] = useState('📋');
+  const sections = useMemo(() => {
+    const result = new Map(TASK_SECTIONS.map((s) => [s.key, s]));
+    for (const s of group.effective_sections || group.custom_sections || []) result.set(s.key, s);
+    for (const s of group.statuses || []) {
+      if (s.section && !result.has(s.section)) result.set(s.section, { key: s.section, label: s.section_label || s.section, emoji: s.section_emoji || '📋' });
+    }
+    return [...result.values()];
+  }, [group]);
+  const addSection = useMutation({
+    mutationFn: () => api.put(`/admin/status-groups/${group.id}`, { custom_sections: [...(group.custom_sections || []), { key: slugify(sectionName), label: sectionName.trim(), emoji: sectionEmoji.trim() || '📋' }] }),
+    onSuccess: () => { setSection(slugify(sectionName)); setSectionName(''); onChanged(); },
+    onError: (err: any) => alert(err?.response?.data?.error || 'Failed to add section'),
+  });
   const [name, setName] = useState('');
   const [color, setColor] = useState('#6b7280');
   const [category, setCategory] = useState<StatusCategory>('todo');
@@ -459,13 +486,13 @@ function StatusesCard({ group, onChanged }: { group: StatusGroup; onChanged: () 
   // safe to submit.
   const displayOrder: StatusGroupStatus[] = isTaskWorkflow
     ? [
-        ...TASK_SECTIONS.flatMap((sec) => statuses.filter((s) => (s.section || '') === sec.key)),
-        ...statuses.filter((s) => !(s.section || '') || !TASK_SECTIONS.some((sec) => sec.key === s.section)),
+        ...sections.flatMap((sec) => statuses.filter((s) => (s.section || '') === sec.key)),
+        ...statuses.filter((s) => !(s.section || '') || !sections.some((sec) => sec.key === s.section)),
       ]
     : statuses;
 
   const sectionOf = (s: StatusGroupStatus) =>
-    TASK_SECTIONS.find((sec) => sec.key === (s.section || '')) || null;
+    sections.find((sec) => sec.key === (s.section || '')) || null;
 
   const placeAtEndOfSection = (order: StatusGroupStatus[], id: string, sectionKey: string) => {
     const without = order.filter((s) => s.id !== id);
@@ -482,7 +509,7 @@ function StatusesCard({ group, onChanged }: { group: StatusGroup; onChanged: () 
 
   const create = useMutation({
     mutationFn: () => {
-      const sec = TASK_SECTIONS.find((s) => s.key === section);
+      const sec = sections.find((s) => s.key === section);
       return api.post(`/admin/status-groups/${group.id}/statuses`, {
         name: name.trim(), color, category,
         description: description.trim() || null,
@@ -558,14 +585,15 @@ function StatusesCard({ group, onChanged }: { group: StatusGroup; onChanged: () 
   const move = useMutation({
     mutationFn: (ordered: StatusGroupStatus[]) =>
       api.put(`/admin/status-groups/${group.id}/statuses/reorder`, {
-        items: ordered.map((s, i) => ({ id: s.id, position: i })),
+        items: ordered.filter((s) => !s.is_inherited).map((s, i) => ({ id: s.id, position: i })),
       }),
     onSuccess: onChanged,
+    onError: (err: any) => { onChanged(); alert(err?.response?.data?.error || 'Failed to reorder statuses'); },
   });
 
   const addSystemStatus = useMutation({
     mutationFn: (preset: SystemStatusPreset) => {
-      const sec = TASK_SECTIONS.find((s) => s.key === preset.section);
+      const sec = sections.find((s) => s.key === preset.section);
       return api.post(`/admin/status-groups/${group.id}/statuses`, {
         name: isTaskWorkflow ? preset.name : preset.label,
         key: preset.key,
@@ -604,6 +632,7 @@ function StatusesCard({ group, onChanged }: { group: StatusGroup; onChanged: () 
   };
 
   const atSectionEdge = (displayIdx: number, dir: -1 | 1) => {
+    if (displayOrder[displayIdx]?.is_inherited || displayOrder[displayIdx + dir]?.is_inherited) return true;
     if (!isTaskWorkflow) return displayIdx === 0 ? dir === -1 : displayIdx === displayOrder.length - 1;
     const j = displayIdx + dir;
     if (j < 0 || j >= displayOrder.length) return true;
@@ -614,14 +643,15 @@ function StatusesCard({ group, onChanged }: { group: StatusGroup; onChanged: () 
     <div className="rounded-xl border border-divider bg-surface p-4">
       <h3 className="mb-1 text-sm font-semibold">Statuses in this group ({statuses.length})</h3>
       <p className="mb-3 text-xs text-foreground-dim">Order controls the board column order. Category controls grouping (to-do / active / done / closed).</p>
-      {isTaskWorkflow && (
+      {canEditSystem && (
         <p className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-          This group powers the status picker on every generic task. Keys (mono chips below) are stored on tasks
-          and can’t be changed — rename labels freely. Changes apply within about a minute.
+          Every status created here is a system default. Edits also update linked groups. Status keys stay stable on existing tasks.
         </p>
       )}
 
+      {group.base_group_id && <p className="mb-3 rounded-lg border border-divider bg-muted px-3 py-2 text-xs text-foreground-muted">Primary group: Default Task Statuses. Inherited statuses are read-only here; edit them in the default group. Add local statuses below.</p>}
       {/* System default statuses quick-add / info box */}
+      {!group.base_group_id && (
       <div className="mb-3 rounded-lg border border-divider/70 bg-muted/20 p-2.5">
         <div className="flex items-center justify-between gap-2 mb-1.5">
           <span className="text-xs font-semibold text-foreground flex items-center gap-1.5">
@@ -655,6 +685,20 @@ function StatusesCard({ group, onChanged }: { group: StatusGroup; onChanged: () 
         )}
       </div>
 
+      )}
+
+      <form className="mb-3 flex flex-wrap gap-2" onSubmit={(e) => {
+        e.preventDefault();
+        const key = slugify(sectionName);
+        if (!key || sections.some((s) => s.key === key)) { alert('Enter a unique section name'); return; }
+        addSection.mutate();
+      }}>
+        <input aria-label="New section name" value={sectionName} onChange={(e) => setSectionName(e.target.value)} placeholder="New section name" className="min-w-40 flex-1 rounded-lg border border-divider px-3 py-2 text-sm" />
+        <input aria-label="Section emoji" value={sectionEmoji} maxLength={16} onChange={(e) => setSectionEmoji(e.target.value)} className="w-16 rounded-lg border border-divider px-2 py-2 text-sm" />
+        <button disabled={!sectionName.trim() || addSection.isPending} className="rounded-lg border border-divider px-3 py-2 text-sm disabled:opacity-50">+ Add section</button>
+      </form>
+      <div className="mb-3 flex flex-wrap gap-2">{sections.filter((sec) => !statuses.some((s) => s.section === sec.key) && (group.effective_sections || group.custom_sections || []).some((s) => s.key === sec.key)).map((sec) => <span key={sec.key} className="rounded bg-muted px-2 py-1 text-xs">{sec.emoji} {sec.label} · 0 statuses</span>)}</div>
+
       <form
         className="mb-3 space-y-2"
         onSubmit={(e) => { e.preventDefault(); if (name.trim()) create.mutate(); }}
@@ -669,7 +713,7 @@ function StatusesCard({ group, onChanged }: { group: StatusGroup; onChanged: () 
           </select>
           {isTaskWorkflow && (
             <select value={section} onChange={(e) => setSection(e.target.value)} className="rounded-lg border border-divider px-2 py-2 text-sm" title="Picker section">
-              {TASK_SECTIONS.map((s) => (
+              {sections.map((s) => (
                 <option key={s.key} value={s.key}>{s.emoji} {s.label}</option>
               ))}
             </select>
@@ -717,13 +761,13 @@ function StatusesCard({ group, onChanged }: { group: StatusGroup; onChanged: () 
                   </select>
                   {isTaskWorkflow && (
                     <select value={editSection} onChange={(e) => setEditSection(e.target.value)} className="rounded border border-divider px-1 py-1 text-xs">
-                      {TASK_SECTIONS.map((sec) => (
+                      {sections.map((sec) => (
                         <option key={sec.key} value={sec.key}>{sec.emoji} {sec.label}</option>
                       ))}
                     </select>
                   )}
                   <button onClick={() => {
-                    const sec = TASK_SECTIONS.find((x) => x.key === editSection);
+                    const sec = sections.find((x) => x.key === editSection);
                     if (isTaskWorkflow && editSection !== (s.section || '')) {
                       pendingRelocate.current = { id: s.id, section: editSection };
                     }
@@ -739,6 +783,7 @@ function StatusesCard({ group, onChanged }: { group: StatusGroup; onChanged: () 
                   {s.is_default && <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700">DEFAULT</span>}
                   {(() => {
                     const isSystem = isSystemStatus(s);
+                    const locked = s.is_inherited || (isSystem && !canEditSystem);
                     return (
                       <>
                         {isSystem && (
@@ -746,11 +791,11 @@ function StatusesCard({ group, onChanged }: { group: StatusGroup; onChanged: () 
                         )}
                         <button onClick={() => shift(i, -1)} disabled={atSectionEdge(i, -1)} className="rounded px-1 text-foreground-dim hover:text-foreground disabled:opacity-30" title="Move up">↑</button>
                         <button onClick={() => shift(i, 1)} disabled={atSectionEdge(i, 1)} className="rounded px-1 text-foreground-dim hover:text-foreground disabled:opacity-30" title="Move down">↓</button>
-                        {!s.is_default && !isSystem && (
+                        {!s.is_default && !locked && !group.base_group_id && (
                           <button onClick={() => update.mutate({ id: s.id, body: { is_default: true } })} className="rounded px-1 text-xs text-foreground-dim hover:text-foreground" title="Mark as default">★</button>
                         )}
-                        {isSystem ? (
-                          <span className="rounded px-1.5 py-0.5 text-[11px] font-medium text-foreground-dim bg-muted/60" title="System default status cannot be edited or changed">Locked</span>
+                        {locked ? (
+                          <span className="rounded px-1.5 py-0.5 text-[11px] font-medium text-foreground-dim bg-muted/60" title={s.is_inherited ? "Edit in Default Task Statuses" : "System default status"}>{s.is_inherited ? 'Inherited' : 'Locked'}</span>
                         ) : (
                           <>
                             <button onClick={() => { setEditingId(s.id); setEditName(s.name); setEditColor(s.color); setEditCategory(s.category); setEditDescription(s.description || ''); setEditSection(s.section || 'not_started'); }} className="rounded px-1 text-xs text-foreground-dim hover:text-foreground">Edit</button>

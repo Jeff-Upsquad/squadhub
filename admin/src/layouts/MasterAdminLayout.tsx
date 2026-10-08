@@ -309,7 +309,7 @@ export default function MasterAdminLayout({ children }: { children: React.ReactN
               <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M3 5h18M3 12h18M3 19h18" />
               </svg>
-              Status Groups
+              Task Statuses
             </NavLink>
             <NavLink href="/admin/labels">
               <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">

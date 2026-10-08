@@ -38,7 +38,8 @@ export function useTaskWorkflowCatalog(options?: TaskWorkflowCatalogOptions) {
       const qs = params.toString();
       return api.get(`/pm/status-groups/effective${qs ? `?${qs}` : ''}`).then((r) => r.data);
     },
-    staleTime: 5 * 60 * 1000,
+    staleTime: 60 * 1000,
+    refetchInterval: 60 * 1000,
     retry: 1,
   });
 
