@@ -19,18 +19,98 @@ import {
 
 export type StatusGroupEntityType = 'space' | 'folder' | 'list' | 'template';
 
-/** Resolve live inheritance, preserving source ids for read-only admin rows. */
-export function composeGroupStatuses(group: any, local: any[], inherited: any[] = []) {
-  const base = inherited.map((s: any) => ({ ...s, is_inherited: true }));
+export function slugify(s: string): string {
+  return (s || 'status').toLowerCase()
+    .replace(/[^a-z0-9_\s]/g, '')
+    .trim()
+    .replace(/\s+/g, '_')
+    .replace(/^[^a-z]+/, '') || 'status';
+}
+
+/** Resolve live inheritance, preserving source ids for read-only admin rows, applying replacements and toggle states. */
+export function composeGroupStatuses(
+  group: any,
+  local: any[],
+  inherited: any[] = [],
+  options?: { includeDisabled?: boolean },
+) {
+  const disabledKeys: string[] = Array.isArray(group?.disabled_status_keys)
+    ? group.disabled_status_keys
+    : [];
+  const replacements: Record<string, any> =
+    group?.status_replacements && typeof group.status_replacements === 'object'
+      ? group.status_replacements
+      : {};
+
+  const base = inherited.map((s: any) => {
+    const lookupKey = s.key || s.id;
+    const replacement =
+      (s.key && replacements[s.key]) ||
+      (s.id && replacements[s.id]) ||
+      replacements[lookupKey];
+
+    if (replacement) {
+      const repKey = replacement.key || slugify(replacement.name);
+      const isDisabled = disabledKeys.includes(repKey);
+
+      return {
+        ...s,
+        id: replacement.id || `rep_${group?.id || 'grp'}_${s.key || s.id}`,
+        group_id: group?.id || s.group_id,
+        name: replacement.name,
+        key: repKey,
+        color: replacement.color || s.color,
+        category: replacement.category || s.category,
+        section: replacement.section !== undefined ? replacement.section : s.section,
+        section_label: replacement.section_label !== undefined ? replacement.section_label : s.section_label,
+        section_emoji: replacement.section_emoji !== undefined ? replacement.section_emoji : s.section_emoji,
+        description: replacement.description !== undefined ? replacement.description : s.description,
+        is_inherited: true,
+        is_system: false,
+        is_replacement: true,
+        replaces_key: s.key,
+        replaces_name: s.name,
+        replaces_id: s.id,
+        original_status: s,
+        is_disabled: isDisabled,
+      };
+    }
+
+    const keysToCheck = [s.key, s.id, lookupKey].filter(Boolean);
+    const isDisabled = disabledKeys.some((k) => keysToCheck.includes(k));
+
+    return {
+      ...s,
+      is_inherited: true,
+      is_replacement: false,
+      is_disabled: isDisabled,
+    };
+  });
+
   const localRows = local
     .filter((s: any) => !base.some((b: any) =>
       (b.key && b.key === s.key) || b.name.toLowerCase() === s.name.toLowerCase()))
-    .map((s: any) => ({ ...s, is_inherited: false,
-      is_system: group.key === 'task_workflow' || isSystemStatus(s),
-      // The primary group owns the initial status in linked workflows.
-      is_default: group.base_group_id ? false : s.is_default,
-    }));
-  return [...base, ...localRows].map((s, position) => ({ ...s, position }));
+    .map((s: any) => {
+      const keysToCheck = [s.key, s.id].filter(Boolean);
+      const isDisabled = disabledKeys.some((k) => keysToCheck.includes(k));
+      return {
+        ...s,
+        is_inherited: false,
+        is_system: group?.key === 'task_workflow' || isSystemStatus(s),
+        // The primary group owns the initial status in linked workflows.
+        is_default: group?.base_group_id ? false : s.is_default,
+        is_replacement: false,
+        is_disabled: isDisabled,
+      };
+    });
+
+  const all = [...base, ...localRows].map((s, position) => ({ ...s, position }));
+
+  if (options?.includeDisabled) {
+    return all;
+  }
+
+  return all.filter((s) => !s.is_disabled).map((s, position) => ({ ...s, position }));
 }
 
 /**
@@ -62,7 +142,11 @@ async function getStageSystemRows(): Promise<any[]> {
   return (data || []).filter((s: any) => !s.is_archived);
 }
 
-export async function getGroupStatuses(groupId: string, visited = new Set<string>()): Promise<any[]> {
+export async function getGroupStatuses(
+  groupId: string,
+  visited = new Set<string>(),
+  options?: { includeDisabled?: boolean },
+): Promise<any[]> {
   if (visited.has(groupId)) throw new Error('Circular status group inheritance');
   visited.add(groupId);
   const { data: group, error: groupError } = await supabaseAdmin
@@ -78,9 +162,9 @@ export async function getGroupStatuses(groupId: string, visited = new Set<string
   if (group.is_stage_workflow && group.key !== STAGE_SYSTEM_GROUP_KEY) {
     return composeStageGroupStatuses(data, await getStageSystemRows());
   }
-  const inherited = group.base_group_id ? await getGroupStatuses(group.base_group_id, visited) : [];
+  const inherited = group.base_group_id ? await getGroupStatuses(group.base_group_id, visited, { includeDisabled: false }) : [];
   const sections = await getGroupSections(group);
-  return composeGroupStatuses(group, data || [], inherited).map((s: any) => {
+  return composeGroupStatuses(group, data || [], inherited, options).map((s: any) => {
     const section = sections.find((sec: any) => sec.key === s.section);
     return section ? { ...s, section_label: section.label, section_emoji: section.emoji } : s;
   });

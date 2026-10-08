@@ -42,6 +42,8 @@ const groupCreateSchema = z.object({
   color: z.string().max(16).optional(),
   base_group_id: z.string().uuid().nullable().optional(),
   custom_sections: z.array(sectionSchema).max(50).optional(),
+  disabled_status_keys: z.array(z.string()).optional(),
+  status_replacements: z.record(z.string(), z.any()).optional(),
 });
 
 const groupUpdateSchema = z.object({
@@ -51,6 +53,8 @@ const groupUpdateSchema = z.object({
   color: z.string().max(16).optional(),
   base_group_id: z.string().uuid().nullable().optional(),
   custom_sections: z.array(sectionSchema).max(50).optional(),
+  disabled_status_keys: z.array(z.string()).optional(),
+  status_replacements: z.record(z.string(), z.any()).optional(),
 });
 
 const statusCreateSchema = z.object({
@@ -200,7 +204,7 @@ router.get('/', async (_req: Request, res: Response) => {
 
     const result = await Promise.all((groups || []).map(async (g: any) => ({
       ...g,
-      statuses: await getGroupStatuses(g.id),
+      statuses: await getGroupStatuses(g.id, new Set<string>(), { includeDisabled: true }),
       effective_sections: await getGroupSections(g),
       usage_count: usageByGroup.get(g.id) || 0,
     })));
@@ -596,6 +600,8 @@ router.put('/:id', async (req: Request, res: Response) => {
     if (body.color !== undefined) patch.color = body.color;
     if (body.base_group_id !== undefined) patch.base_group_id = body.base_group_id;
     if (body.custom_sections !== undefined) patch.custom_sections = body.custom_sections;
+    if (body.disabled_status_keys !== undefined) patch.disabled_status_keys = body.disabled_status_keys;
+    if (body.status_replacements !== undefined) patch.status_replacements = body.status_replacements;
 
     const { data, error } = await supabaseAdmin
       .from('status_groups')
@@ -802,6 +808,223 @@ router.put('/:id/statuses/reorder', async (req: Request, res: Response) => {
   } catch (err) {
     if (zodErr(err, res)) return;
     console.error('Reorder group statuses error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+const statusReplaceSchema = z.object({
+  name: z.string().min(1).max(100),
+  color: z.string().max(16).optional(),
+  category: z.enum(CATEGORIES).optional(),
+  section: z.string().max(64).optional(),
+  section_label: z.string().max(100).nullable().optional(),
+  section_emoji: z.string().max(16).nullable().optional(),
+  description: z.string().max(500).nullable().optional(),
+});
+
+// PUT /admin/status-groups/:id/toggle-status
+router.put('/:id/toggle-status', async (req: Request, res: Response) => {
+  try {
+    const { key, enabled } = z.object({
+      key: z.string().min(1),
+      enabled: z.boolean(),
+    }).parse(req.body);
+
+    const group = await getGroup(req.params.id as string);
+    if (!group) {
+      res.status(404).json({ success: false, error: 'Status group not found' });
+      return;
+    }
+
+    const currentDisabled: string[] = Array.isArray(group.disabled_status_keys)
+      ? [...group.disabled_status_keys]
+      : [];
+
+    let nextDisabled: string[];
+    if (enabled) {
+      nextDisabled = currentDisabled.filter((k) => k !== key);
+    } else {
+      nextDisabled = currentDisabled.includes(key) ? currentDisabled : [...currentDisabled, key];
+    }
+
+    const { data, error } = await supabaseAdmin
+      .from('status_groups')
+      .update({ disabled_status_keys: nextDisabled })
+      .eq('id', req.params.id as string)
+      .select()
+      .single();
+
+    if (error) {
+      res.status(error.code === 'P0001' ? 400 : 500).json({ success: false, error: error.message });
+      return;
+    }
+
+    refreshTaskOverrides();
+    await syncAllSpacesForGroup(req.params.id as string);
+    const statuses = await getGroupStatuses(req.params.id as string, new Set<string>(), { includeDisabled: true });
+    res.json({ success: true, data, statuses });
+  } catch (err) {
+    if (zodErr(err, res)) return;
+    console.error('Toggle status error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// PUT /admin/status-groups/:id/statuses/:statusKey/toggle
+router.put('/:id/statuses/:statusKey/toggle', async (req: Request, res: Response) => {
+  try {
+    const key = req.params.statusKey as string;
+    const body = z.object({ enabled: z.boolean().optional() }).safeParse(req.body);
+    const group = await getGroup(req.params.id as string);
+    if (!group) {
+      res.status(404).json({ success: false, error: 'Status group not found' });
+      return;
+    }
+
+    const currentDisabled: string[] = Array.isArray(group.disabled_status_keys)
+      ? [...group.disabled_status_keys]
+      : [];
+
+    const isCurrentlyDisabled = currentDisabled.includes(key);
+    const targetEnabled = (body.success && body.data.enabled !== undefined)
+      ? body.data.enabled
+      : isCurrentlyDisabled;
+
+    let nextDisabled: string[];
+    if (targetEnabled) {
+      nextDisabled = currentDisabled.filter((k) => k !== key);
+    } else {
+      nextDisabled = currentDisabled.includes(key) ? currentDisabled : [...currentDisabled, key];
+    }
+
+    const { data, error } = await supabaseAdmin
+      .from('status_groups')
+      .update({ disabled_status_keys: nextDisabled })
+      .eq('id', req.params.id as string)
+      .select()
+      .single();
+
+    if (error) {
+      res.status(error.code === 'P0001' ? 400 : 500).json({ success: false, error: error.message });
+      return;
+    }
+
+    refreshTaskOverrides();
+    await syncAllSpacesForGroup(req.params.id as string);
+    const statuses = await getGroupStatuses(req.params.id as string, new Set<string>(), { includeDisabled: true });
+    res.json({ success: true, data, statuses });
+  } catch (err) {
+    console.error('Toggle status error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// PUT /admin/status-groups/:id/statuses/:statusKey/replace
+router.put('/:id/statuses/:statusKey/replace', async (req: Request, res: Response) => {
+  try {
+    const statusKey = req.params.statusKey as string;
+    const body = statusReplaceSchema.parse(req.body);
+    const group = await getGroup(req.params.id as string);
+    if (!group) {
+      res.status(404).json({ success: false, error: 'Status group not found' });
+      return;
+    }
+    if (!group.base_group_id) {
+      res.status(400).json({ success: false, error: 'Status replacement is only available in linked status groups' });
+      return;
+    }
+
+    const inherited = await getGroupStatuses(group.base_group_id);
+    const original = inherited.find((s: any) => s.key === statusKey || s.id === statusKey);
+    if (!original) {
+      res.status(404).json({ success: false, error: 'Target status to replace not found in primary group' });
+      return;
+    }
+
+    const currentReplacements = (group.status_replacements && typeof group.status_replacements === 'object')
+      ? { ...group.status_replacements }
+      : {};
+
+    const repKey = slugify(body.name);
+    const replacementObj = {
+      name: body.name.trim(),
+      key: repKey,
+      color: body.color || original.color || '#6b7280',
+      category: body.category || original.category || 'todo',
+      section: body.section !== undefined ? body.section : original.section,
+      section_label: body.section_label !== undefined ? body.section_label : original.section_label,
+      section_emoji: body.section_emoji !== undefined ? body.section_emoji : original.section_emoji,
+      description: body.description !== undefined ? body.description : (original.description || null),
+      replaces_key: original.key || statusKey,
+      replaces_name: original.name,
+      replaces_id: original.id,
+      replaced_at: new Date().toISOString(),
+    };
+
+    currentReplacements[original.key || statusKey] = replacementObj;
+
+    const { data, error } = await supabaseAdmin
+      .from('status_groups')
+      .update({ status_replacements: currentReplacements })
+      .eq('id', req.params.id as string)
+      .select()
+      .single();
+
+    if (error) {
+      res.status(error.code === 'P0001' ? 400 : 500).json({ success: false, error: error.message });
+      return;
+    }
+
+    refreshTaskOverrides();
+    await syncAllSpacesForGroup(req.params.id as string);
+    const statuses = await getGroupStatuses(req.params.id as string, new Set<string>(), { includeDisabled: true });
+    res.json({ success: true, data, statuses });
+  } catch (err) {
+    if (zodErr(err, res)) return;
+    console.error('Replace status error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// DELETE /admin/status-groups/:id/statuses/:statusKey/replace
+router.delete('/:id/statuses/:statusKey/replace', async (req: Request, res: Response) => {
+  try {
+    const statusKey = req.params.statusKey as string;
+    const group = await getGroup(req.params.id as string);
+    if (!group) {
+      res.status(404).json({ success: false, error: 'Status group not found' });
+      return;
+    }
+
+    const currentReplacements = (group.status_replacements && typeof group.status_replacements === 'object')
+      ? { ...group.status_replacements }
+      : {};
+
+    delete currentReplacements[statusKey];
+    for (const [k, v] of Object.entries(currentReplacements) as any) {
+      if (v?.replaces_key === statusKey || v?.key === statusKey || v?.replaces_id === statusKey) {
+        delete currentReplacements[k];
+      }
+    }
+
+    const { data, error } = await supabaseAdmin
+      .from('status_groups')
+      .update({ status_replacements: currentReplacements })
+      .eq('id', req.params.id as string)
+      .select()
+      .single();
+
+    if (error) {
+      res.status(error.code === 'P0001' ? 400 : 500).json({ success: false, error: error.message });
+      return;
+    }
+
+    refreshTaskOverrides();
+    await syncAllSpacesForGroup(req.params.id as string);
+    const statuses = await getGroupStatuses(req.params.id as string, new Set<string>(), { includeDisabled: true });
+    res.json({ success: true, data, statuses });
+  } catch (err) {
+    console.error('Revert replacement error:', err);
     res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });

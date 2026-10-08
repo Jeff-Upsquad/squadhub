@@ -586,15 +586,18 @@ router.patch('/sessions/:id', async (req: Request, res: Response) => {
       return;
     }
 
-    // Reduce-only: the edited range must be contained within the original
-    // range. Start may move later and end may move earlier, but neither may
-    // expand outward — tracked time can be trimmed, never increased.
-    const origStartMs = new Date(session.start_time).getTime();
-    const origEndMs = new Date(session.end_time).getTime();
-    const origDuration = session.duration_seconds
-      ?? Math.round((origEndMs - origStartMs) / 1000);
+    // Reduce-only against the TRUE original bounds: the edited range must sit
+    // inside the range from before the first trim, so time can be trimmed
+    // and re-adjusted back up to the original — but never extended past it.
+    // original_* is NULL until the first trim, in which case the current
+    // values are the original.
+    const boundStartMs = new Date(session.original_start_time ?? session.start_time).getTime();
+    const boundEndMs = new Date(session.original_end_time ?? session.end_time).getTime();
+    const boundDuration = session.original_duration_seconds
+      ?? session.duration_seconds
+      ?? Math.round((boundEndMs - boundStartMs) / 1000);
     const duration = Math.round((endMs - startMs) / 1000);
-    if (startMs < origStartMs || endMs > origEndMs || duration > origDuration) {
+    if (startMs < boundStartMs || endMs > boundEndMs || duration > boundDuration) {
       res.status(403).json({ success: false, error: 'Time can only be reduced, not increased' });
       return;
     }
@@ -610,6 +613,11 @@ router.patch('/sessions/:id', async (req: Request, res: Response) => {
         end_time: newEnd,
         timer_type: newType,
         duration_seconds: duration,
+        original_start_time: session.original_start_time ?? session.start_time,
+        original_end_time: session.original_end_time ?? session.end_time,
+        original_duration_seconds: session.original_duration_seconds
+          ?? session.duration_seconds
+          ?? Math.round((new Date(session.end_time).getTime() - new Date(session.start_time).getTime()) / 1000),
       })
       .eq('id', sessionId)
       .select()

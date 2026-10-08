@@ -575,6 +575,14 @@ export interface StatusGroupStatus {
   is_placeholder?: boolean;
   /** Retired row: hidden from pickers/boards, kept so old task history resolves. */
   is_archived?: boolean;
+  /** True when toggled off in the group; excluded from applied spaces/boards. */
+  is_disabled?: boolean;
+  /** True when this row replaces an inherited status in this group. */
+  is_replacement?: boolean;
+  replaces_key?: string | null;
+  replaces_name?: string | null;
+  replaces_id?: string | null;
+  original_status?: any;
 }
 
 /** Convert a managed task_workflow row into the catalog shape the picker renders. */
@@ -686,6 +694,21 @@ export interface StatusGroupSection {
   emoji: string;
 }
 
+export interface StatusReplacement {
+  name: string;
+  key?: string;
+  color?: string;
+  category?: StatusCategory;
+  section?: string | null;
+  section_label?: string | null;
+  section_emoji?: string | null;
+  description?: string | null;
+  replaces_key?: string;
+  replaces_name?: string;
+  replaces_id?: string;
+  replaced_at?: string;
+}
+
 export interface StatusGroup {
   id: string;
   key: string;
@@ -706,6 +729,8 @@ export interface StatusGroup {
    *  tasks.priority and "when" on tasks.work_date. Boards group by exact
    *  stage and sort by priority inside each column. */
   is_stage_workflow?: boolean;
+  disabled_status_keys?: string[];
+  status_replacements?: Record<string, StatusReplacement>;
   statuses?: StatusGroupStatus[];
   usage_count?: number;
 }
@@ -2174,6 +2199,10 @@ export interface TimerSession {
   duration_seconds: number | null;
   is_auto_stopped: boolean;
   created_at: string;
+  /** True original bounds before any trim. NULL = never trimmed. */
+  original_start_time?: string | null;
+  original_end_time?: string | null;
+  original_duration_seconds?: number | null;
   user?: User;
 }
 
