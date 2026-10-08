@@ -38,6 +38,20 @@ vi.mock('../supabase', () => ({
           const res = await execute();
           return { data: res.data[0] || null, error: null };
         },
+        update: (patch: any) => {
+          for (const r of store.tables[table] || []) {
+            if (filters.every((f) => f(r))) {
+              Object.assign(r, patch);
+            }
+          }
+          return query;
+        },
+        insert: (data: any) => {
+          const rows = Array.isArray(data) ? data : [data];
+          if (!store.tables[table]) store.tables[table] = [];
+          store.tables[table].push(...rows);
+          return query;
+        },
         then: (resolve: any, reject: any) => execute().then(resolve, reject),
       };
       return query;
@@ -57,7 +71,11 @@ const row = (id: string, group_id: string, name: string, extra: any = {}) => ({ 
 
 beforeEach(() => {
   store.tables = {
-    status_groups: [defaultGroup, linkedGroup, { id: 'independent', key: 'custom', is_enabled: true }],
+    status_groups: [
+      { ...defaultGroup, disabled_status_keys: [], status_replacements: {} },
+      { ...linkedGroup, disabled_status_keys: [], status_replacements: {} },
+      { id: 'independent', key: 'custom', is_enabled: true },
+    ],
     status_group_statuses: [row('open', 'default', 'Open', { is_default: true }), row('approval', 'linked', 'Approval'), row('custom', 'independent', 'Custom')],
     status_group_assignments: [], folders: [], lists: [],
   };
@@ -120,6 +138,60 @@ describe('live status group inheritance', () => {
     store.tables.status_groups = [{ id: 'a', base_group_id: 'b' }, { id: 'b', base_group_id: 'a' }];
     await expect(getGroupStatuses('a')).rejects.toThrow('Circular');
   });
+
+  it('toggles statuses on or off in a linked group without affecting the base group', async () => {
+    const linked = store.tables.status_groups.find((g) => g.id === 'linked')!;
+    linked.disabled_status_keys = ['open'];
+
+    const effectiveStatuses = await getGroupStatuses('linked');
+    expect(effectiveStatuses.map((s) => s.key)).toEqual(['approval']);
+
+    const adminStatuses = await getGroupStatuses('linked', new Set(), { includeDisabled: true });
+    expect(adminStatuses.map((s) => s.key)).toEqual(['open', 'approval']);
+    expect(adminStatuses[0].is_disabled).toBe(true);
+
+    const baseStatuses = await getGroupStatuses('default');
+    expect(baseStatuses.map((s) => s.key)).toEqual(['open']);
+    expect(baseStatuses[0].is_disabled).toBe(false);
+  });
+
+  it('replaces an inherited status in place with custom status without affecting the base group', async () => {
+    const linked = store.tables.status_groups.find((g) => g.id === 'linked')!;
+    linked.status_replacements = {
+      open: {
+        name: 'Backlog',
+        key: 'backlog',
+        color: '#999999',
+        category: 'todo',
+        description: 'Custom backlog replacement',
+      },
+    };
+
+    const statuses = await getGroupStatuses('linked');
+    expect(statuses.map((s) => s.key)).toEqual(['backlog', 'approval']);
+    expect(statuses[0]).toMatchObject({
+      name: 'Backlog',
+      key: 'backlog',
+      is_replacement: true,
+      replaces_key: 'open',
+      replaces_name: 'Open',
+    });
+
+    const baseStatuses = await getGroupStatuses('default');
+    expect(baseStatuses.map((s) => s.key)).toEqual(['open']);
+    expect(baseStatuses[0].name).toBe('Open');
+  });
+
+  it('reverts replacement back to original inherited status', async () => {
+    const linked = store.tables.status_groups.find((g) => g.id === 'linked')!;
+    linked.status_replacements = {
+      open: { name: 'Backlog', key: 'backlog' },
+    };
+    expect((await getGroupStatuses('linked'))[0].name).toBe('Backlog');
+
+    delete linked.status_replacements.open;
+    expect((await getGroupStatuses('linked'))[0].name).toBe('Open');
+  });
 });
 
 async function callRoute(path: string, method: string, params: any, body: any = {}) {
@@ -161,5 +233,35 @@ describe('admin inheritance safeguards', () => {
   it('prevents assigning a different system default', async () => {
     const res = await callRoute('/:id/default', 'put', { id: 'linked' });
     expect(res.statusCode).toBe(400);
+  });
+
+  it('toggles status via PUT /:id/toggle-status and /:id/statuses/:statusKey/toggle', async () => {
+    const res = await callRoute('/:id/toggle-status', 'put', { id: 'linked' }, { key: 'open', enabled: false });
+    expect(res.statusCode).toBe(200);
+    const linked = store.tables.status_groups.find((g) => g.id === 'linked');
+    expect(linked.disabled_status_keys).toEqual(['open']);
+
+    const res2 = await callRoute('/:id/statuses/:statusKey/toggle', 'put', { id: 'linked', statusKey: 'open' }, { enabled: true });
+    expect(res2.statusCode).toBe(200);
+    expect(linked.disabled_status_keys).toEqual([]);
+  });
+
+  it('replaces status via PUT /:id/statuses/:statusKey/replace and reverts via DELETE', async () => {
+    const res = await callRoute('/:id/statuses/:statusKey/replace', 'put', { id: 'linked', statusKey: 'open' }, {
+      name: 'Triage Pending',
+      color: '#ff5500',
+      category: 'todo',
+    });
+    expect(res.statusCode).toBe(200);
+    const linked = store.tables.status_groups.find((g) => g.id === 'linked');
+    expect(linked.status_replacements.open).toMatchObject({
+      name: 'Triage Pending',
+      key: 'triage_pending',
+      color: '#ff5500',
+    });
+
+    const resDel = await callRoute('/:id/statuses/:statusKey/replace', 'delete', { id: 'linked', statusKey: 'open' });
+    expect(resDel.statusCode).toBe(200);
+    expect(linked.status_replacements.open).toBeUndefined();
   });
 });
