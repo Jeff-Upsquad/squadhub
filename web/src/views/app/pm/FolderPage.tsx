@@ -105,6 +105,10 @@ export default function FolderPage({ folderId: propFolderId }: { folderId?: stri
         position: idx,
         is_default: !!d.is_default,
         category: d.category,
+        group: d.group,
+        groupLabel: d.groupLabel,
+        groupEmoji: d.groupEmoji,
+        description: d.description,
       }));
     }
     if (rawStatuses.length > 0) return rawStatuses;
@@ -117,6 +121,10 @@ export default function FolderPage({ folderId: propFolderId }: { folderId?: stri
         position: idx,
         is_default: !!d.is_default,
         category: d.category,
+        group: d.group,
+        groupLabel: d.groupLabel,
+        groupEmoji: d.groupEmoji,
+        description: d.description,
       }));
     }
     return [];

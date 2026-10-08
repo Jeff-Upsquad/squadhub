@@ -95,8 +95,14 @@ export default function StatusPicker({
 
     const items: Item[] = displayStatuses.map((s) => {
       const slug = toSlug(s.name);
-      const def = getTaskStatusDef(slug) || getTaskStatusDef(s.name.toLowerCase());
-      let groupKey = def?.group;
+      // Prefer the stable key (s.id is the catalog key when built from the
+      // managed task_workflow catalog) over the renamable name — e.g. row
+      // key `priority` renamed to "Normal Priority" slugs to
+      // `normal_priority` and would otherwise miss and fall back to the
+      // wrong bucket. Carried `group` (admin's section) wins outright.
+      const def = getTaskStatusDef(s.id) || getTaskStatusDef(slug) || getTaskStatusDef(s.name.toLowerCase());
+      const carriedGroup = s.group || null;
+      let groupKey = carriedGroup || def?.group;
       if (!groupKey) {
         if (s.category === 'todo') groupKey = 'not_started';
         else if (s.category === 'closed' || (s.category as string) === 'done') groupKey = 'done';
@@ -104,12 +110,12 @@ export default function StatusPicker({
       }
       const groupCfg = SPACE_STATUS_GROUP_CONFIG.find((c) => c.key === groupKey) || {
         key: groupKey,
-        label: def?.groupLabel || (s.category === 'todo' ? 'Not Started' : s.category === 'closed' ? 'Closed' : 'In Motion'),
-        emoji: def?.groupEmoji || '📋',
+        label: s.groupLabel || def?.groupLabel || (s.category === 'todo' ? 'Not Started' : s.category === 'closed' ? 'Closed' : 'In Motion'),
+        emoji: s.groupEmoji || def?.groupEmoji || '📋',
       };
       return {
         status: s,
-        description: def?.description || '',
+        description: s.description || def?.description || '',
         groupKey,
         groupName: groupCfg.label,
         emoji: groupCfg.emoji,
