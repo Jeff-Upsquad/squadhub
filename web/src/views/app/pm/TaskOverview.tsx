@@ -301,11 +301,11 @@ export default function TaskOverview({
     + (lead ? ` ${lead.title} is ${isTaskOverdue(lead) ? 'overdue' : 'due today'}.` : '');
 
   const tiles: { key: TileKey; name: string; value: number; sub: string; dot: string }[] = [
-    { key: 'all', name: 'All open', value: openPool.length, sub: 'tasks', dot: '#B7BCC0' },
-    { key: 'not_started', name: 'Not started', value: openPool.filter((t) => sectionOf(t) === 'not_started').length, sub: 'tasks', dot: '#B7BCC0' },
-    { key: 'active', name: 'Active', value: openPool.filter((t) => sectionOf(t) === 'in_motion').length, sub: 'in progress', dot: '#39C66B' },
-    { key: 'urgent', name: 'Urgent', value: urgent.length, sub: 'need you', dot: '#FF453A' },
     { key: 'due', name: 'Due today', value: dueNow.length, sub: `${overdue.length} overdue`, dot: '#FFB340' },
+    { key: 'urgent', name: 'Urgent', value: urgent.length, sub: 'need you', dot: '#FF453A' },
+    { key: 'active', name: 'Active', value: openPool.filter((t) => sectionOf(t) === 'in_motion').length, sub: 'in progress', dot: '#39C66B' },
+    { key: 'not_started', name: 'Not started', value: openPool.filter((t) => sectionOf(t) === 'not_started').length, sub: 'tasks', dot: '#B7BCC0' },
+    { key: 'all', name: 'All open', value: openPool.length, sub: 'tasks', dot: '#B7BCC0' },
   ];
 
   const sel = selId ? top.find((t) => t.id === selId) || null : null;
