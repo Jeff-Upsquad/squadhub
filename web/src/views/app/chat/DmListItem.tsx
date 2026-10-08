@@ -31,7 +31,7 @@ export default function DmListItem({ dm, active, onClick, unreadCount }: Props) 
   return (
     <button
       onClick={onClick}
-      className={`mb-[1px] flex w-full items-center gap-2 rounded-[6px] px-2 py-[5px] text-left text-[13px] transition ${
+      className={`mb-[1px] flex w-full items-center gap-2 rounded-[10px] py-[5px] pl-2 pr-[10px] text-left text-[13px] transition ${
         active
           ? 'bg-[var(--surface)] text-[var(--sh-ink)] font-medium border border-[var(--sh-hair)]'
           : 'text-[var(--sh-ink-2)] hover:bg-[var(--sh-hair-3)] hover:text-[var(--sh-ink)]'

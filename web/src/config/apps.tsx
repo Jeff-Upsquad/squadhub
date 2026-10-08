@@ -1,6 +1,7 @@
 import type { HomeView } from '../layouts/MainLayout';
 import { getFreshAccessToken } from '../services/api';
 import { openExternalUrl } from '../lib/openExternal';
+import { markAppOpened } from '../stores/recentOpensStore';
 
 // ---- App registry ----
 // Single source of truth for the in-app "Apps" (mini-apps). Both the Apps
@@ -226,6 +227,7 @@ export async function launchApp(
   app: AppDef,
   opts: { workspace?: { id: string; name: string } | null; openView: (view: HomeView) => void },
 ): Promise<void> {
+  markAppOpened(app.slug);
   if (app.external === 'squadbooks') {
     await launchSquadBooks(opts.workspace);
     return;

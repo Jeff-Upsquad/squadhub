@@ -402,12 +402,35 @@ body {
   box-shadow: inset 0 0 0 1px rgba(255,255,255,.12), inset 0 1px 0 rgba(255,255,255,.16), 0 3px 8px rgba(0,0,0,.25);
 }
 .sb-brand::after { content: ''; width: 15px; height: 5px; margin-bottom: 6px; border-radius: 3px; background: #fff; }
+/* Home sidebar's animated bot mark — same squircle, with a face that idles
+   through moods (HomeSidebar BotFace). */
+.sb-brand-bot {
+  cursor: pointer;
+  background: linear-gradient(180deg, #2a2d31 0%, #0e1012 100%);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.12), inset 0 1px 0 rgba(255,255,255,.16), 0 3px 8px rgba(0,0,0,.25);
+  transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
+}
 /* Sidebar type: primary nav a notch larger than the tree rows for hierarchy */
 .sh-mod-side .sb-nav { font-size: 13.5px; letter-spacing: -0.012em; }
 .sh-mod-side .sb-nav[data-active] { font-weight: 600; }
 .sh-mod-side .sb-wordmark { font-size: 16px; font-weight: 700; letter-spacing: -0.035em; line-height: 1.05; }
 .sh-mod-side .sb-tagline { font-size: 10.5px; font-weight: 500; letter-spacing: -0.005em; }
 .sh-mod-side .sb-section { font-size: 12px; font-weight: 600; letter-spacing: -0.01em; }
+/* Tree row actions (⋮ / +) — float over the end of the name on hover instead
+   of squeezing it, fading in over a gradient of the row's own background. */
+.sb-row-acts {
+  position: absolute; right: 4px; top: 0; bottom: 0;
+  display: flex; align-items: center; gap: 2px; padding-left: 18px;
+  color: var(--sh-ink-4); opacity: 0; pointer-events: none; transition: opacity 120ms;
+  background: linear-gradient(90deg, transparent, var(--sidebar) 16px);
+  border-radius: 0 6px 6px 0;
+}
+.sb-row-acts--row { right: 2px; background: linear-gradient(90deg, transparent, var(--sh-hair-3) 16px); }
+.sb-tree-node:hover > .sb-row-acts,
+.sb-row-acts:focus-within { opacity: 1; pointer-events: auto; }
+/* Home sidebar tiles (primary nav + recent apps) */
+.sb-tile { transition: background-color 120ms, color 120ms, transform 120ms; }
+.sb-tile-app:hover { transform: translateY(-1px); }
 
 /* ── Content pane — every open tab renders inside one white card with the
    same radius as the sidebar. Views that paint their own canvas (My Home)
