@@ -210,6 +210,12 @@ html.dark .ta-panel, html[data-theme="noir"] .ta-panel {
 .ta-resize-top { top: -2px; }
 .ta-resize-bottom { bottom: -2px; }
 .ta-resize:focus-visible { outline: 2px solid var(--event-color); outline-offset: 1px; border-radius: 4px; }
+/* Short blocks still get both handles — shrink them so top + bottom don't
+   cover the whole card and stay inside the visible box (overflow:hidden). */
+.ta-event[data-short="true"] .ta-resize { height: 8px; left: 2px; right: 2px; }
+.ta-event[data-short="true"] .ta-resize::after { width: 20px; height: 3px; }
+.ta-event[data-short="true"] .ta-resize-top { top: 0; }
+.ta-event[data-short="true"] .ta-resize-bottom { bottom: 0; }
 
 /* Inline trim editor in the detail panel (mirrors the logged-time editor). */
 .ta-edit-row { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
