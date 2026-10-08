@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import type { Task } from '@squadhub/shared';
 import { usePMStore } from '../../../stores/pmStore';
+import { useWorkspaceStore } from '../../../stores/workspaceStore';
+import { showToast } from '../../../components/Toast';
 import {
   useWorkBlock,
   useActiveWorkBlockRun,
@@ -19,6 +22,7 @@ import {
   inputTimeToMinute,
   type Recurrence,
 } from '../../../utils/workBlockRecurrence';
+import TaskCreatePanel from './TaskCreatePanel';
 
 interface Props {
   task: Task;
@@ -185,8 +189,10 @@ export default function WorkBlockSections({ task, canEdit }: Props) {
   const { data: active } = useActiveWorkBlockRun();
   const unlink = useUnlinkTaskFromWorkBlock();
   const link = useLinkTaskToWorkBlock();
+  const workspaceId = useWorkspaceStore((s) => s.currentWorkspace?.id);
   const [editing, setEditing] = useState(false);
   const [linkInput, setLinkInput] = useState('');
+  const [creating, setCreating] = useState(false);
 
   const config = bundle?.config || null;
   const activeRunForThisBlock: WorkBlockRun | null = useMemo(() => {
@@ -252,7 +258,19 @@ export default function WorkBlockSections({ task, canEdit }: Props) {
 
       {/* Manually linked tasks */}
       <section>
-        <h4 className="mb-2 text-[11px] font-semibold uppercase tracking-wide opacity-60">Linked tasks</h4>
+        <div className="mb-2 flex items-center justify-between gap-2">
+          <h4 className="text-[11px] font-semibold uppercase tracking-wide opacity-60">Linked tasks</h4>
+          {canEdit && (
+            <button
+              type="button"
+              onClick={() => setCreating(true)}
+              className="rounded border border-[color:var(--sh-hair-3)] px-2 py-0.5 text-[11px] font-medium opacity-80 hover:border-[color:var(--sh-accent)] hover:opacity-100"
+              title="Create a task and link it to this time block"
+            >
+              + New task
+            </button>
+          )}
+        </div>
         <ul className="flex flex-col gap-1.5">
           {(bundle?.links || []).map((l) => (
             <li key={l.linked_task_id} className="flex items-center gap-2 text-[12px]">
@@ -333,6 +351,51 @@ export default function WorkBlockSections({ task, canEdit }: Props) {
           </ul>
         </section>
       )}
+
+      {/* Create a task from inside the block — same drawer the global "+" uses,
+          portaled to <body> so the detail panel's backdrop-filter can't trap it.
+          The new task is linked to this block the moment it's created. */}
+      {creating &&
+        typeof document !== 'undefined' &&
+        createPortal(
+          <TaskCreatePanel
+            key={`wb-create-${task.id}`}
+            pickable
+            workspaceId={workspaceId}
+            initialSpaceId={task.space?.id ?? null}
+            initialListId={task.list_id}
+            initialDraft={{
+              title: '',
+              description: '',
+              status: 'todo',
+              priority: 'none',
+              assignee_ids: [],
+              work_date: null,
+              start_date: null,
+              due_date: null,
+              task_type_id: null,
+              time_estimate: null,
+              recurrence: null,
+              subtasks: [],
+              checklists: [],
+            }}
+            onCreated={(created) => {
+              link.mutate(
+                { work_block_task_id: task.id, linked_task_id: created.id },
+                {
+                  onSuccess: () => setCreating(false),
+                  onError: (err) => {
+                    console.error('Failed to link new task to time block:', err);
+                    showToast('Task created, but could not link it to this time block', 'error');
+                    setCreating(false);
+                  },
+                },
+              );
+            }}
+            onClose={() => setCreating(false)}
+          />,
+          document.body,
+        )}
     </div>
   );
 }

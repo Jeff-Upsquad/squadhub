@@ -22,7 +22,7 @@ export const KINDS: { kind: ActivityKind; label: string; color: string }[] = [
   { kind: 'break', label: 'Break', color: '#eeb85a' },
   { kind: 'overtime', label: 'Overtime', color: '#ef8b70' },
   { kind: 'day_plan', label: 'Day planner', color: '#38bdf8' },
-  { kind: 'block', label: 'Work blocks', color: '#ad92ed' },
+  { kind: 'block', label: 'Time blocks', color: '#ad92ed' },
   { kind: 'task', label: 'Tasks', color: '#71a7ee' },
   { kind: 'no_work', label: 'No work', color: '#9b9fab' },
 ];
@@ -81,7 +81,7 @@ export function taskActivities(entries: TaskTimeEntry[]): Activity[] {
     id: `entry:${e.id}`, kind: e.source === 'work_block' ? 'block' : 'task',
     title: e.task?.title || 'Archived task', start: Date.parse(e.started_at), end: Date.parse(e.stopped_at),
     seconds: e.duration_seconds, taskId: e.task_id, project: [e.task?.space?.name, e.task?.list?.name].filter(Boolean).join(' / '),
-    note: e.note, source: e.source === 'manual' ? 'Manually logged' : e.source === 'work_block' ? 'Work block timer' : 'Task timer',
+    note: e.note, source: e.source === 'manual' ? 'Manually logged' : e.source === 'work_block' ? 'Time block timer' : 'Task timer',
     isManual: e.source === 'manual', children: e.children,
   }));
 }

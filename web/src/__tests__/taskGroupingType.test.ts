@@ -27,7 +27,7 @@ describe('task grouping by task type', () => {
     {
       id: 'type-wb',
       key: 'work_block',
-      name: 'Work Block',
+      name: 'Time Block',
       description: null,
       icon: 'box',
       color: '#8b5cf6',
@@ -68,7 +68,7 @@ describe('task grouping by task type', () => {
     ];
 
     const groups = groupByTaskType(tasks, sampleTypes);
-    expect(groups.map((g) => g.label)).toEqual(['Tasks', 'Work Block', 'Routines']);
+    expect(groups.map((g) => g.label)).toEqual(['Tasks', 'Time Block', 'Routines']);
     expect(groups[0].tasks.map((t) => t.id)).toEqual(['2', '4']);
     expect(groups[0].color).toBe('#3b82f6');
     expect(groups[1].tasks.map((t) => t.id)).toEqual(['1']);
@@ -84,7 +84,7 @@ describe('task grouping by task type', () => {
     ];
 
     const groups = groupByTaskType(tasks);
-    expect(groups.map((g) => g.label)).toEqual(['Tasks', 'Work Block']);
+    expect(groups.map((g) => g.label)).toEqual(['Tasks', 'Time Block']);
     expect(groups[0].tasks[0].id).toBe('2');
     expect(groups[1].tasks[0].id).toBe('1');
   });

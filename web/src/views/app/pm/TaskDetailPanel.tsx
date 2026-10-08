@@ -246,7 +246,7 @@ function fmtClock(v: unknown): string {
 
 function timeSourceLabel(s: unknown): string {
   if (s === 'manual') return 'manually';
-  if (s === 'work_block') return 'via work block';
+  if (s === 'work_block') return 'via time block';
   return 'via timer';
 }
 

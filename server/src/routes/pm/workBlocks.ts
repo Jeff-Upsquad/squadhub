@@ -41,7 +41,7 @@ async function assertWorkBlockTask(taskId: string): Promise<{ ok: boolean; error
     .single();
   if (error || !task) return { ok: false, error: 'Task not found' };
   const key = (task as any)?.task_types?.key;
-  if (key !== 'work_block') return { ok: false, error: 'Task is not a work block' };
+  if (key !== 'work_block') return { ok: false, error: 'Task is not a time block' };
   return { ok: true };
 }
 
@@ -228,7 +228,7 @@ router.patch('/work-blocks/:task_id', async (req: Request, res: Response) => {
       return;
     }
     if (!data) {
-      res.status(404).json({ success: false, error: 'Work block config not found' });
+      res.status(404).json({ success: false, error: 'Time block config not found' });
       return;
     }
     res.json({ success: true, data });
@@ -638,7 +638,7 @@ router.post('/work-blocks/:task_id/links', async (req: Request, res: Response) =
       return;
     }
     if (parsed.data.linked_task_id === taskId) {
-      res.status(400).json({ success: false, error: 'Cannot link a work block to itself' });
+      res.status(400).json({ success: false, error: 'Cannot link a time block to itself' });
       return;
     }
     const { data, error } = await supabaseAdmin

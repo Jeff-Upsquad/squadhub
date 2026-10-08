@@ -1153,6 +1153,8 @@ body.sb-resizing { user-select: none; -webkit-user-select: none; cursor: col-res
 .sh-view .dp-block[data-type="group_block"] { --dp-accent: #6366F1; }
 .sh-view .dp-block[data-virtual="true"] { box-shadow: inset 3px 0 0 var(--dp-accent), inset 0 0 0 1px color-mix(in oklch, var(--dp-accent) 30%, transparent); background-image: repeating-linear-gradient(-45deg, transparent 0 8px, color-mix(in oklch, var(--dp-accent) 6%, transparent) 8px 10px); }
 .sh-view .dp-block[data-moving="true"], .sh-view .dp-block[data-resizing="true"] { z-index: 7; opacity: 1; box-shadow: inset 3px 0 0 var(--dp-accent), 0 10px 24px -6px rgba(10,10,10,.28); }
+/* Time Block link drop target — a dragged task lights the block up before it lands. */
+.sh-view .dp-block[data-wbdrop="true"] { background: color-mix(in oklch, var(--dp-accent) 26%, var(--surface)); box-shadow: inset 3px 0 0 var(--dp-accent), 0 0 0 2px var(--dp-accent), 0 0 0 5px color-mix(in oklch, var(--dp-accent) 24%, transparent); }
 .sh-view .dp-block[data-done="true"] { --dp-accent: var(--sh-ink-4); background: var(--sh-hair-3); color: var(--sh-ink-3); }
 .sh-view .dp-block[data-done="true"] .b-title { text-decoration: line-through; text-decoration-color: var(--sh-ink-4); }
 .sh-view .dp-block .b-check { flex: none; margin-right: 4px; color: var(--sh-done); vertical-align: -1px; }
@@ -1405,6 +1407,9 @@ body.sb-resizing { user-select: none; -webkit-user-select: none; cursor: col-res
 /* Group block — combined block for a whole group (indigo). */
 .cal-tt-block[data-type="group_block"] { background: #e0e7ff; color: #312e81; border-left: 3px solid #6366f1; }
 .cal-tt-block[data-virtual="true"] { opacity: 0.82; }
+/* Time Block link drop target — a dragged task lights the block up before it
+   lands; dropping links the task to the block (MultiDayCalendar / DayCalendar). */
+.cal-tt-block[data-wbdrop="true"] { background: color-mix(in oklch, #8b5cf6 34%, transparent) !important; outline: 2px dashed #7c3aed; outline-offset: -2px; box-shadow: 0 0 0 3px color-mix(in oklch, #8b5cf6 30%, transparent); }
 .cal-tt-block[data-hidden="true"] { visibility: hidden; }
 .cal-tt-block-body { flex: 1; min-height: 0; padding: 2px 6px; cursor: grab; position: relative; overflow: hidden; }
 .cal-tt-block-body:active { cursor: grabbing; }

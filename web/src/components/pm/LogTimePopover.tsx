@@ -564,7 +564,7 @@ function RecentRow({
   const who = isMine ? 'you' : (entry.user?.display_name || entry.user?.email || 'someone');
   const editedBy = entry.edited_by_user?.display_name || entry.edited_by_user?.email || null;
   const negative = entry.duration_seconds < 0;
-  const sourceLabel = entry.source === 'work_block' ? 'block' : entry.source === 'manual' ? 'manual' : 'timer';
+  const sourceLabel = entry.source === 'work_block' ? 'time block' : entry.source === 'manual' ? 'manual' : 'timer';
 
   return (
     <li className="tp-recent-row">
@@ -577,7 +577,7 @@ function RecentRow({
       <span className="tp-recent-meta">
         <span className="tp-recent-who">logged by {who}</span>
         <span className="tp-recent-when">{when}</span>
-        <span className="tp-recent-tag tp-recent-tag-lower" title={sourceLabel === 'timer' ? 'Logged by the timer' : sourceLabel === 'manual' ? 'Logged manually' : 'Logged by a work block · reduce only'}>
+        <span className="tp-recent-tag tp-recent-tag-lower" title={sourceLabel === 'timer' ? 'Logged by the timer' : sourceLabel === 'manual' ? 'Logged manually' : 'Logged by a time block · reduce only'}>
           {sourceLabel}
         </span>
         {negative && (
@@ -674,7 +674,7 @@ function EditEntryRow({
   const reduceOnly = level === 'reduce' || isWorkBlock;
   const blocked = (reduceOnly && raising) || isNegative;
   const blockedMsg = isWorkBlock
-    ? 'Work-block time can only be reduced, not increased'
+    ? 'Time-block time can only be reduced, not increased'
     : adminCapped
       ? 'Admins can only reduce logged time, not increase it'
       : 'You can only reduce this entry';

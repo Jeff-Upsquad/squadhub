@@ -816,7 +816,7 @@ export default function TaskRow({
                 strokeWidth="2"
                 strokeLinecap="round"
                 strokeLinejoin="round"
-                aria-label="Work block"
+                aria-label="Time block"
                 style={{ flexShrink: 0 }}
               >
                 <circle cx="12" cy="12" r="9" />
@@ -876,7 +876,7 @@ export default function TaskRow({
                     : 'rgba(16, 185, 129, 0.15)',
                   color: isWorkBlockRun ? '#7c3aed' : '#047857',
                 }}
-                title={isWorkBlockRun ? 'Work-block run in progress' : 'Timer running'}
+                title={isWorkBlockRun ? 'Time-block run in progress' : 'Timer running'}
               >
                 <span className="relative inline-flex h-1.5 w-1.5">
                   <span

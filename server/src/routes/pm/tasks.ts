@@ -1513,7 +1513,7 @@ router.patch('/tasks/:id/time-entries/:entryId', async (req: Request, res: Respo
     // Work-block rows are auto-logged by their run: anyone may reduce them but
     // no one may raise them, whatever skill level they hold.
     if (isBlockEntry && newSeconds > oldSeconds) {
-      res.status(403).json({ success: false, error: 'Work-block time can only be reduced, not increased' });
+      res.status(403).json({ success: false, error: 'Time-block time can only be reduced, not increased' });
       return;
     }
     // A negative entry is stored with its pair reordered (see logTaskTimeEntry),

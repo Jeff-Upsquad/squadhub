@@ -328,7 +328,7 @@ function CalendarData({ events, commitment, loading = false, error = false, onRe
     <div className="ta-filters" aria-label="Time type filters">{KINDS.map(k => <button key={k.kind} aria-pressed={filters.includes(k.kind)} onClick={() => setFilters(f => f.includes(k.kind) ? f.filter(v => v !== k.kind) : [...f, k.kind])}><i style={{ background: k.color }} />{k.label}</button>)}<span>IST · GMT+5:30</span></div>
     <div className="ta-calendar" data-view={view}>
       {gridWidth > calendarWidth + 1 && <div className="ta-scroll-hint">↔ Scroll sideways to see all tasks</div>}
-      {loading ? <div className="ta-state" role="status"><Glyph name="clock" /><strong>Loading your timeline…</strong><span>Gathering attendance, tasks and work blocks.</span></div>
+      {loading ? <div className="ta-state" role="status"><Glyph name="clock" /><strong>Loading your timeline…</strong><span>Gathering attendance, tasks and time blocks.</span></div>
         : error ? <div className="ta-state" role="alert"><strong>We couldn’t load all your time</strong><span>Please try again to see the complete timeline.</span><button className="ta-today" onClick={onRetry}>Try again</button></div>
         : <div className="ta-grid-scroll" ref={scroller} tabIndex={0} aria-label="Time calendar. Scroll sideways to see overlapping tasks.">
       <div className="ta-grid-head" style={{ width: gridWidth }}><div className="ta-zone">IST</div>{dayLayouts.map(({ key, width, widths }) => <div key={key} style={{ flex: `0 0 ${width}px` }} className="ta-day-head" data-today={key === dayKey(now)}>

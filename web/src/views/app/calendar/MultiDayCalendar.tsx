@@ -2,7 +2,9 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { getTaskStatusCategory } from '@squadhub/shared';
 import { usePMStore, focusBucketForMinute } from '../../../stores/pmStore';
+import { showToast } from '../../../components/Toast';
 import { useUpdateTask } from '../../../hooks/useTasks';
+import { useLinkTaskToWorkBlock } from '../../../hooks/useWorkBlocks';
 import {
   useDayPlansRange,
   useScheduleTaskOnDay,
@@ -27,6 +29,8 @@ import {
   groupRunTargetFromContainer,
   priorityLevel,
   setSlimDragImage,
+  dragIsTask,
+  dragTaskId,
 } from './calendarUtils';
 import { useSlotDragCreate, SlotCreatePanel } from '../day-planner/SlotCreate';
 
@@ -170,12 +174,16 @@ export default function MultiDayCalendar({ days, todayKey, onOpenTask, onOpenDay
   const setFocusBucket = usePMStore((s) => s.setFocusBucket);
   const setGroupRunPanel = usePMStore((s) => s.setGroupRunPanel);
   const qc = useQueryClient();
+  // Dropping a task onto a Time Block links it to that block.
+  const linkToBlock = useLinkTaskToWorkBlock();
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const gridRef = useRef<HTMLDivElement>(null);
   const N = days.length;
 
   const [dragOver, setDragOver] = useState<{ date: string; start: number } | null>(null);
+  // Time block currently under a dragged task — drives the link-drop highlight.
+  const [wbOver, setWbOver] = useState<string | null>(null);
   // Click-and-drag on empty column space → new task in that slot.
   const slotCreate = useSlotDragCreate(PX_PER_MIN);
   const [allDayOver, setAllDayOver] = useState<string | null>(null);
@@ -544,7 +552,47 @@ export default function MultiDayCalendar({ days, todayKey, onOpenTask, onOpenDay
                       width: `calc((100% - 6px) / ${p.cols} - 2px)`,
                       ...(isWb ? { background: `color-mix(in oklch, ${wbColor} 18%, transparent)`, borderLeftColor: wbColor } : {}),
                     }}
-                    title={`${title} · ${fmtTimeRange(renderStart, renderDur)}`}
+                    title={`${title} · ${fmtTimeRange(renderStart, renderDur)}${isWb ? ' · drop a task here to link it' : ''}`}
+                    data-wbdrop={isWb && wbOver === p.id ? 'true' : undefined}
+                    onDragOver={(e) => {
+                      // Time Blocks are link targets: accept a dragged task so
+                      // it links instead of falling through to the column below.
+                      if (!isWb || !dragIsTask(e.dataTransfer)) return;
+                      e.preventDefault();
+                      e.stopPropagation();
+                      // 'move' — every task drag source sets effectAllowed to
+                      // copyMove, and a dropEffect outside that set is rejected.
+                      e.dataTransfer.dropEffect = 'move';
+                      if (wbOver !== p.id) {
+                        setWbOver(p.id);
+                        // Drop the time ghost — it would otherwise paint over
+                        // this block while the task hovers here.
+                        setDragOver(null);
+                      }
+                    }}
+                    onDragLeave={(e) => {
+                      if (!isWb) return;
+                      if (e.currentTarget.contains(e.relatedTarget as Node | null)) return;
+                      setWbOver((c) => (c === p.id ? null : c));
+                    }}
+                    onDrop={(e) => {
+                      if (!isWb) return;
+                      const dropped = dragTaskId(e.dataTransfer);
+                      if (!dropped || dropped === p.task_id) return;
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setWbOver(null);
+                      linkToBlock.mutate(
+                        { work_block_task_id: p.task_id, linked_task_id: dropped },
+                        {
+                          onSuccess: () => showToast('Task linked to the time block', 'success'),
+                          onError: (err) => {
+                            console.error('Failed to link task to time block:', err);
+                            showToast('Could not link that task to the time block', 'error');
+                          },
+                        },
+                      );
+                    }}
                   >
                     <div className="cal-tt-block-handle top" onMouseDown={startResize(p, day, 'top')} title="Drag to change start" />
                     <div className="cal-tt-block-body" onMouseDown={startMove(p, day)}>

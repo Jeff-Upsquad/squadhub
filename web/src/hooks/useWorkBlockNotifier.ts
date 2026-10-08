@@ -58,7 +58,7 @@ export function useWorkBlockNotifier() {
       const leadMin = p.wb_notify_before_min ?? 5;
       const notifyStart = p.wb_notify_on_start ?? true;
       const notifyEnd = p.wb_notify_on_end ?? true;
-      const title = p.task?.title ?? 'Work block';
+      const title = p.task?.title ?? 'Time block';
 
       // T - leadMin: "Starting soon" lead-time card (only if the user has
       // a lead time > 0 AND start toasts aren't muted).
@@ -97,7 +97,7 @@ export function useWorkBlockNotifier() {
       // At end: plain text toast.
       if (notifyEnd && endMs > now) {
         const id = window.setTimeout(() => {
-          showToast(`Work block "${title}" has ended`);
+          showToast(`Time block "${title}" has ended`);
         }, endMs - now);
         timersRef.current.push(id);
       }
