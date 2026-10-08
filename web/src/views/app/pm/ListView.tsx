@@ -9,7 +9,11 @@ import { groupTasks as groupTasksGeneric, partitionByCompletion, sortTasks, buil
 import { filterTasks, countActiveFilters, EMPTY_FILTER, type TaskFilterState } from '../../../lib/filters';
 import { isTaskVisibleInView } from '../../../lib/viewKeywordMatching';
 import { useIsMobile } from '../../../hooks/useIsMobile';
+import { groupTasksByStage, sortByStageOrder } from '../../../lib/stageWorkflow';
 import TaskGroupCard from './TaskGroupCard';
+import { SectionedGroups } from './ListSection';
+import { statusSection, taskTypeSection } from '../../../lib/listSections';
+import { GROUP_ORDER as TASK_TYPE_GROUP_ORDER, getTaskTypeGroup } from '../../../components/pm/TaskTypeDropdown';
 
 export default function ListView({
   listId,
@@ -17,6 +21,7 @@ export default function ListView({
   filters,
   onClearFilters,
   groupBy = 'status',
+  groupDirection = 'asc',
   myTasksOnly = false,
   searchQuery = '',
   canEdit = true,
@@ -26,12 +31,14 @@ export default function ListView({
   allViews = [],
   columns,
   columnControls,
+  stageMode = false,
 }: {
   listId: string;
   statuses: SpaceStatus[];
   filters?: TaskFilterState;
   onClearFilters?: () => void;
   groupBy?: ListGroupBy;
+  groupDirection?: 'asc' | 'desc';
   myTasksOnly?: boolean;
   searchQuery?: string;
   canEdit?: boolean;
@@ -41,6 +48,9 @@ export default function ListView({
   allViews?: ListViewRow[];
   columns?: ListViewColumnId[];
   columnControls?: ColumnControls;
+  /** List is on a stage workflow: group by exact stage and, with no explicit
+   *  sort, order every group priority → overdue → due date. */
+  stageMode?: boolean;
 }) {
   // Include subtasks as flat rows, then nest them under their parents so each
   // parent row gets the expandable subtask dropdown (TaskRow's chevron) instead
@@ -73,9 +83,9 @@ export default function ListView({
     let arr = filterWithSubtasks(tasks, matches);
     // Default (manual) is creation order — oldest first — so a newly added
     // task lands at the bottom of its group. Explicit sorts take precedence.
-    arr = sortBy !== 'manual' ? sortTasks(arr, sortBy) : sortByCreationOrder(arr);
+    arr = sortBy !== 'manual' ? sortTasks(arr, sortBy) : stageMode ? sortByStageOrder(arr) : sortByCreationOrder(arr);
     return arr;
-  }, [tasks, filters, searchQuery, myTasksOnly, currentUserId, tz, focusToday, sortBy, activeView, allViews]);
+  }, [tasks, filters, searchQuery, myTasksOnly, currentUserId, tz, focusToday, sortBy, activeView, allViews, stageMode]);
 
   const activeFilterCount = countActiveFilters(filters);
 
@@ -91,6 +101,9 @@ export default function ListView({
   // active filter + search + scope, and it automatically rejoins the main list
   // once its day arrives (isTaskUpcoming goes false overnight).
   const upcomingTasks = useMemo(() => {
+    // Stage workflows keep every open task in its stage / bucket / plan group;
+    // "when" is shown by the Plan grouping instead of snoozing rows away.
+    if (stageMode) return [];
     const f = filters ?? EMPTY_FILTER;
     const hasDateFilter = (f.dueDate?.length ?? 0) > 0 || (f.workDate?.length ?? 0) > 0;
     if (!hasDateFilter) {
@@ -116,7 +129,7 @@ export default function ListView({
     const { open } = partitionByCompletion(base, fadingTaskIds);
     const upcoming = open.filter((t) => isTaskUpcoming(t, tz));
     return sortBy !== 'manual' ? sortTasks(upcoming, sortBy) : sortByCreationOrder(upcoming);
-  }, [tasks, filters, searchQuery, myTasksOnly, currentUserId, tz, focusToday, sortBy, openTasks, fadingTaskIds, activeView, allViews]);
+  }, [tasks, filters, searchQuery, myTasksOnly, currentUserId, tz, focusToday, sortBy, openTasks, fadingTaskIds, activeView, allViews, stageMode]);
 
   const upcomingIds = useMemo(() => new Set(upcomingTasks.map((t) => t.id)), [upcomingTasks]);
 
@@ -137,13 +150,19 @@ export default function ListView({
 
   const statusGroups = useMemo(() => {
     if (groupBy !== 'status') return null;
+    if (stageMode) {
+      // Exact stage per group (legacy grouping matches by category, which
+      // would repeat a task under every stage of the same category).
+      const groups = groupTasksByStage(filteredCurrent, statuses, fadingTaskIds);
+      return sortBy !== 'manual' ? groups.map((g) => ({ ...g, tasks: sortTasks(g.tasks, sortBy) })) : groups;
+    }
     return groupTasksByStatus(filteredCurrent, statuses, fadingTaskIds);
-  }, [filteredCurrent, statuses, groupBy, fadingTaskIds]);
+  }, [filteredCurrent, statuses, groupBy, fadingTaskIds, stageMode, sortBy]);
 
   const genericGroups = useMemo(() => {
     if (groupBy === 'status' || groupBy === 'none') return null;
-    return groupTasksGeneric(currentOpenTasks, groupBy, tz, fadingTaskIds, taskTypes);
-  }, [currentOpenTasks, groupBy, tz, fadingTaskIds, taskTypes]);
+    return groupTasksGeneric(currentOpenTasks, groupBy, tz, fadingTaskIds, taskTypes, statuses);
+  }, [currentOpenTasks, groupBy, tz, fadingTaskIds, taskTypes, statuses]);
 
   const handleStatusChange = (taskId: string, statusId: string) => {
     updateTask.mutate({ id: taskId, status: statusId });
@@ -185,6 +204,10 @@ export default function ListView({
         defaultCollapsed
       />
     ) : null;
+
+  const sectionScope = `lvsec:${listId}:${groupBy}`;
+  const typeForGroup = (key: string) =>
+    (taskTypes || []).find((t) => t.id === key || t.key === key) || null;
 
   if (isLoading) {
     return (
@@ -240,7 +263,13 @@ export default function ListView({
           </div>
         ) : groupBy === 'status' && statusGroups ? (
           <>
-            {statusGroups.map(({ status, tasks: groupTasks }) => (
+            <SectionedGroups
+              scope={sectionScope}
+              direction={groupDirection}
+              groups={statusGroups}
+              sectionOf={({ status }) => statusSection(status)}
+              countOf={(g) => g.tasks.length}
+              render={({ status, tasks: groupTasks }) => (
               <TaskGroupCard
                 key={status.id}
                 groupKey={status.id}
@@ -255,14 +284,15 @@ export default function ListView({
                 canEdit={canEdit}
                 showAddRow={canEdit}
                 dimFocused={!!focusGroup}
-                defaultNewTaskStatus={status.category}
+                defaultNewTaskStatus={stageMode ? status.id : status.category}
                 onDrop={handleStatusChange}
                 defaultPriority={activeView?.config?.defaultPriority}
                 defaultTaskTypeId={activeView?.config?.defaultTaskTypeId}
                 defaultLabelId={activeView?.config?.defaultLabel}
                 activeViewId={activeView?.id}
               />
-            ))}
+            )}
+            />
             {upcomingCard()}
           </>
         ) : groupBy === 'none' ? (
@@ -291,7 +321,14 @@ export default function ListView({
           </>
         ) : genericGroups ? (
           <>
-            {genericGroups.map((g) => (
+            <SectionedGroups
+              scope={sectionScope}
+              direction={groupDirection}
+              groups={genericGroups}
+              sectionOf={(g) => (groupBy === 'task_type' ? taskTypeSection(typeForGroup(g.key), getTaskTypeGroup) : null)}
+              countOf={(g) => g.tasks.length}
+              order={groupBy === 'task_type' ? TASK_TYPE_GROUP_ORDER : undefined}
+              render={(g) => (
               <TaskGroupCard
                 key={g.key}
                 groupKey={`gg:${g.key}`}
@@ -311,7 +348,8 @@ export default function ListView({
                 defaultLabelId={activeView?.config?.defaultLabel}
                 activeViewId={activeView?.id}
               />
-            ))}
+            )}
+            />
             {upcomingCard()}
             {completedCard()}
           </>

@@ -1,5 +1,12 @@
 import { supabaseAdmin } from '../supabase';
-import { registerTaskStatusDefs, statusGroupRowToTaskDef, isSystemStatus } from '@squadhub/shared';
+import {
+  registerTaskStatusDefs,
+  statusGroupRowToTaskDef,
+  isSystemStatus,
+  STAGE_SYSTEM_GROUP_KEY,
+  STAGE_DEFAULT_KEY,
+  LEGACY_PLACEHOLDER_KEYS,
+} from '@squadhub/shared';
 
 /**
  * Status-group helpers shared by the admin routes and the PM creation hooks.
@@ -26,6 +33,35 @@ export function composeGroupStatuses(group: any, local: any[], inherited: any[] 
   return [...base, ...localRows].map((s, position) => ({ ...s, position }));
 }
 
+/**
+ * Stage workflows always show the System Stages: NEW first (the default for
+ * every new task), then the group's own stages, then the Blocked / Paused
+ * placeholders, then CLOSED / CANCELLED. A local row with a system key is
+ * dropped — the system row wins so every location behaves the same.
+ */
+export function composeStageGroupStatuses(local: any[], system: any[]) {
+  const sys = system.map((s: any) => ({ ...s, is_inherited: true, is_system: true }));
+  const sysKeys = new Set(sys.map((s: any) => s.key).filter(Boolean));
+  const own = local
+    .filter((s: any) => !(s.key && sysKeys.has(s.key)))
+    .map((s: any) => ({ ...s, is_inherited: false, is_default: false }));
+  const head = sys.filter((s: any) => s.section === 'not_started');
+  const tail = sys.filter((s: any) => s.section === 'blocked_paused' || s.section === 'done');
+  const middle = sys.filter((s: any) => !head.includes(s) && !tail.includes(s));
+  return [...head, ...own, ...middle, ...tail].map((s: any, position: number) => ({ ...s, position }));
+}
+
+async function getStageSystemRows(): Promise<any[]> {
+  const { data: sys } = await supabaseAdmin
+    .from('status_groups').select('id').eq('key', STAGE_SYSTEM_GROUP_KEY).maybeSingle();
+  if (!sys) return [];
+  const { data, error } = await supabaseAdmin
+    .from('status_group_statuses').select('*').eq('group_id', (sys as any).id)
+    .order('position', { ascending: true });
+  if (error) throw new Error(error.message);
+  return (data || []).filter((s: any) => !s.is_archived);
+}
+
 export async function getGroupStatuses(groupId: string, visited = new Set<string>()): Promise<any[]> {
   if (visited.has(groupId)) throw new Error('Circular status group inheritance');
   visited.add(groupId);
@@ -33,10 +69,15 @@ export async function getGroupStatuses(groupId: string, visited = new Set<string
     .from('status_groups').select('*').eq('id', groupId).maybeSingle();
   if (groupError) throw new Error(groupError.message);
   if (!group) return [];
-  const { data, error } = await supabaseAdmin
+  const { data: allRows, error } = await supabaseAdmin
     .from('status_group_statuses').select('*').eq('group_id', groupId)
     .order('position', { ascending: true });
   if (error) throw new Error(error.message);
+  // Archived rows stay in the table (keys are immutable) but never render.
+  const data = (allRows || []).filter((s: any) => !s.is_archived);
+  if (group.is_stage_workflow && group.key !== STAGE_SYSTEM_GROUP_KEY) {
+    return composeStageGroupStatuses(data, await getStageSystemRows());
+  }
   const inherited = group.base_group_id ? await getGroupStatuses(group.base_group_id, visited) : [];
   const sections = await getGroupSections(group);
   return composeGroupStatuses(group, data || [], inherited).map((s: any) => {
@@ -293,6 +334,28 @@ export async function spaceHasSeedStatuses(spaceId: string) {
   );
 }
 
+/**
+ * Stage facts for a list: whether its effective group is a stage workflow,
+ * which statuses are placeholders there, and its default stage. The legacy
+ * dependency statuses are placeholders everywhere.
+ */
+export async function getListStageInfo(listId: string | null | undefined): Promise<{
+  stage: boolean;
+  placeholders: Set<string>;
+  statuses: any[];
+}> {
+  const placeholders = new Set<string>(LEGACY_PLACEHOLDER_KEYS);
+  try {
+    const effective = await resolveEffectiveGroup({ listId: listId || null });
+    const statuses = effective?.statuses || [];
+    for (const s of statuses) if (s.is_placeholder && s.key) placeholders.add(s.key);
+    return { stage: !!effective?.assignment?.status_groups?.is_stage_workflow, placeholders, statuses };
+  } catch (e) {
+    console.error('[statusGroups] getListStageInfo failed:', e);
+    return { stage: false, placeholders, statuses: [] };
+  }
+}
+
 // ---- Task status normalization -------------------------------------------
 // Tasks store a free-form TEXT status, so 'OPEN' vs 'open' splits boards into
 // two groups (groupByStatus keys on the raw string). This resolves the
@@ -322,12 +385,21 @@ export async function normalizeTaskStatusForList(
   if (!input) return null;
   const lower = input.toLowerCase();
 
-  // Legacy shorthands first — always safe.
-  if (LEGACY_STATUS_ALIASES[lower]) return LEGACY_STATUS_ALIASES[lower];
-
   try {
     const effective = await resolveEffectiveGroup({ listId: listId || null });
     const rows: any[] = effective?.statuses || [];
+
+    // Legacy shorthands. Stage workflows have no 'open' / 'in_progress', so
+    // map them onto NEW / the first Active stage / CLOSED instead.
+    if (LEGACY_STATUS_ALIASES[lower] || lower === 'open' || lower === 'in_progress') {
+      if (effective?.assignment?.status_groups?.is_stage_workflow) {
+        if (lower === 'todo' || lower === 'open') return STAGE_DEFAULT_KEY;
+        if (lower === 'done') return 'closed';
+        const firstActive = rows.find((s: any) => s.section === 'in_motion' && s.key);
+        return firstActive?.key || STAGE_DEFAULT_KEY;
+      }
+      if (LEGACY_STATUS_ALIASES[lower]) return LEGACY_STATUS_ALIASES[lower];
+    }
 
     // 1. Exact key match (case-sensitive canonical).
     for (const s of rows) {
@@ -371,6 +443,7 @@ export async function normalizeTaskStatusForList(
     }
   } catch (e) {
     console.error('[statusGroups] normalizeTaskStatusForList failed:', e);
+    if (LEGACY_STATUS_ALIASES[lower]) return LEGACY_STATUS_ALIASES[lower];
   }
 
   // Unknown status — let the caller decide (400 with allowed list).

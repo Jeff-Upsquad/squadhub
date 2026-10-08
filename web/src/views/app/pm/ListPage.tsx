@@ -10,6 +10,7 @@ import { canAtLeast } from '../../../lib/access';
 import type { SpaceStatus, AccessLevel, ListView as ListViewType, ListViewRow, ListViewConfig } from '@squadhub/shared';
 import ListView from './ListView';
 import BoardView from './BoardView';
+import StageBoardView from './StageBoardView';
 import WhiteboardView from './WhiteboardView';
 import ViewTabs from '../../../components/pm/ViewTabs';
 import FieldManagerPanel from '../../../components/pm/FieldManagerPanel';
@@ -20,7 +21,7 @@ import ManageMembersModal from './ManageMembersModal';
 import MinimalGroupFilterBar from '../../../components/pm/MinimalGroupFilterBar';
 import ViewSearchInput from '../../../components/pm/ViewSearchInput';
 import ContainerChatButton from '../../../components/pm/ContainerChatButton';
-import { LIST_GROUP_BY_OPTIONS, SORT_BY_OPTIONS, isTaskCompleted, type SortBy } from '../../../lib/taskGrouping';
+import { LIST_GROUP_BY_OPTIONS, STAGE_GROUP_BY_OPTIONS, SORT_BY_OPTIONS, isTaskCompleted, type SortBy } from '../../../lib/taskGrouping';
 import { type ListGroupBy } from '../../../stores/pmStore';
 import { EMPTY_FILTER, deriveAssigneeOptions, deriveTagOptions, filterTasks, type TaskFilterState } from '../../../lib/filters';
 import { useIsMobile } from '../../../hooks/useIsMobile';
@@ -85,6 +86,7 @@ export default function ListPage({
 
   const filters = (workingConfig.filters ?? EMPTY_FILTER) as TaskFilterState;
   const listGroupBy = (workingConfig.groupBy ?? 'status') as ListGroupBy;
+  const listGroupDir = workingConfig.groupDir === 'desc' ? 'desc' : 'asc';
   const sortBy = (workingConfig.sortBy ?? 'manual') as SortBy;
   const configDirty = useMemo(
     () => JSON.stringify(workingConfig ?? {}) !== JSON.stringify(activeView?.config ?? {}),
@@ -149,7 +151,7 @@ export default function ListPage({
     enabled: !!folderId,
   });
 
-  const { defs: catalogDefs, assignment } = useTaskWorkflowCatalog({
+  const { defs: catalogDefs, assignment, group: effectiveGroup } = useTaskWorkflowCatalog({
     spaceId: effectiveSpaceId,
     folderId,
     listId: activeListId,
@@ -170,6 +172,7 @@ export default function ListPage({
         groupLabel: d.groupLabel,
         groupEmoji: d.groupEmoji,
         description: d.description,
+        is_placeholder: d.is_placeholder,
       }));
     }
     if (rawStatuses.length > 0) return rawStatuses;
@@ -186,10 +189,14 @@ export default function ListPage({
         groupLabel: d.groupLabel,
         groupEmoji: d.groupEmoji,
         description: d.description,
+        is_placeholder: d.is_placeholder,
       }));
     }
     return [];
   }, [spaceData, listData, catalogDefs, assignment, effectiveSpaceId]);
+
+  // Stage workflow: statuses are stages only; priority + plan are separate.
+  const stageMode = !!(effectiveGroup?.is_stage_workflow && assignment && !assignment.is_default_fallback);
 
   const myAccess: AccessLevel | undefined = spaceData?.my_access_level || listData?.my_access_level;
   const isManager = canAtLeast(myAccess, 'manager');
@@ -413,9 +420,11 @@ export default function ListPage({
       {/* Minimal Group + Filter bar (List view only) */}
       {contentType === 'list' && (
         <MinimalGroupFilterBar
-          groupOptions={LIST_GROUP_BY_OPTIONS as { value: string; label: string }[]}
+          groupOptions={(stageMode ? [...LIST_GROUP_BY_OPTIONS, ...STAGE_GROUP_BY_OPTIONS] : LIST_GROUP_BY_OPTIONS) as { value: string; label: string }[]}
           groupBy={listGroupBy}
           onGroupChange={(v) => setWorkingConfig((c) => ({ ...c, groupBy: v }))}
+          groupDirection={listGroupDir}
+          onGroupDirectionChange={(d) => setWorkingConfig((c) => ({ ...c, groupDir: d }))}
           filters={filters}
           onFiltersChange={(next) => setWorkingConfig((c) => ({ ...c, filters: next }))}
           statuses={statuses}
@@ -523,6 +532,7 @@ export default function ListPage({
             filters={filters}
             onClearFilters={() => setWorkingConfig((c) => ({ ...c, filters: {} }))}
             groupBy={listGroupBy}
+            groupDirection={listGroupDir}
             myTasksOnly={myTasksOnly}
             searchQuery={searchQuery}
             canEdit={canEdit}
@@ -532,6 +542,17 @@ export default function ListPage({
             allViews={views}
             columns={listVisibleColumns}
             columnControls={listColumnControls}
+            stageMode={stageMode}
+          />
+        ) : contentType === 'board' && stageMode ? (
+          <StageBoardView
+            listId={activeListId}
+            statuses={statuses}
+            filters={filters}
+            searchQuery={searchQuery}
+            canEdit={canEdit}
+            activeView={activeView}
+            allViews={views}
           />
         ) : contentType === 'board' ? (
           <BoardView

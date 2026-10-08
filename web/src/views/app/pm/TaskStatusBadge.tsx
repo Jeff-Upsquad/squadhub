@@ -23,38 +23,36 @@ export default function TaskStatusBadge({
   }
   if (!name) return null;
 
-  const isWaitingOrUnblocked = rawKey === 'waiting_on_dependency' || rawKey === 'unblocked'
+  // Placeholder ("current status") stages park a task: the original stage
+  // leads and the placeholder trails, muted.
+  const isParked = rawKey === 'waiting_on_dependency' || rawKey === 'unblocked'
+    || !!getTaskStatusDef(rawKey)?.is_placeholder
     || (name.toUpperCase().includes('WAITING') && name.toUpperCase().includes('DEPEND'))
     || name.toUpperCase() === 'UNBLOCKED';
   const origDef = originalStatus ? getTaskStatusDef(originalStatus) : null;
   const origLabel = origDef?.label || originalStatus || null;
   const origColor = origDef?.color || '#6b7280';
+  const showParked = isParked && !!origLabel;
+  const leadColor = showParked ? origColor : color;
 
   return (
     <span
       className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium ${className}`}
       style={{
-        backgroundColor: `${color}18`,
-        color,
+        backgroundColor: `${leadColor}18`,
+        color: leadColor,
       }}
+      title={showParked ? `${origLabel} · currently ${name}` : undefined}
     >
       <span
         className="h-1.5 w-1.5 rounded-full shrink-0"
-        style={{ backgroundColor: color }}
+        style={{ backgroundColor: leadColor }}
       />
-      <span>{name}</span>
-      {isWaitingOrUnblocked && origLabel && (
-        <span
-          className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded-full text-[10px] font-medium border shrink-0"
-          style={{
-            borderColor: `${color}40`,
-            backgroundColor: `${origColor}18`,
-            color: origColor,
-          }}
-          title={`Original status: ${origLabel}`}
-        >
-          <span className="h-1 w-1 rounded-full shrink-0" style={{ backgroundColor: origColor }} />
-          <span>{origLabel}</span>
+      <span>{showParked ? origLabel : name}</span>
+      {showParked && (
+        <span className="sw-parked-chip">
+          <span className="sw-parked-dot" style={{ backgroundColor: color }} />
+          <span>{name}</span>
         </span>
       )}
     </span>

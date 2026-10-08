@@ -1,5 +1,5 @@
 import type { Task, TaskType, SpaceStatus } from '@squadhub/shared';
-import { getTaskStatusCategory, getTaskStatusDef } from '@squadhub/shared';
+import { getTaskStatusCategory, getTaskStatusDef, TASK_BUCKETS, TASK_PLANS, taskBucketOf, taskPlanOf } from '@squadhub/shared';
 
 // Sentinel for callers that genuinely have no fading state to thread through
 // (e.g., exports, server-side rendering, tests). Real UI callers must pass the
@@ -7,7 +7,7 @@ import { getTaskStatusCategory, getTaskStatusDef } from '@squadhub/shared';
 // keep a task in its pre-fade bucket while the slide-out animation plays.
 export const EMPTY_FADING_MAP: ReadonlyMap<string, string> = new Map();
 
-export type GroupBy = 'none' | 'status' | 'work_date' | 'due_date' | 'priority' | 'task_type' | 'space' | 'folder' | 'list' | 'label';
+export type GroupBy = 'none' | 'status' | 'work_date' | 'due_date' | 'priority' | 'task_type' | 'space' | 'folder' | 'list' | 'label' | 'bucket' | 'plan';
 
 export const GROUP_BY_OPTIONS: { value: GroupBy; label: string }[] = [
   { value: 'none', label: 'None' },
@@ -34,6 +34,15 @@ export const LIST_GROUP_BY_OPTIONS: { value: GroupBy; label: string }[] = [
   { value: 'list', label: 'List' },
   { value: 'label', label: 'Label' },
 ];
+
+// Extra groupings for lists on a stage workflow (stages ≠ priority ≠ plan).
+export const STAGE_GROUP_BY_OPTIONS: { value: GroupBy; label: string }[] = [
+  { value: 'bucket', label: 'Bucket' },
+  { value: 'plan', label: 'Plan' },
+];
+
+/** Order of groups (and sections): ascending = natural order. */
+export type GroupDirection = 'asc' | 'desc';
 
 export type SortBy = 'manual' | 'title' | 'due_date' | 'priority' | 'recent';
 
@@ -362,6 +371,41 @@ export function groupByStatus(
   });
 }
 
+// Universal bucket of each task's stage, in fixed order. Uses the caller's
+// stage set when given (so renamed stages resolve), else the status registry.
+export function groupByBucket(
+  tasks: Task[],
+  fadingMap: ReadonlyMap<string, string>,
+  orderedStatuses?: SpaceStatus[],
+): Group[] {
+  const bucketOf = (t: Task) => {
+    const snap = fadingMap.get(t.id);
+    const raw = String(snap !== undefined ? snap : ((t as unknown as { status?: string }).status ?? '')).trim().toLowerCase();
+    const s = orderedStatuses?.find((x) => x.id.toLowerCase() === raw || x.name.toLowerCase() === raw);
+    if (s) return taskBucketOf(s);
+    const def = getTaskStatusDef(raw);
+    return taskBucketOf(def ? { group: def.group, category: def.category } : null);
+  };
+  return TASK_BUCKETS.map((b, i) => ({
+    key: b.key,
+    label: `${b.emoji} ${b.label}`,
+    sort: i,
+    color: b.color,
+    tasks: tasks.filter((t) => bucketOf(t) === b.key),
+  })).filter((g) => g.tasks.length > 0);
+}
+
+// "When will I do it", derived from work_date (Missed / Today / … / Someday).
+export function groupByPlan(tasks: Task[], tz: string): Group[] {
+  return TASK_PLANS.map((p, i) => ({
+    key: p.key,
+    label: p.label,
+    sort: i,
+    color: p.color,
+    tasks: tasks.filter((t) => taskPlanOf(t.work_date, tz) === p.key),
+  })).filter((g) => g.tasks.length > 0);
+}
+
 export function groupByNamedRef(
   tasks: Task[],
   pick: (t: Task) => { id: string; name: string } | null | undefined,
@@ -504,6 +548,10 @@ export function groupTasks(
       return groupByNamedRef(tasks, (t) => t.list ?? null, 'No list');
     case 'label':
       return groupByLabel(tasks);
+    case 'bucket':
+      return groupByBucket(tasks, fadingMap, orderedStatuses);
+    case 'plan':
+      return groupByPlan(tasks, tz);
     default:
       return [];
   }

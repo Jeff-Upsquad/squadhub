@@ -129,6 +129,44 @@ async function callRoute(path: string, method: string, params: any, body: any = 
   return res;
 }
 
+describe('stage workflows', () => {
+  beforeEach(() => {
+    store.tables.status_groups.push(
+      { id: 'sys', key: 'stages_system', is_enabled: true, is_stage_workflow: true },
+      { id: 'design', key: 'stages_design', is_enabled: true, is_stage_workflow: true },
+    );
+    store.tables.status_group_statuses.push(
+      row('new', 'sys', 'NEW', { is_default: true, section: 'not_started' }),
+      row('waiting_on_dependency', 'sys', 'WAITING ON', { section: 'blocked_paused', is_placeholder: true }),
+      row('closed', 'sys', 'CLOSED', { section: 'done', category: 'closed' }),
+      row('design_draft', 'design', 'DRAFT', { section: 'in_motion', is_default: true }),
+      row('on_hold_old', 'design', 'OLD HOLD', { section: 'blocked_paused', is_archived: true }),
+      row('closed', 'design', 'DELIVERED', { section: 'done' }),
+    );
+  });
+
+  it('frames every stage group with the system stages: NEW first, placeholders and CLOSED last', async () => {
+    const statuses = await getGroupStatuses('design');
+    expect(statuses.map((s) => s.key)).toEqual(['new', 'design_draft', 'waiting_on_dependency', 'closed']);
+    expect(statuses.map((s) => s.position)).toEqual([0, 1, 2, 3]);
+  });
+
+  it('keeps NEW as the only default and lets system rows win over local copies', async () => {
+    const statuses = await getGroupStatuses('design');
+    expect(statuses.filter((s) => s.is_default).map((s) => s.key)).toEqual(['new']);
+    expect(statuses.find((s) => s.key === 'closed')).toMatchObject({ name: 'CLOSED', is_inherited: true });
+    expect(statuses.find((s) => s.key === 'waiting_on_dependency')).toMatchObject({ is_placeholder: true });
+  });
+
+  it('hides archived rows', async () => {
+    expect((await getGroupStatuses('design')).some((s) => s.key === 'on_hold_old')).toBe(false);
+  });
+
+  it('does not frame the system group itself', async () => {
+    expect((await getGroupStatuses('sys')).map((s) => s.key)).toEqual(['new', 'waiting_on_dependency', 'closed']);
+  });
+});
+
 describe('admin inheritance safeguards', () => {
   it('rejects edits to inherited rows through the child route', async () => {
     const res = await callRoute('/:id/statuses/:statusId', 'put', { id: 'linked', statusId: 'open' }, { name: 'Override' });

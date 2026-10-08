@@ -8,6 +8,11 @@ import { useTaskTypes } from '../../../hooks/useTaskTypes';
 import { useIsMobile } from '../../../hooks/useIsMobile';
 import { useTaskWorkflowCatalog } from '../../../hooks/useTaskWorkflowCatalog';
 import TaskGroupCard from './TaskGroupCard';
+import { SectionedGroups } from './ListSection';
+import { useStatusDirectory } from '../../../hooks/useStatusDirectory';
+import { groupTasksByStatusDirectory } from '../../../lib/stageWorkflow';
+import { statusSection, taskTypeSection, type ListSectionMeta } from '../../../lib/listSections';
+import { GROUP_ORDER as TASK_TYPE_GROUP_ORDER, getTaskTypeGroup } from '../../../components/pm/TaskTypeDropdown';
 import { GROUP_BY_OPTIONS, groupTasks, partitionByCompletion, buildFocusTodayGroup, isTaskCompleted, isTaskUpcoming, nestSubtasks, filterWithSubtasks, sortByCreationOrder, type GroupBy } from '../../../lib/taskGrouping';
 import MinimalGroupFilterBar from '../../../components/pm/MinimalGroupFilterBar';
 import FieldManagerPanel from '../../../components/pm/FieldManagerPanel';
@@ -41,12 +46,15 @@ export default function FolderPage({ folderId: propFolderId }: { folderId?: stri
   const clearScopeFilters = usePMStore((s) => s.clearScopeFilters);
   const groupByScope = usePMStore((s) => s.groupByScope);
   const setScopedGroupBy = usePMStore((s) => s.setScopedGroupBy);
+  const groupDirByScope = usePMStore((s) => s.groupDirByScope);
+  const setScopedGroupDir = usePMStore((s) => s.setScopedGroupDir);
   const fadingTaskIds = usePMStore((s) => s.fadingTaskIds);
   const isMobile = useIsMobile();
   const [listFilter, setListFilter] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const groupScopeKey = activeFolderId ? `folder:${activeFolderId}` : '';
   const groupBy = (groupScopeKey && groupByScope[groupScopeKey]) || 'none';
+  const groupDir = (groupScopeKey && groupDirByScope[groupScopeKey]) || 'asc';
 
   const scopeKey = activeFolderId ? `folder:${activeFolderId}` : '';
   const filters = (scopeKey && filtersByScope[scopeKey]) || EMPTY_FILTER;
@@ -109,6 +117,7 @@ export default function FolderPage({ folderId: propFolderId }: { folderId?: stri
         groupLabel: d.groupLabel,
         groupEmoji: d.groupEmoji,
         description: d.description,
+        is_placeholder: d.is_placeholder,
       }));
     }
     if (rawStatuses.length > 0) return rawStatuses;
@@ -125,6 +134,7 @@ export default function FolderPage({ folderId: propFolderId }: { folderId?: stri
         groupLabel: d.groupLabel,
         groupEmoji: d.groupEmoji,
         description: d.description,
+        is_placeholder: d.is_placeholder,
       }));
     }
     return [];
@@ -245,10 +255,22 @@ export default function FolderPage({ folderId: propFolderId }: { folderId?: stri
     [openTasks, upcomingIds],
   );
 
-  const groups = useMemo(() => {
+  // Lists here can run different workflows (Design vs Software stages), so
+  // status grouping resolves labels + sections from every status group.
+  const statusDirectory = useStatusDirectory();
+  const groups = useMemo((): { key: string; label: string; color?: string; tasks: Task[]; section: ListSectionMeta | null }[] => {
     if (groupBy === 'none') return [];
-    return groupTasks(currentOpenTasks, groupBy, tz, fadingTaskIds, taskTypes, spaceStatuses);
-  }, [currentOpenTasks, groupBy, tz, fadingTaskIds, taskTypes, spaceStatuses]);
+    if (groupBy === 'status') {
+      return groupTasksByStatusDirectory(currentOpenTasks, statusDirectory, fadingTaskIds, spaceStatuses)
+        .map((g) => ({ key: g.key, label: g.label, color: g.color, tasks: g.tasks, section: g.status ? statusSection(g.status) : null }));
+    }
+    return groupTasks(currentOpenTasks, groupBy, tz, fadingTaskIds, taskTypes, spaceStatuses).map((g) => ({
+      ...g,
+      section: groupBy === 'task_type'
+        ? taskTypeSection((taskTypes || []).find((t) => t.id === g.key || t.key === g.key) || null, getTaskTypeGroup)
+        : null,
+    }));
+  }, [currentOpenTasks, groupBy, tz, fadingTaskIds, taskTypes, spaceStatuses, statusDirectory]);
 
   const focusGroup = useMemo(() => {
     return buildFocusTodayGroup(currentOpenTasks);
@@ -329,6 +351,8 @@ export default function FolderPage({ folderId: propFolderId }: { folderId?: stri
         groupOptions={GROUP_BY_OPTIONS as { value: string; label: string }[]}
         groupBy={groupBy}
         onGroupChange={(v) => groupScopeKey && setScopedGroupBy(groupScopeKey, v as GroupBy)}
+        groupDirection={groupDir}
+        onGroupDirectionChange={(d) => groupScopeKey && setScopedGroupDir(groupScopeKey, d)}
         filters={filters}
         onFiltersChange={(next) => scopeKey && setScopeFilters(scopeKey, next)}
         statuses={spaceStatuses}
@@ -396,7 +420,14 @@ export default function FolderPage({ folderId: propFolderId }: { folderId?: stri
                 />
               )
             ) : (
-              groups.map((g) => (
+              <SectionedGroups
+                scope={`flsec:${activeFolderId}:${groupBy}`}
+                groups={groups}
+                sectionOf={(g) => g.section}
+                countOf={(g) => g.tasks.length}
+                order={groupBy === 'task_type' ? TASK_TYPE_GROUP_ORDER : undefined}
+                direction={groupDir}
+                render={(g) => (
                 <TaskGroupCard
                   key={g.key}
                   groupKey={`fl:${g.key}`}
@@ -412,7 +443,8 @@ export default function FolderPage({ folderId: propFolderId }: { folderId?: stri
                   showAddRow={false}
                   dimFocused={!!focusGroup}
                 />
-              ))
+                )}
+              />
             )}
             {upcomingTasks.length > 0 && (
               <TaskGroupCard
