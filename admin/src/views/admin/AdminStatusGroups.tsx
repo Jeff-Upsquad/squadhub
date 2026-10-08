@@ -846,8 +846,10 @@ function StatusesCard({ group, onChanged }: { group: StatusGroup; onChanged: () 
 // Apply card — requirement 2
 // ============================================================
 function ApplyCard({ group, onChanged }: { group: StatusGroup; onChanged: () => void }) {
+  const qc = useQueryClient();
   const [entityType, setEntityType] = useState<EntityType>('space');
   const [q, setQ] = useState('');
+  const [replaceTarget, setReplaceTarget] = useState<{ id: string; name: string } | null>(null);
 
   const { data: searchRes, isLoading } = useQuery({
     queryKey: ['admin-status-group-targets', entityType, q],
@@ -858,7 +860,13 @@ function ApplyCard({ group, onChanged }: { group: StatusGroup; onChanged: () => 
   const apply = useMutation({
     mutationFn: (entity_id: string) => api.post(`/admin/status-groups/${group.id}/apply`, { entity_type: entityType, entity_id }),
     onSuccess: onChanged,
-    onError: (err: any) => alert(err?.response?.data?.error || 'Failed to apply group'),
+    onError: (err: any) => {
+      if (err?.response?.status === 409) {
+        // Taken between search and click — refresh so the row shows Replace.
+        qc.invalidateQueries({ queryKey: ['admin-status-group-targets'] });
+      }
+      alert(err?.response?.data?.error || 'Failed to apply group');
+    },
   });
   const unapply = useMutation({
     mutationFn: (entity_id: string) => api.delete(`/admin/status-groups/${group.id}/apply`, { data: { entity_type: entityType, entity_id } }),
@@ -904,7 +912,10 @@ function ApplyCard({ group, onChanged }: { group: StatusGroup; onChanged: () => 
                   <button onClick={() => unapply.mutate(t.id)} className="rounded border border-divider px-2 py-1 text-xs hover:bg-muted">Remove</button>
                 </>
               ) : taken ? (
-                <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700">HAS ANOTHER GROUP</span>
+                <>
+                  <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700">HAS ANOTHER GROUP</span>
+                  <button onClick={() => setReplaceTarget({ id: t.id, name: t.name })} className="rounded-lg border border-amber-300 px-2.5 py-1 text-xs font-medium text-amber-700 hover:bg-amber-50">Replace</button>
+                </>
               ) : (
                 <button onClick={() => apply.mutate(t.id)} className="rounded-lg bg-ink px-2.5 py-1 text-xs font-medium text-white hover:opacity-90">Apply</button>
               )}
@@ -913,6 +924,177 @@ function ApplyCard({ group, onChanged }: { group: StatusGroup; onChanged: () => 
         })}
         {!isLoading && targets.length === 0 && (
           <p className="py-4 text-center text-xs text-foreground-dim">Nothing found — try a different search.</p>
+        )}
+      </div>
+      {replaceTarget && (
+        <ReplaceGroupModal
+          group={group}
+          entityType={entityType}
+          target={replaceTarget}
+          onClose={() => setReplaceTarget(null)}
+          onDone={() => { setReplaceTarget(null); onChanged(); qc.invalidateQueries({ queryKey: ['admin-status-group-targets'] }); }}
+        />
+      )}
+    </div>
+  );
+}
+
+// ============================================================
+// Replace modal — swap the entity's current group for this one,
+// remapping live tasks from old statuses to new ones.
+// Left: existing statuses actually in use (with task counts).
+// Right: the new status each one inherits on replace.
+// ============================================================
+type ReplacePreview = {
+  has_existing: boolean;
+  entity?: { type: string; id: string; name: string };
+  current_group?: { id: string; key?: string; name: string };
+  new_group?: { id: string; name: string };
+  old_statuses?: StatusGroupStatus[];
+  new_statuses?: StatusGroupStatus[];
+  breakdown?: { status: string; count: number }[];
+  total_tasks?: number;
+  list_count?: number;
+};
+
+function ReplaceGroupModal({ group, entityType, target, onClose, onDone }: {
+  group: StatusGroup;
+  entityType: EntityType;
+  target: { id: string; name: string };
+  onClose: () => void;
+  onDone: () => void;
+}) {
+  const [mapping, setMapping] = useState<Record<string, string>>({});
+  const [error, setError] = useState<string | null>(null);
+
+  const { data: previewRes, isLoading } = useQuery({
+    queryKey: ['admin-status-group-replace-preview', group.id, entityType, target.id],
+    queryFn: () => api.get(`/admin/status-groups/${group.id}/replace-preview`, { params: { entity_type: entityType, entity_id: target.id } }).then((r) => r.data),
+  });
+  const preview: ReplacePreview | undefined = previewRes?.data;
+
+  const newStatuses: StatusGroupStatus[] = preview?.new_statuses || [];
+  const oldStatuses: StatusGroupStatus[] = preview?.old_statuses || [];
+  const breakdown = preview?.breakdown || [];
+  const totalTasks = preview?.total_tasks || 0;
+
+  const oldColor = (statusName: string) =>
+    oldStatuses.find((s) => s.key === statusName || s.name === statusName || s.name.toLowerCase() === statusName.toLowerCase())?.color || '#94A3B8';
+
+  // Auto-suggest: same key/name match, else the new group's default, else first.
+  useEffect(() => {
+    if (!preview?.has_existing || breakdown.length === 0 || newStatuses.length === 0) return;
+    setMapping((prev) => {
+      if (Object.keys(prev).length > 0) return prev;
+      const fallback = newStatuses.find((s) => s.is_default) || newStatuses[0];
+      const next: Record<string, string> = {};
+      for (const b of breakdown) {
+        const match = newStatuses.find((s) => s.key === b.status || s.name.toLowerCase() === b.status.toLowerCase());
+        next[b.status] = (match || fallback).id;
+      }
+      return next;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [preview]);
+
+  const replace = useMutation({
+    mutationFn: () => api.post(`/admin/status-groups/${group.id}/apply`, {
+      entity_type: entityType,
+      entity_id: target.id,
+      allow_replace: true,
+      status_mapping: mapping,
+    }).then((r) => r.data),
+    onSuccess: onDone,
+    onError: (err: any) => setError(err?.response?.data?.error || 'Failed to replace group'),
+  });
+
+  const allMapped = breakdown.every((b) => mapping[b.status]);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => !replace.isPending && onClose()} />
+      <div className="relative max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-xl border border-divider bg-surface p-6 shadow-2xl">
+        <h3 className="text-base font-semibold">Replace status group on “{target.name}”</h3>
+        {isLoading ? (
+          <p className="py-8 text-center text-sm text-foreground-dim">Checking existing statuses…</p>
+        ) : !preview?.has_existing ? (
+          <div className="py-6 text-center">
+            <p className="text-sm text-foreground-dim">No other group is applied here any more — you can apply directly.</p>
+            <button onClick={onClose} className="mt-4 rounded-lg border border-divider px-3.5 py-1.5 text-xs font-medium">Close</button>
+          </div>
+        ) : (
+          <>
+            <p className="mt-1 text-sm text-foreground-muted">
+              <span className="font-medium text-foreground">{preview.current_group?.name}</span>
+              {' → '}
+              <span className="font-medium text-foreground">{group.name}</span>
+              {totalTasks > 0 ? (
+                <> · <span className="font-semibold">{totalTasks} task{totalTasks === 1 ? '' : 's'}</span> will be remapped</>
+              ) : (
+                <> · no tasks here, safe to switch directly</>
+              )}
+            </p>
+
+            {breakdown.length === 0 ? (
+              <p className="mt-4 rounded-lg border border-divider bg-muted px-3 py-2 text-xs text-foreground-muted">
+                Nothing is using a status in this scope yet. Replacing only changes which group future tasks use.
+              </p>
+            ) : (
+              <div className="mt-4">
+                <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 px-1 pb-1 text-[11px] font-semibold uppercase tracking-wider text-foreground-dim">
+                  <span>Current status ({breakdown.length} in use)</span>
+                  <span />
+                  <span>Becomes {group.name} status</span>
+                </div>
+                <div className="space-y-1.5">
+                  {breakdown.map((b) => (
+                    <div key={b.status} className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 rounded-lg border border-divider px-3 py-2">
+                      <div className="flex min-w-0 items-center gap-2">
+                        <span className="h-3 w-3 shrink-0 rounded-full" style={{ background: oldColor(b.status) }} />
+                        <span className="truncate text-sm font-medium">{b.status}</span>
+                        <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium text-foreground-dim">
+                          {b.count} task{b.count === 1 ? '' : 's'}
+                        </span>
+                      </div>
+                      <span className="text-foreground-dim">→</span>
+                      <select
+                        value={mapping[b.status] || ''}
+                        onChange={(e) => setMapping((m) => ({ ...m, [b.status]: e.target.value }))}
+                        disabled={replace.isPending}
+                        className="w-full rounded-lg border border-divider bg-surface px-2 py-1.5 text-sm focus:border-ink focus:outline-none"
+                      >
+                        <option value="" disabled>Select…</option>
+                        {newStatuses.map((s) => (
+                          <option key={s.id} value={s.id}>{s.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {error && (
+              <p className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600">{error}</p>
+            )}
+
+            <div className="mt-6 flex justify-end gap-2">
+              <button
+                onClick={onClose}
+                disabled={replace.isPending}
+                className="rounded-lg border border-divider px-3.5 py-1.5 text-xs font-medium text-foreground-dim hover:text-foreground disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => { setError(null); replace.mutate(); }}
+                disabled={replace.isPending || !allMapped || newStatuses.length === 0}
+                className="rounded-lg bg-ink px-3.5 py-1.5 text-xs font-semibold text-white hover:opacity-90 disabled:opacity-50"
+              >
+                {replace.isPending ? 'Replacing…' : totalTasks > 0 ? `Replace & remap ${totalTasks} task${totalTasks === 1 ? '' : 's'}` : 'Replace group'}
+              </button>
+            </div>
+          </>
         )}
       </div>
     </div>
@@ -993,7 +1175,8 @@ function TemplatesCard({ selectedGroupId, onChanged }: { selectedGroupId: string
     tplRes?.data || [];
 
   const apply = useMutation({
-    mutationFn: (template_id: string) => api.post(`/admin/status-groups/${selectedGroupId}/apply`, { entity_type: 'template', entity_id: template_id }),
+    // Templates hold no live tasks, so switching is a direct replace.
+    mutationFn: (template_id: string) => api.post(`/admin/status-groups/${selectedGroupId}/apply`, { entity_type: 'template', entity_id: template_id, allow_replace: true }),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['admin-status-group-templates'] }); onChanged(); },
     onError: (err: any) => alert(err?.response?.data?.error || 'Failed to apply to template'),
   });
