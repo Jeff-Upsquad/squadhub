@@ -2044,6 +2044,10 @@ export interface TimerSession {
   duration_seconds: number | null;
   is_auto_stopped: boolean;
   created_at: string;
+  /** True original bounds before any trim. NULL = never trimmed. */
+  original_start_time?: string | null;
+  original_end_time?: string | null;
+  original_duration_seconds?: number | null;
   user?: User;
 }
 

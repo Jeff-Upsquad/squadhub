@@ -83,6 +83,20 @@ function isWithinWindow(endIso: string | null, windowHours: number): boolean {
   return Date.now() - new Date(endIso).getTime() <= windowHours * 3600 * 1000;
 }
 
+// True original bounds before the first trim (NULL = never trimmed).
+// Reduce-only is enforced against these, so time can be re-adjusted back up
+// to the original — but never past it.
+function boundsOf(session: TimerSession): { startMs: number; endMs: number; seconds: number } {
+  const startIso = session.original_start_time ?? session.start_time;
+  const endIso = session.original_end_time ?? session.end_time;
+  const startMs = Date.parse(startIso);
+  const endMs = endIso ? Date.parse(endIso) : NaN;
+  const seconds = session.original_duration_seconds
+    ?? session.duration_seconds
+    ?? (Number.isFinite(startMs) && Number.isFinite(endMs) ? Math.round((endMs - startMs) / 1000) : 0);
+  return { startMs, endMs, seconds };
+}
+
 function CalendarData({ events, commitment, loading = false, error = false, onRetry, onOpenTask, sessions = [], canEdit = false, editWindowHours = 0, workspaceId, context }: {
   events: Activity[]; commitment: number; loading?: boolean; error?: boolean; onRetry?: () => void; onOpenTask?: (id: string) => void;
   sessions?: TimerSession[]; canEdit?: boolean; editWindowHours?: number; workspaceId?: string; context?: string;
@@ -94,7 +108,7 @@ function CalendarData({ events, commitment, loading = false, error = false, onRe
   const [picker, setPicker] = useState(false);
   const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
   const [dragError, setDragError] = useState<string | null>(null);
-  const [drag, setDrag] = useState<null | { sessionId: string; edge: 'start' | 'end'; origStart: number; origEnd: number; curMs: number; startY: number }>(null);
+  const [drag, setDrag] = useState<null | { sessionId: string; edge: 'start' | 'end'; origStart: number; origEnd: number; boundStart: number; boundEnd: number; curMs: number; startY: number }>(null);
   const scroller = useRef<HTMLDivElement>(null);
   const [calendarWidth, setCalendarWidth] = useState(850);
   useEffect(() => {
@@ -142,20 +156,21 @@ function CalendarData({ events, commitment, loading = false, error = false, onRe
     }
   };
   // Drag-to-trim: pointermove/up listeners while a resize handle is held.
-  // Reduce-only by construction: the dragged edge clamps inside the original
-  // session range, so time can be trimmed but never extended.
+  // Reduce-only against the TRUE original bounds: an edge clamps inside the
+  // pre-trim range, so time can be trimmed and re-adjusted back up to the
+  // original — but never extended past it.
   const dragRef = useRef<typeof drag>(null);
   dragRef.current = drag;
   useEffect(() => {
     if (!drag) return;
-    const { sessionId, edge, origStart, origEnd, startY } = drag;
+    const { sessionId, edge, origStart, origEnd, boundStart, boundEnd, startY } = drag;
     const move = (e: PointerEvent) => {
       const deltaMs = Math.round((e.clientY - startY) / HOUR_HEIGHT * 3600000 / 60000) * 60000;
       if (edge === 'start') {
-        const clamped = Math.min(Math.max(origStart + deltaMs, origStart), origEnd - 60000);
+        const clamped = Math.min(Math.max(origStart + deltaMs, boundStart), origEnd - 60000);
         setDrag(d => (d && d.curMs !== clamped ? { ...d, curMs: clamped } : d));
       } else {
-        const clamped = Math.max(Math.min(origEnd + deltaMs, origEnd), origStart + 60000);
+        const clamped = Math.max(Math.min(origEnd + deltaMs, boundEnd), origStart + 60000);
         setDrag(d => (d && d.curMs !== clamped ? { ...d, curMs: clamped } : d));
       }
     };
@@ -246,8 +261,11 @@ function CalendarData({ events, commitment, loading = false, error = false, onRe
     const origStart = Date.parse(session.start_time);
     const origEnd = session.end_time ? Date.parse(session.end_time) : NaN;
     if (!Number.isFinite(origStart) || !Number.isFinite(origEnd)) return;
+    const bounds = boundsOf(session);
+    const boundStart = Number.isFinite(bounds.startMs) ? bounds.startMs : origStart;
+    const boundEnd = Number.isFinite(bounds.endMs) ? bounds.endMs : origEnd;
     setSelectedId(null);
-    setDrag({ sessionId: session.id, edge, origStart, origEnd, curMs: edge === 'start' ? origStart : origEnd, startY: e.clientY });
+    setDrag({ sessionId: session.id, edge, origStart, origEnd, boundStart, boundEnd, curMs: edge === 'start' ? origStart : origEnd, startY: e.clientY });
   };
   const display = (event: Activity, top: number, height: number, left: string, width: string, isNarrow?: boolean, isTight?: boolean, dayStartMs?: number) => {
     const sid = sessionIdOf(event);
@@ -274,11 +292,11 @@ function CalendarData({ events, commitment, loading = false, error = false, onRe
       const isFirst = pieces.length ? pieces[0].id === event.id : true;
       const isLast = pieces.length ? pieces[pieces.length - 1].id === event.id : true;
       if (drag.edge === 'start' && isFirst && dayStartMs != null) {
-        const ns = Math.min(Math.max(drag.curMs, drag.origStart), drag.origEnd - 60000);
+        const ns = Math.min(Math.max(drag.curMs, drag.boundStart), drag.origEnd - 60000);
         adjTop = (ns - dayStartMs) / 3600000 * HOUR_HEIGHT;
         adjHeight = (event.end - ns) / 3600000 * HOUR_HEIGHT;
       } else if (drag.edge === 'end' && isLast) {
-        const ne = Math.max(Math.min(drag.curMs, drag.origEnd), drag.origStart + 60000);
+        const ne = Math.max(Math.min(drag.curMs, drag.boundEnd), drag.origStart + 60000);
         adjHeight = (ne - event.start) / 3600000 * HOUR_HEIGHT;
       }
     }
@@ -288,7 +306,7 @@ function CalendarData({ events, commitment, loading = false, error = false, onRe
       onClick={() => setSelectedId(event.id === selectedId ? null : event.id)}
       aria-label={`${event.title}, ${clock(event.start)} to ${event.live ? 'now' : clock(event.end)}, ${duration(event.seconds)}${event.isManual ? ', manually entered' : ''}${editable ? ', editable: open details to trim time or drag the edges' : ''}`}
       title={`${event.title} · ${clock(event.start)}–${event.live ? 'now' : clock(event.end)} · ${duration(event.seconds)}${event.isManual ? ' · Manually entered' : ''}${editable ? ' · Drag edges to trim (reduce only)' : ''}`}>
-      {topHandle && session && <span className="ta-resize ta-resize-top" role="slider" aria-label={`Trim ${event.title} start (reduce only)`} aria-valuemin={Date.parse(session.start_time)} aria-valuemax={Date.parse(session.end_time!)} aria-valuenow={drag?.sessionId === sid && drag.edge === 'start' ? drag.curMs : Date.parse(session.start_time)}
+      {topHandle && session && <span className="ta-resize ta-resize-top" role="slider" aria-label={`Trim ${event.title} start (reduce only)`} aria-valuemin={boundsOf(session).startMs} aria-valuemax={Date.parse(session.end_time!)} aria-valuenow={drag?.sessionId === sid && drag.edge === 'start' ? drag.curMs : Date.parse(session.start_time)}
         onPointerDown={e => beginResize(e, session, 'start')} onClick={e => e.stopPropagation()} />}
       <span className="ta-event-title">
         <span className="ta-event-name">
@@ -301,7 +319,7 @@ function CalendarData({ events, commitment, loading = false, error = false, onRe
       {adjHeight >= 43 && <span className="ta-event-time">{clock(drag?.sessionId === sid && drag.edge === 'start' ? drag.curMs : event.start)} – {event.live ? 'now' : clock(event.end)}</span>}
       {adjHeight >= 78 && event.project && <span className="ta-event-project">{event.project}</span>}
       {adjHeight >= 105 && event.kind === 'block' && <span className="ta-event-badge">{event.children?.length || 0} tasks in this block</span>}
-      {bottomHandle && session && <span className="ta-resize ta-resize-bottom" role="slider" aria-label={`Trim ${event.title} end (reduce only)`} aria-valuemin={Date.parse(session.start_time)} aria-valuemax={Date.parse(session.end_time!)} aria-valuenow={drag?.sessionId === sid && drag.edge === 'end' ? drag.curMs : Date.parse(session.end_time!)}
+      {bottomHandle && session && <span className="ta-resize ta-resize-bottom" role="slider" aria-label={`Trim ${event.title} end (reduce only)`} aria-valuemin={Date.parse(session.start_time)} aria-valuemax={boundsOf(session).endMs} aria-valuenow={drag?.sessionId === sid && drag.edge === 'end' ? drag.curMs : Date.parse(session.end_time!)}
         onPointerDown={e => beginResize(e, session, 'end')} onClick={e => e.stopPropagation()} />}
     </button>
     );
@@ -385,9 +403,14 @@ function CalendarData({ events, commitment, loading = false, error = false, onRe
 }
 
 function AttendanceEditForm({ session, onClose, onSaved }: { session: TimerSession; onClose: () => void; onSaved: () => void }) {
-  const origStart = Date.parse(session.start_time);
-  const origEnd = session.end_time ? Date.parse(session.end_time) : NaN;
-  const origSeconds = session.duration_seconds ?? Math.round((origEnd - origStart) / 1000);
+  const curStart = Date.parse(session.start_time);
+  const curEnd = session.end_time ? Date.parse(session.end_time) : NaN;
+  const bounds = boundsOf(session);
+  const boundStart = Number.isFinite(bounds.startMs) ? bounds.startMs : curStart;
+  const boundEnd = Number.isFinite(bounds.endMs) ? bounds.endMs : curEnd;
+  const boundSeconds = bounds.seconds;
+  const boundStartIso = new Date(boundStart).toISOString();
+  const boundEndIso = new Date(boundEnd).toISOString();
   const [startLocal, setStartLocal] = useState(toLocalInput(session.start_time));
   const [endLocal, setEndLocal] = useState(session.end_time ? toLocalInput(session.end_time) : '');
   const [error, setError] = useState<string | null>(null);
@@ -396,16 +419,16 @@ function AttendanceEditForm({ session, onClose, onSaved }: { session: TimerSessi
   const endMs = endLocal ? Date.parse(fromLocalInput(endLocal)) : NaN;
   const validRange = Number.isFinite(startMs) && Number.isFinite(endMs) && endMs > startMs;
   const newSeconds = validRange ? Math.round((endMs - startMs) / 1000) : 0;
-  const expands = validRange && (startMs < origStart || endMs > origEnd || newSeconds > origSeconds);
+  const expands = validRange && (startMs < boundStart || endMs > boundEnd || newSeconds > boundSeconds);
   const tooShort = validRange && newSeconds < 60;
   const blocked = expands || tooShort || !validRange;
-  const trimmed = validRange ? Math.max(0, origSeconds - newSeconds) : 0;
+  const trimmed = validRange ? Math.max(0, boundSeconds - newSeconds) : 0;
   const save = async () => {
     if (saving) return;
     if (!validRange) { setError('Pick a valid start and end'); return; }
     if (expands) { setError('Time can only be reduced, not increased'); return; }
     if (tooShort) { setError('Sessions must keep at least 1 minute'); return; }
-    if (startMs === origStart && endMs === origEnd) { onClose(); return; }
+    if (startMs === curStart && endMs === curEnd) { onClose(); return; }
     setSaving(true);
     setError(null);
     try {
@@ -422,9 +445,9 @@ function AttendanceEditForm({ session, onClose, onSaved }: { session: TimerSessi
   return (
     <div className="ta-edit" onKeyDown={e => { if (e.key === 'Enter') void save(); if (e.key === 'Escape') onClose(); }}>
       <div className="ta-edit-grid">
-        <label>Start<input type="datetime-local" value={startLocal} min={toLocalInput(session.start_time)} max={endLocal || undefined}
+        <label>Start<input type="datetime-local" value={startLocal} min={toLocalInput(boundStartIso)} max={endLocal || undefined}
           onChange={e => { setStartLocal(e.target.value); setError(null); }} /></label>
-        <label>End<input type="datetime-local" value={endLocal} min={startLocal || undefined} max={session.end_time ? toLocalInput(session.end_time) : undefined}
+        <label>End<input type="datetime-local" value={endLocal} min={startLocal || undefined} max={toLocalInput(boundEndIso)}
           onChange={e => { setEndLocal(e.target.value); setError(null); }} /></label>
       </div>
       <div className="ta-edit-foot">
@@ -432,7 +455,7 @@ function AttendanceEditForm({ session, onClose, onSaved }: { session: TimerSessi
           {error || (expands ? 'Time can only be reduced, not increased'
             : tooShort ? 'Sessions must keep at least 1 minute'
             : trimmed > 0 ? `−${duration(trimmed)} · ${duration(newSeconds)} remaining`
-            : `Reduce only · up to ${duration(origSeconds)}`)}
+            : `Reduce only · up to ${duration(boundSeconds)}`)}
         </span>
         <button type="button" className="ta-today" onClick={onClose}>Cancel</button>
         <button type="button" className="ta-save" disabled={blocked || saving} onClick={() => void save()}>{saving ? 'Saving…' : 'Save'}</button>
