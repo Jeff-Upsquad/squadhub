@@ -257,7 +257,7 @@ function CalendarData({ events, commitment, loading = false, error = false, onRe
     // into work + overtime shares a middle boundary (the commitment split)
     // that must not move, so it gets no handle.
     let topHandle = false, bottomHandle = false;
-    if (editable && session?.end_time && dayStartMs != null && height >= 40) {
+    if (editable && session?.end_time && dayStartMs != null) {
       const sStart = Date.parse(session.start_time), sEnd = Date.parse(session.end_time);
       const insideDay = sStart >= dayStartMs - 1000 && sEnd <= dayStartMs + 86400000 + 1000;
       if (insideDay) {

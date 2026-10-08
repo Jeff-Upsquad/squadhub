@@ -6397,6 +6397,79 @@ button.td-bcrumb:hover .name { color: var(--sh-ink); }
   border-radius: 4px;
 }
 
+/* Linked tasks (time block) — same row grammar as .td-subtask-row, minus the
+   completion checkbox: a link glyph anchors the row, the × unlinks. */
+.td-subtask-row .td-link-ico {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  flex: none;
+  color: var(--sh-ink-4);
+}
+.td-subtask-row .td-link-x {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  font-size: 15px;
+  line-height: 1;
+  color: var(--sh-ink-4);
+  opacity: 0.55;
+  cursor: pointer;
+  transition: opacity .12s, background .12s, color .12s;
+}
+.td-subtask-row:hover .td-link-x { opacity: 1; }
+.td-subtask-row .td-link-x:hover,
+.td-subtask-row .td-link-x:focus-visible {
+  color: var(--sh-ink);
+  background: var(--sh-hair-3);
+}
+/* Matches that sit above the inline link input, inside the same card. */
+.td-link-results {
+  display: flex;
+  flex-direction: column;
+  background: var(--surface-alt);
+}
+.td-link-results > :last-child { border-bottom: 0; }
+.td-link-result {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 14px;
+  border: 0;
+  border-bottom: 1px solid var(--sh-hair-3);
+  background: transparent;
+  text-align: left;
+  font-family: inherit;
+  cursor: pointer;
+}
+.td-link-result:hover { background: var(--sh-hair-3); }
+.td-link-result .title {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--sh-ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.td-link-input {
+  width: 100%;
+  padding: 10px 14px;
+  font-family: inherit;
+  font-size: 13.5px;
+  color: var(--sh-ink);
+  background: transparent;
+  border: 0;
+  border-top: 1px solid var(--sh-hair-3);
+  outline: none;
+}
+.td-link-input::placeholder { color: var(--sh-ink-4); }
+.td-link-input:focus { background: var(--surface); }
+
 .td-subtask-section {
   display: flex;
   align-items: center;
