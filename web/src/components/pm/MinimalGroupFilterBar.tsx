@@ -25,6 +25,10 @@ interface MinimalGroupFilterBarProps {
   groupOptions: { value: string; label: string }[];
   groupBy: string;
   onGroupChange: (v: string) => void;
+  /** Group order. When `onGroupDirectionChange` is given the Group menu
+   *  offers Ascending / Descending under the options. */
+  groupDirection?: 'asc' | 'desc';
+  onGroupDirectionChange?: (d: 'asc' | 'desc') => void;
   filters: TaskFilterState;
   onFiltersChange: (next: TaskFilterState) => void;
   statuses: SpaceStatus[];
@@ -68,6 +72,8 @@ export default function MinimalGroupFilterBar({
   groupOptions,
   groupBy,
   onGroupChange,
+  groupDirection = 'asc',
+  onGroupDirectionChange,
   filters,
   onFiltersChange,
   statuses,
@@ -146,6 +152,7 @@ export default function MinimalGroupFilterBar({
           >
             {LAYERS_ICON}
             <span>{currentGroup?.label ?? 'Group'}</span>
+            {groupBy !== 'none' && groupDirection === 'desc' && <span aria-label="descending">↓</span>}
           </button>
           {groupOpen && (
             <div className="mgf-menu" role="listbox" aria-label="Group tasks by">
@@ -171,6 +178,25 @@ export default function MinimalGroupFilterBar({
                   </button>
                 );
               })}
+              {onGroupDirectionChange && groupBy !== 'none' && (
+                <>
+                  <div className="mgf-menu-head">Order</div>
+                  <div className="mgf-dir" role="radiogroup" aria-label="Group order">
+                    {(['asc', 'desc'] as const).map((d) => (
+                      <button
+                        key={d}
+                        type="button"
+                        role="radio"
+                        aria-checked={groupDirection === d}
+                        data-active={groupDirection === d || undefined}
+                        onClick={() => onGroupDirectionChange(d)}
+                      >
+                        {d === 'asc' ? '↑ Ascending' : '↓ Descending'}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
             </div>
           )}
         </div>

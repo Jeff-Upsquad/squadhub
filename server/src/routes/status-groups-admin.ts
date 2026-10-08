@@ -69,6 +69,9 @@ const statusCreateSchema = z.object({
   section: z.string().max(64).optional(),
   section_label: z.string().max(100).nullable().optional(),
   section_emoji: z.string().max(16).nullable().optional(),
+  // Placeholder ("current status") stage: parks a task and remembers the
+  // stage it came from, returning there when cleared.
+  is_placeholder: z.boolean().optional(),
 });
 
 const statusUpdateSchema = z.object({
@@ -80,6 +83,9 @@ const statusUpdateSchema = z.object({
   section: z.string().max(64).optional(),
   section_label: z.string().max(100).nullable().optional(),
   section_emoji: z.string().max(16).nullable().optional(),
+  // Placeholder ("current status") stage: parks a task and remembers the
+  // stage it came from, returning there when cleared.
+  is_placeholder: z.boolean().optional(),
 });
 
 const reorderSchema = z.object({
@@ -754,6 +760,7 @@ router.post('/:id/statuses', async (req: Request, res: Response) => {
         section: body.section || preset?.section || null,
         section_label: body.section_label ?? preset?.section_label ?? null,
         section_emoji: body.section_emoji ?? preset?.section_emoji ?? null,
+        is_placeholder: body.is_placeholder ?? false,
       })
       .select()
       .single();
@@ -1056,6 +1063,7 @@ router.put('/:id/statuses/:statusId', async (req: Request, res: Response) => {
     if (body.section !== undefined) patch.section = body.section;
     if (body.section_label !== undefined) patch.section_label = body.section_label;
     if (body.section_emoji !== undefined) patch.section_emoji = body.section_emoji;
+    if (body.is_placeholder !== undefined) patch.is_placeholder = body.is_placeholder;
 
     const { data, error } = await supabaseAdmin
       .from('status_group_statuses')

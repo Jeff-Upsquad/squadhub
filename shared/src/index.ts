@@ -402,6 +402,9 @@ export interface TaskStatusDef {
   color: string;
   is_system?: boolean;
   is_default?: boolean;
+  /** Placeholder ("current status") stage: a temporary state like WAITING ON.
+   *  The task remembers its original stage and returns to it when cleared. */
+  is_placeholder?: boolean;
 }
 
 export const TASK_STATUS_CATALOG: TaskStatusDef[] = [
@@ -540,6 +543,7 @@ export interface SpaceStatus {
   groupLabel?: string | null;
   groupEmoji?: string | null;
   description?: string | null;
+  is_placeholder?: boolean;
 }
 
 // ---- Status Groups (admin-managed reusable status sets) ----
@@ -567,6 +571,10 @@ export interface StatusGroupStatus {
   is_system?: boolean;
   /** Inherited rows retain their source group and are read-only in linked groups. */
   is_inherited?: boolean;
+  /** Placeholder stage (see TaskStatusDef.is_placeholder). */
+  is_placeholder?: boolean;
+  /** Retired row: hidden from pickers/boards, kept so old task history resolves. */
+  is_archived?: boolean;
   /** True when toggled off in the group; excluded from applied spaces/boards. */
   is_disabled?: boolean;
   /** True when this row replaces an inherited status in this group. */
@@ -667,6 +675,7 @@ export function statusGroupRowToTaskDef(r: StatusGroupStatus): TaskStatusDef {
     color: r.color,
     is_system: isSystemStatus(r),
     is_default: r.is_default,
+    is_placeholder: !!r.is_placeholder,
   };
 }
 
@@ -716,10 +725,129 @@ export interface StatusGroup {
   base_group_id?: string | null;
   custom_sections?: StatusGroupSection[];
   effective_sections?: StatusGroupSection[];
+  /** Stage-only workflow: statuses say WHERE a task is; priority lives on
+   *  tasks.priority and "when" on tasks.work_date. Boards group by exact
+   *  stage and sort by priority inside each column. */
+  is_stage_workflow?: boolean;
   disabled_status_keys?: string[];
   status_replacements?: Record<string, StatusReplacement>;
   statuses?: StatusGroupStatus[];
   usage_count?: number;
+}
+
+// ---- Stage workflows: buckets + plan -------------------------------------
+// Every stage maps to one of four universal buckets (via its picker section)
+// so views spanning locations can line up "Client Review" and "Code Review"
+// as the same kind of thing.
+
+export type TaskBucket = 'not_started' | 'active' | 'waiting' | 'done';
+
+export const TASK_BUCKETS: { key: TaskBucket; label: string; emoji: string; color: string }[] = [
+  { key: 'not_started', label: 'Not started', emoji: '📥', color: '#9ca3af' },
+  { key: 'active', label: 'Active', emoji: '🏃', color: '#3b82f6' },
+  { key: 'waiting', label: 'Waiting', emoji: '⏸️', color: '#a16207' },
+  { key: 'done', label: 'Done', emoji: '✅', color: '#10b981' },
+];
+
+/** Key of the shared stage set every stage workflow inherits (NEW, the
+ *  Blocked / Paused placeholders, CLOSED, CANCELLED). */
+export const STAGE_SYSTEM_GROUP_KEY = 'stages_system';
+/** Default stage for every new task in a stage workflow. */
+export const STAGE_DEFAULT_KEY = 'new';
+
+/** Statuses that are placeholders everywhere (legacy dependency flow). */
+export const LEGACY_PLACEHOLDER_KEYS = ['waiting_on_dependency', 'unblocked'] as const;
+
+/** The stage a task "really" sits in: its original stage while it is parked
+ *  in a placeholder, otherwise its status. */
+export function originalStageOf(
+  status: string | null | undefined,
+  originalStatus: string | null | undefined,
+  isPlaceholder: (key: string) => boolean,
+): string | null {
+  if (!status) return null;
+  if (isPlaceholder(status)) return originalStatus || null;
+  return status;
+}
+
+/** Bucket for a status, from its picker section first, then its category. */
+export function taskBucketOf(status: { group?: string | null; section?: string | null; category?: StatusCategory | string | null } | null | undefined): TaskBucket {
+  const section = status?.group ?? status?.section ?? null;
+  if (section === 'blocked_paused') return 'waiting';
+  if (section === 'done') return 'done';
+  if (section === 'not_started') return 'not_started';
+  const cat = status?.category;
+  if (cat === 'done' || cat === 'closed') return 'done';
+  if (cat === 'todo') return 'not_started';
+  return 'active';
+}
+
+/** Priority rank, lower = more important. Shared by every sort. */
+export const TASK_PRIORITY_RANK: Record<string, number> = {
+  emergency: 0,
+  urgent: 1,
+  high: 2,
+  normal: 3,
+  low: 4,
+  none: 5,
+};
+
+/** "When will I do it" — derived from tasks.work_date, never stored. */
+export type TaskPlan = 'today' | 'tomorrow' | 'this_week' | 'next_week' | 'later' | 'someday' | 'missed';
+
+export const TASK_PLANS: { key: TaskPlan; label: string; color: string }[] = [
+  { key: 'missed', label: 'Missed', color: '#dc2626' },
+  { key: 'today', label: 'Today', color: '#f97316' },
+  { key: 'tomorrow', label: 'Tomorrow', color: '#06b6d4' },
+  { key: 'this_week', label: 'This week', color: '#22d3ee' },
+  { key: 'next_week', label: 'Next week', color: '#60a5fa' },
+  { key: 'later', label: 'Later', color: '#94a3b8' },
+  { key: 'someday', label: 'Someday', color: '#a8a29e' },
+];
+
+function dayKeyIn(d: Date, tz: string): string {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' }).format(d);
+}
+
+/** Monday-based week index of a YYYY-MM-DD day key (UTC math on the key). */
+function weekIndexOf(key: string): number {
+  const t = Date.parse(`${key}T00:00:00Z`) / 86_400_000; // days since epoch
+  return Math.floor((t + 3) / 7); // epoch day 0 was a Thursday
+}
+
+export function taskPlanOf(workDate: string | null | undefined, tz: string, now: Date = new Date()): TaskPlan {
+  if (!workDate) return 'someday';
+  const k = dayKeyIn(new Date(workDate), tz);
+  const today = dayKeyIn(now, tz);
+  if (k < today) return 'missed';
+  if (k === today) return 'today';
+  if (k === dayKeyIn(new Date(now.getTime() + 86_400_000), tz)) return 'tomorrow';
+  const diff = weekIndexOf(k) - weekIndexOf(today);
+  if (diff === 0) return 'this_week';
+  if (diff === 1) return 'next_week';
+  return 'later';
+}
+
+/** The work_date to store when someone picks a plan (null = Someday). */
+export function workDateForPlan(plan: TaskPlan, now: Date = new Date()): string | null {
+  const at = (days: number) => {
+    const d = new Date(now);
+    d.setHours(12, 0, 0, 0);
+    d.setDate(d.getDate() + days);
+    return d.toISOString();
+  };
+  const dow = (now.getDay() + 6) % 7; // 0 = Monday
+  switch (plan) {
+    case 'today': return at(0);
+    case 'tomorrow': return at(1);
+    // Friday; from Friday on, the next day still inside this week.
+    case 'this_week': return at(dow < 4 ? 4 - dow : Math.min(1, 6 - dow));
+    case 'next_week': return at(7 - dow); // next Monday
+    case 'later': return at(14 - dow);
+    case 'someday':
+    case 'missed':
+    default: return null;
+  }
 }
 
 export interface StatusGroupAssignment {
@@ -833,6 +961,8 @@ export interface ListViewColumnState {
 export interface ListViewConfig {
   filters?: ListViewFilters;
   groupBy?: string;
+  /** Order of the groups: 'asc' (natural, default) or 'desc' (reversed). */
+  groupDir?: 'asc' | 'desc';
   sortBy?: string;
   keywords?: string[];
   includeInTimeReport?: boolean;

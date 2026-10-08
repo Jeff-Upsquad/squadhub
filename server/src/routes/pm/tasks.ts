@@ -18,7 +18,7 @@ import { getUserSkillLevel, checkLoggedTimeChange, isUserAdmin } from '../../uti
 import { resolveClientSource } from '../../utils/clientSource';
 import { recordWorkBlockCompletionIfActive } from './workBlocks';
 import { recordGroupRunCompletionIfActive } from './groupRuns';
-import { normalizeTaskStatusForList, defaultTaskStatusForList } from '../../utils/statusGroups';
+import { normalizeTaskStatusForList, defaultTaskStatusForList, getListStageInfo } from '../../utils/statusGroups';
 
 const router = Router();
 router.use(requireAuth);
@@ -1857,6 +1857,26 @@ router.post('/tasks/:id/companion-timer/cancel', async (req: Request, res: Respo
 // ------------------------------------------------------------
 
 /**
+ * Where a task goes once its last dependency clears. In a stage workflow it
+ * returns to the stage it was parked from (remembered as
+ * auto_unblocked_stage so a reopened blocker can park it again); elsewhere it
+ * shows the legacy UNBLOCKED status.
+ */
+async function unblockedPatch(task: { status: string; list_id?: string | null; metadata?: any }): Promise<{ status: string; metadata: any }> {
+  const meta = { ...(task.metadata || {}) };
+  const orig = meta.original_status;
+  if (task.list_id && orig) {
+    const info = await getListStageInfo(task.list_id);
+    if (info.stage && !info.placeholders.has(orig)) {
+      delete meta.original_status;
+      meta.auto_unblocked_stage = orig;
+      return { status: orig, metadata: meta };
+    }
+  }
+  return { status: 'unblocked', metadata: meta };
+}
+
+/**
  * When a task is completed, any task waiting on it will move to 'unblocked'
  * (provided all other tasks it is waiting on are also completed).
  * Symmetrically, if a completed task is reopened, dependent tasks currently in
@@ -1942,9 +1962,10 @@ async function handleTaskCompletionDependencies(taskId: string, userId: string, 
 
         if (allOtherBlockersDone && (depTask as any).status === 'waiting_on_dependency') {
           const oldStatus = (depTask as any).status;
+          const next = await unblockedPatch(depTask as any);
           await supabaseAdmin
             .from('tasks')
-            .update({ status: 'unblocked', last_modified_by: userId })
+            .update({ status: next.status, metadata: next.metadata, last_modified_by: userId })
             .eq('id', targetId);
 
           await logTaskActivity(targetId, userId, [
@@ -1952,7 +1973,7 @@ async function handleTaskCompletionDependencies(taskId: string, userId: string, 
               event_type: 'field_change',
               field: 'status',
               old_value: oldStatus,
-              new_value: 'unblocked',
+              new_value: next.status,
             },
           ]);
         }
@@ -1963,10 +1984,26 @@ async function handleTaskCompletionDependencies(taskId: string, userId: string, 
       for (const targetId of candidateIds) {
         const { data: depTask } = await supabaseAdmin
           .from('tasks')
-          .select('id, status, list_id')
+          .select('id, status, list_id, metadata')
           .eq('id', targetId)
           .maybeSingle();
         if (!depTask) continue;
+
+        // Stage workflow: it went back to its stage when unblocked — park it
+        // again (only if nobody has moved it since).
+        const depMeta = (depTask as any).metadata || {};
+        if (depMeta.auto_unblocked_stage && (depTask as any).status === depMeta.auto_unblocked_stage) {
+          const nextMeta = { ...depMeta, original_status: depMeta.auto_unblocked_stage };
+          delete nextMeta.auto_unblocked_stage;
+          await supabaseAdmin
+            .from('tasks')
+            .update({ status: 'waiting_on_dependency', metadata: nextMeta, last_modified_by: userId })
+            .eq('id', targetId);
+          await logTaskActivity(targetId, userId, [
+            { event_type: 'field_change', field: 'status', old_value: (depTask as any).status, new_value: 'waiting_on_dependency' },
+          ]);
+          continue;
+        }
 
         if ((depTask as any).status === 'unblocked') {
           await supabaseAdmin
@@ -2140,18 +2177,26 @@ router.post('/tasks/:id/relationships', async (req: Request, res: Response) => {
     // If Task A blocks Task B (so Task B is waiting on Task A):
     //   If Task A is already completed -> Task B moves to 'unblocked'
     //   Otherwise -> Task B moves to 'waiting_on_dependency'
+    // Park the waiting task, remembering its real stage. A task already in a
+    // placeholder (e.g. ON HOLD) keeps the stage it was parked from.
+    const park = async (task: any, listIdT: string, meta: any, blockerDone: boolean) => {
+      const info = await getListStageInfo(listIdT);
+      const parked = { ...meta };
+      if (task.status && !info.placeholders.has(task.status)) parked.original_status = task.status;
+      delete parked.auto_unblocked_stage;
+      if (!blockerDone) return { status: 'waiting_on_dependency', metadata: parked };
+      return unblockedPatch({ status: task.status, list_id: listIdT, metadata: parked });
+    };
     if (body.type === 'waiting_on') {
       const isDoneB = await isTaskStatusDone(listIdB, (taskB as any).status);
-      patchA.status = isDoneB ? 'unblocked' : 'waiting_on_dependency';
-      if (!isWaitingOrUnblockedStatus((taskA as any).status) && (taskA as any).status) {
-        nextMetaA.original_status = (taskA as any).status;
-      }
+      const next = await park(taskA, listIdA, nextMetaA, isDoneB);
+      patchA.status = next.status;
+      patchA.metadata = next.metadata;
     } else if (body.type === 'blocks') {
       const isDoneA = await isTaskStatusDone(listIdA, (taskA as any).status);
-      patchB.status = isDoneA ? 'unblocked' : 'waiting_on_dependency';
-      if (!isWaitingOrUnblockedStatus((taskB as any).status) && (taskB as any).status) {
-        nextMetaB.original_status = (taskB as any).status;
-      }
+      const next = await park(taskB, listIdB, nextMetaB, isDoneA);
+      patchB.status = next.status;
+      patchB.metadata = next.metadata;
     }
 
     await Promise.all([
@@ -2226,12 +2271,14 @@ router.delete('/tasks/:id/relationships/:targetTaskId', async (req: Request, res
       const hasOtherWaitingOn = relsA.some((r: any) => r.type === 'waiting_on');
       const shouldUnblockA = (taskA as any).status === 'waiting_on_dependency' && !hasOtherWaitingOn;
       if (shouldUnblockA) {
-        patchA.status = 'unblocked';
+        const next = await unblockedPatch({ status: (taskA as any).status, list_id: listIdA, metadata: nextMetaA });
+        patchA.status = next.status;
+        patchA.metadata = next.metadata;
       }
       await supabaseAdmin.from('tasks').update(patchA).eq('id', id);
       const eventsA: any[] = [{ event_type: 'field_change', field: 'relationships', old_value: { target_task_id: targetId }, new_value: null }];
       if (shouldUnblockA) {
-        eventsA.push({ event_type: 'field_change', field: 'status', old_value: 'waiting_on_dependency', new_value: 'unblocked' });
+        eventsA.push({ event_type: 'field_change', field: 'status', old_value: 'waiting_on_dependency', new_value: patchA.status });
       }
       await logTaskActivity(id, req.userId!, eventsA);
     }
@@ -2244,12 +2291,14 @@ router.delete('/tasks/:id/relationships/:targetTaskId', async (req: Request, res
       const hasOtherWaitingOn = relsB.some((r: any) => r.type === 'waiting_on');
       const shouldUnblockB = (taskB as any).status === 'waiting_on_dependency' && !hasOtherWaitingOn;
       if (shouldUnblockB) {
-        patchB.status = 'unblocked';
+        const next = await unblockedPatch({ status: (taskB as any).status, list_id: listIdB, metadata: nextMetaB });
+        patchB.status = next.status;
+        patchB.metadata = next.metadata;
       }
       await supabaseAdmin.from('tasks').update(patchB).eq('id', targetId);
       const eventsB: any[] = [{ event_type: 'field_change', field: 'relationships', old_value: { target_task_id: id }, new_value: null }];
       if (shouldUnblockB) {
-        eventsB.push({ event_type: 'field_change', field: 'status', old_value: 'waiting_on_dependency', new_value: 'unblocked' });
+        eventsB.push({ event_type: 'field_change', field: 'status', old_value: 'waiting_on_dependency', new_value: patchB.status });
       }
       await logTaskActivity(targetId, req.userId!, eventsB);
     }
@@ -2361,7 +2410,7 @@ router.post('/tasks', async (req: Request, res: Response) => {
       resolvedStatus = normalized;
     } else {
       // Catalog-driven task type uses the group's default; legacy types still use 'todo'.
-      resolvedStatus = resolvedTypeKey === 'task'
+      resolvedStatus = resolvedTypeKey === 'task' || (await getListStageInfo(body.list_id)).stage
         ? await defaultTaskStatusForList(body.list_id)
         : 'todo';
     }
@@ -2586,19 +2635,24 @@ router.put('/tasks/:id', async (req: Request, res: Response) => {
 
     if (body.status !== undefined) {
       const priorStatus = (prior as any)?.status;
-      const isNextWaitingOrUnblocked = isWaitingOrUnblockedStatus(body.status);
-      const isPriorWaitingOrUnblocked = isWaitingOrUnblockedStatus(priorStatus);
+      // Placeholder ("current status") stages park a task: remember the real
+      // stage it came from; any move to a real stage clears it.
+      const { placeholders } = await getListStageInfo(body.list_id || listId);
+      const isPlaceholder = (k: string | null | undefined) => !!k && (placeholders.has(k) || isWaitingOrUnblockedStatus(k));
+      const isNextPlaceholder = isPlaceholder(body.status);
+      const isPriorPlaceholder = isPlaceholder(priorStatus);
 
-      if (isNextWaitingOrUnblocked) {
-        if (!isPriorWaitingOrUnblocked && priorStatus) {
+      if (isNextPlaceholder) {
+        if (!isPriorPlaceholder && priorStatus) {
           nextMeta.original_status = priorStatus;
-        } else if (isPriorWaitingOrUnblocked) {
+        } else if (isPriorPlaceholder) {
           nextMeta.original_status = priorMeta.original_status || priorStatus;
         }
       } else {
-        // Leaving waiting_on_dependency / unblocked -> clear original_status
         delete nextMeta.original_status;
       }
+      // A manual status change ends the "auto-returned from WAITING" link.
+      if (body.status !== priorStatus) delete nextMeta.auto_unblocked_stage;
       updatePayload.metadata = nextMeta;
     } else if (body.metadata !== undefined) {
       updatePayload.metadata = nextMeta;

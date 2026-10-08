@@ -129,12 +129,16 @@ export default function TaskStatusPicker({
     || getTaskStatusDef(value)
     || (value ? getTaskStatusDef(LEGACY_TO_KEY[value]) : null);
 
-  const isWaitingOrUnblocked = value === 'waiting_on_dependency' || value === 'unblocked';
+  // Placeholder ("current status") stages park a task: its original stage
+  // leads, the placeholder trails muted, and the menu offers a way back.
+  const isParked = value === 'waiting_on_dependency' || value === 'unblocked' || !!current?.is_placeholder;
   const origDef = originalStatus
     ? (findTaskStatusDef(catalog, originalStatus) || getTaskStatusDef(originalStatus))
     : null;
   const origLabel = origDef?.label || originalStatus || null;
   const origColor = origDef?.color || '#6b7280';
+  const showParked = isParked && !!origLabel;
+  const resumeDef = showParked && origDef && !origDef.is_placeholder && findTaskStatusDef(catalog, origDef.key) ? origDef : null;
 
   const { grouped: filtered, flatList } = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -216,24 +220,13 @@ export default function TaskStatusPicker({
       >
         <span
           className="h-1.5 w-1.5 rounded-full shrink-0"
-          style={{ background: current?.color || 'var(--sh-ink-4)' }}
+          style={{ background: (showParked ? origColor : current?.color) || 'var(--sh-ink-4)' }}
         />
-        <span className="text-[13px]">{current?.label || value || 'No status'}</span>
-        {isWaitingOrUnblocked && origLabel && (
-          <span
-            className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10.5px] font-medium border shrink-0"
-            style={{
-              borderColor: 'var(--sh-hair)',
-              background: 'var(--surface-alt)',
-              color: 'var(--sh-ink-2)',
-            }}
-            title={`Original status: ${origLabel}`}
-          >
-            <span
-              className="h-1.5 w-1.5 rounded-full shrink-0"
-              style={{ background: origColor }}
-            />
-            <span className="truncate max-w-[120px]">{origLabel}</span>
+        <span className="text-[13px]">{showParked ? origLabel : (current?.label || value || 'No status')}</span>
+        {showParked && (
+          <span className="sw-parked-chip" title={`Current status: ${current?.label || value}`}>
+            <span className="sw-parked-dot" style={{ background: current?.color || '#6b7280' }} />
+            <span className="truncate max-w-[84px]">{current?.label || value}</span>
           </span>
         )}
         <svg
@@ -313,6 +306,20 @@ export default function TaskStatusPicker({
               className="overflow-y-auto overscroll-contain flex-1 py-1 divide-y divide-[var(--sh-hair)]/40 scrollbar-thin"
               style={{ overscrollBehavior: 'contain' }}
             >
+              {resumeDef && !query && (
+                <div className="px-1 py-1">
+                  <button
+                    type="button"
+                    onClick={() => pick(resumeDef.key)}
+                    className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-left hover:bg-[var(--sh-hair-3)] text-[var(--sh-ink)]"
+                    title={`Clear ${current?.label || value} and go back to ${resumeDef.label}`}
+                  >
+                    <span className="w-5 text-center text-[var(--sh-ink-3)]">↩</span>
+                    <span className="text-[12.5px] font-medium">Back to {resumeDef.label}</span>
+                    <span className="ml-auto text-[10.5px] text-[var(--sh-ink-4)]">clears {current?.label || value}</span>
+                  </button>
+                </div>
+              )}
               {filtered.length === 0 ? (
                 <div className="px-4 py-8 text-center">
                   <div className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-[var(--surface-alt)] text-[var(--sh-ink-4)] mb-2">

@@ -1088,6 +1088,7 @@ function StatusesCard({ group, onChanged }: { group: StatusGroup; onChanged: () 
                     </span>
                   )}
                   {s.is_default && <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700">DEFAULT</span>}
+                  {s.is_placeholder && <span className="rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700" title="Placeholder: tasks keep their original stage and return to it when this clears">PLACEHOLDER</span>}
                   {(() => {
                     const isSystem = isSystemStatus(s);
                     const locked = (s.is_inherited && !s.is_replacement) || (isSystem && !canEditSystem);
@@ -1100,6 +1101,15 @@ function StatusesCard({ group, onChanged }: { group: StatusGroup; onChanged: () 
                         <button onClick={() => shift(i, 1)} disabled={atSectionEdge(i, 1)} className="rounded px-1 text-foreground-dim hover:text-foreground disabled:opacity-30" title="Move down">↓</button>
                         {!s.is_default && !locked && !group.base_group_id && (
                           <button onClick={() => update.mutate({ id: s.id, body: { is_default: true } })} className="rounded px-1 text-xs text-foreground-dim hover:text-foreground" title="Mark as default">★</button>
+                        )}
+                        {!locked && (group as any).is_stage_workflow && (
+                          <button
+                            onClick={() => update.mutate({ id: s.id, body: { is_placeholder: !s.is_placeholder } })}
+                            className="rounded px-1 text-xs text-foreground-dim hover:text-foreground"
+                            title={s.is_placeholder ? 'Make this a normal stage' : 'Make this a placeholder: tasks remember their stage and return to it when cleared'}
+                          >
+                            {s.is_placeholder ? '⏸ Unset placeholder' : '⏸ Placeholder'}
+                          </button>
                         )}
 
                         {/* Linked group toggle ON/OFF control */}

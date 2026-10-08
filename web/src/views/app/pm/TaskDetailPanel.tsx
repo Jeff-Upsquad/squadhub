@@ -5,6 +5,7 @@ import { useQueryClient, useQuery } from '@tanstack/react-query';
 import { usePMStore } from '../../../stores/pmStore';
 import { sourceFromComment, useConvertToTaskStore } from '../../../stores/convertToTaskStore';
 import { useDeepLinkStore } from '../../../lib/deepLinks';
+import { isPlaceholderStatus } from '../../../lib/stageWorkflow';
 import { useTask, useUpdateTask, useDeleteTask, useTaskComments, useAddComment, useCreateTask, useTaskLists, useAddTaskToLists, useRemoveTaskFromList, useTaskActivity } from '../../../hooks/useTasks';
 import { useFocusTask } from '../../../hooks/useDayPlanner';
 import { isTaskFocused } from '../../../lib/taskGrouping';
@@ -433,7 +434,7 @@ export default function TaskDetailPanel({
   const resolvedFolderId = folderId || (task as any)?.folder_id || undefined;
   const resolvedListId = listId || (task as any)?.list_id || undefined;
   const currentTypeId = task?.task_type_id || undefined;
-  const { defs: taskCatalog } = useTaskWorkflowCatalog({
+  const { defs: taskCatalog, group: catalogGroup, assignment: catalogAssignment } = useTaskWorkflowCatalog({
     spaceId: resolvedSpaceId,
     folderId: resolvedFolderId,
     listId: resolvedListId,
@@ -898,7 +899,10 @@ export default function TaskDetailPanel({
 
   const taskStatusCategory = task ? (task as any).status as string | undefined : undefined;
   const catalogDef = findTaskStatusDef(taskCatalog, taskStatusCategory) || getTaskStatusDef(taskStatusCategory);
-  const isTaskType = currentType?.key === 'task';
+  // Stage-workflow lists are catalog-driven whatever the task type: their
+  // stages live in the status group, not in the space's seed statuses.
+  const isStageList = !!(catalogGroup?.is_stage_workflow && catalogAssignment && !catalogAssignment.is_default_fallback);
+  const isTaskType = currentType?.key === 'task' || isStageList;
   const status = task
     ? isTaskType
       ? (catalogDef
@@ -3766,13 +3770,26 @@ function SpaceStatusPicker({
   const searchInputRef = useRef<HTMLInputElement>(null);
   const [rect, setRect] = useState<DOMRect | null>(null);
 
-  const isWaitingOrUnblocked = taskStatusCategory === 'waiting_on_dependency' || taskStatusCategory === 'unblocked'
-    || (current?.name && (current.name.toUpperCase().includes('WAITING') && current.name.toUpperCase().includes('DEPEND') || current.name.toUpperCase() === 'UNBLOCKED'));
-  const origDef = originalStatus
-    ? (statuses.find((s) => s.name === originalStatus || s.id === originalStatus) || getTaskStatusDef(originalStatus))
+  // Placeholder ("current status") stages park a task: its original stage
+  // leads, the placeholder trails muted, and the menu offers a way back.
+  const isParked = isPlaceholderStatus(statuses, taskStatusCategory) || !!current?.is_placeholder
+    || (!!current?.name && current.name.toUpperCase().includes('WAITING') && current.name.toUpperCase().includes('DEPEND'));
+  const origStatus = originalStatus
+    ? statuses.find((s) => s.name === originalStatus || s.id === originalStatus) || null
     : null;
+  const origDef = origStatus || (originalStatus ? getTaskStatusDef(originalStatus) : null);
   const origLabel = (origDef as any)?.name || (origDef as any)?.label || originalStatus || null;
   const origColor = origDef?.color || '#6b7280';
+  const showParked = isParked && !!origLabel;
+  // Space-status lists may not carry the stage row; fall back to the catalog
+  // def (onPick sends the name, which the server normalizes to the key).
+  const origCatalog = !origStatus && originalStatus ? getTaskStatusDef(originalStatus) : null;
+  const resumeTo: SpaceStatus | null = !showParked ? null
+    : origStatus ? (origStatus.is_placeholder ? null : origStatus)
+    : origCatalog && !origCatalog.is_placeholder
+      ? ({ id: origCatalog.key, name: origCatalog.label, color: origCatalog.color, category: origCatalog.category } as SpaceStatus)
+      : null;
+  const leadColor = showParked ? origColor : current?.color;
 
   const toggle = useCallback(() => {
     if (!canEdit) return;
@@ -3944,26 +3961,19 @@ function SpaceStatusPicker({
         className="td-prop-chip inline-flex items-center gap-1.5"
         style={{
           cursor: canEdit ? 'pointer' : 'default',
-          background: current?.color ? `color-mix(in oklch, ${current.color} 14%, transparent)` : 'var(--surface-alt)',
-          color: current?.color || 'var(--sh-ink-3)',
+          background: leadColor ? `color-mix(in oklch, ${leadColor} 14%, transparent)` : 'var(--surface-alt)',
+          color: leadColor || 'var(--sh-ink-3)',
         }}
+        title={showParked ? `${origLabel} · currently ${current?.name || taskStatusCategory}` : undefined}
       >
-        <span className="dot" style={{ background: current?.color || 'var(--sh-ink-4)' }} />
+        <span className="dot" style={{ background: leadColor || 'var(--sh-ink-4)' }} />
         <span className="truncate max-w-[150px]">
-          {current?.name || (taskStatusCategory ? ({ todo: 'To Do', active: 'Active', done: 'Done', closed: 'Closed' }[taskStatusCategory] ?? taskStatusCategory) : 'No status')}
+          {showParked ? origLabel : (current?.name || (taskStatusCategory ? ({ todo: 'To Do', active: 'Active', done: 'Done', closed: 'Closed' }[taskStatusCategory] ?? taskStatusCategory) : 'No status'))}
         </span>
-        {isWaitingOrUnblocked && origLabel && (
-          <span
-            className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10.5px] font-medium border shrink-0"
-            style={{
-              borderColor: 'var(--sh-hair)',
-              background: 'var(--surface-alt)',
-              color: 'var(--sh-ink-2)',
-            }}
-            title={`Original status: ${origLabel}`}
-          >
-            <span className="h-1.5 w-1.5 rounded-full shrink-0" style={{ background: origColor }} />
-            <span className="truncate max-w-[110px]">{origLabel}</span>
+        {showParked && (
+          <span className="sw-parked-chip">
+            <span className="sw-parked-dot" style={{ background: current?.color || '#6b7280' }} />
+            <span className="truncate max-w-[110px]">{current?.name || taskStatusCategory}</span>
           </span>
         )}
         {canEdit && (
@@ -4028,6 +4038,20 @@ function SpaceStatusPicker({
               className="overflow-y-auto overscroll-contain flex-1 py-1 divide-y divide-[var(--sh-hair)]/40 scrollbar-thin"
               style={{ overscrollBehavior: 'contain' }}
             >
+              {resumeTo && !search && (
+                <div className="px-1 py-1">
+                  <button
+                    type="button"
+                    onClick={() => { onPick(resumeTo); setOpen(false); }}
+                    className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-left hover:bg-[var(--sh-hair-3)] text-[var(--sh-ink)]"
+                    title={`Clear ${current?.name || taskStatusCategory} and go back to ${resumeTo.name}`}
+                  >
+                    <span className="w-5 text-center text-[var(--sh-ink-3)]">↩</span>
+                    <span className="text-[12.5px] font-medium">Back to {resumeTo.name}</span>
+                    <span className="ml-auto text-[10.5px] text-[var(--sh-ink-4)]">clears {current?.name || taskStatusCategory}</span>
+                  </button>
+                </div>
+              )}
               {grouped.length === 0 ? (
                 <div className="px-4 py-8 text-center">
                   <div className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-[var(--surface-alt)] text-[var(--sh-ink-4)] mb-2">

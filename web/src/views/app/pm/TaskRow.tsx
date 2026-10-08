@@ -33,6 +33,7 @@ import FocusStarButton from '../../../components/pm/FocusStarButton';
 import TaskRelationshipsButton from '../../../components/pm/TaskRelationshipsButton';
 import { getTaskStatusDef, type ListViewColumnId } from '@squadhub/shared';
 import { DEFAULT_VISIBLE_IDS, gridTemplateFor } from '../../../lib/columns';
+import { isPlaceholderStatus } from '../../../lib/stageWorkflow';
 
 const DEFAULT_VISIBLE_COLUMNS: ListViewColumnId[] = DEFAULT_VISIBLE_IDS;
 
@@ -467,13 +468,16 @@ export default function TaskRow({
     const statusLabel = currentStatus?.name ?? catalogDef?.label ?? null;
     const statusColor = currentStatus?.color ?? catalogDef?.color ?? '#6b7280';
     const originalStatus = (task as any)?.metadata?.original_status;
-    const isWaitingOrUnblocked = statusCategory === 'waiting_on_dependency' || statusCategory === 'unblocked'
-      || (statusLabel && (statusLabel.toUpperCase().includes('WAITING') && statusLabel.toUpperCase().includes('DEPEND') || statusLabel.toUpperCase() === 'UNBLOCKED'));
+    // Placeholder ("current status") stages park a task: the original stage
+    // is what matters, so it leads and the placeholder trails, muted.
+    const isParked = isPlaceholderStatus(statuses, statusCategory)
+      || (!!statusLabel && statusLabel.toUpperCase().includes('WAITING') && statusLabel.toUpperCase().includes('DEPEND'));
     const origDef = originalStatus
       ? (statuses.find((s) => s.name === originalStatus || s.id === originalStatus) || getTaskStatusDef(originalStatus))
       : null;
     const origLabel = (origDef as any)?.name || (origDef as any)?.label || originalStatus || null;
     const origColor = origDef?.color || '#6b7280';
+    const showParked = isParked && !!origLabel;
 
     return (
       <div
@@ -481,24 +485,16 @@ export default function TaskRow({
         data-empty={!statusLabel}
         onClick={canEdit ? (e) => openPicker(e, setStatusAnchor) : undefined}
         style={{ cursor: canEdit ? 'pointer' : 'default' }}
-        title={canEdit ? 'Change status' : undefined}
+        title={canEdit ? (showParked ? `${origLabel} · currently ${statusLabel}` : 'Change status') : undefined}
       >
         {statusLabel ? (
           <span className="lv-pri flex items-center gap-1.5">
-            <span className="lv-pri-dot" style={{ background: statusColor }} />
-            <span className="lv-pri-label">{statusLabel}</span>
-            {isWaitingOrUnblocked && origLabel && (
-              <span
-                className="inline-flex items-center gap-1 rounded-full px-1.5 py-0.2 text-[10px] font-medium border shrink-0"
-                style={{
-                  borderColor: 'var(--sh-hair)',
-                  background: 'var(--surface-alt)',
-                  color: 'var(--sh-ink-2)',
-                }}
-                title={`Original status: ${origLabel}`}
-              >
-                <span className="h-1 w-1 rounded-full shrink-0" style={{ background: origColor }} />
-                <span className="truncate max-w-[90px]">{origLabel}</span>
+            <span className="lv-pri-dot" style={{ background: showParked ? origColor : statusColor }} />
+            <span className="lv-pri-label">{showParked ? origLabel : statusLabel}</span>
+            {showParked && (
+              <span className="sw-parked-chip" title={`Current status: ${statusLabel}`}>
+                <span className="sw-parked-dot" style={{ background: statusColor }} />
+                <span className="truncate max-w-[90px]">{statusLabel}</span>
               </span>
             )}
           </span>
