@@ -6,6 +6,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getTaskStatusCategory, getTaskStatusDef, type SpaceStatus, type Task } from '@squadhub/shared';
 import api from '../../services/api';
 import { useWorkspaceStore } from '../../stores/workspaceStore';
+import { usePMStore } from '../../stores/pmStore';
 import { useMyTasks } from '../../hooks/useTasks';
 import { showToast } from '../Toast';
 import TaskStatusBadge from '../../views/app/pm/TaskStatusBadge';
@@ -78,6 +79,21 @@ export default function TaskRelationshipsModal({
   const [searchQuery, setSearchQuery] = useState('');
   const debouncedQuery = useDebounced(searchQuery.trim(), 160);
   const searchInputRef = useRef<HTMLInputElement>(null);
+  // Tasks linked during this modal session — shown in a "Just linked" section on the overview
+  const [recentLinks, setRecentLinks] = useState<
+    Array<{
+      id: string;
+      type: 'waiting_on' | 'blocks';
+      title: string;
+      space_name?: string | null;
+      list_name?: string | null;
+    }>
+  >([]);
+
+  const openTask = (id: string) => {
+    usePMStore.getState().setActiveTask(id);
+    onClose();
+  };
 
   // Close on Escape when in overview, or return to overview when searching
   useEffect(() => {
@@ -177,6 +193,16 @@ export default function TaskRelationshipsModal({
     onSuccess: (_, vars) => {
       const target = displayedTasks.find((t) => t.id === vars.targetTaskId);
       const targetTitle = target?.title || 'task';
+      setRecentLinks((prev) => [
+        ...prev.filter((r) => r.id !== vars.targetTaskId),
+        {
+          id: vars.targetTaskId,
+          type: vars.type,
+          title: targetTitle,
+          space_name: target?.space_name ?? null,
+          list_name: target?.list_name ?? null,
+        },
+      ]);
       if (vars.type === 'waiting_on') {
         showToast(`Linked: This task is now waiting on "${targetTitle}". Status updated to Waiting on dependency.`, 'success');
       } else {
@@ -202,7 +228,8 @@ export default function TaskRelationshipsModal({
       const res = await api.delete(`/pm/tasks/${taskId}/relationships/${targetTaskId}`);
       return res.data;
     },
-    onSuccess: () => {
+    onSuccess: (_data, targetTaskId) => {
+      setRecentLinks((prev) => prev.filter((r) => r.id !== targetTaskId));
       showToast('Relationship removed', 'info');
       qc.invalidateQueries({ queryKey: ['task-relationships', taskId] });
       qc.invalidateQueries({ queryKey: ['task', taskId] });
@@ -295,6 +322,88 @@ export default function TaskRelationshipsModal({
         {/* Content */}
         {mode === 'overview' ? (
           <div className="p-6 space-y-6 max-h-[75vh] overflow-y-auto">
+            {/* Just linked — tasks connected during this session */}
+            {recentLinks.length > 0 && (
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wider text-foreground-dim mb-2.5">
+                  Just linked
+                  <span className="ml-1.5 rounded-full bg-blue-100 px-1.5 py-0.2 text-[10px] font-medium text-blue-700 dark:bg-blue-950/60 dark:text-blue-300">
+                    {recentLinks.length}
+                  </span>
+                </p>
+                <div className="space-y-1.5">
+                  {recentLinks.map((link) => {
+                    const fresh =
+                      link.type === 'waiting_on'
+                        ? waitingOnList.find((t) => t.id === link.id)
+                        : blocksList.find((t) => t.id === link.id);
+                    const title = fresh?.title || link.title;
+                    const spaceName = fresh?.space_name ?? link.space_name ?? null;
+                    const listName = fresh?.list_name ?? link.list_name ?? null;
+                    return (
+                      <div
+                        key={link.id}
+                        className="flex items-center justify-between gap-3 p-2.5 rounded-lg border border-blue-500/40 bg-blue-50/40 dark:bg-blue-950/25 transition"
+                      >
+                        <button
+                          type="button"
+                          onClick={() => openTask(link.id)}
+                          className="flex items-center gap-2.5 min-w-0 text-left group"
+                          title={`Open "${title}"`}
+                        >
+                          <span
+                            className="h-2 w-2 rounded-full shrink-0"
+                            style={{
+                              backgroundColor: fresh?.completed
+                                ? '#10b981'
+                                : link.type === 'waiting_on'
+                                  ? '#f59e0b'
+                                  : '#6b7280',
+                            }}
+                          />
+                          <div className="min-w-0">
+                            <p
+                              className="truncate text-sm font-semibold text-foreground group-hover:text-blue-600 group-hover:underline underline-offset-2"
+                              title={title}
+                            >
+                              {title}
+                            </p>
+                            <div className="flex items-center gap-1.5 text-[11px] text-foreground-dim">
+                              <span
+                                className={
+                                  link.type === 'waiting_on'
+                                    ? 'font-medium text-amber-600 dark:text-amber-400'
+                                    : 'font-medium text-purple-600 dark:text-purple-400'
+                                }
+                              >
+                                {link.type === 'waiting_on' ? 'Waiting on' : 'Blocks'}
+                              </span>
+                              {spaceName && <span>{spaceName}</span>}
+                              {spaceName && listName && <span>›</span>}
+                              {listName && <span>{listName}</span>}
+                            </div>
+                          </div>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => openTask(link.id)}
+                          className="shrink-0 inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-950/50 transition"
+                          title="Open task"
+                        >
+                          Open
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                            <polyline points="15 3 21 3 21 9" />
+                            <line x1="10" y1="14" x2="21" y2="3" />
+                          </svg>
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
             {/* Action Cards */}
             <div>
               <p className="text-xs font-semibold uppercase tracking-wider text-foreground-dim mb-2.5">
@@ -385,7 +494,12 @@ export default function TaskRelationshipsModal({
                         key={item.id}
                         className="flex items-center justify-between gap-3 p-2.5 rounded-lg border border-divider hover:bg-muted/40 transition"
                       >
-                        <div className="flex items-center gap-2.5 min-w-0">
+                        <button
+                          type="button"
+                          onClick={() => openTask(item.id)}
+                          className="flex items-center gap-2.5 min-w-0 text-left group"
+                          title={`Open "${item.title}"`}
+                        >
                           <span
                             className="h-2 w-2 rounded-full shrink-0"
                             style={{
@@ -393,7 +507,7 @@ export default function TaskRelationshipsModal({
                             }}
                           />
                           <div className="min-w-0">
-                            <p className="truncate text-sm font-medium text-foreground" title={item.title}>
+                            <p className="truncate text-sm font-medium text-foreground group-hover:text-blue-600 group-hover:underline underline-offset-2" title={item.title}>
                               {item.title}
                             </p>
                             <div className="flex items-center gap-1.5 text-[11px] text-foreground-dim">
@@ -403,7 +517,7 @@ export default function TaskRelationshipsModal({
                               {item.list_name && <span>{item.list_name}</span>}
                             </div>
                           </div>
-                        </div>
+                        </button>
 
                         <div className="flex items-center gap-2 shrink-0">
                           {item.completed ? (
@@ -461,7 +575,12 @@ export default function TaskRelationshipsModal({
                         key={item.id}
                         className="flex items-center justify-between gap-3 p-2.5 rounded-lg border border-divider hover:bg-muted/40 transition"
                       >
-                        <div className="flex items-center gap-2.5 min-w-0">
+                        <button
+                          type="button"
+                          onClick={() => openTask(item.id)}
+                          className="flex items-center gap-2.5 min-w-0 text-left group"
+                          title={`Open "${item.title}"`}
+                        >
                           <span
                             className="h-2 w-2 rounded-full shrink-0"
                             style={{
@@ -469,7 +588,7 @@ export default function TaskRelationshipsModal({
                             }}
                           />
                           <div className="min-w-0">
-                            <p className="truncate text-sm font-medium text-foreground" title={item.title}>
+                            <p className="truncate text-sm font-medium text-foreground group-hover:text-blue-600 group-hover:underline underline-offset-2" title={item.title}>
                               {item.title}
                             </p>
                             <div className="flex items-center gap-1.5 text-[11px] text-foreground-dim">
@@ -479,7 +598,7 @@ export default function TaskRelationshipsModal({
                               {item.list_name && <span>{item.list_name}</span>}
                             </div>
                           </div>
-                        </div>
+                        </button>
 
                         <div className="flex items-center gap-2 shrink-0">
                           <button
