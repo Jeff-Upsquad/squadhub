@@ -18,6 +18,7 @@ import { getUserSkillLevel, checkLoggedTimeChange, isUserAdmin } from '../../uti
 import { resolveClientSource } from '../../utils/clientSource';
 import { recordWorkBlockCompletionIfActive } from './workBlocks';
 import { recordGroupRunCompletionIfActive } from './groupRuns';
+import { normalizeTaskStatusForList, defaultTaskStatusForList } from '../../utils/statusGroups';
 
 const router = Router();
 router.use(requireAuth);
@@ -2347,14 +2348,29 @@ router.post('/tasks', async (req: Request, res: Response) => {
       resolvedTypeKey = (defaultType as any)?.key ?? null;
     }
 
-    // Catalog-driven task type uses 'open' as its initial status; legacy types still use 'todo'.
-    const defaultStatus = resolvedTypeKey === 'task' ? 'open' : 'todo';
+    // Status must come from the list's effective group (list > folder >
+    // space > template > default). Normalize casing variants ('OPEN' -> 'open')
+    // so a second bucket can never be created again.
+    let resolvedStatus: string;
+    if (body.status) {
+      const normalized = await normalizeTaskStatusForList(body.list_id, body.status);
+      if (!normalized) {
+        res.status(400).json({ success: false, error: `Invalid status '${body.status}' for this list's status group` });
+        return;
+      }
+      resolvedStatus = normalized;
+    } else {
+      // Catalog-driven task type uses the group's default; legacy types still use 'todo'.
+      resolvedStatus = resolvedTypeKey === 'task'
+        ? await defaultTaskStatusForList(body.list_id)
+        : 'todo';
+    }
 
     const insertData: Record<string, any> = {
       list_id: body.list_id,
       title: body.title,
       description: body.description || null,
-      status: body.status || defaultStatus,
+      status: resolvedStatus,
       priority: body.priority || 'none',
       time_estimate: body.time_estimate ?? null,
       due_date: body.due_date || null,
@@ -2518,6 +2534,19 @@ router.put('/tasks/:id', async (req: Request, res: Response) => {
 
     const priorEstimate: number | null = (prior as any)?.time_estimate ?? null;
     const estimateListId: string | null = (prior as any)?.list_id ?? null;
+
+    // Status must belong to the (destination) list's effective group.
+    // Normalize casing variants so 'OPEN' saves as 'open' instead of forking
+    // a second board column.
+    if (body.status !== undefined) {
+      const targetListId = body.list_id || listId;
+      const normalized = await normalizeTaskStatusForList(targetListId, body.status);
+      if (!normalized) {
+        res.status(400).json({ success: false, error: `Invalid status '${body.status}' for this list's status group` });
+        return;
+      }
+      (body as any).status = normalized;
+    }
 
     // Completion gate: only fires on the transition INTO a done/closed status —
     // tasks already complete can be re-saved (or moved between done states)

@@ -292,3 +292,105 @@ export async function spaceHasSeedStatuses(spaceId: string) {
     names.has('Done')
   );
 }
+
+// ---- Task status normalization -------------------------------------------
+// Tasks store a free-form TEXT status, so 'OPEN' vs 'open' splits boards into
+// two groups (groupByStatus keys on the raw string). This resolves the
+// effective group for the target list (list > folder > space > template >
+// default) plus the space's space_statuses, then maps any casing variant back
+// to its canonical value:
+//
+//   - task_workflow-style rows: key is canonical ('open'); name ('OPEN') maps to it
+//   - space_statuses rows: name is canonical ('In Progress')
+//   - legacy categories: todo->open, active->in_progress, done/closed->closed
+//
+// Returns the canonical status to store, or null when the value matches
+// nothing (caller should 400).
+
+const LEGACY_STATUS_ALIASES: Record<string, string> = {
+  todo: 'open',
+  active: 'in_progress',
+  done: 'closed',
+};
+
+export async function normalizeTaskStatusForList(
+  listId: string | null | undefined,
+  raw: string | null | undefined,
+): Promise<string | null> {
+  if (!raw) return null;
+  const input = raw.trim();
+  if (!input) return null;
+  const lower = input.toLowerCase();
+
+  // Legacy shorthands first — always safe.
+  if (LEGACY_STATUS_ALIASES[lower]) return LEGACY_STATUS_ALIASES[lower];
+
+  try {
+    const effective = await resolveEffectiveGroup({ listId: listId || null });
+    const rows: any[] = effective?.statuses || [];
+
+    // 1. Exact key match (case-sensitive canonical).
+    for (const s of rows) {
+      if (s.key && s.key === input) return s.key;
+    }
+    // 2. Case-insensitive key or name match -> canonical key.
+    for (const s of rows) {
+      if (s.key && s.key.toLowerCase() === lower) return s.key;
+      if (s.name && s.name.toLowerCase() === lower) return s.key || s.name;
+    }
+
+    // 3. Space-level custom statuses (tasks store the NAME here).
+    let spaceId: string | null = null;
+    if (listId) {
+      const { data: list } = await supabaseAdmin
+        .from('lists')
+        .select('space_id')
+        .eq('id', listId)
+        .maybeSingle();
+      spaceId = (list as any)?.space_id || null;
+    }
+    if (spaceId) {
+      const { data: spaceRows } = await supabaseAdmin
+        .from('space_statuses')
+        .select('name')
+        .eq('space_id', spaceId);
+      for (const r of (spaceRows || []) as { name: string }[]) {
+        if (r.name === input) return r.name;
+      }
+      for (const r of (spaceRows || []) as { name: string }[]) {
+        if (r.name && r.name.toLowerCase() === lower) return r.name;
+      }
+    }
+
+    // 4. Static catalog fallback (covers default-fallback + offline groups).
+    const { TASK_STATUS_CATALOG } = await import('@squadhub/shared');
+    for (const d of TASK_STATUS_CATALOG as { key: string; label: string }[]) {
+      if (d.key === input) return d.key;
+      if (d.key.toLowerCase() === lower) return d.key;
+      if ((d.label || '').toLowerCase() === lower) return d.key;
+    }
+  } catch (e) {
+    console.error('[statusGroups] normalizeTaskStatusForList failed:', e);
+  }
+
+  // Unknown status — let the caller decide (400 with allowed list).
+  // As a last resort, if it looks like an all-caps key variant, lowercase it
+  // so 'OPEN' can never create a second bucket again.
+  if (/^[A-Z0-9_ ]+$/.test(input) && input.length <= 40) {
+    return lower.replace(/\s+/g, '_');
+  }
+  return null;
+}
+
+/** Default status for a list: the effective group's is_default row, else 'open'. */
+export async function defaultTaskStatusForList(listId: string | null | undefined): Promise<string> {
+  try {
+    const effective = await resolveEffectiveGroup({ listId: listId || null });
+    const rows: any[] = effective?.statuses || [];
+    const def = rows.find((s) => s.is_default && s.key) || rows.find((s) => s.key);
+    if (def?.key) return def.key;
+  } catch (e) {
+    console.error('[statusGroups] defaultTaskStatusForList failed:', e);
+  }
+  return 'open';
+}

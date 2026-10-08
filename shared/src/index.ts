@@ -481,7 +481,15 @@ export function registerTaskStatusDefs(defs: TaskStatusDef[]): void {
 export function getTaskStatusDef(key: string | null | undefined): TaskStatusDef | null {
   if (!key) return null;
   if (TASK_STATUS_OVERRIDES && TASK_STATUS_OVERRIDES[key]) return TASK_STATUS_OVERRIDES[key];
-  return TASK_STATUS_BY_KEY[key] || null;
+  if (TASK_STATUS_BY_KEY[key]) return TASK_STATUS_BY_KEY[key];
+  // Case-insensitive fallback so legacy 'OPEN' resolves to 'open' instead of
+  // forking a second board bucket.
+  const lower = key.toLowerCase().trim();
+  if (lower !== key) {
+    if (TASK_STATUS_OVERRIDES && TASK_STATUS_OVERRIDES[lower]) return TASK_STATUS_OVERRIDES[lower];
+    if (TASK_STATUS_BY_KEY[lower]) return TASK_STATUS_BY_KEY[lower];
+  }
+  return null;
 }
 
 export function getTaskStatusCategory(key: string | null | undefined): StatusCategory | null {
