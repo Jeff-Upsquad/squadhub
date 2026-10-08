@@ -85,7 +85,63 @@ const reorderSchema = z.object({
 const applySchema = z.object({
   entity_type: z.enum(ENTITY_TYPES),
   entity_id: z.string().uuid(),
+  // Replace flow: when the entity already has a different group, the caller
+  // must pass allow_replace:true plus a status_mapping of
+  // { <old task status string>: <new status id in the incoming group> }.
+  allow_replace: z.boolean().optional(),
+  status_mapping: z.record(z.string(), z.string().uuid()).optional(),
 });
+
+/** Resolve the list ids that own tasks for a given assignment target. */
+async function getListIdsForEntity(entityType: string, entityId: string): Promise<string[]> {
+  if (entityType === 'list') return [entityId];
+  if (entityType === 'template') return [];
+  if (entityType === 'folder') {
+    const { data, error } = await supabaseAdmin
+      .from('lists')
+      .select('id')
+      .eq('folder_id', entityId)
+      .limit(2000);
+    if (error) throw new Error(error.message);
+    return (data || []).map((l: any) => l.id);
+  }
+  // space (= area): every list directly under the area. Folder-scoped
+  // lists carry the same space_id, so one query covers them.
+  const { data, error } = await supabaseAdmin
+    .from('lists')
+    .select('id')
+    .eq('space_id', entityId)
+    .limit(2000);
+  if (error) throw new Error(error.message);
+  return (data || []).map((l: any) => l.id);
+}
+
+/** Count tasks in scope grouped by their exact status string. */
+async function getTaskStatusBreakdown(listIds: string[]): Promise<{ status: string; count: number }[]> {
+  if (!listIds.length) return [];
+  const { data, error } = await supabaseAdmin
+    .from('tasks')
+    .select('status')
+    .in('list_id', listIds)
+    .limit(5000);
+  if (error) throw new Error(error.message);
+  const counts = new Map<string, number>();
+  for (const t of (data || []) as any[]) {
+    const key = (t.status ?? '').toString() || '(empty)';
+    counts.set(key, (counts.get(key) || 0) + 1);
+  }
+  return [...counts.entries()]
+    .map(([status, count]) => ({ status, count }))
+    .sort((a, b) => b.count - a.count);
+}
+
+async function getEntityName(entityType: string, entityId: string): Promise<string> {
+  const table = entityType === 'space' ? 'spaces'
+    : entityType === 'folder' ? 'folders'
+    : entityType === 'list' ? 'lists' : 'client_space_templates';
+  const { data } = await supabaseAdmin.from(table).select('id, name').eq('id', entityId).maybeSingle();
+  return (data as any)?.name || entityId;
+}
 
 async function getGroup(id: string) {
   const { data } = await supabaseAdmin
@@ -354,6 +410,66 @@ router.get('/templates', async (_req: Request, res: Response) => {
     res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });
+
+// ------------------------------------------------------------
+// GET /admin/status-groups/:id/replace-preview?entity_type=&entity_id=
+// What would change if this group replaced the entity's current group?
+// Returns the current group, both groups' effective statuses, and the
+// tasks in scope grouped by their exact current status string so the
+// admin UI can offer an old → new mapping.
+// ------------------------------------------------------------
+async function handleReplacePreview(req: Request, res: Response) {
+  try {
+    const newGroupId = req.params.id as string;
+    const entityType = req.query.entity_type as string;
+    const entityId = req.query.entity_id as string;
+    if (!ENTITY_TYPES.includes(entityType as any) || !entityId) {
+      res.status(400).json({ success: false, error: 'entity_type and entity_id are required' });
+      return;
+    }
+    const newGroup = await getGroup(newGroupId);
+    if (!newGroup) {
+      res.status(404).json({ success: false, error: 'Status group not found' });
+      return;
+    }
+    const { data: current } = await supabaseAdmin
+      .from('status_group_assignments')
+      .select('*, status_groups(id, key, name, color)')
+      .eq('entity_type', entityType)
+      .eq('entity_id', entityId)
+      .maybeSingle();
+    if (!current || (current as any).group_id === newGroupId) {
+      res.json({ success: true, data: { has_existing: false } });
+      return;
+    }
+    const currentGroup = (current as any).status_groups || { id: (current as any).group_id };
+    const [oldStatuses, newStatuses] = await Promise.all([
+      getGroupStatuses((current as any).group_id),
+      getGroupStatuses(newGroupId),
+    ]);
+    const listIds = await getListIdsForEntity(entityType, entityId);
+    const breakdown = await getTaskStatusBreakdown(listIds);
+    const totalTasks = breakdown.reduce((n, b) => n + b.count, 0);
+    res.json({
+      success: true,
+      data: {
+        has_existing: true,
+        entity: { type: entityType, id: entityId, name: await getEntityName(entityType, entityId) },
+        current_group: { id: currentGroup.id || (current as any).group_id, key: currentGroup.key, name: currentGroup.name || 'Current group' },
+        new_group: { id: newGroup.id, name: newGroup.name },
+        old_statuses: oldStatuses,
+        new_statuses: newStatuses,
+        breakdown,
+        total_tasks: totalTasks,
+        list_count: listIds.length,
+      },
+    });
+  } catch (err) {
+    console.error('Replace preview error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+}
+router.get('/:id/replace-preview', handleReplacePreview);
 
 // ------------------------------------------------------------
 // GET /admin/status-groups/:id/usage — where is this group applied?
@@ -888,10 +1004,10 @@ router.delete('/:id/statuses/:statusId', async (req: Request, res: Response) => 
 // Apply / unapply — requirement 2 + 3
 // ------------------------------------------------------------
 
-// POST /admin/status-groups/:id/apply {entity_type, entity_id}
+// POST /admin/status-groups/:id/apply {entity_type, entity_id, allow_replace?, status_mapping?}
 router.post('/:id/apply', async (req: Request, res: Response) => {
   try {
-    const { entity_type, entity_id } = applySchema.parse(req.body);
+    const { entity_type, entity_id, allow_replace, status_mapping } = applySchema.parse(req.body);
     const group = await getGroup((req.params.id as string));
     if (!group) {
       res.status(404).json({ success: false, error: 'Status group not found' });
@@ -917,13 +1033,70 @@ router.post('/:id/apply', async (req: Request, res: Response) => {
       return;
     }
 
+    // Replace guard: swapping groups re-points live tasks, so require an
+    // explicit mapping pass instead of silently overwriting.
+    const { data: current } = await supabaseAdmin
+      .from('status_group_assignments')
+      .select('group_id')
+      .eq('entity_type', entity_type)
+      .eq('entity_id', entity_id)
+      .maybeSingle();
+    const currentGroupId = (current as any)?.group_id as string | undefined;
+    if (currentGroupId && currentGroupId !== (req.params.id as string) && !allow_replace) {
+      res.status(409).json({
+        success: false,
+        error: 'This place already has a status group. Use Replace to remap its tasks.',
+        code: 'ALREADY_APPLIED',
+        current_group_id: currentGroupId,
+      });
+      return;
+    }
+
+    let remapped = 0;
+    if (currentGroupId && currentGroupId !== (req.params.id as string) && allow_replace) {
+      const listIds = await getListIdsForEntity(entity_type, entity_id);
+      const breakdown = await getTaskStatusBreakdown(listIds);
+      if (breakdown.length > 0) {
+        const mapping = status_mapping || {};
+        const unmapped = breakdown.map((b) => b.status).filter((s) => !mapping[s]);
+        if (unmapped.length > 0) {
+          res.status(400).json({
+            success: false,
+            error: `Map every existing status before replacing (unmapped: ${unmapped.join(', ')}).`,
+            unmapped,
+            breakdown,
+          });
+          return;
+        }
+        const newStatuses = await getGroupStatuses(req.params.id as string);
+        const byId = new Map(newStatuses.map((s: any) => [s.id, s]));
+        for (const [oldStatus, newStatusId] of Object.entries(mapping)) {
+          const row = byId.get(newStatusId);
+          if (!row) {
+            res.status(400).json({ success: false, error: 'Invalid status in mapping' });
+            return;
+          }
+          const replacement = (row as any).key || (row as any).name;
+          if (listIds.length === 0) continue;
+          const { error: updateError } = await supabaseAdmin
+            .from('tasks')
+            .update({ status: replacement })
+            .in('list_id', listIds)
+            .eq('status', oldStatus);
+          if (updateError) throw new Error(updateError.message);
+          remapped += breakdown.find((b) => b.status === oldStatus)?.count || 0;
+        }
+      }
+    }
+
     const assignment = await upsertAssignment(
       (req.params.id as string),
       entity_type,
       entity_id,
       (req as any).userId,
     );
-    res.status(201).json({ success: true, data: assignment });
+    refreshTaskOverrides();
+    res.status(201).json({ success: true, data: assignment, remapped_tasks: remapped });
   } catch (err) {
     if (zodErr(err, res)) return;
     console.error('Apply status group error:', err);
