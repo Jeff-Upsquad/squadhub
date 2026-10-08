@@ -521,6 +521,8 @@ export default function QuickAdd() {
     setLoginError('');
     // Assignee starts empty — the circle next to the pill self-assigns.
     setAssigneeIds([]);
+    // Type starts empty too — never carry over the previous pick.
+    setTaskTypeId(null);
     setTypeSearch('');
     setTypeHi(0);
     setStatusSearch('');
@@ -627,17 +629,14 @@ export default function QuickAdd() {
     };
   }, [selectedList?.id]);
 
-  // Load task types once per app run; default to the workspace default type.
+  // Load task types once per app run; type starts empty (user picks it).
   useEffect(() => {
     let alive = true;
     fetchTaskTypes()
       .then((types) => {
         if (!alive) return;
         setTaskTypes(types);
-        setTaskTypeId((cur) => {
-          if (cur && types.some((t) => t.id === cur)) return cur;
-          return types.find((t) => t.is_default)?.id ?? types[0]?.id ?? null;
-        });
+        setTaskTypeId((cur) => (cur && types.some((t) => t.id === cur) ? cur : null));
       })
       .catch(() => {
         if (alive) setTaskTypes([]);
