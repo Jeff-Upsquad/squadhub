@@ -72,6 +72,8 @@ function isDueToday(t: Task): boolean {
   return formatWhen(t.due_date).state === 'today';
 }
 
+export const NO_FOLDER_KEY = '__none__';
+
 type Sub = { key: string; name: string; color: string; tasks: Task[]; showHead: boolean };
 type Card = { key: string; name: string; subs: Sub[] };
 
@@ -81,6 +83,9 @@ export default function TaskOverview({
   lists,
   listFilter,
   onListFilter,
+  folders,
+  folderFilter = 'all',
+  onFolderFilter,
   scopeKey,
   statusFallback,
   loading,
@@ -89,9 +94,14 @@ export default function TaskOverview({
   title: string;
   /** Every task in scope (subtasks included; only top-level rows render). */
   tasks: Task[];
-  lists: { id: string; name: string }[];
+  lists: { id: string; name: string; folderId?: string | null }[];
   listFilter: string;
   onListFilter: (id: string) => void;
+  /** Space pages: folder chips narrow the list chips + tasks below. */
+  folders?: { id: string; name: string }[];
+  /** `'all'`, a folder id, or NO_FOLDER_KEY for lists directly in the space. */
+  folderFilter?: string;
+  onFolderFilter?: (id: string) => void;
   /** Persists group / order / filters / collapsed cards, e.g. `space:<id>`. */
   scopeKey: string;
   statusFallback: SpaceStatus[];
@@ -175,10 +185,21 @@ export default function TaskOverview({
   };
   const sectionOf = (t: Task) => placeOf(t).status?.group || null;
 
+  const visibleLists = useMemo(
+    () => (folderFilter === 'all' ? lists : lists.filter((l) => (l.folderId ?? NO_FOLDER_KEY) === folderFilter)),
+    [lists, folderFilter],
+  );
+  const hasDirectLists = lists.some((l) => !l.folderId);
   const top = useMemo(() => tasks.filter((t) => !t.parent_task_id), [tasks]);
+  // Tasks in the selected folder (or every task when no folder is picked).
+  const scoped = useMemo(() => {
+    if (folderFilter === 'all') return top;
+    const ids = new Set(visibleLists.map((l) => l.id));
+    return top.filter((t) => !!t.list?.id && ids.has(t.list.id));
+  }, [top, folderFilter, visibleLists]);
   const pool = useMemo(
-    () => top.filter((t) => listFilter === 'all' || t.list?.id === listFilter),
-    [top, listFilter],
+    () => scoped.filter((t) => listFilter === 'all' || t.list?.id === listFilter),
+    [scoped, listFilter],
   );
   const openPool = pool.filter((t) => !isDone(t));
   const urgent = openPool.filter((t) => t.priority === 'emergency' || t.priority === 'urgent');
@@ -294,18 +315,18 @@ export default function TaskOverview({
   const filterCount = (filters.priorities?.length ?? 0) + (filters.assigneeIds?.length ? 1 : 0) + (filters.hasDueDate ? 1 : 0);
 
   // ---- Summary ------------------------------------------------------------
-  const listsInScope = listFilter === 'all' ? `${lists.length} ${lists.length === 1 ? 'list' : 'lists'}` : (lists.find((l) => l.id === listFilter)?.name || 'this list');
+  const listsInScope = listFilter === 'all' ? `${visibleLists.length} ${visibleLists.length === 1 ? 'list' : 'lists'}` : (lists.find((l) => l.id === listFilter)?.name || 'this list');
   const lead = overdue[0] || urgent[0];
   const summary = `You have ${openPool.length} open ${openPool.length === 1 ? 'task' : 'tasks'} across ${listsInScope}`
     + (urgent.length ? `, ${urgent.length} marked urgent.` : '.')
     + (lead ? ` ${lead.title} is ${isTaskOverdue(lead) ? 'overdue' : 'due today'}.` : '');
 
   const tiles: { key: TileKey; name: string; value: number; sub: string; dot: string }[] = [
-    { key: 'all', name: 'All open', value: openPool.length, sub: 'tasks', dot: '#B7BCC0' },
-    { key: 'not_started', name: 'Not started', value: openPool.filter((t) => sectionOf(t) === 'not_started').length, sub: 'tasks', dot: '#B7BCC0' },
-    { key: 'active', name: 'Active', value: openPool.filter((t) => sectionOf(t) === 'in_motion').length, sub: 'in progress', dot: '#39C66B' },
-    { key: 'urgent', name: 'Urgent', value: urgent.length, sub: 'need you', dot: '#FF453A' },
     { key: 'due', name: 'Due today', value: dueNow.length, sub: `${overdue.length} overdue`, dot: '#FFB340' },
+    { key: 'urgent', name: 'Urgent', value: urgent.length, sub: 'need you', dot: '#FF453A' },
+    { key: 'active', name: 'Active', value: openPool.filter((t) => sectionOf(t) === 'in_motion').length, sub: 'in progress', dot: '#39C66B' },
+    { key: 'not_started', name: 'Not started', value: openPool.filter((t) => sectionOf(t) === 'not_started').length, sub: 'tasks', dot: '#B7BCC0' },
+    { key: 'all', name: 'All open', value: openPool.length, sub: 'tasks', dot: '#B7BCC0' },
   ];
 
   const sel = selId ? top.find((t) => t.id === selId) || null : null;
@@ -473,10 +494,37 @@ export default function TaskOverview({
             ))}
           </div>
 
+          {/* Folder chips (Space pages) — narrow the list chips + tasks */}
+          {folders && folders.length > 0 && onFolderFilter && (
+            <div className="tov-chips tov-folders">
+              <span className="tov-folders-lbl">Folders</span>
+              {[
+                { id: 'all', name: 'All folders', count: top.length },
+                ...folders.map((f) => {
+                  const ids = new Set(lists.filter((l) => l.folderId === f.id).map((l) => l.id));
+                  return { id: f.id, name: f.name, count: top.filter((t) => !!t.list?.id && ids.has(t.list.id)).length };
+                }),
+                ...(hasDirectLists ? [{
+                  id: NO_FOLDER_KEY,
+                  name: 'No folder',
+                  count: (() => {
+                    const ids = new Set(lists.filter((l) => !l.folderId).map((l) => l.id));
+                    return top.filter((t) => !!t.list?.id && ids.has(t.list.id)).length;
+                  })(),
+                }] : []),
+              ].map((f) => (
+                <button key={f.id} type="button" className="tov-chip" data-on={folderFilter === f.id || undefined} onClick={() => onFolderFilter(f.id)}>
+                  <span>{f.name}</span>
+                  <span className="tov-chip-count">{f.count}</span>
+                </button>
+              ))}
+            </div>
+          )}
+
           {/* List chips + Group / Filter / view switch */}
           <div className="tov-toolbar">
             <div className="tov-chips">
-              {[{ id: 'all', name: 'All lists', count: top.length }, ...lists.map((l) => ({ id: l.id, name: l.name, count: top.filter((t) => t.list?.id === l.id).length }))].map((l) => (
+              {[{ id: 'all', name: 'All lists', count: scoped.length }, ...visibleLists.map((l) => ({ id: l.id, name: l.name, count: top.filter((t) => t.list?.id === l.id).length }))].map((l) => (
                 <button key={l.id} type="button" className="tov-chip" data-on={listFilter === l.id || undefined} onClick={() => onListFilter(l.id)}>
                   <span>{l.name}</span>
                   <span className="tov-chip-count">{l.count}</span>
