@@ -19,12 +19,20 @@ export default function SpacePage({ spacePageId: propSpacePageId }: { spacePageI
   const activeSpacePageId = propSpacePageId ?? storeSpacePageId;
   const setContextListId = usePMStore((s) => s.setContextListId);
   const [listFilter, setListFilter] = useState<string>('all');
+  const [folderFilter, setFolderFilter] = useState<string>('all');
 
   const { data: space } = useSpace(activeSpacePageId) as { data: SpaceWithChildren | undefined };
 
   useEffect(() => {
     setListFilter('all');
+    setFolderFilter('all');
   }, [activeSpacePageId]);
+
+  // Picking a folder clears a list pick that may sit outside it.
+  const pickFolder = (id: string) => {
+    setFolderFilter(id);
+    setListFilter('all');
+  };
 
   // New tasks created from this page land in the selected list.
   useEffect(() => {
@@ -99,9 +107,12 @@ export default function SpacePage({ spacePageId: propSpacePageId }: { spacePageI
       <TaskOverview
         title={space?.name || 'Space'}
         tasks={allTasks}
-        lists={allLists.map((l) => ({ id: l.id, name: l.name }))}
+        lists={allLists.map((l) => ({ id: l.id, name: l.name, folderId: l.folder?.id ?? null }))}
         listFilter={listFilter}
         onListFilter={setListFilter}
+        folders={(space?.folders ?? []).map((f) => ({ id: f.id, name: f.name }))}
+        folderFilter={folderFilter}
+        onFolderFilter={pickFolder}
         scopeKey={`space:${activeSpacePageId}`}
         statusFallback={spaceStatuses}
         loading={isLoading}

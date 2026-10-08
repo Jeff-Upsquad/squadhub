@@ -98,6 +98,7 @@
 }
 .tov-chip:hover { transform: translateY(-1px); box-shadow: 0 6px 16px rgba(0, 0, 0, .08); }
 .tov-chip[data-on] { background: var(--tov-ink); color: var(--tov-card); border-color: var(--tov-ink); }
+.tov-folders-lbl { font: 600 11px 'Inter', sans-serif; letter-spacing: .04em; text-transform: uppercase; color: var(--tov-ink-3); margin-right: 4px; }
 .tov-chip-count { font-variant-numeric: tabular-nums; opacity: .55; }
 .tov-menu-root { position: relative; }
 .tov-ctl {
