@@ -1,5 +1,5 @@
 import type { Task, TaskType } from '@squadhub/shared';
-import { getTaskStatusCategory } from '@squadhub/shared';
+import { getTaskStatusCategory, getTaskStatusDef } from '@squadhub/shared';
 
 // Sentinel for callers that genuinely have no fading state to thread through
 // (e.g., exports, server-side rendering, tests). Real UI callers must pass the
@@ -307,13 +307,22 @@ export function groupByStatus(
     let label: string;
     let sort: number | string;
     if (s && typeof s === 'object') {
-      key = s.id || s.name || '__none__';
+      const rawKey = s.id || s.name || '__none__';
+      // UUIDs stay exact; status keys/names collapse case-insensitively so
+      // 'Open' vs 'OPEN' never fork a second bucket from dirty data.
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(rawKey);
+      key = isUuid ? rawKey : rawKey.toLowerCase().trim() || '__none__';
       label = s.name || 'No status';
       sort = typeof s.position === 'number' ? s.position : (s.name || '').toLowerCase();
     } else if (typeof s === 'string' && s) {
-      key = s;
-      label = s.charAt(0).toUpperCase() + s.slice(1);
-      sort = s;
+      const trimmed = s.trim();
+      const lower = trimmed.toLowerCase();
+      // Merge casing variants ('OPEN' + 'open') into one bucket. Prefer the
+      // catalog label ('OPEN') when known so headers stay consistent.
+      const def = getTaskStatusDef(lower) || getTaskStatusDef(trimmed);
+      key = def?.key || lower || '__none__';
+      label = def?.label || (trimmed.charAt(0).toUpperCase() + trimmed.slice(1));
+      sort = lower;
     } else {
       key = '__none__';
       label = 'No status';
