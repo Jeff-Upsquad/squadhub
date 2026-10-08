@@ -5,6 +5,7 @@ import { requireAdmin } from '../middleware/admin';
 import { supabaseAdmin } from '../supabase';
 import {
   getGroupStatuses,
+  getGroupSections,
   syncSpaceToGroup,
   syncAllSpacesForGroup,
   upsertAssignment,
@@ -28,12 +29,19 @@ const slugRegex = /^[a-z][a-z0-9_]*$/;
 const CATEGORIES = ['todo', 'active', 'done', 'closed'] as const;
 const ENTITY_TYPES = ['space', 'folder', 'list', 'template'] as const;
 
+const sectionSchema = z.object({
+  key: z.string().min(1).max(64).regex(slugRegex),
+  label: z.string().trim().min(1).max(100),
+  emoji: z.string().max(16),
+});
 const groupCreateSchema = z.object({
   key: z.string().min(1).max(64).regex(slugRegex, 'Key must be lowercase letters, numbers and underscores'),
   name: z.string().min(1).max(100),
   description: z.string().nullable().optional(),
   icon: z.string().max(64).optional(),
   color: z.string().max(16).optional(),
+  base_group_id: z.string().uuid().nullable().optional(),
+  custom_sections: z.array(sectionSchema).max(50).optional(),
 });
 
 const groupUpdateSchema = z.object({
@@ -41,6 +49,8 @@ const groupUpdateSchema = z.object({
   description: z.string().nullable().optional(),
   icon: z.string().max(64).optional(),
   color: z.string().max(16).optional(),
+  base_group_id: z.string().uuid().nullable().optional(),
+  custom_sections: z.array(sectionSchema).max(50).optional(),
 });
 
 const statusCreateSchema = z.object({
@@ -113,39 +123,25 @@ router.get('/', async (_req: Request, res: Response) => {
       .order('position', { ascending: true })
       .order('created_at', { ascending: true });
     if (error) {
-      res.status(500).json({ success: false, error: error.message });
+      res.status(error.code === 'P0001' ? 400 : 500).json({ success: false, error: error.message });
       return;
     }
 
-    const { data: statuses } = await supabaseAdmin
-      .from('status_group_statuses')
-      .select('*')
-      .order('position', { ascending: true });
-
-    const { data: assignments } = await supabaseAdmin
-      .from('status_group_assignments')
-      .select('id, group_id, entity_type, entity_id');
-
-    const statusesByGroup = new Map<string, any[]>();
-    for (const s of statuses || []) {
-      const list = statusesByGroup.get(s.group_id) || [];
-      list.push({
-        ...s,
-        is_system: isSystemStatus(s),
-      });
-      statusesByGroup.set(s.group_id, list);
-    }
+    const { data: assignments, error: assignmentError } = await supabaseAdmin
+      .from('status_group_assignments').select('id, group_id, entity_type, entity_id');
+    if (assignmentError) throw new Error(assignmentError.message);
 
     const usageByGroup = new Map<string, number>();
     for (const a of assignments || []) {
       usageByGroup.set(a.group_id, (usageByGroup.get(a.group_id) || 0) + 1);
     }
 
-    const result = (groups || []).map((g: any) => ({
+    const result = await Promise.all((groups || []).map(async (g: any) => ({
       ...g,
-      statuses: statusesByGroup.get(g.id) || [],
+      statuses: await getGroupStatuses(g.id),
+      effective_sections: await getGroupSections(g),
       usage_count: usageByGroup.get(g.id) || 0,
-    }));
+    })));
 
     res.json({ success: true, data: result });
   } catch (err) {
@@ -161,6 +157,13 @@ router.post('/', async (req: Request, res: Response) => {
   try {
     const body = groupCreateSchema.parse(req.body);
 
+    if (body.base_group_id) {
+      const base = await getGroup(body.base_group_id);
+      if (!base || base.key !== 'task_workflow') {
+        res.status(400).json({ success: false, error: 'Primary group must be Default Task Statuses' });
+        return;
+      }
+    }
     const { data: maxRow } = await supabaseAdmin
       .from('status_groups')
       .select('position')
@@ -174,21 +177,23 @@ router.post('/', async (req: Request, res: Response) => {
       .insert({
         key: body.key,
         name: body.name,
-        description: body.description ?? null,
+        description: body.description ?? '',
         icon: body.icon || 'flag',
         color: body.color || '#6b7280',
         position: nextPos,
+        base_group_id: body.base_group_id || null,
+        custom_sections: body.custom_sections || [],
       })
       .select()
       .single();
 
     if (error) {
-      const status = error.code === '23505' ? 409 : 500;
+      const status = error.code === '23505' ? 409 : error.code === 'P0001' ? 400 : 500;
       res.status(status).json({ success: false, error: error.message });
       return;
     }
 
-    res.status(201).json({ success: true, data: { ...data, statuses: [], usage_count: 0 } });
+    res.status(201).json({ success: true, data: { ...data, statuses: await getGroupStatuses(data.id), usage_count: 0 } });
   } catch (err) {
     if (zodErr(err, res)) return;
     console.error('Create status group error:', err);
@@ -210,7 +215,7 @@ router.put('/reorder', async (req: Request, res: Response) => {
         .update({ position: item.position })
         .eq('id', item.id);
       if (error) {
-        res.status(500).json({ success: false, error: error.message });
+        res.status(error.code === 'P0001' ? 400 : 500).json({ success: false, error: error.message });
         return;
       }
     }
@@ -324,7 +329,7 @@ router.get('/templates', async (_req: Request, res: Response) => {
       .select('id, slug, name, category, is_enabled')
       .order('name');
     if (error) {
-      res.status(500).json({ success: false, error: error.message });
+      res.status(error.code === 'P0001' ? 400 : 500).json({ success: false, error: error.message });
       return;
     }
     const ids = (templates || []).map((t: any) => t.id);
@@ -366,7 +371,7 @@ router.get('/:id/usage', async (req: Request, res: Response) => {
       .eq('group_id', (req.params.id as string))
       .order('created_at', { ascending: false });
     if (error) {
-      res.status(500).json({ success: false, error: error.message });
+      res.status(error.code === 'P0001' ? 400 : 500).json({ success: false, error: error.message });
       return;
     }
 
@@ -438,11 +443,37 @@ router.put('/:id', async (req: Request, res: Response) => {
       res.status(404).json({ success: false, error: 'Status group not found' });
       return;
     }
+    if (body.base_group_id !== undefined) {
+      const base = body.base_group_id ? await getGroup(body.base_group_id) : null;
+      if (group.key === 'task_workflow' || (body.base_group_id && base?.key !== 'task_workflow')) {
+        res.status(400).json({ success: false, error: 'Primary group must be Default Task Statuses' });
+        return;
+      }
+      if (base) {
+        const inherited = await getGroupStatuses(base.id);
+        const local = (await getGroupStatuses(group.id)).filter((s: any) => s.group_id === group.id);
+        if (local.some((s: any) => inherited.some((b: any) => (s.key && s.key === b.key) || s.name.toLowerCase() === b.name.toLowerCase()))) {
+          res.status(409).json({ success: false, error: 'Remove or rename conflicting local statuses before linking this group' });
+          return;
+        }
+      }
+    }
+    if (body.custom_sections) {
+      const baseId = body.base_group_id !== undefined ? body.base_group_id : group.base_group_id;
+      const inheritedSections = baseId ? await getGroupSections(await getGroup(baseId)) : [];
+      const keys = [...inheritedSections, ...body.custom_sections].map((s: any) => s.key);
+      if (new Set(keys).size !== keys.length) {
+        res.status(400).json({ success: false, error: 'Section keys must be unique' });
+        return;
+      }
+    }
     const patch: Record<string, any> = {};
     if (body.name !== undefined) patch.name = body.name;
-    if (body.description !== undefined) patch.description = body.description;
+    if (body.description !== undefined) patch.description = body.description ?? '';
     if (body.icon !== undefined) patch.icon = body.icon;
     if (body.color !== undefined) patch.color = body.color;
+    if (body.base_group_id !== undefined) patch.base_group_id = body.base_group_id;
+    if (body.custom_sections !== undefined) patch.custom_sections = body.custom_sections;
 
     const { data, error } = await supabaseAdmin
       .from('status_groups')
@@ -451,9 +482,11 @@ router.put('/:id', async (req: Request, res: Response) => {
       .select()
       .single();
     if (error) {
-      res.status(500).json({ success: false, error: error.message });
+      res.status(error.code === 'P0001' ? 400 : 500).json({ success: false, error: error.message });
       return;
     }
+    refreshTaskOverrides();
+    await syncAllSpacesForGroup(group.id);
     res.json({ success: true, data });
   } catch (err) {
     if (zodErr(err, res)) return;
@@ -471,6 +504,10 @@ router.put('/:id/enabled', async (req: Request, res: Response) => {
       res.status(404).json({ success: false, error: 'Status group not found' });
       return;
     }
+    if (group.key === 'task_workflow' && !is_enabled) {
+      res.status(400).json({ success: false, error: 'Default Task Statuses must remain enabled' });
+      return;
+    }
     const { data, error } = await supabaseAdmin
       .from('status_groups')
       .update({ is_enabled })
@@ -478,7 +515,7 @@ router.put('/:id/enabled', async (req: Request, res: Response) => {
       .select()
       .single();
     if (error) {
-      res.status(500).json({ success: false, error: error.message });
+      res.status(error.code === 'P0001' ? 400 : 500).json({ success: false, error: error.message });
       return;
     }
     refreshTaskOverrides();
@@ -498,7 +535,10 @@ router.put('/:id/default', async (req: Request, res: Response) => {
       res.status(404).json({ success: false, error: 'Status group not found' });
       return;
     }
-    await supabaseAdmin.from('status_groups').update({ is_default: false }).eq('is_default', true);
+    if (group.key !== 'task_workflow') {
+      res.status(400).json({ success: false, error: 'Default Task Statuses is the system default. Use it as the primary group instead.' });
+      return;
+    }
     const { data, error } = await supabaseAdmin
       .from('status_groups')
       .update({ is_default: true })
@@ -506,7 +546,7 @@ router.put('/:id/default', async (req: Request, res: Response) => {
       .select()
       .single();
     if (error) {
-      res.status(500).json({ success: false, error: error.message });
+      res.status(error.code === 'P0001' ? 400 : 500).json({ success: false, error: error.message });
       return;
     }
     res.json({ success: true, data });
@@ -535,7 +575,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
     // Assignments cascade via FK; applied spaces keep their cloned space_statuses.
     const { error } = await supabaseAdmin.from('status_groups').delete().eq('id', (req.params.id as string));
     if (error) {
-      res.status(500).json({ success: false, error: error.message });
+      res.status(error.code === 'P0001' ? 400 : 500).json({ success: false, error: error.message });
       return;
     }
     refreshTaskOverrides();
@@ -565,8 +605,16 @@ router.post('/:id/statuses', async (req: Request, res: Response) => {
       : 0;
 
     const rawSlug = slugify(body.name);
-    const canonicalKey = body.key || (isSystemStatusKey(rawSlug) ? rawSlug : rawSlug);
-    const isSystem = isSystemStatusKey(canonicalKey);
+    const canonicalKey = body.key || rawSlug;
+    const isSystem = group.key === 'task_workflow' || isSystemStatusKey(canonicalKey);
+    if (existing.some((s: any) => s.key === canonicalKey || s.name.toLowerCase() === body.name.toLowerCase())) {
+      res.status(409).json({ success: false, error: 'A local or inherited status with this name or key already exists' });
+      return;
+    }
+    if (group.base_group_id && body.is_default) {
+      res.status(400).json({ success: false, error: 'The primary group owns the initial status' });
+      return;
+    }
     const preset = isSystem ? SYSTEM_STATUS_PRESETS.find((p) => p.key === canonicalKey) : null;
 
     const { data, error } = await supabaseAdmin
@@ -578,7 +626,8 @@ router.post('/:id/statuses', async (req: Request, res: Response) => {
         description: body.description ?? preset?.description ?? null,
         color: body.color || preset?.color || '#6b7280',
         category: body.category || preset?.category || 'todo',
-        is_default: body.is_default ?? existing.length === 0,
+        is_default: group.base_group_id ? false : (body.is_default ?? existing.length === 0),
+        is_system: isSystem,
         position: nextPos,
         section: body.section || preset?.section || null,
         section_label: body.section_label ?? preset?.section_label ?? null,
@@ -587,7 +636,7 @@ router.post('/:id/statuses', async (req: Request, res: Response) => {
       .select()
       .single();
     if (error) {
-      const status = error.code === '23505' ? 409 : 500;
+      const status = error.code === '23505' ? 409 : error.code === 'P0001' ? 400 : 500;
       res.status(status).json({
         success: false,
         error: error.code === '23505' ? 'A status with this name already exists in the group' : error.message,
@@ -608,6 +657,11 @@ router.post('/:id/statuses', async (req: Request, res: Response) => {
 router.put('/:id/statuses/reorder', async (req: Request, res: Response) => {
   try {
     const { items } = reorderSchema.parse(req.body);
+    const local = (await getGroupStatuses(req.params.id as string)).filter((s: any) => s.group_id === req.params.id);
+    if (items.some((item) => !local.some((s: any) => s.id === item.id))) {
+      res.status(400).json({ success: false, error: 'Inherited statuses must be reordered in Default Task Statuses' });
+      return;
+    }
     for (const item of items) {
       const { error } = await supabaseAdmin
         .from('status_group_statuses')
@@ -615,7 +669,7 @@ router.put('/:id/statuses/reorder', async (req: Request, res: Response) => {
         .eq('id', item.id)
         .eq('group_id', (req.params.id as string));
       if (error) {
-        res.status(500).json({ success: false, error: error.message });
+        res.status(error.code === 'P0001' ? 400 : 500).json({ success: false, error: error.message });
         return;
       }
     }
@@ -642,12 +696,17 @@ router.put('/:id/statuses/:statusId', async (req: Request, res: Response) => {
       res.status(404).json({ success: false, error: 'Status not found' });
       return;
     }
-    if (isSystemStatus(existing as any)) {
+    const group = await getGroup(req.params.id as string);
+    if (group?.key !== 'task_workflow' && isSystemStatus(existing as any)) {
       res.status(400).json({ success: false, error: 'System default status cannot be edited or changed' });
       return;
     }
 
     const body = statusUpdateSchema.parse(req.body);
+    if (group?.base_group_id && body.is_default) {
+      res.status(400).json({ success: false, error: 'The primary group owns the initial status' });
+      return;
+    }
     const patch: Record<string, any> = {};
     if (body.name !== undefined) patch.name = body.name;
     if (body.color !== undefined) patch.color = body.color;
@@ -667,7 +726,7 @@ router.put('/:id/statuses/:statusId', async (req: Request, res: Response) => {
       .select()
       .single();
     if (error) {
-      res.status(500).json({ success: false, error: error.message });
+      res.status(error.code === 'P0001' ? 400 : 500).json({ success: false, error: error.message });
       return;
     }
     if (!data) {
@@ -717,7 +776,7 @@ router.get('/:id/statuses/:statusId/usage', async (req: Request, res: Response) 
       .in('status', candidates);
 
     if (error) {
-      res.status(500).json({ success: false, error: error.message });
+      res.status(error.code === 'P0001' ? 400 : 500).json({ success: false, error: error.message });
       return;
     }
 
@@ -746,11 +805,17 @@ router.delete('/:id/statuses/:statusId', async (req: Request, res: Response) => 
       res.status(404).json({ success: false, error: 'Status not found' });
       return;
     }
-    if (isSystemStatus(existing as any)) {
+    const group = await getGroup(req.params.id as string);
+    if (group?.key !== 'task_workflow' && isSystemStatus(existing as any)) {
       res.status(400).json({ success: false, error: 'System default status cannot be deleted' });
       return;
     }
 
+    const remaining = await getGroupStatuses(groupId);
+    if (remaining.length <= 1) {
+      res.status(400).json({ success: false, error: 'Keep at least one status in the group' });
+      return;
+    }
     const candidates = Array.from(new Set([
       existing.key,
       existing.name,
@@ -760,11 +825,15 @@ router.delete('/:id/statuses/:statusId', async (req: Request, res: Response) => 
       existing.name?.toUpperCase(),
     ].filter(Boolean))) as string[];
 
-    const { count: taskCount } = await supabaseAdmin
+    const { count: taskCount, error: usageError } = await supabaseAdmin
       .from('tasks')
       .select('*', { count: 'exact', head: true })
       .in('status', candidates);
 
+    if (usageError) {
+      res.status(500).json({ success: false, error: 'Failed to check tasks using this status' });
+      return;
+    }
     if (taskCount && taskCount > 0) {
       if (!targetStatusId) {
         res.status(400).json({
@@ -775,19 +844,14 @@ router.delete('/:id/statuses/:statusId', async (req: Request, res: Response) => 
         return;
       }
 
-      const { data: targetStatus } = await supabaseAdmin
-        .from('status_group_statuses')
-        .select('id, key, name, group_id')
-        .eq('id', targetStatusId)
-        .eq('group_id', groupId)
-        .maybeSingle();
+      const targetStatus = (await getGroupStatuses(groupId)).find((s: any) => s.id === targetStatusId);
 
       if (!targetStatus || targetStatus.id === statusId) {
         res.status(400).json({ success: false, error: 'Invalid replacement status selected' });
         return;
       }
 
-      const replacementValue = targetStatus.name || targetStatus.key;
+      const replacementValue = targetStatus.key || targetStatus.name;
 
       const { error: updateError } = await supabaseAdmin
         .from('tasks')
@@ -878,7 +942,7 @@ router.delete('/:id/apply', async (req: Request, res: Response) => {
       .eq('entity_type', entity_type)
       .eq('entity_id', entity_id);
     if (error) {
-      res.status(500).json({ success: false, error: error.message });
+      res.status(error.code === 'P0001' ? 400 : 500).json({ success: false, error: error.message });
       return;
     }
     // Note: applied spaces keep their cloned space_statuses (boards don't shift).

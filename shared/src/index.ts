@@ -550,6 +550,8 @@ export interface StatusGroupStatus {
   section_label?: string | null;
   section_emoji?: string | null;
   is_system?: boolean;
+  /** Inherited rows retain their source group and are read-only in linked groups. */
+  is_inherited?: boolean;
 }
 
 /** Convert a managed task_workflow row into the catalog shape the picker renders. */
@@ -654,6 +656,12 @@ export interface TaskRelationship {
   created_by?: string;
 }
 
+export interface StatusGroupSection {
+  key: string;
+  label: string;
+  emoji: string;
+}
+
 export interface StatusGroup {
   id: string;
   key: string;
@@ -667,6 +675,9 @@ export interface StatusGroup {
   is_enabled: boolean;
   created_at: string;
   updated_at: string;
+  base_group_id?: string | null;
+  custom_sections?: StatusGroupSection[];
+  effective_sections?: StatusGroupSection[];
   statuses?: StatusGroupStatus[];
   usage_count?: number;
 }
