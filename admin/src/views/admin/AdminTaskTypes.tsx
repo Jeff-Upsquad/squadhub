@@ -2,14 +2,18 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../services/api';
-import type {
-  TaskType,
-  TaskTypeGroup,
-  TaskTypeField,
-  TaskFieldType,
-  TaskTypeFieldOption,
-  Role,
-  User,
+import {
+  type TaskType,
+  type TaskTypeGroup,
+  type TaskTypeField,
+  type TaskFieldType,
+  type TaskTypeFieldOption,
+  type Role,
+  type User,
+  GROUP_ORDER,
+  DEFAULT_TASK_TYPE_GROUPS,
+  TASK_TYPE_GROUP_EMOJIS,
+  getTaskTypeGroup,
 } from '@squadhub/shared';
 
 type SubTab = 'types' | 'apply' | 'usage' | 'templates';
@@ -406,6 +410,134 @@ function GroupMetaCard({ group, onChanged, onDelete }: { group: TaskTypeGroup; o
 }
 
 // ============================================================
+// RemoveTaskTypeModal — confirm removal with task reassignment
+// ============================================================
+function RemoveTaskTypeModal({
+  type,
+  group,
+  onClose,
+  onConfirm,
+  isPending,
+}: {
+  type: TaskType;
+  group: TaskTypeGroup;
+  onClose: () => void;
+  onConfirm: (targetTypeId?: string) => void;
+  isPending: boolean;
+}) {
+  const [selectedTargetId, setSelectedTargetId] = useState<string>('');
+
+  const usageQuery = useQuery({
+    queryKey: ['task-type-usage', group.id, type.id],
+    queryFn: () => api.get(`/admin/task-type-groups/${group.id}/types/${type.id}/usage`).then((r) => r.data),
+  });
+
+  const count: number = usageQuery.data?.count ?? 0;
+  const availableReplacements = (group.task_types || []).filter((t) => t.id !== type.id);
+
+  useEffect(() => {
+    if (!selectedTargetId && availableReplacements.length > 0) {
+      const defaultType = availableReplacements.find((t) => t.is_default);
+      setSelectedTargetId(defaultType ? defaultType.id : availableReplacements[0].id);
+    }
+  }, [availableReplacements, selectedTargetId]);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div
+        className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+        onClick={() => !isPending && onClose()}
+      />
+      <div className="relative w-full max-w-md rounded-xl border border-divider bg-surface p-6 shadow-2xl">
+        <div className="flex items-start gap-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-red-100 text-red-600 dark:bg-red-950/40 dark:text-red-400">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M3 6h18" />
+              <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
+              <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
+              <line x1="10" y1="11" x2="10" y2="17" />
+              <line x1="14" y1="11" x2="14" y2="17" />
+            </svg>
+          </div>
+          <div className="flex-1 min-w-0">
+            <h3 className="text-base font-semibold text-foreground">Remove Task Type</h3>
+            <div className="mt-1 flex items-center gap-2">
+              <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ backgroundColor: type.color || '#94A3B8' }} />
+              <span className="text-sm font-medium text-foreground truncate">{type.name}</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-4">
+          {usageQuery.isLoading ? (
+            <div className="flex items-center gap-2 py-4 text-xs text-foreground-dim">
+              <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+              Checking tasks using this type…
+            </div>
+          ) : usageQuery.isError ? (
+            <div className="rounded-lg bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900 p-3 text-xs text-red-600 dark:text-red-400">
+              Failed to check task usage.
+            </div>
+          ) : count > 0 ? (
+            <div className="space-y-3">
+              <div className="rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/60 p-3">
+                <p className="text-xs font-semibold text-amber-800 dark:text-amber-300">
+                  ⚠️ {count} {count === 1 ? 'task currently has' : 'tasks currently have'} this task type in places where this group is applied.
+                </p>
+                <p className="mt-1 text-xs text-amber-700/90 dark:text-amber-400/90">
+                  Select another task type to move {count === 1 ? 'this task' : 'these tasks'} to before removing:
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-foreground-dim mb-1.5">
+                  Change {count === 1 ? 'task' : 'tasks'} to:
+                </label>
+                <select
+                  value={selectedTargetId}
+                  onChange={(e) => setSelectedTargetId(e.target.value)}
+                  disabled={isPending}
+                  className="w-full rounded-lg border border-divider bg-surface px-3 py-2 text-sm text-foreground focus:border-ink focus:outline-none"
+                >
+                  {availableReplacements.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name} ({getTaskTypeGroup(t)})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          ) : (
+            <p className="text-sm text-foreground-dim">
+              Are you sure you want to remove <span className="font-semibold text-foreground">“{type.name}”</span> from group <span className="font-semibold text-foreground">“{group.name}”</span>? The task type will remain in the catalog.
+            </p>
+          )}
+        </div>
+
+        <div className="mt-6 flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={isPending}
+            className="rounded-lg border border-divider px-3.5 py-1.5 text-xs font-medium text-foreground-dim hover:text-foreground disabled:opacity-50 cursor-pointer"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            disabled={isPending || usageQuery.isLoading || usageQuery.isError || (count > 0 && !selectedTargetId)}
+            onClick={() => onConfirm(count > 0 ? selectedTargetId : undefined)}
+            className="rounded-lg bg-red-600 px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-red-700 disabled:opacity-50 cursor-pointer"
+          >
+            {isPending ? 'Removing…' : count > 0 ? 'Change Task Type & Remove' : 'Remove from Group'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
 // TypesCard — manage task types in the group
 // ============================================================
 function TypesCard({
@@ -427,10 +559,51 @@ function TypesCard({
   const [newDesc, setNewDesc] = useState('');
   const [newColor, setNewColor] = useState('#6b7280');
   const [newIcon, setNewIcon] = useState('check-square');
+  const [newGroupName, setNewGroupName] = useState('Task Types');
+  const [isCustomGroup, setIsCustomGroup] = useState(false);
+  const [customGroupName, setCustomGroupName] = useState('');
+  const [typePendingRemove, setTypePendingRemove] = useState<TaskType | null>(null);
 
   const types: TaskType[] = group.task_types || [];
   const existingIdsInGroup = new Set(types.map((t) => t.id));
   const availableToPick = allTypes.filter((t) => !existingIdsInGroup.has(t.id));
+
+  const availableGroupNames = useMemo(() => {
+    const set = new Set<string>(GROUP_ORDER);
+    for (const t of allTypes) {
+      if (t.group_name) set.add(t.group_name);
+    }
+    return Array.from(set);
+  }, [allTypes]);
+
+  const groupedTypes = useMemo(() => {
+    const map = new Map<string, TaskType[]>();
+    for (const t of types) {
+      const g = getTaskTypeGroup(t);
+      const list = map.get(g) || [];
+      list.push(t);
+      map.set(g, list);
+    }
+    const result: { groupName: string; emoji: string; items: TaskType[] }[] = [];
+    for (const gName of GROUP_ORDER) {
+      if (map.has(gName)) {
+        result.push({
+          groupName: gName,
+          emoji: TASK_TYPE_GROUP_EMOJIS[gName] || '📋',
+          items: map.get(gName)!,
+        });
+        map.delete(gName);
+      }
+    }
+    for (const [gName, items] of map.entries()) {
+      result.push({
+        groupName: gName,
+        emoji: TASK_TYPE_GROUP_EMOJIS[gName] || '📋',
+        items,
+      });
+    }
+    return result;
+  }, [types]);
 
   const addType = useMutation({
     mutationFn: (body: any) => api.post(`/admin/task-type-groups/${group.id}/types`, body),
@@ -442,13 +615,22 @@ function TypesCard({
       setNewName('');
       setNewKey('');
       setNewDesc('');
+      setNewGroupName('Task Types');
+      setIsCustomGroup(false);
+      setCustomGroupName('');
     },
     onError: (err: any) => alert(err?.response?.data?.error || 'Failed to add task type'),
   });
 
   const removeType = useMutation({
-    mutationFn: (typeId: string) => api.delete(`/admin/task-type-groups/${group.id}/types/${typeId}`),
-    onSuccess: onChanged,
+    mutationFn: (args: { typeId: string; targetTypeId?: string }) =>
+      api.delete(`/admin/task-type-groups/${group.id}/types/${args.typeId}`, {
+        data: args.targetTypeId ? { target_task_type_id: args.targetTypeId } : undefined,
+      }),
+    onSuccess: () => {
+      onChanged();
+      setTypePendingRemove(null);
+    },
     onError: (err: any) => alert(err?.response?.data?.error || 'Failed to remove task type'),
   });
 
@@ -464,12 +646,16 @@ function TypesCard({
     onSuccess: onChanged,
   });
 
-  function move(index: number, direction: -1 | 1) {
-    const nextIdx = index + direction;
-    if (nextIdx < 0 || nextIdx >= types.length) return;
+  function moveInGroup(groupItems: TaskType[], indexInGroup: number, direction: -1 | 1) {
+    const nextIdx = indexInGroup + direction;
+    if (nextIdx < 0 || nextIdx >= groupItems.length) return;
+    const current = groupItems[indexInGroup];
+    const target = groupItems[nextIdx];
     const reordered = [...types];
-    const [moved] = reordered.splice(index, 1);
-    reordered.splice(nextIdx, 0, moved);
+    const idxA = reordered.findIndex((t) => t.id === current.id);
+    const idxB = reordered.findIndex((t) => t.id === target.id);
+    if (idxA === -1 || idxB === -1) return;
+    [reordered[idxA], reordered[idxB]] = [reordered[idxB], reordered[idxA]];
     reorderTypes.mutate(reordered.map((t, idx) => ({ id: t.id, position: idx })));
   }
 
@@ -490,87 +676,92 @@ function TypesCard({
         </button>
       </div>
 
-      {/* Task Types List */}
-      <div className="space-y-1.5">
-        {types.map((t, idx) => (
-          <div
-            key={t.id}
-            className="flex items-center justify-between rounded-lg border border-divider bg-surface px-3 py-2 text-sm"
-          >
-            <div className="flex items-center gap-3 min-w-0">
-              <span className="h-3 w-3 rounded-full shrink-0" style={{ background: t.color }} />
-              <div className="min-w-0">
-                <div className="flex items-center gap-2">
-                  <span className="font-medium text-foreground truncate">{t.name}</span>
-                  <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] text-foreground-dim">
-                    {t.key}
-                  </code>
-                  {(t.fields || []).length > 0 && (
-                    <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium text-foreground-dim">
-                      {(t.fields || []).length} custom fields
-                    </span>
-                  )}
-                  {t.is_system && (
-                    <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-600">
-                      SYSTEM
-                    </span>
-                  )}
+      {/* Task Types Grouped List */}
+      <div className="space-y-4">
+        {groupedTypes.map((sec) => (
+          <div key={sec.groupName} className="space-y-1.5">
+            <div className="flex items-center gap-1.5 px-1 pt-2 text-[11px] font-semibold uppercase tracking-wider text-foreground-dim">
+              <span aria-hidden>{sec.emoji}</span>
+              <span>{sec.groupName}</span>
+              <span className="font-normal normal-case tracking-normal">({sec.items.length})</span>
+            </div>
+            {sec.items.map((t, itemIdx) => (
+              <div
+                key={t.id}
+                className="flex items-center justify-between rounded-lg border border-divider bg-surface px-3 py-2 text-sm"
+              >
+                <div className="flex items-center gap-3 min-w-0">
+                  <span className="h-3 w-3 rounded-full shrink-0" style={{ background: t.color }} />
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium text-foreground truncate">{t.name}</span>
+                      <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] text-foreground-dim">
+                        {t.key}
+                      </code>
+                      {(t.fields || []).length > 0 && (
+                        <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium text-foreground-dim">
+                          {(t.fields || []).length} custom fields
+                        </span>
+                      )}
+                      {t.is_system && (
+                        <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-600">
+                          SYSTEM
+                        </span>
+                      )}
+                    </div>
+                    {t.description && (
+                      <p className="truncate text-xs text-foreground-dim">{t.description}</p>
+                    )}
+                  </div>
                 </div>
-                {t.description && (
-                  <p className="truncate text-xs text-foreground-dim">{t.description}</p>
-                )}
+
+                <div className="flex items-center gap-2 shrink-0">
+                  {/* Order buttons (move within group) */}
+                  <button
+                    onClick={() => moveInGroup(sec.items, itemIdx, -1)}
+                    disabled={itemIdx === 0}
+                    className="rounded px-1.5 py-0.5 text-xs text-foreground-dim hover:text-foreground disabled:opacity-30 cursor-pointer"
+                    title="Move up"
+                  >
+                    ↑
+                  </button>
+                  <button
+                    onClick={() => moveInGroup(sec.items, itemIdx, 1)}
+                    disabled={itemIdx === sec.items.length - 1}
+                    className="rounded px-1.5 py-0.5 text-xs text-foreground-dim hover:text-foreground disabled:opacity-30 cursor-pointer"
+                    title="Move down"
+                  >
+                    ↓
+                  </button>
+
+                  {/* Enabled toggle */}
+                  <button
+                    onClick={() => toggleTypeEnabled.mutate({ id: t.id, is_enabled: !t.is_enabled })}
+                    className={`rounded px-2 py-0.5 text-xs font-medium border border-divider cursor-pointer ${
+                      t.is_enabled ? 'bg-emerald-50 text-emerald-700' : 'bg-muted text-foreground-dim'
+                    }`}
+                  >
+                    {t.is_enabled ? 'Active' : 'Disabled'}
+                  </button>
+
+                  {/* Edit full details & custom fields */}
+                  <button
+                    onClick={() => onEditType(t)}
+                    className="rounded border border-divider px-2 py-0.5 text-xs font-medium hover:bg-muted cursor-pointer"
+                  >
+                    Edit
+                  </button>
+
+                  {/* Remove from group */}
+                  <button
+                    onClick={() => setTypePendingRemove(t)}
+                    className="rounded border border-red-200 px-2 py-0.5 text-xs font-medium text-red-600 hover:bg-red-50 cursor-pointer"
+                  >
+                    Remove
+                  </button>
+                </div>
               </div>
-            </div>
-
-            <div className="flex items-center gap-2 shrink-0">
-              {/* Order buttons */}
-              <button
-                onClick={() => move(idx, -1)}
-                disabled={idx === 0}
-                className="rounded px-1.5 py-0.5 text-xs text-foreground-dim hover:text-foreground disabled:opacity-30"
-                title="Move up"
-              >
-                ↑
-              </button>
-              <button
-                onClick={() => move(idx, 1)}
-                disabled={idx === types.length - 1}
-                className="rounded px-1.5 py-0.5 text-xs text-foreground-dim hover:text-foreground disabled:opacity-30"
-                title="Move down"
-              >
-                ↓
-              </button>
-
-              {/* Enabled toggle */}
-              <button
-                onClick={() => toggleTypeEnabled.mutate({ id: t.id, is_enabled: !t.is_enabled })}
-                className={`rounded px-2 py-0.5 text-xs font-medium border border-divider ${
-                  t.is_enabled ? 'bg-emerald-50 text-emerald-700' : 'bg-muted text-foreground-dim'
-                }`}
-              >
-                {t.is_enabled ? 'Active' : 'Disabled'}
-              </button>
-
-              {/* Edit full details & custom fields */}
-              <button
-                onClick={() => onEditType(t)}
-                className="rounded border border-divider px-2 py-0.5 text-xs font-medium hover:bg-muted"
-              >
-                Edit
-              </button>
-
-              {/* Remove from group */}
-              <button
-                onClick={() => {
-                  if (confirm(`Remove “${t.name}” from group “${group.name}”? The task type will remain in the catalog.`)) {
-                    removeType.mutate(t.id);
-                  }
-                }}
-                className="rounded border border-red-200 px-2 py-0.5 text-xs font-medium text-red-600 hover:bg-red-50"
-              >
-                Remove
-              </button>
-            </div>
+            ))}
           </div>
         ))}
 
@@ -581,6 +772,19 @@ function TypesCard({
         )}
       </div>
 
+      {/* Remove Task Type Modal with replacement */}
+      {typePendingRemove && (
+        <RemoveTaskTypeModal
+          type={typePendingRemove}
+          group={group}
+          onClose={() => setTypePendingRemove(null)}
+          onConfirm={(targetTypeId) =>
+            removeType.mutate({ typeId: typePendingRemove.id, targetTypeId })
+          }
+          isPending={removeType.isPending}
+        />
+      )}
+
       {/* Add Task Type Modal */}
       {showAddModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
@@ -590,7 +794,7 @@ function TypesCard({
             <div className="mb-4 flex gap-2 border-b border-divider pb-2">
               <button
                 onClick={() => setIsCreatingNew(false)}
-                className={`text-xs font-semibold pb-1 border-b-2 ${
+                className={`text-xs font-semibold pb-1 border-b-2 cursor-pointer ${
                   !isCreatingNew ? 'border-ink text-foreground' : 'border-transparent text-foreground-dim'
                 }`}
               >
@@ -598,7 +802,7 @@ function TypesCard({
               </button>
               <button
                 onClick={() => setIsCreatingNew(true)}
-                className={`text-xs font-semibold pb-1 border-b-2 ${
+                className={`text-xs font-semibold pb-1 border-b-2 cursor-pointer ${
                   isCreatingNew ? 'border-ink text-foreground' : 'border-transparent text-foreground-dim'
                 }`}
               >
@@ -619,7 +823,7 @@ function TypesCard({
                   <option value="">-- Select a task type --</option>
                   {availableToPick.map((t) => (
                     <option key={t.id} value={t.id}>
-                      {t.name} ({t.key})
+                      {t.name} ({getTaskTypeGroup(t)})
                     </option>
                   ))}
                 </select>
@@ -629,14 +833,14 @@ function TypesCard({
                 <div className="flex gap-2 pt-2">
                   <button
                     onClick={() => setShowAddModal(false)}
-                    className="flex-1 rounded-lg border border-divider py-2 text-xs font-semibold"
+                    className="flex-1 rounded-lg border border-divider py-2 text-xs font-semibold cursor-pointer"
                   >
                     Cancel
                   </button>
                   <button
                     disabled={!selectedExistingId}
                     onClick={() => addType.mutate({ task_type_id: selectedExistingId })}
-                    className="flex-1 rounded-lg bg-ink py-2 text-xs font-semibold text-white disabled:opacity-50"
+                    className="flex-1 rounded-lg bg-ink py-2 text-xs font-semibold text-white disabled:opacity-50 cursor-pointer"
                   >
                     Add to group
                   </button>
@@ -648,12 +852,14 @@ function TypesCard({
                   e.preventDefault();
                   if (!newName.trim()) return;
                   const finalKey = (newKey || slugify(newName)).trim();
+                  const finalGroupName = isCustomGroup ? customGroupName.trim() : newGroupName.trim();
                   addType.mutate({
                     name: newName.trim(),
                     key: finalKey,
                     description: newDesc.trim() || null,
                     color: newColor,
                     icon: newIcon,
+                    group_name: finalGroupName || null,
                   });
                 }}
                 className="space-y-3"
@@ -670,6 +876,37 @@ function TypesCard({
                     placeholder="e.g. Bug Report"
                     className="w-full rounded-lg border border-divider px-3 py-1.5 text-sm"
                   />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-foreground-muted">Group / Category</label>
+                  <select
+                    value={isCustomGroup ? '__custom__' : newGroupName}
+                    onChange={(e) => {
+                      if (e.target.value === '__custom__') {
+                        setIsCustomGroup(true);
+                      } else {
+                        setIsCustomGroup(false);
+                        setNewGroupName(e.target.value);
+                      }
+                    }}
+                    className="w-full rounded-lg border border-divider bg-surface px-3 py-1.5 text-sm text-foreground focus:border-ink focus:outline-none"
+                  >
+                    {availableGroupNames.map((g) => (
+                      <option key={g} value={g}>
+                        {(TASK_TYPE_GROUP_EMOJIS[g] ? `${TASK_TYPE_GROUP_EMOJIS[g]} ` : '')}{g}
+                      </option>
+                    ))}
+                    <option value="__custom__">+ Custom category...</option>
+                  </select>
+                  {isCustomGroup && (
+                    <input
+                      value={customGroupName}
+                      onChange={(e) => setCustomGroupName(e.target.value)}
+                      required
+                      placeholder="Enter custom category name"
+                      className="mt-2 w-full rounded-lg border border-divider px-3 py-1.5 text-sm"
+                    />
+                  )}
                 </div>
                 <div>
                   <label className="mb-1 block text-xs font-medium text-foreground-muted">Key</label>
@@ -703,13 +940,13 @@ function TypesCard({
                   <button
                     type="button"
                     onClick={() => setShowAddModal(false)}
-                    className="flex-1 rounded-lg border border-divider py-2 text-xs font-semibold"
+                    className="flex-1 rounded-lg border border-divider py-2 text-xs font-semibold cursor-pointer"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
-                    className="flex-1 rounded-lg bg-ink py-2 text-xs font-semibold text-white"
+                    className="flex-1 rounded-lg bg-ink py-2 text-xs font-semibold text-white cursor-pointer"
                   >
                     Create &amp; Add
                   </button>
@@ -727,10 +964,12 @@ function TypesCard({
 // ApplyCard — apply task type group to container
 // ============================================================
 function ApplyCard({ group, onChanged }: { group: TaskTypeGroup; onChanged: () => void }) {
+  const qc = useQueryClient();
   const [entityType, setEntityType] = useState<EntityType>('space');
   const [q, setQ] = useState('');
+  const [replaceTarget, setReplaceTarget] = useState<{ id: string; name: string } | null>(null);
 
-  const { data: searchRes } = useQuery({
+  const { data: searchRes, isLoading } = useQuery({
     queryKey: ['admin-task-type-group-targets', entityType, q],
     queryFn: () =>
       api.get('/admin/task-type-groups/targets/search', { params: { type: entityType, q } }).then((r) => r.data),
@@ -742,7 +981,12 @@ function ApplyCard({ group, onChanged }: { group: TaskTypeGroup; onChanged: () =
     mutationFn: (entity_id: string) =>
       api.post(`/admin/task-type-groups/${group.id}/apply`, { entity_type: entityType, entity_id }),
     onSuccess: onChanged,
-    onError: (err: any) => alert(err?.response?.data?.error || 'Failed to apply group'),
+    onError: (err: any) => {
+      if (err?.response?.status === 409) {
+        qc.invalidateQueries({ queryKey: ['admin-task-type-group-targets'] });
+      }
+      alert(err?.response?.data?.error || 'Failed to apply group');
+    },
   });
 
   const unapply = useMutation({
@@ -760,7 +1004,7 @@ function ApplyCard({ group, onChanged }: { group: TaskTypeGroup; onChanged: () =
           <button
             key={t}
             onClick={() => { setEntityType(t); setQ(''); }}
-            className={`rounded-lg px-3 py-1.5 text-xs font-medium transition ${
+            className={`rounded-lg px-3 py-1.5 text-xs font-medium transition cursor-pointer ${
               entityType === t ? 'bg-ink text-white' : 'border border-divider hover:bg-muted'
             }`}
           >
@@ -778,7 +1022,8 @@ function ApplyCard({ group, onChanged }: { group: TaskTypeGroup; onChanged: () =
       />
 
       <div className="mt-3 max-h-96 space-y-1.5 overflow-y-auto">
-        {targets.map((t) => {
+        {isLoading && <p className="py-4 text-center text-xs text-foreground-dim">Searching…</p>}
+        {!isLoading && targets.map((t) => {
           const isCurrent = t.assigned_group_id === group.id;
           const isOther = t.assigned_group_id && !isCurrent;
           return (
@@ -794,24 +1039,239 @@ function ApplyCard({ group, onChanged }: { group: TaskTypeGroup; onChanged: () =
                 {isCurrent ? (
                   <button
                     onClick={() => unapply.mutate(t.id)}
-                    className="rounded-lg border border-emerald-300 bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-800 hover:bg-emerald-100"
+                    className="rounded-lg border border-emerald-300 bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-800 hover:bg-emerald-100 cursor-pointer"
                   >
                     ✓ Applied (click to remove)
                   </button>
+                ) : isOther ? (
+                  <div className="flex items-center gap-2">
+                    <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700">
+                      HAS ANOTHER GROUP
+                    </span>
+                    <button
+                      onClick={() => setReplaceTarget({ id: t.id, name: t.name })}
+                      className="rounded-lg border border-amber-300 px-2.5 py-1 text-xs font-medium text-amber-700 hover:bg-amber-50 cursor-pointer"
+                    >
+                      Replace
+                    </button>
+                  </div>
                 ) : (
                   <button
                     onClick={() => apply.mutate(t.id)}
-                    className="rounded-lg bg-ink px-3 py-1 text-xs font-medium text-white hover:opacity-90"
+                    className="rounded-lg bg-ink px-3 py-1 text-xs font-medium text-white hover:opacity-90 cursor-pointer"
                   >
-                    {isOther ? 'Replace current' : 'Apply'}
+                    Apply
                   </button>
                 )}
               </div>
             </div>
           );
         })}
-        {targets.length === 0 && (
+        {!isLoading && targets.length === 0 && (
           <p className="py-6 text-center text-xs text-foreground-dim">No targets match.</p>
+        )}
+      </div>
+
+      {replaceTarget && (
+        <ReplaceTaskTypeGroupModal
+          group={group}
+          entityType={entityType}
+          target={replaceTarget}
+          onClose={() => setReplaceTarget(null)}
+          onDone={() => {
+            setReplaceTarget(null);
+            onChanged();
+            qc.invalidateQueries({ queryKey: ['admin-task-type-group-targets'] });
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+// ============================================================
+// Replace modal — swap the entity's current task type group for this one,
+// remapping live tasks from old task types to new ones.
+// ============================================================
+type ReplaceTaskTypePreview = {
+  has_existing: boolean;
+  entity?: { type: string; id: string; name: string };
+  current_group?: { id: string; key?: string; name: string };
+  new_group?: { id: string; name: string };
+  old_types?: TaskType[];
+  new_types?: TaskType[];
+  breakdown?: { task_type_id: string | null; name: string; key: string; color: string; count: number }[];
+  total_tasks?: number;
+  list_count?: number;
+};
+
+function ReplaceTaskTypeGroupModal({
+  group,
+  entityType,
+  target,
+  onClose,
+  onDone,
+}: {
+  group: TaskTypeGroup;
+  entityType: EntityType;
+  target: { id: string; name: string };
+  onClose: () => void;
+  onDone: () => void;
+}) {
+  const [mapping, setMapping] = useState<Record<string, string>>({});
+  const [error, setError] = useState<string | null>(null);
+
+  const { data: previewRes, isLoading } = useQuery({
+    queryKey: ['admin-task-type-group-replace-preview', group.id, entityType, target.id],
+    queryFn: () =>
+      api.get(`/admin/task-type-groups/${group.id}/replace-preview`, {
+        params: { entity_type: entityType, entity_id: target.id },
+      }).then((r) => r.data),
+  });
+  const preview: ReplaceTaskTypePreview | undefined = previewRes?.data;
+
+  const newTypes: TaskType[] = preview?.new_types || [];
+  const oldTypes: TaskType[] = preview?.old_types || [];
+  const breakdown = preview?.breakdown || [];
+  const totalTasks = preview?.total_tasks || 0;
+
+  // Auto-suggest mapping
+  useEffect(() => {
+    if (!preview?.has_existing || breakdown.length === 0 || newTypes.length === 0) return;
+    setMapping((prev) => {
+      if (Object.keys(prev).length > 0) return prev;
+      const fallback = newTypes.find((t) => t.is_default) || newTypes[0];
+      const next: Record<string, string> = {};
+      for (const b of breakdown) {
+        const key = b.task_type_id || '__null__';
+        const match = newTypes.find(
+          (t) =>
+            (b.key && t.key.toLowerCase() === b.key.toLowerCase()) ||
+            (b.name && t.name.toLowerCase() === b.name.toLowerCase()),
+        );
+        next[key] = (match || fallback).id;
+      }
+      return next;
+    });
+  }, [preview, breakdown, newTypes]);
+
+  const replace = useMutation({
+    mutationFn: () =>
+      api.post(`/admin/task-type-groups/${group.id}/apply`, {
+        entity_type: entityType,
+        entity_id: target.id,
+        allow_replace: true,
+        task_type_mapping: mapping,
+      }).then((r) => r.data),
+    onSuccess: onDone,
+    onError: (err: any) => setError(err?.response?.data?.error || 'Failed to replace group'),
+  });
+
+  const allMapped = breakdown.every((b) => mapping[b.task_type_id || '__null__']);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div
+        className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+        onClick={() => !replace.isPending && onClose()}
+      />
+      <div className="relative max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-xl border border-divider bg-surface p-6 shadow-2xl">
+        <h3 className="text-base font-semibold">Replace task type group on “{target.name}”</h3>
+        {isLoading ? (
+          <p className="py-8 text-center text-sm text-foreground-dim">Checking existing tasks…</p>
+        ) : !preview?.has_existing ? (
+          <div className="py-6 text-center">
+            <p className="text-sm text-foreground-dim">No other group is applied here any more — you can apply directly.</p>
+            <button onClick={onClose} className="mt-4 rounded-lg border border-divider px-3.5 py-1.5 text-xs font-medium cursor-pointer">
+              Close
+            </button>
+          </div>
+        ) : (
+          <>
+            <p className="mt-1 text-sm text-foreground-muted">
+              <span className="font-medium text-foreground">{preview.current_group?.name}</span>
+              {' → '}
+              <span className="font-medium text-foreground">{group.name}</span>
+              {totalTasks > 0 ? (
+                <> · <span className="font-semibold">{totalTasks} task{totalTasks === 1 ? '' : 's'}</span> will be remapped</>
+              ) : (
+                <> · no tasks here, safe to switch directly</>
+              )}
+            </p>
+
+            {breakdown.length === 0 ? (
+              <p className="mt-4 rounded-lg border border-divider bg-muted px-3 py-2 text-xs text-foreground-muted">
+                Nothing is using a task type in this scope yet. Replacing only changes which group future tasks use.
+              </p>
+            ) : (
+              <div className="mt-4">
+                <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 px-1 pb-1 text-[11px] font-semibold uppercase tracking-wider text-foreground-dim">
+                  <span>Current task type ({breakdown.length} in use)</span>
+                  <span />
+                  <span>Becomes {group.name} task type</span>
+                </div>
+                <div className="space-y-1.5">
+                  {breakdown.map((b) => {
+                    const rowKey = b.task_type_id || '__null__';
+                    return (
+                      <div
+                        key={rowKey}
+                        className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 rounded-lg border border-divider px-3 py-2"
+                      >
+                        <div className="flex min-w-0 items-center gap-2">
+                          <span
+                            className="h-3 w-3 shrink-0 rounded-full"
+                            style={{ background: b.color || '#94A3B8' }}
+                          />
+                          <span className="truncate text-sm font-medium">{b.name}</span>
+                          <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium text-foreground-dim">
+                            {b.count} task{b.count === 1 ? '' : 's'}
+                          </span>
+                        </div>
+                        <span className="text-foreground-dim">→</span>
+                        <select
+                          value={mapping[rowKey] || ''}
+                          onChange={(e) => setMapping((m) => ({ ...m, [rowKey]: e.target.value }))}
+                          disabled={replace.isPending}
+                          className="w-full rounded-lg border border-divider bg-surface px-2 py-1.5 text-sm focus:border-ink focus:outline-none"
+                        >
+                          <option value="" disabled>Select…</option>
+                          {newTypes.map((t) => (
+                            <option key={t.id} value={t.id}>
+                              {t.name} ({getTaskTypeGroup(t)})
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {error && (
+              <p className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600">
+                {error}
+              </p>
+            )}
+
+            <div className="mt-6 flex justify-end gap-2">
+              <button
+                onClick={onClose}
+                disabled={replace.isPending}
+                className="rounded-lg border border-divider px-3.5 py-1.5 text-xs font-medium text-foreground-dim hover:text-foreground disabled:opacity-50 cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => { setError(null); replace.mutate(); }}
+                disabled={replace.isPending || !allMapped || newTypes.length === 0}
+                className="rounded-lg bg-ink px-3.5 py-1.5 text-xs font-semibold text-white hover:opacity-90 disabled:opacity-50 cursor-pointer"
+              >
+                {replace.isPending ? 'Replacing…' : totalTasks > 0 ? `Replace & remap ${totalTasks} task${totalTasks === 1 ? '' : 's'}` : 'Replace group'}
+              </button>
+            </div>
+          </>
         )}
       </div>
     </div>
@@ -995,6 +1455,17 @@ function EditTaskTypeModal({
   const [description, setDescription] = useState('');
   const [icon, setIcon] = useState('check-square');
   const [color, setColor] = useState('#6b7280');
+  const [groupName, setGroupName] = useState('Task Types');
+  const [isCustomGroup, setIsCustomGroup] = useState(false);
+  const [customGroupName, setCustomGroupName] = useState('');
+
+  const availableGroupNames = useMemo(() => {
+    const set = new Set<string>(GROUP_ORDER);
+    for (const t of types) {
+      if (t.group_name) set.add(t.group_name);
+    }
+    return Array.from(set);
+  }, [types]);
 
   useEffect(() => {
     if (type) {
@@ -1002,6 +1473,10 @@ function EditTaskTypeModal({
       setDescription(type.description || '');
       setIcon(type.icon || 'check-square');
       setColor(type.color || '#6b7280');
+      const g = getTaskTypeGroup(type);
+      setGroupName(g);
+      setIsCustomGroup(false);
+      setCustomGroupName('');
     }
   }, [type]);
 
@@ -1105,11 +1580,13 @@ function EditTaskTypeModal({
           <form
             onSubmit={(e) => {
               e.preventDefault();
+              const finalGroupName = isCustomGroup ? customGroupName.trim() : groupName.trim();
               updateType.mutate({
                 name: name.trim(),
                 description: description.trim() || null,
                 icon,
                 color,
+                group_name: finalGroupName || null,
               });
             }}
             className="space-y-4"
@@ -1140,6 +1617,37 @@ function EditTaskTypeModal({
                   />
                 </div>
               </div>
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-foreground-muted">Group / Category</label>
+              <select
+                value={isCustomGroup ? '__custom__' : groupName}
+                onChange={(e) => {
+                  if (e.target.value === '__custom__') {
+                    setIsCustomGroup(true);
+                  } else {
+                    setIsCustomGroup(false);
+                    setGroupName(e.target.value);
+                  }
+                }}
+                className="w-full rounded-lg border border-divider bg-surface px-3 py-2 text-sm text-foreground focus:border-ink focus:outline-none"
+              >
+                {availableGroupNames.map((g) => (
+                  <option key={g} value={g}>
+                    {(TASK_TYPE_GROUP_EMOJIS[g] ? `${TASK_TYPE_GROUP_EMOJIS[g]} ` : '')}{g}
+                  </option>
+                ))}
+                <option value="__custom__">+ Custom category...</option>
+              </select>
+              {isCustomGroup && (
+                <input
+                  value={customGroupName}
+                  onChange={(e) => setCustomGroupName(e.target.value)}
+                  required
+                  placeholder="Enter custom category name"
+                  className="mt-2 w-full rounded-lg border border-divider px-3 py-1.5 text-sm"
+                />
+              )}
             </div>
             <div>
               <label className="mb-1 block text-xs font-medium text-foreground-muted">Description</label>
