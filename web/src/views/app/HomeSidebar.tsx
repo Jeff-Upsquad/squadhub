@@ -63,8 +63,6 @@ interface HomeSidebarProps {
 // fold under "More".
 const RECENT_DAYS = 7;
 const DAY_MS = 86_400_000;
-// Recent-app tiles before the "+N More" tile (two rows of three).
-const MAX_APP_TILES = 5;
 const TAB_KEY = 'squadhub-sidebar-tab';
 
 // ---- Icon paths (24×24 outline, stroke 2) ----
@@ -374,8 +372,8 @@ export default function HomeSidebar({
   const recentCutoff = Date.now() - RECENT_DAYS * DAY_MS;
 
   // ---- Recent apps ----
-  // Tiles = apps opened in the last RECENT_DAYS days, most recent first. Until
-  // anything has been opened, pinned apps fill the tiles so the grid isn't
+  // Chips = apps opened in the last RECENT_DAYS days, most recent first. Until
+  // anything has been opened, pinned apps fill the chips so the row isn't
   // empty. Everything else pinned folds under "+N More".
   const { appTiles, appMore } = useMemo(() => {
     const pinnedOrder = new Map(appFavoritesOrder.map((slug, i) => [slug, i]));
@@ -385,7 +383,7 @@ export default function HomeSidebar({
     const recent = availableApps
       .filter((a) => (openedAt[`app:${a.slug}`] ?? 0) >= recentCutoff)
       .sort((a, b) => openedAt[`app:${b.slug}`] - openedAt[`app:${a.slug}`]);
-    const tiles = (recent.length ? recent : pinned).slice(0, MAX_APP_TILES);
+    const tiles = recent.length ? recent : pinned;
     const tileSlugs = new Set(tiles.map((a) => a.slug));
     const overflow = recent.filter((a) => !tileSlugs.has(a.slug));
     const overflowSlugs = new Set(overflow.map((a) => a.slug));
@@ -761,6 +759,82 @@ export default function HomeSidebar({
         )}
       </div>
 
+      {/* ---- Recent apps ---- */}
+      {availableApps.length > 0 && (
+        <div data-tip-anchor="home.apps">
+          <div className="flex items-center justify-between px-4 pt-[14px] pb-[6px]">
+            <span className="sb-section truncate text-[var(--sh-ink-3)]">Recent apps</span>
+            <button type="button" onClick={onOpenApps} className="shrink-0 text-[11.5px] font-medium text-[var(--sh-ink-4)] transition hover:text-[var(--sh-ink)]">
+              All apps
+            </button>
+          </div>
+          <div className="flex flex-wrap gap-[6px] px-3">
+            {appTiles.map((app) => {
+              const active = !!app.view && homeView === app.view;
+              return (
+                <button
+                  key={app.slug}
+                  type="button"
+                  title={app.name}
+                  onClick={(e) => launchApp(app, e)}
+                  onAuxClick={(e) => { if (e.button === 1) launchApp(app, e); }}
+                  className={`sb-chip relative flex h-7 max-w-full items-center gap-[6px] rounded-[8px] pl-2 pr-[10px] text-[11.5px] font-medium transition ${
+                    active
+                      ? 'bg-[var(--surface)] text-[var(--sh-ink)] shadow-[var(--sh-shadow-sm)] ring-1 ring-inset ring-[var(--sh-hair-2)]'
+                      : 'text-[var(--sh-ink-2)] shadow-[inset_0_0_0_1px_var(--sh-hair-2)] hover:bg-[var(--sh-hair-3)] hover:text-[var(--sh-ink)]'
+                  }`}
+                >
+                  <AppIcon paths={app.paths} className="h-[13px] w-[13px] shrink-0" />
+                  <span className="min-w-0 truncate">{app.name}</span>
+                  {app.slug === 'leads' && cardsAttention.total > 0 && (
+                    <span
+                      title={cardsAttention.parts.join(' · ')}
+                      className="absolute -right-1 -top-1 grid h-[14px] min-w-[14px] place-items-center rounded-full px-[3px] text-[9px] font-bold text-[#0a0a0a] shadow-[0_0_0_2px_var(--sidebar)]"
+                      style={{ background: 'var(--color-sh-warning)' }}
+                    >
+                      {cardsAttention.total > 99 ? '99+' : cardsAttention.total}
+                    </span>
+                  )}
+                  {(app.slug === 'squadcrm-teamchat' || app.slug === 'squadhire-teamchat') && (
+                    <span className="absolute -right-1 -top-1 flex">
+                      <TeamChatAppBadge source={app.slug === 'squadcrm-teamchat' ? 'crm' : 'shcrm'} />
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+            {appMore.length > 0 && (
+              <button
+                type="button"
+                title={`Not opened in the last ${RECENT_DAYS} days`}
+                onClick={() => setAppsMoreOpen((o) => !o)}
+                className="flex h-7 select-none items-center gap-1 rounded-[8px] border border-dashed border-[var(--sh-hair-2)] px-[10px] text-[11.5px] font-medium text-[var(--sh-ink-3)] transition hover:text-[var(--sh-ink)]"
+              >
+                <span>{appsMoreOpen ? '−' : `+${appMore.length}`}</span>
+                <span>{appsMoreOpen ? 'Less' : 'More'}</span>
+              </button>
+            )}
+          </div>
+          {appsMoreOpen && appMore.length > 0 && (
+            <div className="mx-3 mt-[6px] rounded-[12px] bg-[var(--sh-hair-3)] p-1">
+              {appMore.map((app) => (
+                <button
+                  key={app.slug}
+                  type="button"
+                  onClick={(e) => launchApp(app, e)}
+                  onAuxClick={(e) => { if (e.button === 1) launchApp(app, e); }}
+                  className="flex w-full items-center gap-[9px] rounded-[8px] px-2 py-[6px] text-left text-[13px] text-[var(--sh-ink-3)] transition hover:bg-[var(--sh-hair)] hover:text-[var(--sh-ink)]"
+                >
+                  <AppIcon paths={app.paths} className="h-[14px] w-[14px] shrink-0" />
+                  <span className="min-w-0 flex-1 truncate">{app.name}</span>
+                  <span className="text-[11px] tabular-nums text-[var(--sh-ink-4)]">{ageLabel(openedAt[`app:${app.slug}`])}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Work / Chat switch */}
       <div className="mx-3 mt-[10px] mb-[2px] grid grid-cols-2 rounded-full bg-[var(--sh-hair-3)] p-[3px]" role="tablist">
         <button type="button" role="tab" aria-selected={tab === 'work'} onClick={() => setTab('work')} className={segment(tab === 'work')}>
@@ -780,82 +854,6 @@ export default function HomeSidebar({
       <div className="flex-1 overflow-y-auto pb-3">
         {tab === 'work' && (
           <>
-            {/* ---- Recent apps ---- */}
-            {availableApps.length > 0 && (
-              <div data-tip-anchor="home.apps">
-                <div className="flex items-center justify-between px-4 pt-[14px] pb-[6px]">
-                  <span className="sb-section truncate text-[var(--sh-ink-3)]">Recent apps</span>
-                  <button type="button" onClick={onOpenApps} className="shrink-0 text-[11.5px] font-medium text-[var(--sh-ink-4)] transition hover:text-[var(--sh-ink)]">
-                    All apps
-                  </button>
-                </div>
-                <div className="grid grid-cols-3 gap-[6px] px-3">
-                  {appTiles.map((app) => {
-                    const active = !!app.view && homeView === app.view;
-                    return (
-                      <button
-                        key={app.slug}
-                        type="button"
-                        title={app.name}
-                        onClick={(e) => launchApp(app, e)}
-                        onAuxClick={(e) => { if (e.button === 1) launchApp(app, e); }}
-                        className={`sb-tile sb-tile-app relative flex h-[52px] flex-col items-center justify-center gap-1 rounded-[12px] px-1 ${
-                          active
-                            ? 'bg-[var(--surface)] text-[var(--sh-ink)] shadow-[var(--sh-shadow-sm)] ring-1 ring-inset ring-[var(--sh-hair-2)]'
-                            : 'bg-[var(--sh-hair-3)] text-[var(--sh-ink-2)] hover:bg-[var(--sh-hair)] hover:text-[var(--sh-ink)]'
-                        }`}
-                      >
-                        <AppIcon paths={app.paths} className="h-4 w-4 shrink-0" />
-                        <span className="max-w-full truncate text-[9.5px] font-semibold leading-[1.15] text-[var(--sh-ink-3)]">{app.name}</span>
-                        {app.slug === 'leads' && cardsAttention.total > 0 && (
-                          <span
-                            title={cardsAttention.parts.join(' · ')}
-                            className="absolute -right-[3px] -top-[3px] grid h-[14px] min-w-[14px] place-items-center rounded-full px-[3px] text-[9px] font-bold text-[#0a0a0a] shadow-[0_0_0_2px_var(--sidebar)]"
-                            style={{ background: 'var(--color-sh-warning)' }}
-                          >
-                            {cardsAttention.total > 99 ? '99+' : cardsAttention.total}
-                          </span>
-                        )}
-                        {(app.slug === 'squadcrm-teamchat' || app.slug === 'squadhire-teamchat') && (
-                          <span className="absolute -right-[3px] -top-[3px] flex">
-                            <TeamChatAppBadge source={app.slug === 'squadcrm-teamchat' ? 'crm' : 'shcrm'} />
-                          </span>
-                        )}
-                      </button>
-                    );
-                  })}
-                  <button
-                    type="button"
-                    title={appMore.length ? `Not opened in the last ${RECENT_DAYS} days` : 'Browse all apps'}
-                    onClick={() => (appMore.length ? setAppsMoreOpen((o) => !o) : onOpenApps())}
-                    className="sb-tile flex h-[52px] select-none flex-col items-center justify-center gap-[2px] rounded-[12px] text-[12px] font-semibold text-[var(--sh-ink-3)] shadow-[inset_0_0_0_1px_var(--sh-hair-2)] hover:bg-[var(--sh-hair-3)] hover:text-[var(--sh-ink)]"
-                  >
-                    {appMore.length ? (appsMoreOpen ? '−' : `+${appMore.length}`) : <Icon d="M4 4h6v6H4z M14 4h6v6h-6z M4 14h6v6H4z M14 14h6v6h-6z" className="h-[14px] w-[14px]" />}
-                    <span className="text-[9.5px] font-semibold text-[var(--sh-ink-4)]">
-                      {appMore.length ? (appsMoreOpen ? 'Less' : 'More') : 'All apps'}
-                    </span>
-                  </button>
-                </div>
-                {appsMoreOpen && appMore.length > 0 && (
-                  <div className="mx-3 mt-[6px] rounded-[12px] bg-[var(--sh-hair-3)] p-1">
-                    {appMore.map((app) => (
-                      <button
-                        key={app.slug}
-                        type="button"
-                        onClick={(e) => launchApp(app, e)}
-                        onAuxClick={(e) => { if (e.button === 1) launchApp(app, e); }}
-                        className="flex w-full items-center gap-[9px] rounded-[8px] px-2 py-[6px] text-left text-[13px] text-[var(--sh-ink-3)] transition hover:bg-[var(--sh-hair)] hover:text-[var(--sh-ink)]"
-                      >
-                        <AppIcon paths={app.paths} className="h-[14px] w-[14px] shrink-0" />
-                        <span className="min-w-0 flex-1 truncate">{app.name}</span>
-                        <span className="text-[11px] tabular-nums text-[var(--sh-ink-4)]">{ageLabel(openedAt[`app:${app.slug}`])}</span>
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-
             {/* ---- Favorites (header doubles as the sidebar search) ---- */}
             {!findOpen ? (
               <SectionLabel
