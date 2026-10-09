@@ -12267,37 +12267,47 @@ button.sw-pri:hover, button.sw-chip:hover { filter: brightness(0.95); border-col
 .mgf-dir button:hover { color: var(--sh-ink); background: var(--sh-hair-3); }
 .mgf-dir button[data-active] { background: var(--sh-ink); border-color: var(--sh-ink); color: var(--surface); }
 
-/* ---- Sidebar tree expand/collapse (TreeCollapse) ---- */
+/* ---- Sidebar tree expand/collapse (TreeCollapse) ----
+   Open: 300ms soft decelerate, rows drift in with a light stagger.
+   Close: 220ms standard ease, rows just fade (no drift) so it reads as one fold. */
 .sh-tree-collapse {
   display: grid;
+  overflow-anchor: none;
   grid-template-rows: 0fr;
   opacity: 0;
-  transition: grid-template-rows 260ms cubic-bezier(0.22, 1, 0.36, 1), opacity 200ms ease;
+  transition: grid-template-rows 220ms cubic-bezier(0.4, 0, 0.2, 1), opacity 160ms ease-in;
 }
-.sh-tree-collapse.is-open {
+.sh-tree-collapse[data-phase='opening'],
+.sh-tree-collapse[data-phase='open'] {
   grid-template-rows: 1fr;
   opacity: 1;
+  transition: grid-template-rows 300ms cubic-bezier(0.25, 1, 0.5, 1), opacity 220ms ease-out;
 }
 .sh-tree-collapse-inner {
   min-height: 0;
   overflow: hidden;
 }
+/* Fully open: stop clipping so row menus / drag indicators aren't cut off. */
+.sh-tree-collapse[data-phase='open'] > .sh-tree-collapse-inner { overflow: visible; }
 .sh-tree-collapse-inner > div > * {
   opacity: 0;
-  transform: translateY(-6px);
-  transition: opacity 200ms ease, transform 260ms cubic-bezier(0.22, 1, 0.36, 1);
+  transition: opacity 140ms ease-in;
 }
-.sh-tree-collapse.is-open > .sh-tree-collapse-inner > div > * {
-  opacity: 1;
-  transform: none;
+.sh-tree-collapse[data-phase='opening'] > .sh-tree-collapse-inner > div > * {
+  animation: sh-tree-row-in 280ms cubic-bezier(0.25, 1, 0.5, 1) both;
 }
-.sh-tree-collapse.is-open > .sh-tree-collapse-inner > div > *:nth-child(2) { transition-delay: 25ms; }
-.sh-tree-collapse.is-open > .sh-tree-collapse-inner > div > *:nth-child(3) { transition-delay: 50ms; }
-.sh-tree-collapse.is-open > .sh-tree-collapse-inner > div > *:nth-child(4) { transition-delay: 75ms; }
-.sh-tree-collapse.is-open > .sh-tree-collapse-inner > div > *:nth-child(5) { transition-delay: 100ms; }
-.sh-tree-collapse.is-open > .sh-tree-collapse-inner > div > *:nth-child(n+6) { transition-delay: 120ms; }
+.sh-tree-collapse[data-phase='opening'] > .sh-tree-collapse-inner > div > *,
+.sh-tree-collapse[data-phase='open'] > .sh-tree-collapse-inner > div > * { opacity: 1; }
+.sh-tree-collapse[data-phase='opening'] > .sh-tree-collapse-inner > div > *:nth-child(2) { animation-delay: 20ms; }
+.sh-tree-collapse[data-phase='opening'] > .sh-tree-collapse-inner > div > *:nth-child(3) { animation-delay: 40ms; }
+.sh-tree-collapse[data-phase='opening'] > .sh-tree-collapse-inner > div > *:nth-child(4) { animation-delay: 60ms; }
+.sh-tree-collapse[data-phase='opening'] > .sh-tree-collapse-inner > div > *:nth-child(5) { animation-delay: 80ms; }
+.sh-tree-collapse[data-phase='opening'] > .sh-tree-collapse-inner > div > *:nth-child(n+6) { animation-delay: 100ms; }
+@keyframes sh-tree-row-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: none; }
+}
 @media (prefers-reduced-motion: reduce) {
   .sh-tree-collapse,
-  .sh-tree-collapse-inner > div > * { transition: none; }
+  .sh-tree-collapse-inner > div > * { transition: none !important; animation: none !important; }
 }
-.sh-tree-collapse.is-settled > .sh-tree-collapse-inner { overflow: visible; }

@@ -14,6 +14,7 @@ import { useRecentOpensStore } from '../../stores/recentOpensStore';
 import { wantsNewTab, buildListSnapshot, buildFolderSnapshot, buildSpaceSnapshot, buildChatSnapshot, buildAppSnapshot } from '../../lib/tabSnapshots';
 import { useCardsAttention } from '@/views/admin/useCardsAttention';
 import SpaceTree, { WorkspaceTree } from './pm/SpaceTree';
+import TreeCollapse from '../../components/TreeCollapse';
 import CreateSpaceModal from './pm/CreateSpaceModal';
 import CreateFolderListModal from './pm/CreateFolderListModal';
 import { useAvailableApps } from '../../hooks/useApps';
@@ -64,6 +65,7 @@ interface HomeSidebarProps {
 const RECENT_DAYS = 7;
 const DAY_MS = 86_400_000;
 const TAB_KEY = 'squadhub-sidebar-tab';
+const APPS_COLLAPSED_KEY = 'squadhub-sidebar-apps-collapsed';
 
 // ---- Icon paths (24×24 outline, stroke 2) ----
 const ICON = {
@@ -393,10 +395,20 @@ export default function HomeSidebar({
     return { appTiles: tiles, appMore: [...overflow, ...older] };
   }, [availableApps, appFavorites, appFavoritesOrder, openedAt, recentCutoff]);
   const [appsMoreOpen, setAppsMoreOpen] = useState(false);
+  // Recent apps section can be folded away (remembered per device).
+  const [appsCollapsed, setAppsCollapsedState] = useState(() => {
+    try { return localStorage.getItem(APPS_COLLAPSED_KEY) === '1'; } catch { return false; }
+  });
+  const toggleAppsCollapsed = () => {
+    setAppsCollapsedState((c) => {
+      try { localStorage.setItem(APPS_COLLAPSED_KEY, c ? '0' : '1'); } catch { /* storage unavailable */ }
+      return !c;
+    });
+  };
 
   // Requirement Cards is the one app with a queue behind it — its tile carries
   // how much of the pipeline is waiting on us. Skipped when it isn't on screen.
-  const cardsVisible = appTiles.some((a) => a.slug === 'leads') || (appsMoreOpen && appMore.some((a) => a.slug === 'leads'));
+  const cardsVisible = !appsCollapsed && appTiles.some((a) => a.slug === 'leads') || (appsMoreOpen && appMore.some((a) => a.slug === 'leads'));
   const cardsAttention = useCardsAttention(cardsVisible);
 
   // ---- Favorites ----
@@ -660,7 +672,7 @@ export default function HomeSidebar({
   const segment = (active: boolean) =>
     `flex h-7 items-center justify-center gap-[6px] rounded-full text-[12.5px] font-semibold transition ${
       active
-        ? 'bg-[var(--surface)] text-[var(--sh-ink)] shadow-[var(--sh-shadow-sm)] dark:bg-[var(--sh-hair-2)] dark:shadow-[inset_0_1px_0_rgba(255,255,255,.06)]'
+        ? 'bg-[var(--surface)] text-[var(--sh-ink)] shadow-[0_0_0_0.5px_rgba(16,24,40,.08),0_1px_2px_rgba(16,24,40,.10),0_3px_8px_-1px_rgba(16,24,40,.10)] dark:bg-[var(--sh-hair-2)] dark:shadow-[inset_0_1px_0_rgba(255,255,255,.08),0_1px_2px_rgba(0,0,0,.45),0_3px_8px_-1px_rgba(0,0,0,.4)]'
         : 'text-[var(--sh-ink-3)] hover:text-[var(--sh-ink)]'
     }`;
 
@@ -718,6 +730,9 @@ export default function HomeSidebar({
         </div>
       </div>
 
+      {/* Everything below the brand row scrolls as one — search, tiles, apps,
+          Work/Chat switch and the tree all move together. */}
+      <div className="min-h-0 flex-1 overflow-y-auto pb-3">
       {/* Search — a grey pill that opens the workspace palette */}
       <div className="px-3 pt-[2px] pb-[6px]">
         <button
@@ -763,11 +778,33 @@ export default function HomeSidebar({
       {availableApps.length > 0 && (
         <div data-tip-anchor="home.apps">
           <div className="flex items-center justify-between px-4 pt-[14px] pb-[6px]">
-            <span className="sb-section truncate text-[var(--sh-ink-3)]">Recent apps</span>
+            <button
+              type="button"
+              onClick={toggleAppsCollapsed}
+              aria-expanded={!appsCollapsed}
+              title={appsCollapsed ? 'Show apps' : 'Hide apps'}
+              className="group/apps flex min-w-0 items-center gap-[5px] text-[var(--sh-ink-3)] transition hover:text-[var(--sh-ink)]"
+            >
+              <span className="sb-section truncate">Recent apps</span>
+              {appsCollapsed && (
+                <span className="rounded-full bg-[var(--sh-hair-3)] px-[6px] py-[2px] text-[10.5px] font-medium leading-none text-[var(--sh-ink-3)]">
+                  {availableApps.length}
+                </span>
+              )}
+              <svg
+                className={`h-3 w-3 shrink-0 text-[var(--sh-ink-4)] transition-transform duration-[260ms] ease-[cubic-bezier(0.22,1,0.36,1)] group-hover/apps:text-[var(--sh-ink)] ${appsCollapsed ? '-rotate-90' : ''}`}
+                viewBox="0 0 18 18"
+                fill="currentColor"
+                aria-hidden
+              >
+                <path d="M5 7h8L9 11z" />
+              </svg>
+            </button>
             <button type="button" onClick={onOpenApps} className="shrink-0 text-[11.5px] font-medium text-[var(--sh-ink-4)] transition hover:text-[var(--sh-ink)]">
               All apps
             </button>
           </div>
+          <TreeCollapse open={!appsCollapsed}>
           <div className="flex flex-wrap gap-[6px] px-3">
             {appTiles.map((app) => {
               const active = !!app.view && homeView === app.view;
@@ -832,6 +869,7 @@ export default function HomeSidebar({
               ))}
             </div>
           )}
+          </TreeCollapse>
         </div>
       )}
 
@@ -850,8 +888,7 @@ export default function HomeSidebar({
         </button>
       </div>
 
-      {/* Scrollable content */}
-      <div className="flex-1 overflow-y-auto pb-3">
+      <div>
         {tab === 'work' && (
           <>
             {/* ---- Favorites (header doubles as the sidebar search) ---- */}
@@ -1152,6 +1189,7 @@ export default function HomeSidebar({
             </div>
           </>
         )}
+      </div>
       </div>
     </div>
   );
