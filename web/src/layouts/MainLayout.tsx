@@ -53,7 +53,7 @@ import SalesLeadsPage from '../views/app/sales/SalesLeadsPage';
 import LeadsPage from '../views/app/leads/LeadsPage';
 import ThemeToggle from '../components/ThemeToggle';
 import RailTimer from './RailTimer';
-import ActiveTimer from '../components/ActiveTimer';
+import ActiveTimerTiles from '../components/ActiveTimer';
 import TimerConflictDialog from '../components/TimerConflictDialog';
 import TimerModeDialog from '../components/TimerModeDialog';
 import TimeSheetPanel from '../components/TimeSheetPanel';
@@ -357,6 +357,7 @@ export default function MainLayout() {
   const [homeView, setHomeView] = useState<HomeView>(
     () => (usePMStore.getState().lastHomeView as HomeView) || 'hub',
   );
+  const isHomeHub = activeSection === 'home' && homeView === 'hub';
   // External web page embedded in the active tab (e.g. a meeting link). Part of
   // the live view so the tab strip's live-mirror round-trips it; cleared by any
   // normal navigation (see the effect below applySnapshot). Seeded from the
@@ -1618,9 +1619,9 @@ export default function MainLayout() {
           onOpenSearch={() => setSearchOpen(true)}
           onNewDm={() => setShowNewDm(true)}
           onLogout={logout}
-          // ActiveTimer and EmergencyBanner are in-flow strips, not fixed
-          // overlays — outside the shell they'd render behind it.
-          banner={<><EmergencyBanner /><ActiveTimer /></>}
+          // Emergencies + running timers share one in-flow strip (no tab bar
+          // on mobile, so timers always live here).
+          banner={<EmergencyBanner after={<ActiveTimerTiles />} />}
         />
 
         <TimerConflictDialog />
@@ -2022,13 +2023,13 @@ export default function MainLayout() {
       {/* Main content area */}
       <div className="relative flex flex-1 flex-col overflow-hidden bg-transparent pt-12 md:pt-0 md:my-3 md:mr-3 md:ml-[6px]">
         {/* Chrome-style tab strip (desktop only) — each tab is a saved view. */}
-        <TabBar />
+        {/* Home shows running timers as tiles after the emergencies; everywhere
+            else the primary timer sits in the tab bar with a "+N" dropdown. */}
+        <TabBar showTimer={!isHomeHub} />
         {/* The universal top-right "New task" floating "+" was removed per request
             — creation now lives in the small global bottom-right quick-create
             FAB (plus each surface's own header actions). */}
-        <EmergencyBanner />
-        {/* Running timers float in a dock at the bottom of the content area. */}
-        <ActiveTimer floating />
+        <EmergencyBanner after={isHomeHub ? <ActiveTimerTiles /> : null} />
         <TimerConflictDialog />
         <TimerModeDialog />
         {/* Fallback for the brief window before the tab strip is seeded (a brand

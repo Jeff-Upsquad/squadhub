@@ -6,6 +6,7 @@ import { useAuthStore } from '../stores/authStore';
 import { useSpace } from '../hooks/useSpaces';
 import { APPS, AppIcon } from '../config/apps';
 import { tabKind, buildHomeSnapshot, type TabSnapshot } from '../lib/tabSnapshots';
+import { TabBarTimer } from './ActiveTimer';
 
 // Chrome-style tab strip across the top of the main content area. Desktop only
 // (mobile keeps the single-view behavior). Each tab is a persisted TabSnapshot;
@@ -189,7 +190,7 @@ function TabItem({
   );
 }
 
-export default function TabBar() {
+export default function TabBar({ showTimer = false }: { showTimer?: boolean }) {
   const tabs = useTabsStore((s) => s.tabs);
   const activeTabId = useTabsStore((s) => s.activeTabId);
   const setActiveTab = useTabsStore((s) => s.setActiveTab);
@@ -201,12 +202,16 @@ export default function TabBar() {
   const dragId = useRef<string | null>(null);
   const [menu, setMenu] = useState<{ x: number; y: number; tabId: string } | null>(null);
 
-  // A single tab adds no value — don't show the strip until there are ≥2.
-  if (tabs.length <= 1) return null;
+  // A single tab adds no value — show only the timer slot until there are ≥2.
+  const showTabs = tabs.length > 1;
+  if (!showTabs && !showTimer) return null;
 
-  // Hidden on mobile — the mobile layout keeps the single-view behavior.
+  // Hidden on mobile — the mobile layout keeps the single-view behavior. The
+  // tabs scroll on their own so the timer's dropdown isn't clipped.
   return (
-    <div className="sh-tabbar hidden h-10 shrink-0 items-center gap-1 overflow-x-auto px-1 pb-1 md:flex">
+    <div className="hidden shrink-0 items-center gap-2 px-1 md:flex empty:hidden">
+    {showTabs && (
+    <div className="sh-tabbar flex h-10 min-w-0 flex-1 items-center gap-1 overflow-x-auto pb-1">
       {tabs.map((tab) => (
         <TabItem
           key={tab.id}
@@ -240,6 +245,9 @@ export default function TabBar() {
           <path d="M12 5v14M5 12h14" />
         </svg>
       </button>
+    </div>
+    )}
+    {showTimer && <TabBarTimer />}
 
       {menu && typeof document !== 'undefined' &&
         createPortal(
