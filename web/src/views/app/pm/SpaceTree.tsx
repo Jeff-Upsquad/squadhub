@@ -8,6 +8,7 @@ import { usePMStore } from '../../../stores/pmStore';
 import { useTabsStore } from '../../../stores/tabsStore';
 import { wantsNewTab, buildListSnapshot, buildFolderSnapshot, buildDesignFolderSnapshot, buildSpaceSnapshot } from '../../../lib/tabSnapshots';
 import CreateSpaceModal from './CreateSpaceModal';
+import TreeCollapse from '../../../components/TreeCollapse';
 import CreateFolderListModal from './CreateFolderListModal';
 import CreateAreaSpaceModal from './CreateAreaSpaceModal';
 import ManageMembersModal from './ManageMembersModal';
@@ -114,7 +115,7 @@ function AdminLockIcon() {
 function TriangleChevron({ open }: { open: boolean }) {
   return (
     <svg
-      className={`h-3 w-3 transition-transform duration-[140ms] ${open ? '' : '-rotate-90'}`}
+      className={`h-3 w-3 transition-transform duration-[260ms] ease-[cubic-bezier(0.22,1,0.36,1)] ${open ? '' : '-rotate-90'}`}
       fill="none"
       stroke="currentColor"
       strokeWidth={2}
@@ -456,8 +457,7 @@ function FolderItem({ folder, spaceId, canAdd, canDelete, isManager, myAccess }:
         </div>
       </div>
 
-      {open && (
-        <div className="ml-2 border-l border-[var(--sh-hair)] pb-1 pl-[7px]">
+      <TreeCollapse open={open} className="ml-2 border-l border-[var(--sh-hair)] pb-1 pl-[7px]">
           {/* Template-based spaces seed status lists (Briefs / In Progress / Reviews /
               Completed) plus a general "Tasks" list — all surface as views inside the
               Design Space page, not as sidebar children. Hide those; show only lists
@@ -480,8 +480,7 @@ function FolderItem({ folder, spaceId, canAdd, canDelete, isManager, myAccess }:
               onCancel={() => setAdding(false)}
             />
           )}
-        </div>
-      )}
+        </TreeCollapse>
 
       {showSettings && typeof document !== 'undefined' && createPortal((
         <>
@@ -558,8 +557,7 @@ function ClientItem({ folder, childSpaces, spaceId, canAddLists, canAddSpaces, c
         </div>
       </div>
 
-      {open && (
-        <div className="ml-2 border-l border-[var(--sh-hair)] pb-1 pl-[7px]">
+      <TreeCollapse open={open} className="ml-2 border-l border-[var(--sh-hair)] pb-1 pl-[7px]">
           {childSpaces.map(spaceFolder => (
             <FolderItem key={spaceFolder.id} folder={spaceFolder} spaceId={spaceId} canAdd={canAddLists} canDelete={canDelete} isManager={isManager} myAccess={myAccess} />
           ))}
@@ -570,8 +568,7 @@ function ClientItem({ folder, childSpaces, spaceId, canAddLists, canAddSpaces, c
               onClose={() => setAdding(false)}
             />
           )}
-        </div>
-      )}
+        </TreeCollapse>
 
       {showSettings && typeof document !== 'undefined' && createPortal((
         <>
@@ -696,11 +693,10 @@ function SpaceItem({ spaceId, initial }: { spaceId: string; initial?: Space }) {
         </div>
       </div>
 
-      {open && space && (
-        <div className="ml-2 border-l border-[var(--sh-hair)] pb-1 pl-[7px]">
+      <TreeCollapse open={open && !!space} className="ml-2 border-l border-[var(--sh-hair)] pb-1 pl-[7px]">
           {(() => {
             // Build folder hierarchy
-            const allFolders = space.folders || [];
+            const allFolders = space?.folders || [];
 
             // Group child folders (spaces) by parent_folder_id
             const childFolders: Record<string, Folder[]> = {};
@@ -740,7 +736,7 @@ function SpaceItem({ spaceId, initial }: { spaceId: string; initial?: Space }) {
                 {standaloneSpaces.map(folder => (
                   <FolderItem key={folder.id} folder={folder} spaceId={spaceId} canAdd={canAddItems && canCreateLists} canDelete={isManager} isManager={isManager} myAccess={myAccess} />
                 ))}
-                {space.lists?.map((list) => (
+                {space?.lists?.map((list) => (
                   <ListItem key={list.id} list={list} isManager={isManager} myAccess={myAccess} dnd={rootListDnd.propsFor(list)} />
                 ))}
               </>
@@ -766,8 +762,7 @@ function SpaceItem({ spaceId, initial }: { spaceId: string; initial?: Space }) {
               onClose={() => setCreateModal(null)}
             />
           )}
-        </div>
-      )}
+        </TreeCollapse>
 
       {showMembers && (
         <ManageMembersModal
