@@ -528,21 +528,73 @@ export function groupTasksByStatus(
   statuses: SpaceStatus[],
   fadingMap: ReadonlyMap<string, string>,
 ) {
-  const groups: { status: SpaceStatus; tasks: Task[] }[] = [];
-  for (const status of statuses) {
-    groups.push({
-      status,
-      tasks: tasks.filter((t) => {
-        const snapshot = fadingMap.get(t.id);
-        const raw = snapshot !== undefined
-          ? snapshot
-          : ((t as any).status as string | undefined);
-        if (!raw) return false;
-        if (raw === status.category) return true;
+  const matchesExact = (status: SpaceStatus, raw: unknown): boolean => {
+    if (raw == null) return false;
+    if (typeof raw === 'object') {
+      const o = raw as { id?: string; name?: string; key?: string };
+      const candidates = [o.id, o.name, o.key]
+        .filter((v): v is string => typeof v === 'string')
+        .map((s) => s.toLowerCase().trim());
+      if (candidates.length === 0) return false;
+      if (candidates.includes(status.id.toLowerCase().trim())) return true;
+      if (candidates.includes(status.name.toLowerCase().trim())) return true;
+      const statusKey = (status as unknown as { key?: string }).key;
+      if (statusKey && candidates.includes(statusKey.toLowerCase().trim())) return true;
+      return false;
+    }
+    const lower = String(raw).toLowerCase().trim();
+    if (!lower) return false;
+    if (status.id.toLowerCase().trim() === lower) return true;
+    if (status.name.toLowerCase().trim() === lower) return true;
+    const statusKey = (status as unknown as { key?: string }).key;
+    if (statusKey && statusKey.toLowerCase().trim() === lower) return true;
+    return false;
+  };
+  const groups: { status: SpaceStatus; tasks: Task[] }[] = statuses.map((status) => ({ status, tasks: [] }));
+  if (groups.length === 0) return groups;
+  const byId = new Map(groups.map((g) => [g.status.id.toLowerCase().trim(), g]));
+  const byName = new Map(groups.map((g) => [g.status.name.toLowerCase().trim(), g]));
+  const unmatched: Task[] = [];
+  for (const t of tasks) {
+    const snapshot = fadingMap.get(t.id);
+    const raw: unknown = snapshot !== undefined
+      ? snapshot
+      : ((t as unknown as { status?: unknown }).status ?? (t as unknown as { status_id?: unknown }).status_id);
+    let placed = false;
+    if (raw != null && raw !== '') {
+      if (typeof raw === 'string') {
+        const lower = raw.toLowerCase().trim();
+        const g = byId.get(lower) || byName.get(lower)
+          || groups.find((x) => ((x.status as unknown as { key?: string }).key || '').toLowerCase().trim() === lower);
+        if (g) { g.tasks.push(t); placed = true; }
+      } else {
+        const g = groups.find((x) => matchesExact(x.status, raw));
+        if (g) { g.tasks.push(t); placed = true; }
+      }
+    }
+    if (!placed) unmatched.push(t);
+  }
+  // Legacy fallback: tasks whose status is a bare category ('todo'/'done') or
+  // an unknown key still need to show up exactly once — never duplicated
+  // across every status sharing that category (the old filter matched by
+  // category, so OPEN+EMPTY each showed the same row).
+  for (const t of unmatched) {
+    const snapshot = fadingMap.get(t.id);
+    const raw: unknown = snapshot !== undefined
+      ? snapshot
+      : ((t as unknown as { status?: unknown }).status ?? (t as unknown as { status_id?: unknown }).status_id);
+    let target = groups[0];
+    if (typeof raw === 'string' && raw) {
+      const lower = raw.toLowerCase().trim();
+      const direct = byId.get(lower) || byName.get(lower);
+      if (direct) target = direct;
+      else {
         const mapped = getTaskStatusCategory(raw);
-        return mapped === status.category;
-      }),
-    });
+        const cat = mapped || (['todo', 'active', 'done', 'closed'].includes(lower) ? lower : null);
+        if (cat) target = groups.find((g) => g.status.category === cat) || groups[0];
+      }
+    }
+    target.tasks.push(t);
   }
   return groups;
 }
