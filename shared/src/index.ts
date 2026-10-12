@@ -1405,10 +1405,13 @@ export interface TaskDayPlan {
   created_at: string;
   updated_at: string;
   // Synthesized rows merged into GET /pm/day-plans (not real task_day_plans
-  // rows): work-block occurrences fired by recurrence rules, and date-derived
-  // occurrences from a task's work/due/start date landing on the viewed day.
+  // rows): work-block occurrences fired by recurrence rules, date-derived
+  // occurrences from a task's work/due/start date landing on the viewed day,
+  // and recurrence occurrences — future firings of a routine template
+  // (tasks.recurrence) so a daily/weekly repeat shows on every day it fires,
+  // not just after the midnight spawner materializes that day's copy.
   virtual?: boolean;
-  kind?: 'work_block_occurrence' | 'date_occurrence' | 'group_block';
+  kind?: 'work_block_occurrence' | 'date_occurrence' | 'recurrence_occurrence' | 'group_block';
   // Date-derived rows only: true when the source date carries no time-of-day
   // (midnight local) — the calendar renders these in its all-day strip.
   all_day?: boolean;

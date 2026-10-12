@@ -1429,6 +1429,11 @@ body.sb-resizing { user-select: none; -webkit-user-select: none; cursor: col-res
 .cal-tt-block[data-done="true"] .cal-tt-block-title { text-decoration: line-through; }
 /* Group block — combined block for a whole group (indigo). */
 .cal-tt-block[data-type="group_block"] { background: #e0e7ff; color: #312e81; border-left: 3px solid #6366f1; }
+/* Work/time block — tint the block type color over the surface and keep the
+   text on the ink scale so it stays readable in both light and dark themes.
+   Must come after the data-level rules: those set dark-on-pastel colors that
+   are illegible on the translucent violet tint. */
+.cal-tt-block[data-type="work_block"] { background: color-mix(in oklch, #8b5cf6 22%, var(--surface)); border-left: 3px solid #8b5cf6; color: var(--sh-ink); }
 .cal-tt-block[data-virtual="true"] { opacity: 0.82; }
 /* Time Block link drop target — a dragged task lights the block up before it
    lands; dropping links the task to the block (MultiDayCalendar / DayCalendar). */

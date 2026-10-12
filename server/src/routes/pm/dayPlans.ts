@@ -4,6 +4,7 @@ import { supabaseAdmin } from '../../supabase';
 import { requireAuth } from '../../middleware/auth';
 import { requireUserType } from '../../middleware/userType';
 import { PARTNER_USER_TYPES } from '@squadhub/shared';
+import { taskRecurrenceOccursOn, type TaskRecurrence } from '@squadhub/shared';
 
 const router = Router();
 router.use(requireAuth);
@@ -173,8 +174,11 @@ async function loadGroupBlocks(userId: string, date: string): Promise<any[]> {
 }
 
 // GET /pm/day-plans?date=YYYY-MM-DD&tz=Area/City — caller's plan blocks for
-// the date, merged with two kinds of virtual rows:
+// the date, merged with three kinds of virtual rows:
 //   - work-block occurrences whose recurrence rule fires on that date, and
+//   - recurrence occurrences: routine templates (tasks.recurrence) whose rule
+//     fires on that date, so a daily repeat shows on every future day — not
+//     just after the midnight spawner materializes that day's copy, and
 //   - date-derived occurrences: assigned tasks whose work/due/start date lands
 //     on that date in the caller's tz. A timestamp with a time-of-day becomes
 //     a timed block; a date-only value (midnight local) becomes an all-day row
@@ -256,6 +260,9 @@ router.get('/day-plans', async (req: Request, res: Response) => {
         .from('tasks')
         .select('id, work_date, due_date, start_date, time_estimate, snoozed_until')
         .contains('assignee_ids', [req.userId!])
+        // Routine templates are expanded separately below — their own stale
+        // work/due dates must not leak in as one-off occurrences here.
+        .is('recurrence', null)
         .not('status', 'in', '(done,closed,cancelled,Done,Closed,Cancelled)')
         .or([win('work_date'), win('due_date'), win('start_date')].join(','));
       if (dateErr) {
@@ -300,7 +307,94 @@ router.get('/day-plans', async (req: Request, res: Response) => {
       }
     }
 
-    const merged = [...realPlans, ...virtualPlans, ...dateVirtuals].sort(
+    // Recurrence occurrences. Routine templates (tasks.recurrence != null) are
+    // hidden from list views — only spawned copies render — so without this a
+    // daily repeat shows on just the day the spawner already materialized and
+    // every future day looks empty. Expand the rule virtually: when it fires
+    // on the viewed date, synthesize a block from the template's time-of-day
+    // (work > due > start) and estimate. Skipped when the day already has a
+    // real plan, a work-block/date occurrence, or a materialized instance for
+    // that template — an explicit placement or the real copy always wins.
+    const recurrenceVirtuals: any[] = [];
+    {
+      const { data: templates, error: tmplErr } = await supabaseAdmin
+        .from('tasks')
+        .select('id, work_date, due_date, start_date, time_estimate, snoozed_until, recurrence, recurrence_paused')
+        .contains('assignee_ids', [req.userId!])
+        .not('recurrence', 'is', null)
+        .not('status', 'in', '(done,closed,cancelled,Done,Closed,Cancelled)');
+      if (tmplErr) {
+        console.error('[dayPlans GET] recurrence lookup failed:', tmplErr);
+      } else {
+        const due = (templates || []).filter(
+          (t: any) =>
+            !t.recurrence_paused &&
+            taskRecurrenceOccursOn(t.recurrence as TaskRecurrence, date),
+        );
+        if (due.length > 0) {
+          // Materialized copies for this date — their parent templates must
+          // not also render as virtuals (would duplicate the block).
+          const parentIds = due.map((t: any) => t.id);
+          const { data: instances } = await supabaseAdmin
+            .from('tasks')
+            .select('recurring_parent_id')
+            .in('recurring_parent_id', parentIds)
+            .eq('recurrence_instance_date', date);
+          const hasInstance = new Set<string>(
+            ((instances || []) as any[])
+              .map((r: any) => r.recurring_parent_id)
+              .filter(Boolean),
+          );
+          const occupied = new Set<string>([
+            ...realPlanTaskIds,
+            ...virtualPlans.map((p) => p.task_id as string),
+            ...dateVirtuals.map((p) => p.task_id as string),
+          ]);
+          const now = new Date();
+          for (const t of due as any[]) {
+            if (occupied.has(t.id) || hasInstance.has(t.id)) continue;
+            if (t.snoozed_until && new Date(t.snoozed_until) > now) continue;
+            // Template's time-of-day carries onto each occurrence. When the
+            // server has the caller's tz, read the clock time off the first
+            // set field (work > due > start); without tz or without any date,
+            // fall back to an all-day row.
+            let field: 'work' | 'due' | 'start' | null = null;
+            let minute = 0;
+            if (tzFmt) {
+              for (const [f, v] of [
+                ['work', t.work_date],
+                ['due', t.due_date],
+                ['start', t.start_date],
+              ] as const) {
+                if (!v) continue;
+                field = f;
+                minute = dayMinuteOf(tzFmt, v).minute;
+                break;
+              }
+            }
+            const allDay = minute === 0;
+            const est =
+              typeof t.time_estimate === 'number' && t.time_estimate > 0 ? t.time_estimate : 30;
+            recurrenceVirtuals.push({
+              id: `rec:${t.id}:${date}`,
+              task_id: t.id,
+              user_id: req.userId!,
+              plan_date: date,
+              start_minute: allDay ? 0 : minute,
+              duration_minutes: allDay ? 1440 : Math.max(15, Math.min(est, 1440 - minute)),
+              created_at: null,
+              updated_at: null,
+              virtual: true,
+              kind: 'recurrence_occurrence',
+              all_day: allDay,
+              date_field: field ?? 'work',
+            });
+          }
+        }
+      }
+    }
+
+    const merged = [...realPlans, ...virtualPlans, ...dateVirtuals, ...recurrenceVirtuals].sort(
       (a, b) => (a.start_minute || 0) - (b.start_minute || 0),
     );
     const hydrated = await hydrate(merged);

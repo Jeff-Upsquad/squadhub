@@ -57,7 +57,7 @@ interface Plan {
   all_day?: boolean;
   virtual?: boolean;
   date_field?: 'work' | 'due' | 'start';
-  kind?: 'work_block_occurrence' | 'date_occurrence' | 'group_block';
+  kind?: 'work_block_occurrence' | 'date_occurrence' | 'recurrence_occurrence' | 'group_block';
   container?: GroupContainer;
   task?: {
     id: string;
@@ -550,7 +550,7 @@ export default function MultiDayCalendar({ days, todayKey, onOpenTask, onOpenDay
                       height: Math.max(18, renderDur * PX_PER_MIN),
                       left: `calc(${p.col} * (100% - 6px) / ${p.cols})`,
                       width: `calc((100% - 6px) / ${p.cols} - 2px)`,
-                      ...(isWb ? { background: `color-mix(in oklch, ${wbColor} 18%, transparent)`, borderLeftColor: wbColor } : {}),
+                      ...(isWb ? { background: `color-mix(in oklch, ${wbColor} 22%, var(--surface))`, borderLeftColor: wbColor, color: `color-mix(in oklch, ${wbColor} 45%, var(--sh-ink))` } : {}),
                     }}
                     title={`${title} · ${fmtTimeRange(renderStart, renderDur)}${isWb ? ' · drop a task here to link it' : ''}`}
                     data-wbdrop={isWb && wbOver === p.id ? 'true' : undefined}
