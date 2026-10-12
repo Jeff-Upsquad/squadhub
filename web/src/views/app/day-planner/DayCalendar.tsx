@@ -145,6 +145,28 @@ function dateFieldLabel(f?: 'work' | 'due' | 'start'): string {
   return 'Work';
 }
 
+// Group all-day chips by list so tasks from the same list stay together.
+// Group blocks each stand alone under their container id.
+function groupAllDayPlans(plans: any[]): Array<{ key: string; label: string; items: any[] }> {
+  const map = new Map<string, { key: string; label: string; items: any[] }>();
+  for (const p of plans) {
+    if (p.kind === 'group_block' && p.container) {
+      const key = `grp:${p.container.id}`;
+      if (!map.has(key)) map.set(key, { key, label: `Grouped tasks under ${p.container.name ?? 'Group'}`, items: [] });
+      map.get(key)!.items.push(p);
+      continue;
+    }
+    const listId = (p.task as any)?.list?.id ?? (p.task as any)?.list?.name ?? null;
+    const key = listId ? `list:${listId}` : `field:${p.date_field ?? 'work'}`;
+    if (!map.has(key)) {
+      const label = (p.task as any)?.list?.name ?? dateFieldLabel(p.date_field);
+      map.set(key, { key, label, items: [] });
+    }
+    map.get(key)!.items.push(p);
+  }
+  return [...map.values()].sort((a, b) => b.items.length - a.items.length || a.label.localeCompare(b.label));
+}
+
 export default function DayCalendar({ date, today, onDateChange, keyboard = false, toolbar, onInteractChange }: Props) {
   const { data: plans = [], isLoading } = useDayPlans(date);
   const schedule = useScheduleTaskOnDay();
@@ -187,6 +209,10 @@ export default function DayCalendar({ date, today, onDateChange, keyboard = fals
   // Click-and-drag on empty grid space → new task in that slot.
   const slotCreate = useSlotDragCreate(PX_PER_MIN);
   const [allDayOver, setAllDayOver] = useState(false);
+  // All-day strip grouping: collapsed shows the first few chips + a "+N more"
+  // toggle; chips are grouped by list so tasks from the same list stay together.
+  const [allDayExpanded, setAllDayExpanded] = useState(false);
+  const [allDayOpenGroups, setAllDayOpenGroups] = useState<Set<string>>(new Set());
   // Block being moved via mousedown drag — drives the live preview position.
   const [moving, setMoving] = useState<{
     planId: string;
@@ -301,8 +327,12 @@ export default function DayCalendar({ date, today, onDateChange, keyboard = fals
   }, [keyboard, date, today, onDateChange]);
 
   // Date-only occurrences go to the all-day strip; everything else (minus
-  // legacy all-day sentinels) lands on the timed grid.
-  const allDayPlans = useMemo(() => plans.filter((p) => p.all_day === true), [plans]);
+  // legacy all-day sentinels) lands on the timed grid. Group blocks stored as
+  // a full-day sentinel (0 + 1440) also surface here as one grouped chip.
+  const allDayPlans = useMemo(
+    () => plans.filter((p) => p.all_day === true || (p.kind === 'group_block' && isAllDaySentinel(p))),
+    [plans],
+  );
   const timedPlans = useMemo(
     () => plans.filter((p) => !p.all_day && !isAllDaySentinel(p)),
     [plans],
@@ -414,10 +444,27 @@ export default function DayCalendar({ date, today, onDateChange, keyboard = fals
   };
 
   // Drop on the all-day strip → set work_date (date-only) for the viewed day,
-  // overwriting any existing work date+time (drops the time-of-day).
+  // overwriting any existing work date+time (drops the time-of-day). A dropped
+  // "Grouped tasks under …" row becomes ONE timed group block at 9am (group
+  // blocks have no all-day form) so the whole group stays together.
   const handleAllDayDrop = (e: React.DragEvent) => {
     e.preventDefault();
     setAllDayOver(false);
+    const containerId = e.dataTransfer.getData(DND_GROUP_CONTAINER_ID);
+    if (containerId) {
+      const totalEst = Number(e.dataTransfer.getData(DND_GROUP_ESTIMATE_TOTAL));
+      const dur = Number.isFinite(totalEst) && totalEst > 0 ? totalEst : 30;
+      scheduleGroup.mutate({
+        container_type: e.dataTransfer.getData(DND_GROUP_CONTAINER_TYPE) as GroupContainer['type'],
+        container_id: containerId,
+        container_name: e.dataTransfer.getData(DND_GROUP_CONTAINER_NAME),
+        plan_date: date,
+        start_minute: 9 * 60,
+        duration_minutes: Math.min(dur, 1440 - 9 * 60),
+      });
+      showToast('Group placed at 9:00am — group blocks are timed', 'success');
+      return;
+    }
     const taskId = e.dataTransfer.getData('application/x-task-id');
     if (!taskId) return;
     const [y, m, d] = date.split('-').map(Number);
@@ -700,32 +747,122 @@ export default function DayCalendar({ date, today, onDateChange, keyboard = fals
           {allDayPlans.length === 0 && (
             <span className="dp-allday-empty">{allDayOver ? 'Drop to plan it for the whole day' : 'Drop a task here to plan it without a time'}</span>
           )}
-          {allDayPlans.map((p) => {
-            const isWb = p.task?.task_type_key === 'work_block';
-            const wbColor = p.task?.task_type_color || '#8b5cf6';
+          {(() => {
+            const groups = groupAllDayPlans(allDayPlans);
+            const total = allDayPlans.length;
+            const COLLAPSED_LIMIT = 4;
+            const collapsed = !allDayExpanded && total > COLLAPSED_LIMIT;
+            const renderChip = (p: any) => {
+              const isWb = p.task?.task_type_key === 'work_block';
+              const wbColor = p.task?.task_type_color || '#8b5cf6';
+              const isGroup = p.kind === 'group_block';
+              const chipTitle = isGroup
+                ? `Grouped tasks under ${p.container?.name ?? 'Group'} · drag onto the grid to give it a time`
+                : `${p.task?.title ?? 'Task'} · ${dateFieldLabel(p.date_field)} ${date} · drag onto the grid to give it a time`;
+              return (
+                <div
+                  key={p.id}
+                  className="dp-allday-chip"
+                  draggable
+                  data-type={isGroup ? 'group_block' : isWb ? 'work_block' : undefined}
+                  style={isWb ? ({ '--dp-accent': wbColor } as React.CSSProperties) : undefined}
+                  onDragStart={(e) => {
+                    if (isGroup && p.container) {
+                      e.dataTransfer.setData(DND_GROUP_CONTAINER_ID, p.container.id);
+                      e.dataTransfer.setData(DND_GROUP_CONTAINER_TYPE, p.container.type);
+                      e.dataTransfer.setData(DND_GROUP_CONTAINER_NAME, p.container.name ?? 'Group');
+                      e.dataTransfer.setData(DND_GROUP_ESTIMATE_TOTAL, String(p.duration_minutes ?? 30));
+                    } else {
+                      e.dataTransfer.setData('application/x-task-id', p.task_id);
+                      e.dataTransfer.setData('application/x-task-estimate', String(p.task?.time_estimate ?? 30));
+                      e.dataTransfer.setData(DND_TASK_RECURRING_PARENT, (p.task as any)?.recurring_parent_id ?? '');
+                    }
+                    e.dataTransfer.effectAllowed = 'copyMove';
+                    setNativeDragging(true);
+                  }}
+                  onDragEnd={() => setNativeDragging(false)}
+                  onClick={() => {
+                    if (isGroup && p.container) setGroupRunPanel(groupRunTargetFromContainer(qc, p.container));
+                    else setActiveTask(p.task_id);
+                  }}
+                  title={chipTitle}
+                >
+                  <span className="t">{isGroup ? `Grouped tasks under ${p.container?.name ?? 'Group'}` : (p.task?.title ?? 'Task')}</span>
+                  <span className="f">{isGroup ? 'Group' : dateFieldLabel(p.date_field)}</span>
+                </div>
+              );
+            };
+            if (groups.length <= 1) {
+              const items = collapsed ? groups[0]?.items.slice(0, COLLAPSED_LIMIT) ?? [] : (groups[0]?.items ?? []);
+              return (
+                <>
+                  {items.map(renderChip)}
+                  {collapsed && (
+                    <button type="button" className="dp-allday-more" onClick={() => setAllDayExpanded(true)}>
+                      +{total - COLLAPSED_LIMIT} more
+                    </button>
+                  )}
+                  {allDayExpanded && total > COLLAPSED_LIMIT && (
+                    <button type="button" className="dp-allday-more" onClick={() => setAllDayExpanded(false)}>
+                      Show less
+                    </button>
+                  )}
+                </>
+              );
+            }
+            // Multiple lists → grouped sections with a header per list.
+            if (collapsed) {
+              const preview = allDayPlans.slice(0, COLLAPSED_LIMIT);
+              return (
+                <>
+                  {preview.map(renderChip)}
+                  <button
+                    type="button"
+                    className="dp-allday-more"
+                    onClick={() => setAllDayExpanded(true)}
+                    title={groups.map((g) => `${g.label} (${g.items.length})`).join(' · ')}
+                  >
+                    +{total - COLLAPSED_LIMIT} more · {groups.length} groups
+                  </button>
+                </>
+              );
+            }
             return (
-              <div
-                key={p.id}
-                className="dp-allday-chip"
-                draggable
-                data-type={isWb ? 'work_block' : undefined}
-                style={isWb ? ({ '--dp-accent': wbColor } as React.CSSProperties) : undefined}
-                onDragStart={(e) => {
-                  e.dataTransfer.setData('application/x-task-id', p.task_id);
-                  e.dataTransfer.setData('application/x-task-estimate', String(p.task?.time_estimate ?? 30));
-                  e.dataTransfer.setData(DND_TASK_RECURRING_PARENT, (p.task as any)?.recurring_parent_id ?? '');
-                  e.dataTransfer.effectAllowed = 'copyMove';
-                  setNativeDragging(true);
-                }}
-                onDragEnd={() => setNativeDragging(false)}
-                onClick={() => setActiveTask(p.task_id)}
-                title={`${p.task?.title ?? 'Task'} · ${dateFieldLabel(p.date_field)} ${date} · drag onto the grid to give it a time`}
-              >
-                <span className="t">{p.task?.title ?? 'Task'}</span>
-                <span className="f">{dateFieldLabel(p.date_field)}</span>
-              </div>
+              <>
+                {groups.map((g) => {
+                  const open = allDayOpenGroups.size === 0 || allDayOpenGroups.has(g.key);
+                  return (
+                    <div key={g.key} className="dp-allday-group">
+                      <button
+                        type="button"
+                        className="dp-allday-grouphead"
+                        onClick={() => {
+                          setAllDayOpenGroups((prev) => {
+                            const next = new Set(prev);
+                            // First click when nothing is explicitly opened collapses this group.
+                            if (prev.size === 0) {
+                              for (const gg of groups) if (gg.key !== g.key) next.add(gg.key);
+                            } else if (next.has(g.key)) next.delete(g.key);
+                            else next.add(g.key);
+                            return next;
+                          });
+                        }}
+                        title={`${g.label} · ${g.items.length} task${g.items.length === 1 ? '' : 's'} · click to ${open ? 'collapse' : 'expand'}`}
+                      >
+                        {g.label} · {g.items.length}
+                      </button>
+                      {open && <div className="dp-allday-groupitems">{g.items.map(renderChip)}</div>}
+                    </div>
+                  );
+                })}
+                {total > COLLAPSED_LIMIT && (
+                  <button type="button" className="dp-allday-more" onClick={() => setAllDayExpanded(false)}>
+                    Show less
+                  </button>
+                )}
+              </>
             );
-          })}
+          })()}
           {exitingAllDay.map((p) => (
             <div key={`exit-${p.id}`} className="dp-allday-chip" data-exiting="true" aria-hidden="true">
               <span className="t">{p.task?.title ?? 'Task'}</span>

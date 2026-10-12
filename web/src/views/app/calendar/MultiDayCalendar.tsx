@@ -120,6 +120,28 @@ function dateFieldLabel(f?: 'work' | 'due' | 'start'): string {
   return 'Work';
 }
 
+// Group all-day chips by list so tasks from the same list stay together.
+// Group blocks each stand alone under their container id.
+function groupAllDayPlans(plans: Plan[]): Array<{ key: string; label: string; items: Plan[] }> {
+  const map = new Map<string, { key: string; label: string; items: Plan[] }>();
+  for (const p of plans) {
+    if (p.kind === 'group_block' && p.container) {
+      const key = `grp:${p.container.id}`;
+      if (!map.has(key)) map.set(key, { key, label: `Grouped tasks under ${p.container.name ?? 'Group'}`, items: [] });
+      map.get(key)!.items.push(p);
+      continue;
+    }
+    const listId = (p.task as any)?.list?.id ?? (p.task as any)?.list?.name ?? null;
+    const key = listId ? `list:${listId}` : `field:${p.date_field ?? 'work'}`;
+    if (!map.has(key)) {
+      const label = (p.task as any)?.list?.name ?? dateFieldLabel(p.date_field);
+      map.set(key, { key, label, items: [] });
+    }
+    map.get(key)!.items.push(p);
+  }
+  return [...map.values()].sort((a, b) => b.items.length - a.items.length || a.label.localeCompare(b.label));
+}
+
 // Greedy overlap layout within ONE day column (mirrors DayCalendar).
 interface Positioned extends Plan { col: number; cols: number }
 function positionBlocks(plans: Plan[]): Positioned[] {
@@ -187,6 +209,8 @@ export default function MultiDayCalendar({ days, todayKey, onOpenTask, onOpenDay
   // Click-and-drag on empty column space → new task in that slot.
   const slotCreate = useSlotDragCreate(PX_PER_MIN);
   const [allDayOver, setAllDayOver] = useState<string | null>(null);
+  // Per-day expand state for the grouped all-day strip ("+N more").
+  const [allDayExpanded, setAllDayExpanded] = useState<Set<string>>(new Set());
   const [moving, setMoving] = useState<{
     key: string; fromDate: string; duration: number; previewDate: string; previewStart: number; threshold: boolean;
   } | null>(null);
@@ -220,13 +244,14 @@ export default function MultiDayCalendar({ days, todayKey, onOpenTask, onOpenDay
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [days[0], N]);
 
-  // Split each day's plans into all-day chips vs timed blocks.
+  // Split each day's plans into all-day chips vs timed blocks. Group blocks
+  // stored as a full-day sentinel surface in the strip as one grouped chip.
   const { allDayByDate, timedByDate } = useMemo(() => {
     const ad: Record<string, Plan[]> = {};
     const td: Record<string, Positioned[]> = {};
     for (const day of days) {
       const plans = (plansByDate[day] ?? []) as unknown as Plan[];
-      ad[day] = plans.filter((p) => p.all_day === true);
+      ad[day] = plans.filter((p) => p.all_day === true || (p.kind === 'group_block' && isAllDaySentinel(p)));
       td[day] = positionBlocks(plans.filter((p) => !p.all_day && !isAllDaySentinel(p)));
     }
     return { allDayByDate: ad, timedByDate: td };
@@ -290,10 +315,27 @@ export default function MultiDayCalendar({ days, todayKey, onOpenTask, onOpenDay
   };
 
   // Drop on the all-day strip → set work_date (date-only) for that day. This
-  // overwrites any existing work date+time, dropping the time component.
+  // overwrites any existing work date+time, dropping the time component. A
+  // dropped group becomes ONE timed group block at 9am (groups have no
+  // all-day form) so the whole group stays together.
   const handleAllDayDrop = (date: string, e: React.DragEvent) => {
     e.preventDefault();
     setAllDayOver(null);
+    const containerId = e.dataTransfer.getData(DND_GROUP_CONTAINER_ID);
+    if (containerId) {
+      const totalEst = Number(e.dataTransfer.getData(DND_GROUP_ESTIMATE_TOTAL));
+      const dur = Number.isFinite(totalEst) && totalEst > 0 ? totalEst : 30;
+      scheduleGroup.mutate({
+        container_type: e.dataTransfer.getData(DND_GROUP_CONTAINER_TYPE) as GroupContainer['type'],
+        container_id: containerId,
+        container_name: e.dataTransfer.getData(DND_GROUP_CONTAINER_NAME),
+        plan_date: date,
+        start_minute: 9 * 60,
+        duration_minutes: Math.min(dur, 1440 - 9 * 60),
+      });
+      showToast('Group placed at 9:00am — group blocks are timed', 'success');
+      return;
+    }
     const taskId = e.dataTransfer.getData(DND_TASK_ID);
     if (!taskId) return;
     const [y, m, d] = date.split('-').map(Number);
@@ -450,27 +492,91 @@ export default function MultiDayCalendar({ days, todayKey, onOpenTask, onOpenDay
               onDragLeave={() => setAllDayOver((c) => (c === day ? null : c))}
               onDrop={(e) => handleAllDayDrop(day, e)}
             >
-              {(allDayByDate[day] ?? []).map((p) => (
-                <div
-                  key={p.id}
-                  className="cal-chip cal-tt-allday-chip"
-                  draggable
-                  data-level={priorityLevel((p.task?.priority ?? 'none') as any)}
-                  onDragStart={(e) => {
-                    e.dataTransfer.setData(DND_TASK_ID, p.task_id);
-                    e.dataTransfer.setData(DND_TASK_ESTIMATE, String(p.task?.time_estimate ?? 30));
-                    e.dataTransfer.setData(DND_TASK_RECURRING_PARENT, (p.task as any)?.recurring_parent_id ?? '');
-                    e.dataTransfer.effectAllowed = 'copyMove';
-                    setSlimDragImage(e, p.task?.title ?? 'Task');
-                  }}
-                  onClick={() => onOpenTask(p.task_id)}
-                  title={`${p.task?.title ?? 'Task'} · ${dateFieldLabel(p.date_field)} · drag onto the grid to give it a time`}
-                >
-                  <span className="cal-chip-dot" />
-                  <span className="cal-chip-title">{p.task?.title ?? 'Task'}</span>
-                  <span className="cal-chip-flag">{dateFieldLabel(p.date_field)}</span>
-                </div>
-              ))}
+              {(() => {
+                const list = allDayByDate[day] ?? [];
+                const LIMIT = N === 1 ? 4 : 2;
+                const expanded = allDayExpanded.has(day);
+                const visible = expanded ? list : list.slice(0, LIMIT);
+                const hidden = list.length - visible.length;
+                const groups = groupAllDayPlans(list);
+                const multiGroup = groups.length > 1;
+                const renderChip = (p: Plan) => {
+                  const isGroup = p.kind === 'group_block';
+                  return (
+                    <div
+                      key={p.id}
+                      className="cal-chip cal-tt-allday-chip"
+                      draggable
+                      data-level={priorityLevel((p.task?.priority ?? 'none') as any)}
+                      data-type={isGroup ? 'group_block' : undefined}
+                      onDragStart={(e) => {
+                        if (isGroup && p.container) {
+                          e.dataTransfer.setData(DND_GROUP_CONTAINER_ID, p.container.id);
+                          e.dataTransfer.setData(DND_GROUP_CONTAINER_TYPE, p.container.type);
+                          e.dataTransfer.setData(DND_GROUP_CONTAINER_NAME, p.container.name ?? 'Group');
+                          e.dataTransfer.setData(DND_GROUP_ESTIMATE_TOTAL, '30');
+                        } else {
+                          e.dataTransfer.setData(DND_TASK_ID, p.task_id);
+                          e.dataTransfer.setData(DND_TASK_ESTIMATE, String(p.task?.time_estimate ?? 30));
+                          e.dataTransfer.setData(DND_TASK_RECURRING_PARENT, (p.task as any)?.recurring_parent_id ?? '');
+                        }
+                        e.dataTransfer.effectAllowed = 'copyMove';
+                        setSlimDragImage(e, isGroup ? `Grouped tasks under ${p.container?.name ?? 'Group'}` : (p.task?.title ?? 'Task'));
+                      }}
+                      onClick={() => {
+                        if (isGroup && p.container) setGroupRunPanel(groupRunTargetFromContainer(qc, p.container));
+                        else onOpenTask(p.task_id);
+                      }}
+                      title={`${isGroup ? `Grouped tasks under ${p.container?.name ?? 'Group'}` : (p.task?.title ?? 'Task')} · ${isGroup ? 'Group' : dateFieldLabel(p.date_field)} · drag onto the grid to give it a time`}
+                    >
+                      <span className="cal-chip-dot" />
+                      <span className="cal-chip-title">{isGroup ? `Grouped tasks under ${p.container?.name ?? 'Group'}` : (p.task?.title ?? 'Task')}</span>
+                      <span className="cal-chip-flag">{isGroup ? 'Group' : dateFieldLabel(p.date_field)}</span>
+                    </div>
+                  );
+                };
+                return (
+                  <>
+                    {expanded && multiGroup
+                      ? groups.map((g) => (
+                          <div key={g.key} className="cal-tt-allday-group">
+                            <div className="cal-tt-allday-grouphead" title={`${g.label} · ${g.items.length} task${g.items.length === 1 ? '' : 's'}`}>
+                              {g.label} · {g.items.length}
+                            </div>
+                            {g.items.map(renderChip)}
+                          </div>
+                        ))
+                      : visible.map(renderChip)}
+                    {hidden > 0 && (
+                      <button
+                        type="button"
+                        className="cal-tt-allday-more"
+                        onClick={() => {
+                          setAllDayExpanded((prev) => new Set(prev).add(day));
+                        }}
+                        title={multiGroup ? groups.map((g) => `${g.label} (${g.items.length})`).join(' · ') : `${hidden} more all-day task${hidden === 1 ? '' : 's'}`}
+                      >
+                        +{hidden} more{multiGroup ? ` · ${groups.length} groups` : ''}
+                      </button>
+                    )}
+                    {expanded && list.length > LIMIT && (
+                      <button
+                        type="button"
+                        className="cal-tt-allday-more"
+                        onClick={() => {
+                          setAllDayExpanded((prev) => {
+                            const next = new Set(prev);
+                            next.delete(day);
+                            return next;
+                          });
+                        }}
+                      >
+                        Show less
+                      </button>
+                    )}
+                  </>
+                );
+              })()}
             </div>
           ))}
       </div>
