@@ -144,6 +144,7 @@ export default function TaskOverview({
   // strike through in place, then slide away (450ms) unless "show" is on.
   const [doneSnap, setDoneSnap] = useState<Map<string, string>>(new Map());
   const [gone, setGone] = useState<Set<string>>(new Set());
+  const [removed, setRemoved] = useState<Set<string>>(new Set());
   const timers = useRef<number[]>([]);
 
   useEffect(() => () => { timers.current.forEach((id) => window.clearTimeout(id)); }, []);
@@ -221,9 +222,9 @@ export default function TaskOverview({
     && filterTasks([t], filters, tz).length > 0
     && (!q || t.title.toLowerCase().includes(q)));
   const doneCount = matching.filter(isDone).length;
-  // Completed rows stay out unless shown — except ones completed here, which
-  // strike through in place and then collapse away (data-hidden).
-  const visible = matching.filter((t) => !isDone(t) || showDone || doneSnap.has(t.id));
+  // Keep locally completed rows during their slide-out, then remove them so
+  // their status / task type / priority group disappears when it becomes empty.
+  const visible = matching.filter((t) => !isDone(t) || showDone || (doneSnap.has(t.id) && !removed.has(t.id)));
   const hiddenRow = (t: Task) => isDone(t) && !showDone && gone.has(t.id);
 
   // ---- Grouping ---------------------------------------------------------
@@ -300,6 +301,7 @@ export default function TaskOverview({
       const prev = doneSnap.get(t.id);
       setDoneSnap((m) => { const n = new Map(m); n.delete(t.id); return n; });
       setGone((g) => { const n = new Set(g); n.delete(t.id); return n; });
+      setRemoved((r) => { const n = new Set(r); n.delete(t.id); return n; });
       const prevCat = prev ? getTaskStatusCategory(prev) : null;
       updateTask.mutate({ id: t.id, status: prev && prevCat !== 'closed' && prevCat !== 'done' ? prev : 'open' });
       return;
@@ -307,6 +309,8 @@ export default function TaskOverview({
     setDoneSnap((m) => new Map(m).set(t.id, (t as any).status || ''));
     updateTask.mutate({ id: t.id, status: 'closed' });
     timers.current.push(window.setTimeout(() => setGone((g) => new Set(g).add(t.id)), 450));
+    // Remove after the row's 600ms CSS transition has finished.
+    timers.current.push(window.setTimeout(() => setRemoved((r) => new Set(r).add(t.id)), 1050));
   };
   const openCreate = () => window.dispatchEvent(new CustomEvent('sh:open-create-task'));
   const setGroup = (g: OverviewGroup) => { setScopedGroupBy(scopeKey, g as GroupBy); setMenu(null); };

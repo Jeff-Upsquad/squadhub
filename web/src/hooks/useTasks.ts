@@ -596,5 +596,5 @@ export function groupTasksByStatus(
     }
     target.tasks.push(t);
   }
-  return groups;
+  return groups.filter((g) => g.tasks.length > 0);
 }

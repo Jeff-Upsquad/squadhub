@@ -422,8 +422,9 @@ export default function StageBoardView({
           </div>
           {PRIORITY_LANES.map((lane) => {
             const laneCount = columns.reduce((n, c) => n + c.tasks.filter((t) => (t.priority || 'none') === lane.key).length, 0);
+            if (laneCount === 0) return null;
             return (
-              <div key={lane.key} className="sw-lane" data-empty={laneCount === 0 || undefined}>
+              <div key={lane.key} className="sw-lane">
                 <div className="sw-lane-gutter">
                   <span className="sw-lane-bar" style={{ background: lane.color }} />
                   <span className="sw-lane-label">{lane.label}</span>
