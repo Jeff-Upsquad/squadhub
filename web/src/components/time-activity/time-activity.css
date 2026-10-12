@@ -217,6 +217,12 @@ html.dark .ta-panel, html[data-theme="noir"] .ta-panel {
 .ta-event[data-short="true"] .ta-resize-top { top: 0; }
 .ta-event[data-short="true"] .ta-resize-bottom { bottom: 0; }
 
+/* Drag-to-move for TIME TRACKER blocks (task + time-block entries).
+   The whole card grabs; duration is preserved while moving. */
+.ta-event[data-movable="true"] { cursor: grab; touch-action: none; }
+.ta-event[data-movable="true"]:active { cursor: grabbing; }
+.ta-event[data-dragging="true"] { z-index: 5; box-shadow: 0 0 0 1px var(--event-color), 0 8px 24px #0005; opacity: .96; cursor: grabbing; }
+
 /* Inline trim editor in the detail panel (mirrors the logged-time editor). */
 .ta-edit-row { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
 .ta-edit-row .ta-open-task { margin-top: 0; }

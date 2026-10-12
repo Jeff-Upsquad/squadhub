@@ -51,6 +51,7 @@ function CalendarData({ workspaceId, context, from, to, now, days = [], onClose 
   }, [sessions.data, entries.data, dayPlansByDate, commitment, now, timers, segmentStart, activeBlock.data]);
   return <TimeActivityCalendar.Data events={events} commitment={commitment}
     sessions={sessions.data || []}
+    entries={entries.data || []}
     canEdit={stats.data?.data?.time_log_edit?.can_edit === true}
     editWindowHours={stats.data?.data?.time_log_edit?.window_hours ?? 0}
     workspaceId={workspaceId} context={context}

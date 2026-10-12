@@ -3,7 +3,7 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode, type CSSProperties } from 'react';
 import { createPortal } from 'react-dom';
 import { useQueryClient } from '@tanstack/react-query';
-import type { TimerSession } from '@squadhub/shared';
+import type { TaskTimeEntry, TimerSession } from '@squadhub/shared';
 import api from '../../services/api';
 import { KINDS, clipActivity, combineTaskSegments, clock, dateLabel, dayKey, dayStart, duration, isAttendance, layoutActivities, shiftDay, weekStart, type Activity, type ActivityKind } from './activityModel';
 import './time-activity.css';
@@ -97,9 +97,9 @@ function boundsOf(session: TimerSession): { startMs: number; endMs: number; seco
   return { startMs, endMs, seconds };
 }
 
-function CalendarData({ events, commitment, loading = false, error = false, onRetry, onOpenTask, sessions = [], canEdit = false, editWindowHours = 0, workspaceId, context }: {
+function CalendarData({ events, commitment, loading = false, error = false, onRetry, onOpenTask, sessions = [], entries = [], canEdit = false, editWindowHours = 0, workspaceId, context }: {
   events: Activity[]; commitment: number; loading?: boolean; error?: boolean; onRetry?: () => void; onOpenTask?: (id: string) => void;
-  sessions?: TimerSession[]; canEdit?: boolean; editWindowHours?: number; workspaceId?: string; context?: string;
+  sessions?: TimerSession[]; entries?: TaskTimeEntry[]; canEdit?: boolean; editWindowHours?: number; workspaceId?: string; context?: string;
 }) {
   const { date, setDate, view, setView, now, from, to, days } = useContext(CalendarContext)!;
   const qc = useQueryClient();
@@ -109,6 +109,16 @@ function CalendarData({ events, commitment, loading = false, error = false, onRe
   const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
   const [dragError, setDragError] = useState<string | null>(null);
   const [drag, setDrag] = useState<null | { sessionId: string; edge: 'start' | 'end'; origStart: number; origEnd: number; boundStart: number; boundEnd: number; curMs: number; startY: number }>(null);
+  // Drag-to-move / resize for TIME TRACKER blocks (task + time-block entries).
+  // Move preserves every entry's duration and only shifts started_at; resize
+  // changes duration via the top/bottom handles. Multi-segment groups (one
+  // task, several entries that day) support move-only.
+  const [entryDrag, setEntryDrag] = useState<null | {
+    key: string; mode: 'move' | 'start' | 'end';
+    items: { taskId: string; entryId: string; origStartMs: number; durationSec: number }[];
+    origBlockStart: number; origBlockEnd: number; curMs: number; deltaMs: number; startY: number; dayStartMs: number; moved: boolean;
+  }>(null);
+  const suppressClick = useRef(false);
   const scroller = useRef<HTMLDivElement>(null);
   const [calendarWidth, setCalendarWidth] = useState(850);
   useEffect(() => {
@@ -140,11 +150,43 @@ function CalendarData({ events, commitment, loading = false, error = false, onRe
     canEdit && isWithinWindow(selectedSession.end_time, editWindowHours) &&
     (selected.kind === 'work' || selected.kind === 'break' || selected.kind === 'overtime' || selected.kind === 'no_work')
   );
+  const entryById = useMemo(() => new Map((entries || []).map(e => [e.id, e])), [entries]);
+  const entryItemsOf = (event: Activity): { taskId: string; entryId: string; origStartMs: number; durationSec: number }[] | null => {
+    if (event.live) return null;
+    if (event.kind !== 'task' && event.kind !== 'block') return null;
+    // Require the backing DB row: demo/sample cards without entries stay static.
+    const collect = (id: string) => {
+      if (!id.startsWith('entry:')) return null;
+      const entryId = id.slice(6);
+      const row = entryById.get(entryId);
+      if (!row) return null;
+      const origStartMs = Date.parse(row.started_at);
+      const durationSec = row.duration_seconds;
+      if (!Number.isFinite(origStartMs) || !Number.isFinite(durationSec) || durationSec <= 0) return null;
+      return { taskId: row.task_id, entryId, origStartMs, durationSec };
+    };
+    if (event.id.startsWith('entry:')) {
+      const single = collect(event.id);
+      return single ? [single] : null;
+    }
+    // Combined task-day group: move every underlying entry by the same delta.
+    const segs = event.segments?.length ? event.segments : null;
+    if (!segs) return null;
+    const items: { taskId: string; entryId: string; origStartMs: number; durationSec: number }[] = [];
+    for (const s of segs) {
+      const item = collect(s.id);
+      if (!item) return null;
+      items.push(item);
+    }
+    return items.length ? items : null;
+  };
+  const canMoveEntry = (event: Activity) => !!entryItemsOf(event);
   useEffect(() => { setEditingSessionId(null); setDragError(null); }, [selectedId]);
   const invalidateTime = () => {
     qc.invalidateQueries({ queryKey: ['timer-sessions'] });
     qc.invalidateQueries({ queryKey: ['timer-stats'] });
     qc.invalidateQueries({ queryKey: ['timer-active'] });
+    qc.invalidateQueries({ queryKey: ['task-time-entries'] });
   };
   const saveSessionResize = async (sessionId: string, patch: { start_time?: string; end_time?: string }) => {
     try {
@@ -152,6 +194,45 @@ function CalendarData({ events, commitment, loading = false, error = false, onRe
       invalidateTime();
       setDragError(null);
     } catch (err: any) {
+      setDragError(err?.response?.data?.error || 'Could not save that change');
+    }
+  };
+  const saveEntryDrag = async (
+    items: { taskId: string; entryId: string; origStartMs: number; durationSec: number }[],
+    mode: 'move' | 'start' | 'end',
+    origBlockStart: number, origBlockEnd: number, finalMs: number, deltaMs: number,
+    eventId: string,
+  ) => {
+    try {
+      if (mode === 'move') {
+        if (deltaMs === 0) return;
+        await Promise.all(items.map(item =>
+          api.patch(`/pm/tasks/${item.taskId}/time-entries/${item.entryId}`, {
+            started_at: new Date(item.origStartMs + deltaMs).toISOString(),
+            duration_seconds: item.durationSec,
+          }),
+        ));
+      } else if (items.length === 1) {
+        const item = items[0];
+        const newStartMs = mode === 'start' ? finalMs : origBlockStart;
+        const newEndMs = mode === 'end' ? finalMs : origBlockEnd;
+        const newSecs = Math.round((newEndMs - newStartMs) / 1000);
+        if (!(newEndMs > newStartMs) || newSecs < 60) {
+          setSelectedId(eventId);
+          setDragError('Sessions must keep at least 1 minute');
+          return;
+        }
+        await api.patch(`/pm/tasks/${item.taskId}/time-entries/${item.entryId}`, {
+          started_at: new Date(newStartMs).toISOString(),
+          duration_seconds: newSecs,
+        });
+      } else {
+        return;
+      }
+      invalidateTime();
+      setDragError(null);
+    } catch (err: any) {
+      setSelectedId(eventId);
       setDragError(err?.response?.data?.error || 'Could not save that change');
     }
   };
@@ -188,6 +269,57 @@ function CalendarData({ events, commitment, loading = false, error = false, onRe
     window.addEventListener('pointercancel', up, { once: true });
     return () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); window.removeEventListener('pointercancel', up); };
   }, [drag ? `${drag.sessionId}:${drag.edge}:${drag.startY}` : null]);
+  // Drag-to-move / resize for task + time-block entries. Move shifts every
+  // underlying entry by the same delta so duration never changes; resize moves
+  // one edge and recomputes duration. Snaps to 1 minute, clamps inside the
+  // visible IST day and never past ~now.
+  const entryDragRef = useRef<typeof entryDrag>(null);
+  entryDragRef.current = entryDrag;
+  useEffect(() => {
+    if (!entryDrag) return;
+    const { key, mode, origBlockStart, origBlockEnd, startY, dayStartMs, items } = entryDrag;
+    const dayEndMs = dayStartMs + 86400000;
+    const futureCap = Date.now() + 60000;
+    const move = (e: PointerEvent) => {
+      const raw = Math.round((e.clientY - startY) / HOUR_HEIGHT * 3600000 / 60000) * 60000;
+      if (Math.abs(e.clientY - startY) < 4 && Math.abs(raw) < 60000) {
+        setEntryDrag(d => (d && d.moved ? { ...d, moved: false } : d));
+        return;
+      }
+      if (mode === 'move') {
+        const minDelta = dayStartMs - origBlockStart;
+        const maxDelta = Math.min(dayEndMs, futureCap) - origBlockEnd;
+        const clamped = Math.min(Math.max(raw, minDelta), maxDelta);
+        setEntryDrag(d => (d && (d.deltaMs !== clamped || !d.moved) ? { ...d, deltaMs: clamped, moved: true } : d));
+      } else if (mode === 'start') {
+        const clamped = Math.min(Math.max(origBlockStart + raw, dayStartMs), origBlockEnd - 60000);
+        setEntryDrag(d => (d && (d.curMs !== clamped || !d.moved) ? { ...d, curMs: clamped, moved: true } : d));
+      } else {
+        const clamped = Math.max(Math.min(origBlockEnd + raw, Math.min(dayEndMs, futureCap)), origBlockStart + 60000);
+        setEntryDrag(d => (d && (d.curMs !== clamped || !d.moved) ? { ...d, curMs: clamped, moved: true } : d));
+      }
+    };
+    const up = () => {
+      const d = entryDragRef.current;
+      setEntryDrag(null);
+      if (!d || d.key !== key) return;
+      if (!d.moved) return;
+      suppressClick.current = true;
+      window.setTimeout(() => { suppressClick.current = false; }, 50);
+      if (mode === 'move') {
+        if (d.deltaMs === 0) return;
+        void saveEntryDrag(items, mode, origBlockStart, origBlockEnd, origBlockStart + d.deltaMs, d.deltaMs, key);
+      } else {
+        const changed = d.curMs !== (mode === 'start' ? origBlockStart : origBlockEnd);
+        if (!changed || items.length !== 1) return;
+        void saveEntryDrag(items, mode, origBlockStart, origBlockEnd, d.curMs, 0, key);
+      }
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up, { once: true });
+    window.addEventListener('pointercancel', () => { setEntryDrag(null); }, { once: true });
+    return () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); };
+  }, [entryDrag ? `${entryDrag.key}:${entryDrag.mode}:${entryDrag.startY}` : null]);
   const totals = Object.fromEntries(KINDS.map(k => [k.kind, visibleEvents.filter(e => e.kind === k.kind).reduce((sum, e) => sum + e.seconds, 0)])) as Record<ActivityKind, number>;
   const work = totals.work + totals.overtime;
   const trackedDays = new Set(visibleEvents.filter(e => e.kind === 'work' || e.kind === 'overtime').map(e => dayKey(e.start))).size;
@@ -267,6 +399,32 @@ function CalendarData({ events, commitment, loading = false, error = false, onRe
     setSelectedId(null);
     setDrag({ sessionId: session.id, edge, origStart, origEnd, boundStart, boundEnd, curMs: edge === 'start' ? origStart : origEnd, startY: e.clientY });
   };
+  const beginEntryResize = (e: React.PointerEvent, event: Activity, edge: 'start' | 'end', dayStartMs: number) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const items = entryItemsOf(event);
+    if (!items || items.length !== 1) return;
+    setSelectedId(null);
+    setDragError(null);
+    setEntryDrag({
+      key: event.id, mode: edge, items,
+      origBlockStart: event.start, origBlockEnd: event.end,
+      curMs: edge === 'start' ? event.start : event.end, deltaMs: 0,
+      startY: e.clientY, dayStartMs, moved: false,
+    });
+  };
+  const beginEntryMove = (e: React.PointerEvent, event: Activity, dayStartMs: number) => {
+    // Only primary-button drags; let right-click / multi-touch behave normally.
+    if (e.button !== 0 || e.ctrlKey || e.metaKey) return;
+    const items = entryItemsOf(event);
+    if (!items) return;
+    setEntryDrag({
+      key: event.id, mode: 'move', items,
+      origBlockStart: event.start, origBlockEnd: event.end,
+      curMs: event.start, deltaMs: 0,
+      startY: e.clientY, dayStartMs, moved: false,
+    });
+  };
   const display = (event: Activity, top: number, height: number, left: string, width: string, isNarrow?: boolean, isTight?: boolean, dayStartMs?: number) => {
     const sid = sessionIdOf(event);
     const session = sid ? sessionById.get(sid) : undefined;
@@ -286,6 +444,12 @@ function CalendarData({ events, commitment, loading = false, error = false, onRe
         bottomHandle = isLast;
       }
     }
+    // TIME TRACKER blocks: the whole card drags to a new start (duration
+    // preserved); single-entry cards also get top/bottom handles to adjust.
+    const entryItems = (event.kind === 'task' || event.kind === 'block') && dayStartMs != null ? entryItemsOf(event) : null;
+    const entryMovable = !!entryItems;
+    const entryResizable = !!entryItems && entryItems.length === 1;
+    const isEntryDragging = !!entryDrag && entryDrag.key === event.id;
     let adjTop = top, adjHeight = height;
     if (drag && sid && drag.sessionId === sid && session) {
       const pieces = piecesBySession.get(sid) || [];
@@ -300,14 +464,41 @@ function CalendarData({ events, commitment, loading = false, error = false, onRe
         adjHeight = (ne - event.start) / 3600000 * HOUR_HEIGHT;
       }
     }
+    if (entryDrag && entryDrag.key === event.id && dayStartMs != null) {
+      if (entryDrag.mode === 'move') {
+        const ns = entryDrag.origBlockStart + entryDrag.deltaMs;
+        adjTop = (ns - dayStartMs) / 3600000 * HOUR_HEIGHT;
+        adjHeight = (entryDrag.origBlockEnd - entryDrag.origBlockStart) / 3600000 * HOUR_HEIGHT;
+      } else if (entryDrag.mode === 'start') {
+        const ns = Math.min(Math.max(entryDrag.curMs, dayStartMs), entryDrag.origBlockEnd - 60000);
+        adjTop = (ns - dayStartMs) / 3600000 * HOUR_HEIGHT;
+        adjHeight = (entryDrag.origBlockEnd - ns) / 3600000 * HOUR_HEIGHT;
+      } else {
+        adjHeight = (entryDrag.curMs - entryDrag.origBlockStart) / 3600000 * HOUR_HEIGHT;
+      }
+    }
+    const previewStart = entryDrag && entryDrag.key === event.id && entryDrag.mode !== 'end'
+      ? (entryDrag.mode === 'move' ? entryDrag.origBlockStart + entryDrag.deltaMs : entryDrag.curMs)
+      : (drag?.sessionId === sid && drag.edge === 'start' ? drag.curMs : event.start);
+    const previewEnd = entryDrag && entryDrag.key === event.id && entryDrag.mode !== 'start'
+      ? (entryDrag.mode === 'move' ? entryDrag.origBlockEnd + entryDrag.deltaMs : entryDrag.curMs)
+      : event.end;
+    const handleClick = () => {
+      if (suppressClick.current) { suppressClick.current = false; return; }
+      if (entryDrag?.moved) return;
+      setSelectedId(event.id === selectedId ? null : event.id);
+    };
     return (
-    <button key={event.id} className="ta-event" data-kind={event.kind} data-selected={event.id === selectedId} data-short={adjHeight < 43} data-narrow={isNarrow} data-tight={isTight}
+    <button key={event.id} className="ta-event" data-kind={event.kind} data-selected={event.id === selectedId} data-short={adjHeight < 43} data-narrow={isNarrow} data-tight={isTight} data-dragging={isEntryDragging} data-movable={entryMovable}
       style={{ top: adjTop, height: Math.max(MIN_EVENT_HEIGHT, adjHeight - EVENT_GAP), left, width, '--event-color': KINDS.find(k => k.kind === event.kind)?.color || '#38bdf8' } as CSSProperties}
-      onClick={() => setSelectedId(event.id === selectedId ? null : event.id)}
-      aria-label={`${event.title}, ${clock(event.start)} to ${event.live ? 'now' : clock(event.end)}, ${duration(event.seconds)}${event.isManual ? ', manually entered' : ''}${editable ? ', editable: open details to trim time or drag the edges' : ''}`}
-      title={`${event.title} · ${clock(event.start)}–${event.live ? 'now' : clock(event.end)} · ${duration(event.seconds)}${event.isManual ? ' · Manually entered' : ''}${editable ? ' · Drag edges to trim (reduce only)' : ''}`}>
+      onClick={handleClick}
+      onPointerDown={entryMovable && dayStartMs != null ? e => beginEntryMove(e, event, dayStartMs) : undefined}
+      aria-label={`${event.title}, ${clock(event.start)} to ${event.live ? 'now' : clock(event.end)}, ${duration(event.seconds)}${event.isManual ? ', manually entered' : ''}${editable ? ', editable: open details to trim time or drag the edges' : ''}${entryMovable ? ', draggable: drag to move without changing duration' : ''}`}
+      title={`${event.title} · ${clock(event.start)}–${event.live ? 'now' : clock(event.end)} · ${duration(event.seconds)}${event.isManual ? ' · Manually entered' : ''}${editable ? ' · Drag edges to trim (reduce only)' : ''}${entryMovable ? ' · Drag to move (duration preserved)' : ''}${entryResizable ? ' · Drag edges to adjust' : ''}`}>
       {topHandle && session && <span className="ta-resize ta-resize-top" role="slider" aria-label={`Trim ${event.title} start (reduce only)`} aria-valuemin={boundsOf(session).startMs} aria-valuemax={Date.parse(session.end_time!)} aria-valuenow={drag?.sessionId === sid && drag.edge === 'start' ? drag.curMs : Date.parse(session.start_time)}
         onPointerDown={e => beginResize(e, session, 'start')} onClick={e => e.stopPropagation()} />}
+      {entryResizable && dayStartMs != null && <span className="ta-resize ta-resize-top" role="slider" aria-label={`Adjust ${event.title} start`} aria-valuemin={dayStartMs} aria-valuemax={event.end - 60000} aria-valuenow={entryDrag?.key === event.id && entryDrag.mode === 'start' ? entryDrag.curMs : event.start}
+        onPointerDown={e => beginEntryResize(e, event, 'start', dayStartMs)} onClick={e => e.stopPropagation()} />}
       <span className="ta-event-title">
         <span className="ta-event-name">
           {event.live && <i className="ta-live-dot" />}
@@ -316,11 +507,13 @@ function CalendarData({ events, commitment, loading = false, error = false, onRe
         </span>
         <b title="Logged time">{duration(event.seconds)}</b>
       </span>
-      {adjHeight >= 43 && <span className="ta-event-time">{clock(drag?.sessionId === sid && drag.edge === 'start' ? drag.curMs : event.start)} – {event.live ? 'now' : clock(event.end)}</span>}
+      {adjHeight >= 43 && <span className="ta-event-time">{clock(previewStart)} – {event.live && !(entryDrag && entryDrag.key === event.id) ? 'now' : clock(previewEnd)}</span>}
       {adjHeight >= 78 && event.project && <span className="ta-event-project">{event.project}</span>}
       {adjHeight >= 105 && event.kind === 'block' && <span className="ta-event-badge">{event.children?.length || 0} tasks in this block</span>}
       {bottomHandle && session && <span className="ta-resize ta-resize-bottom" role="slider" aria-label={`Trim ${event.title} end (reduce only)`} aria-valuemin={Date.parse(session.start_time)} aria-valuemax={boundsOf(session).endMs} aria-valuenow={drag?.sessionId === sid && drag.edge === 'end' ? drag.curMs : Date.parse(session.end_time!)}
         onPointerDown={e => beginResize(e, session, 'end')} onClick={e => e.stopPropagation()} />}
+      {entryResizable && dayStartMs != null && <span className="ta-resize ta-resize-bottom" role="slider" aria-label={`Adjust ${event.title} end`} aria-valuemin={event.start + 60000} aria-valuemax={Math.min(dayStartMs + 86400000, Date.now() + 60000)} aria-valuenow={entryDrag?.key === event.id && entryDrag.mode === 'end' ? entryDrag.curMs : event.end}
+        onPointerDown={e => beginEntryResize(e, event, 'end', dayStartMs)} onClick={e => e.stopPropagation()} />}
     </button>
     );
   };
@@ -379,6 +572,9 @@ function CalendarData({ events, commitment, loading = false, error = false, onRe
       <><div className="ta-detail-top"><i style={{ background: KINDS.find(k => k.kind === selected.kind)!.color }} /><strong>{selected.title}</strong>{selected.isManual && <span className="ta-manual-tag">manual</span>}<span>{duration(selected.seconds)}</span><button className="ta-icon-btn" onClick={() => setSelectedId(null)} aria-label="Dismiss session details"><Glyph name="close" /></button></div>
         <p>{clock(selected.start)} – {selected.live ? 'Now · tracking' : clock(selected.end)}<span>·</span>{selected.source}{selected.project && <><span>·</span>{selected.project}</>}</p>
         {dragError && <p className="ta-edit-error" role="alert">{dragError}</p>}
+        {!selected.live && (selected.kind === 'task' || selected.kind === 'block') && canMoveEntry(selected) && (
+          <p className="ta-edit-hint">Drag the block to move it — duration stays the same{entryItemsOf(selected)?.length === 1 ? ' · drag edges to adjust' : ''}</p>
+        )}
         {selectedEditable && selectedSession && (
           <div className="ta-edit-row">
             <button className="ta-open-task" onClick={() => setEditingSessionId(editingSessionId === selectedSession.id ? null : selectedSession.id)}>
