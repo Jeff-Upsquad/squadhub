@@ -86,7 +86,7 @@ export function sortByStageOrder(tasks: Task[]): Task[] {
   });
 }
 
-/** Exact-stage grouping (one column per real stage, in workflow order).
+/** Exact-stage grouping (one column per populated real stage, in workflow order).
  *  Placeholder stages get no column — their tasks sit in their original
  *  stage. Unknown stages land in the first column so a task is never lost. */
 export function groupTasksByStage(
@@ -101,7 +101,7 @@ export function groupTasksByStage(
     const g = groups.find((x) => statusMatches(x.status, raw)) || groups[0];
     g.tasks.push(t);
   }
-  return groups.map((g) => ({ ...g, tasks: sortByStageOrder(g.tasks) }));
+  return groups.filter((g) => g.tasks.length > 0).map((g) => ({ ...g, tasks: sortByStageOrder(g.tasks) }));
 }
 
 /** Bucket of a task given the list's stage set (falls back to the registry). */
@@ -121,7 +121,7 @@ export function groupTasksByBucket(tasks: Task[], statuses: SpaceStatus[], fadin
     label: `${b.emoji} ${b.label}`,
     color: b.color,
     tasks: sortByStageOrder(tasks.filter((t) => bucketOfTask(t, statuses, fadingMap) === b.key)),
-  }));
+  })).filter((g) => g.tasks.length > 0);
 }
 
 export const PRIORITY_LANES: { key: string; label: string; color: string }[] = [
