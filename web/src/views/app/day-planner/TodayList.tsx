@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Task } from '@squadhub/shared';
 import { usePMStore } from '../../../stores/pmStore';
 import { useDayPlannerTasks, useUnscheduledTasks, useDayPlans, useFocusTask, planDateKey } from '../../../hooks/useDayPlanner';
+import { useUpdateTask } from '../../../hooks/useTasks';
+import { dayToWorkDateISO } from '../calendar/calendarUtils';
 import { useTaskTypes } from '../../../hooks/useTaskTypes';
 import { groupTasks, collapseGroupedTasks, isGroupedRow, GROUP_BY_OPTIONS, type GroupBy } from '../../../lib/taskGrouping';
 import GroupedTaskRow from '../home/GroupedTaskRow';
@@ -64,6 +66,7 @@ export default function TodayList() {
   const { data: unscheduled = [], isLoading: unscheduledLoading } = useUnscheduledTasks();
   const { data: taskTypes } = useTaskTypes();
   const focusTask = useFocusTask();
+  const updateTask = useUpdateTask(null);
   const setActiveTask = usePMStore((s) => s.setActiveTask);
 
   // Group-by preference (persisted, planner-scoped) + multi-home expand state.
@@ -207,6 +210,23 @@ export default function TodayList() {
     });
   };
 
+  // One-click "Add to All-Day": set a date-only work_date for today (local
+  // midnight, no time-of-day). The server surfaces it as an `all_day` virtual
+  // row in the calendar's All-day strip — no timed block is created. Mirrors
+  // the all-day strip's drag-drop handler in DayCalendar (handleAllDayDrop).
+  // Idempotent: clicking again on an already-all-day task is a harmless no-op.
+  const addToAllDay = (e: React.MouseEvent, t: Task) => {
+    e.stopPropagation();
+    const [y, m, d] = todayStr.split('-').map(Number);
+    updateTask.mutate({ id: t.id, work_date: dayToWorkDateISO(new Date(y, m - 1, d)) });
+  };
+
+  const isAllDayToday = (t: Task): boolean => {
+    if (!t.work_date) return false;
+    const dt = new Date(t.work_date);
+    return planDateKey(dt) === todayStr && dt.getHours() === 0 && dt.getMinutes() === 0;
+  };
+
   // Relative day label: "Today", "Tomorrow", "Yesterday", else "Sep 25".
   const relDay = (iso: string): string => {
     const k = planDateKey(new Date(iso));
@@ -323,7 +343,7 @@ export default function TodayList() {
           </div>
         )}
 
-        {/* Footer: every date + estimate; snooze appears on hover */}
+        {/* Footer: every date + estimate; snooze + all-day appear on hover */}
         <div className="dp-card-foot">
           <div className="dates">
             {dates.length === 0 ? (
@@ -335,6 +355,20 @@ export default function TodayList() {
               </span>
             ))}
           </div>
+          <button
+            type="button"
+            className="allday"
+            data-on={isAllDayToday(t) || undefined}
+            onClick={(e) => addToAllDay(e, t)}
+            title={isAllDayToday(t) ? 'Already in All-Day' : 'Add to All-Day'}
+            aria-label={isAllDayToday(t) ? 'Already in All-Day' : 'Add to All-Day'}
+            aria-pressed={isAllDayToday(t)}
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="5" width="18" height="16" rx="3" />
+              <path d="M3 10h18M8 3v4M16 3v4M12 13v6M9.5 16h5" />
+            </svg>
+          </button>
           <button type="button" className="snooze" onClick={(e) => openSnooze(e, t)} title="Snooze" aria-label="Snooze task">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
               <circle cx="12" cy="13" r="8" />

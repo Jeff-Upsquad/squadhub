@@ -1019,10 +1019,11 @@ body.sb-resizing { user-select: none; -webkit-user-select: none; cursor: col-res
 .sh-view .dp-row .est { flex: none; display: inline-flex; align-items: center; gap: 5px; height: 24px; padding: 0 9px 0 8px; border-radius: 8px; background: var(--surface); box-shadow: inset 0 0 0 1px var(--sh-hair-2), 0 1px 1px rgba(10,10,10,.04); color: var(--sh-ink); font-size: 12px; font-weight: 700; letter-spacing: -0.01em; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .sh-view .dp-row .est svg { color: var(--sh-ink-3); }
 .sh-view .dp-row .est[data-empty] { background: transparent; color: var(--sh-ink-4); box-shadow: none; outline: 1px dashed var(--sh-hair-2); outline-offset: -1px; font-weight: 600; }
-.sh-view .dp-row .snooze { flex: none; width: 26px; height: 24px; padding: 0; display: grid; place-items: center; border: 0; border-radius: 8px; background: transparent; color: var(--sh-ink-3); cursor: pointer; opacity: 0; transition: opacity .12s, background .12s, color .12s; }
-.sh-view .dp-row:hover .snooze, .sh-view .dp-row:focus-within .snooze { opacity: 1; }
-.sh-view .dp-row .snooze:hover { background: var(--surface); color: var(--sh-ink); box-shadow: inset 0 0 0 1px var(--sh-hair); }
-@media (hover: none) { .sh-view .dp-row .snooze { opacity: 1; } .sh-view .dp-row .star { color: var(--sh-ink-4); } }
+.sh-view .dp-row .snooze, .sh-view .dp-row .allday { flex: none; width: 26px; height: 24px; padding: 0; display: grid; place-items: center; border: 0; border-radius: 8px; background: transparent; color: var(--sh-ink-3); cursor: pointer; opacity: 0; transition: opacity .12s, background .12s, color .12s; }
+.sh-view .dp-row:hover .snooze, .sh-view .dp-row:focus-within .snooze, .sh-view .dp-row:hover .allday, .sh-view .dp-row:focus-within .allday { opacity: 1; }
+.sh-view .dp-row .snooze:hover, .sh-view .dp-row .allday:hover { background: var(--surface); color: var(--sh-ink); box-shadow: inset 0 0 0 1px var(--sh-hair); }
+.sh-view .dp-row .allday[data-on] { opacity: 1; color: var(--sh-ink); }
+@media (hover: none) { .sh-view .dp-row .snooze, .sh-view .dp-row .allday { opacity: 1; } .sh-view .dp-row .star { color: var(--sh-ink-4); } }
 
 /* Empty + loading states */
 .sh-view .dp-empty { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 36px 20px; text-align: center; border: 1px dashed var(--sh-hair-2); border-radius: 14px; }
