@@ -1143,6 +1143,13 @@ body.sb-resizing { user-select: none; -webkit-user-select: none; cursor: col-res
 .sh-view .dp-allday-chip:active { cursor: grabbing; }
 .sh-view .dp-allday-chip .t { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .sh-view .dp-allday-chip .f { flex: none; font-size: 10.5px; font-weight: 600; opacity: .7; }
+.sh-view .dp-allday-chip[data-type="group_block"] { --dp-accent: #6366F1; }
+.sh-view .dp-allday-group { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; min-width: 0; }
+.sh-view .dp-allday-grouphead { border: 1px solid var(--sh-hair); background: var(--sh-hair-3); color: var(--sh-ink-2); font-size: 11px; font-weight: 700; border-radius: 999px; padding: 2px 9px; cursor: pointer; white-space: nowrap; }
+.sh-view .dp-allday-grouphead:hover { background: var(--surface); color: var(--sh-ink); }
+.sh-view .dp-allday-groupitems { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; min-width: 0; }
+.sh-view .dp-allday-more { border: none; background: transparent; color: var(--sh-ink-3); font-size: 11.5px; font-weight: 700; cursor: pointer; padding: 2px 6px; border-radius: 6px; white-space: nowrap; }
+.sh-view .dp-allday-more:hover { color: var(--sh-ink); background: var(--sh-hair-3); }
 
 /* Hour grid: each row is a 2-column grid (label gutter + slot). */
 .sh-view .dp-cal-grid { position: relative; display: block; padding: 0 16px 60px 0; }
@@ -1403,6 +1410,11 @@ body.sb-resizing { user-select: none; -webkit-user-select: none; cursor: col-res
 .cal-tt-allday-cell { flex: 1; min-width: 0; border-left: 1px solid var(--sh-hair); padding: 5px; display: flex; flex-direction: column; gap: 4px; transition: background .1s; }
 .cal-tt-allday-cell[data-dragover="true"] { background: color-mix(in oklch, #3b82f6 12%, var(--surface)); box-shadow: inset 0 0 0 2px #3b82f6; }
 .cal-tt-allday-chip { width: 100%; }
+.cal-tt-allday-chip[data-type="group_block"] { background: #e0e7ff; border-color: #6366f1; color: #312e81; }
+.cal-tt-allday-group { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.cal-tt-allday-grouphead { font-size: 10px; font-weight: 700; color: var(--sh-ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 0 2px; }
+.cal-tt-allday-more { border: none; background: transparent; color: var(--sh-ink-4); font-size: 10.5px; font-weight: 700; cursor: pointer; text-align: left; padding: 1px 4px; border-radius: 4px; }
+.cal-tt-allday-more:hover { color: var(--sh-ink); background: var(--sh-hair-3); }
 
 .cal-tt-scroll { flex: 1; min-height: 0; overflow-y: auto; position: relative; }
 .cal-tt-col { cursor: cell; }

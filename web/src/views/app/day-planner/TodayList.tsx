@@ -121,11 +121,13 @@ export default function TodayList() {
   // Tasks already on today's calendar are hidden from this list. The query
   // invalidates whenever a plan is created / moved / deleted, so the row
   // reappears automatically when a block is removed from the calendar.
-  // All-day rows don't count — a date-only task sits in the strip *and*
-  // stays here until it's dragged onto the grid and given a time.
+  // Work-based all-day rows count as placed too — a task in the All-day strip
+  // leaves this list (its chip stays draggable onto the grid for a time).
+  // All-day rows derived from due/start dates don't hide: those tasks still
+  // need a work slot chosen.
   const { data: todayPlans = [] } = useDayPlans(todayStr);
   const scheduledTaskIds = useMemo(
-    () => new Set(todayPlans.filter((p) => !p.all_day).map((p) => p.task_id)),
+    () => new Set(todayPlans.filter((p) => !p.all_day || p.date_field === 'work').map((p) => p.task_id)),
     [todayPlans],
   );
   // Containers already dropped as a combined group block today — hide those
