@@ -4,6 +4,8 @@ import { getTaskStatusCategory } from '@squadhub/shared';
 import { usePMStore, focusBucketForMinute } from '../../../stores/pmStore';
 import { showToast } from '../../../components/Toast';
 import api from '../../../services/api';
+import { formatDuration } from '../../../lib/timeDuration';
+import { collectFutureDayPlans, propagateDurationToFutureDayPlans } from '../../../lib/recurrenceDuration';
 import RecurrenceDurationConfirm from '../../../components/pm/RecurrenceDurationConfirm';
 import { useUpdateTask } from '../../../hooks/useTasks';
 import { useLinkTaskToWorkBlock } from '../../../hooks/useWorkBlocks';
@@ -234,6 +236,7 @@ export default function DayCalendar({ date, today, onDateChange, keyboard = fals
   const [recurConfirm, setRecurConfirm] = useState<{
     anchor: DOMRect;
     taskId: string;
+    planDate: string;
     startMinute: number;
     duration: number;
     isWorkBlock: boolean;
@@ -638,6 +641,7 @@ export default function DayCalendar({ date, today, onDateChange, keyboard = fals
               setRecurConfirm({
                 anchor,
                 taskId: plan.task_id,
+                planDate: date,
                 startMinute: cur.previewStart,
                 duration: cur.previewDur,
                 isWorkBlock: isLinkableBlockKey((plan.task as any)?.task_type_key),
@@ -1168,24 +1172,60 @@ export default function DayCalendar({ date, today, onDateChange, keyboard = fals
             const rc = recurConfirm;
             setRecurConfirm(null);
             // Future recurrences adopt the new duration: routine tasks via the
-            // estimate propagation flag, time blocks via their config window.
+            // estimate propagation flag, time blocks via their config window
+            // plus any individually-placed future overrides (which outrank the
+            // config, so they must be rewritten too).
             updateTask.mutate({ id: rc.taskId, time_estimate: rc.duration, propagate_estimate_to_future: true });
             if (rc.isWorkBlock) {
-              api.patch(`/pm/work-blocks/${rc.taskId}`, {
+              const patchConfig = () => api.patch(`/pm/work-blocks/${rc.taskId}`, {
                 start_minute: rc.startMinute,
                 end_minute: Math.min(1440, rc.startMinute + rc.duration),
-              }).then(() => {
+              });
+              const patchFutureOverrides = () => {
+                const rows = collectFutureDayPlans(qc, rc.taskId, rc.planDate);
+                if (rows.length === 0) return Promise.resolve();
+                return propagateDurationToFutureDayPlans(rows, rc.taskId, rc.duration);
+              };
+              const done = () => {
                 qc.invalidateQueries({ queryKey: ['work-block', rc.taskId] });
                 qc.invalidateQueries({ queryKey: ['day-plans'] });
-              }).catch((err) => {
-                console.error('Failed to update future time-block recurrences:', err);
-                showToast('Only this occurrence was updated', 'error');
-              });
+                showToast(`Future recurrences updated to ${formatDuration(rc.duration)}`, 'success');
+              };
+              patchConfig().then(
+                () => patchFutureOverrides().then(done, (err) => {
+                  console.error('Failed to update future time-block overrides:', err);
+                  qc.invalidateQueries({ queryKey: ['day-plans'] });
+                  showToast('Config updated, but some future blocks kept their time', 'error');
+                }),
+                (err) => {
+                  // No config row (individually placed repeats): the future is
+                  // the other placed blocks — update those instead.
+                  if (err?.response?.status === 404) {
+                    patchFutureOverrides().then(
+                      () => {
+                        qc.invalidateQueries({ queryKey: ['day-plans'] });
+                        showToast(`Future recurrences updated to ${formatDuration(rc.duration)}`, 'success');
+                      },
+                      (overrideErr) => {
+                        console.error('Failed to update future time-block occurrences:', overrideErr);
+                        showToast('Could not update future occurrences', 'error');
+                      },
+                    );
+                    return;
+                  }
+                  console.error('Failed to update future time-block recurrences:', err);
+                  showToast('Could not update future recurrences', 'error');
+                },
+              );
             } else {
               qc.invalidateQueries({ queryKey: ['day-plans'] });
+              showToast(`Future recurrences updated to ${formatDuration(rc.duration)}`, 'success');
             }
           }}
-          onCancel={() => setRecurConfirm(null)}
+          onCancel={() => {
+            setRecurConfirm(null);
+            showToast('Only this occurrence was updated', 'info');
+          }}
         />
       )}
     </div>
