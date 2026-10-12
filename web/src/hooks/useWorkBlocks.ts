@@ -228,6 +228,8 @@ export function useLinkTaskToWorkBlock() {
     },
     onSettled: (_d, _e, vars) => {
       qc.invalidateQueries({ queryKey: ['work-block', vars.work_block_task_id] });
+      // Calendar blocks render linked_tasks from the day-plans hydrate.
+      qc.invalidateQueries({ queryKey: ['day-plans'] });
     },
   });
 }
@@ -240,6 +242,7 @@ export function useUnlinkTaskFromWorkBlock() {
     },
     onSettled: (_d, _e, vars) => {
       qc.invalidateQueries({ queryKey: ['work-block', vars.work_block_task_id] });
+      qc.invalidateQueries({ queryKey: ['day-plans'] });
     },
   });
 }

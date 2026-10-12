@@ -1431,6 +1431,9 @@ export interface TaskDayPlan {
     // Flattened task_types join from the day-plans hydrate.
     task_type_key?: string | null;
     task_type_color?: string | null;
+    // Manually linked tasks for time/break blocks (work_block_links +
+    // linked task titles), so the calendar can render them inside the block.
+    linked_tasks?: Array<{ id: string; title: string; status?: string | null }>;
   };
 }
 

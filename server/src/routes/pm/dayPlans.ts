@@ -121,12 +121,48 @@ async function hydrate(plans: any[]): Promise<any[]> {
     : { data: [] as any[] };
   const listMap = new Map<string, any>((lists || []).map((l: any) => [l.id, l]));
 
+  // Linked tasks for time/break blocks so the calendar can render them inside
+  // the block without an extra round-trip per block.
+  const linksByBlock = new Map<string, Array<{ id: string; title: string; status: string | null }>>();
+  const blockIds = (tasks || [])
+    .filter((t: any) => t.task_types?.key === 'work_block' || t.task_types?.key === 'break_block')
+    .map((t: any) => t.id);
+  if (blockIds.length > 0) {
+    const { data: links, error: linksErr } = await supabaseAdmin
+      .from('work_block_links')
+      .select('work_block_task_id, linked_task_id, position')
+      .in('work_block_task_id', blockIds)
+      .order('position', { ascending: true });
+    if (linksErr) {
+      console.error('[dayPlans] work-block links lookup failed:', linksErr);
+    } else if (links && links.length > 0) {
+      const linkedIds = Array.from(new Set((links as any[]).map((l: any) => l.linked_task_id)));
+      const { data: linkedTasks, error: linkedErr } = await supabaseAdmin
+        .from('tasks')
+        .select('id, title, status')
+        .in('id', linkedIds);
+      if (linkedErr) {
+        console.error('[dayPlans] linked-tasks lookup failed:', linkedErr);
+      }
+      const linkedMap = new Map<string, any>((linkedTasks || []).map((t: any) => [t.id, t]));
+      for (const l of links as any[]) {
+        const lt = linkedMap.get(l.linked_task_id);
+        if (!lt) continue;
+        const arr = linksByBlock.get(l.work_block_task_id) ?? [];
+        arr.push({ id: lt.id, title: lt.title ?? 'Untitled task', status: lt.status ?? null });
+        linksByBlock.set(l.work_block_task_id, arr);
+      }
+    }
+  }
+
   return plans.map((p) => {
     const t = taskMap.get(p.task_id);
     const l = t?.list_id ? listMap.get(t.list_id) : null;
     return {
       ...p,
-      task: t ? { ...t, list: l ? { id: l.id, name: l.name } : null } : null,
+      task: t
+        ? { ...t, list: l ? { id: l.id, name: l.name } : null, linked_tasks: linksByBlock.get(p.task_id) ?? [] }
+        : null,
     };
   });
 }
