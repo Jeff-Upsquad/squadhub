@@ -99,7 +99,7 @@ async function hydrate(plans: any[]): Promise<any[]> {
   // makes Supabase reject the whole select with 42703.
   const { data: tasks, error: tasksErr } = await supabaseAdmin
     .from('tasks')
-    .select('id, title, priority, status, time_estimate, list_id, task_type_id, task_types(key, color)')
+    .select('id, title, priority, status, time_estimate, list_id, recurrence, recurring_parent_id, recurrence_instance_date, task_type_id, task_types(key, color)')
     .in('id', taskIds);
   if (tasksErr) {
     console.error('[dayPlans] tasks lookup failed:', tasksErr);
@@ -294,7 +294,7 @@ router.get('/day-plans', async (req: Request, res: Response) => {
       const win = (f: string) => `and(${f}.gte.${fromIso},${f}.lt.${toIso})`;
       const { data: dateTasks, error: dateErr } = await supabaseAdmin
         .from('tasks')
-        .select('id, work_date, due_date, start_date, time_estimate, snoozed_until')
+        .select('id, work_date, due_date, start_date, time_estimate, snoozed_until, recurring_parent_id')
         .contains('assignee_ids', [req.userId!])
         // Routine templates are expanded separately below — their own stale
         // work/due dates must not leak in as one-off occurrences here.
@@ -307,6 +307,12 @@ router.get('/day-plans', async (req: Request, res: Response) => {
       const now = new Date();
       for (const t of (dateTasks || []) as any[]) {
         if (occupied.has(t.id)) continue;
+        // A routine instance must not render alongside its template's explicit
+        // placement: when the user drags the 9am recurrence virtual onto the
+        // calendar (real plan for the template id), the auto-spawned copy's
+        // date-derived 6pm block would otherwise duplicate the same title.
+        // The explicit placement always wins.
+        if (t.recurring_parent_id && occupied.has(t.recurring_parent_id)) continue;
         if (t.snoozed_until && new Date(t.snoozed_until) > now) continue;
         // First field that lands on the viewed day wins; work_date outranks
         // due/start because the planner is about when you'll do the work.

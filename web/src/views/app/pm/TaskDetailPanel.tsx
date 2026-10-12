@@ -64,6 +64,7 @@ import { useGoalsUI } from '../goals/goalsStore';
 import GoalIcon from '../goals/GoalIcons';
 import FocusStarButton from '../../../components/pm/FocusStarButton';
 import EstimatePopover from '../../../components/pm/EstimatePopover';
+import RecurrenceDurationConfirm from '../../../components/pm/RecurrenceDurationConfirm';
 import LogTimePopover from '../../../components/pm/LogTimePopover';
 import { formatDuration } from '../../../lib/timeDuration';
 import AddEntrySplitButton from './AddEntrySplitButton';
@@ -554,6 +555,7 @@ export default function TaskDetailPanel({
     document.execCommand('insertText', false, needsSpace ? ' @' : '@');
   };
   const [estimateAnchor, setEstimateAnchor] = useState<DOMRect | null>(null);
+  const [recurConfirm, setRecurConfirm] = useState<{ anchor: DOMRect | null; minutes: number | null } | null>(null);
   const [logTimeAnchor, setLogTimeAnchor] = useState<DOMRect | null>(null);
   const [timerElapsed, setTimerElapsed] = useState(0);
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
@@ -3213,8 +3215,35 @@ export default function TaskDetailPanel({
         <EstimatePopover
           anchorRect={estimateAnchor}
           value={task.time_estimate ?? null}
-          onApply={(mins) => updateTask.mutate({ id: task.id, time_estimate: mins })}
+          onApply={(mins) => {
+            const isRepeating = !!(task.recurrence || (task as any).recurring_parent_id);
+            const changed = (mins ?? null) !== (task.time_estimate ?? null);
+            if (isRepeating && changed) {
+              // Hold the write: the small pop-up right here decides scope.
+              // Confirm → future recurrences too; cancel → only this item.
+              setRecurConfirm({ anchor: estimateAnchor, minutes: mins });
+            } else {
+              updateTask.mutate({ id: task.id, time_estimate: mins });
+            }
+          }}
           onClose={() => setEstimateAnchor(null)}
+        />
+      )}
+
+      {recurConfirm && task && (
+        <RecurrenceDurationConfirm
+          anchorRect={recurConfirm.anchor}
+          minutes={recurConfirm.minutes}
+          onConfirm={() => {
+            updateTask.mutate({ id: task.id, time_estimate: recurConfirm.minutes, propagate_estimate_to_future: true });
+            setRecurConfirm(null);
+            setEstimateAnchor(null);
+          }}
+          onCancel={() => {
+            updateTask.mutate({ id: task.id, time_estimate: recurConfirm.minutes });
+            setRecurConfirm(null);
+            setEstimateAnchor(null);
+          }}
         />
       )}
 

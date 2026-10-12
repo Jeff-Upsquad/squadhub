@@ -77,6 +77,10 @@ const updateSchema = z.object({
   list_id: z.string().uuid().optional(),
   recurrence: recurrenceSchema.nullable().optional(),
   focused_at: z.string().nullable().optional(),
+  // When true and time_estimate changes on a routine template or instance,
+  // the new estimate is also written to the template + future instances.
+  // Absent/false → only the edited row changes (single-item update).
+  propagate_estimate_to_future: z.boolean().optional(),
 });
 
 // Helper to get list_id from a task
@@ -2573,7 +2577,7 @@ router.put('/tasks/:id', async (req: Request, res: Response) => {
     // activity feed (task_activity, migration 147). One lightweight read.
     const { data: prior } = await supabaseAdmin
       .from('tasks')
-      .select('time_estimate, list_id, title, description, status, priority, due_date, work_date, start_date, task_type_id, assignee_ids, recurrence, metadata, parent_task_id')
+      .select('time_estimate, list_id, title, description, status, priority, due_date, work_date, start_date, task_type_id, assignee_ids, recurrence, recurring_parent_id, recurrence_instance_date, metadata, parent_task_id')
       .eq('id', id)
       .single();
     validateWorkRange(
@@ -2629,6 +2633,8 @@ router.put('/tasks/:id', async (req: Request, res: Response) => {
     }
 
     const updatePayload: Record<string, any> = { ...body, last_modified_by: req.userId! };
+    // Internal-only flag — never a tasks column.
+    delete updatePayload.propagate_estimate_to_future;
 
     const priorMeta = (prior as any)?.metadata || {};
     const nextMeta = body.metadata !== undefined ? { ...priorMeta, ...body.metadata } : { ...priorMeta };
@@ -2766,6 +2772,38 @@ router.put('/tasks/:id', async (req: Request, res: Response) => {
         });
       } catch (auditErr) {
         console.error('Estimate-change audit insert failed:', auditErr);
+      }
+    }
+
+    // Duration propagation for repetitive tasks: when the caller confirms
+    // "update future recurrences", the new estimate is written to the routine
+    // template + every instance on/after the edited occurrence. Without the
+    // flag only the edited row changes. Best-effort — never fails the update.
+    if (body.time_estimate !== undefined
+      && (body as any).propagate_estimate_to_future === true
+      && (body.time_estimate ?? null) !== (priorEstimate ?? null)) {
+      try {
+        const edited: any = data;
+        const templateId: string | null = edited?.recurrence
+          ? edited.id
+          : (edited?.recurring_parent_id ?? (prior as any)?.recurring_parent_id ?? null);
+        if (templateId) {
+          const anchorDate: string = edited?.recurrence_instance_date
+            ?? (prior as any)?.recurrence_instance_date
+            ?? todayIST();
+          const newEstimate: number | null = body.time_estimate ?? null;
+          if (templateId !== edited.id) {
+            await supabaseAdmin.from('tasks').update({ time_estimate: newEstimate }).eq('id', templateId);
+          }
+          await supabaseAdmin
+            .from('tasks')
+            .update({ time_estimate: newEstimate })
+            .eq('recurring_parent_id', templateId)
+            .gte('recurrence_instance_date', anchorDate)
+            .neq('id', edited.id);
+        }
+      } catch (propErr) {
+        console.error('Estimate future-propagation failed:', propErr);
       }
     }
 

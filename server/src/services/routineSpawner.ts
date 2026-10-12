@@ -24,14 +24,26 @@ async function defaultStatusForType(taskTypeId: string | null): Promise<string> 
   return 'todo';
 }
 
-// Instance due date: the occurrence date at the template's due time-of-day
-// (IST). Templates without a due time get end-of-business 6 PM IST.
-function instanceDueDate(template: any, dateStr: string): string {
-  let hhmm = '18:00';
-  if (template.due_date) {
-    hhmm = formatTimeIST(new Date(template.due_date));
-  }
+// Instance date at the template's time-of-day (IST wall clock) shifted onto
+// the occurrence date. Preserves the hour/minute the user picked on the
+// template so a 9:00am routine spawns a 9:00am instance — not a 6pm phantom.
+function instanceDateAtTemplateTime(templateIso: string, dateStr: string): string {
+  const hhmm = formatTimeIST(new Date(templateIso));
   return new Date(`${dateStr}T${hhmm}:00+05:30`).toISOString();
+}
+
+// Instance due date: the occurrence date at the template's due time-of-day
+// (IST). Templates without any dates get end-of-business 6 PM IST so the copy
+// still surfaces in Today; templates that already carry a work/start time but
+// no due date leave due null so the Day Planner doesn't invent a 6pm block.
+function instanceDueDate(template: any, dateStr: string): string | null {
+  if (template.due_date) {
+    return instanceDateAtTemplateTime(template.due_date, dateStr);
+  }
+  if (!template.work_date && !template.start_date) {
+    return new Date(`${dateStr}T18:00:00+05:30`).toISOString();
+  }
+  return null;
 }
 
 // Per-client sequential display number — same behaviour as POST /pm/tasks.
@@ -123,6 +135,11 @@ export async function spawnRoutineInstance(template: any, dateStr: string): Prom
     status,
     priority: template.priority || 'none',
     due_date: instanceDueDate(template, dateStr),
+    // Carry the template's work/start clock times onto the occurrence date so
+    // the instance renders at the same time-of-day (fixes 6pm duplicates where
+    // a 9am routine spawned a due-only 18:00 copy).
+    work_date: template.work_date ? instanceDateAtTemplateTime(template.work_date, dateStr) : null,
+    start_date: template.start_date ? instanceDateAtTemplateTime(template.start_date, dateStr) : null,
     task_type_id: template.task_type_id ?? null,
     assignee_ids: template.assignee_ids || [],
     time_estimate: template.time_estimate ?? null,
