@@ -27,8 +27,8 @@ import './task-overview.css';
 // summary, a dark stats strip whose tiles filter the list, list chips +
 // Group / Filter / view switch, then one big card per group (Stage, Status,
 // Priority, Assignee, List or Task type) with status sub-heads that carry a
-// progress ring. Clicking a row opens a compact inspector; completing a task
-// strikes it through and slides it away.
+// progress ring. Clicking a row opens the full task detail panel; completing
+// a task strikes it through and slides it away.
 
 export type OverviewGroup = 'stage' | 'status' | 'priority' | 'assignee' | 'list' | 'task_type';
 type ViewMode = 'list' | 'board' | 'calendar';
@@ -139,7 +139,6 @@ export default function TaskOverview({
   const [tile, setTile] = useState<TileKey>('all');
   const [view, setView] = useState<ViewMode>('list');
   const [menu, setMenu] = useState<'group' | 'filter' | null>(null);
-  const [selId, setSelId] = useState<string | null>(null);
   const [showDone, setShowDone] = useState(false);
   // Tasks completed here: remembered with their pre-completion status so they
   // strike through in place, then slide away (450ms) unless "show" is on.
@@ -157,7 +156,7 @@ export default function TaskOverview({
     return () => document.removeEventListener('mousedown', onDown);
   }, [menu]);
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') { setMenu(null); setSelId(null); } };
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') { setMenu(null); } };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
   }, []);
@@ -329,8 +328,6 @@ export default function TaskOverview({
     { key: 'all', name: 'All open', value: openPool.length, sub: 'tasks', dot: '#B7BCC0' },
   ];
 
-  const sel = selId ? top.find((t) => t.id === selId) || null : null;
-
   // ---- Rendering helpers --------------------------------------------------
   const rowMeta = (t: Task) => {
     const { parked } = placeOf(t);
@@ -374,9 +371,8 @@ export default function TaskOverview({
       <div
         key={t.id}
         className="tov-row"
-        data-selected={selId === t.id || undefined}
         data-hidden={hide || undefined}
-        onClick={() => setSelId((id) => (id === t.id ? null : t.id))}
+        onClick={() => setActiveTask(t.id)}
       >
         <button
           type="button"
@@ -407,7 +403,7 @@ export default function TaskOverview({
           </div>
           <div className="tov-col-body">
             {c.tasks.map((t) => (
-              <div key={t.id} className="tov-bcard" data-selected={selId === t.id || undefined} onClick={() => setSelId((id) => (id === t.id ? null : t.id))}>
+              <div key={t.id} className="tov-bcard" onClick={() => setActiveTask(t.id)}>
                 <span className="tov-row-title" data-done={isDone(t) || undefined}>{t.title}</span>
                 <span className="tov-row-sub">{rowMeta(t)}</span>
                 {renderPills(t)}
@@ -607,8 +603,8 @@ export default function TaskOverview({
           </div>
         </div>
 
-        {/* Body + inspector */}
-        <div className="tov-layout" data-inspector={!!sel || undefined}>
+        {/* Body */}
+        <div className="tov-layout">
           <div className="tov-main">
             {view === 'list' && cards.map((c) => {
               const collapseKey = `${scopeKey}:tov:${group}:${c.key}`;
@@ -669,52 +665,6 @@ export default function TaskOverview({
               </button>
             )}
           </div>
-
-          {sel && (() => {
-            const { status, parked } = placeOf(sel);
-            const sec = status ? statusSection(status) : null;
-            const done = isDone(sel);
-            const assignees = (sel.assignees || []) as User[];
-            const work = sel.work_date ? formatWhen(sel.work_date) : null;
-            const due = sel.due_date ? formatWhen(sel.due_date) : null;
-            const p = PRIORITY_PILL[(sel.priority as string) || 'none'];
-            const fields: { k: string; v: string; tone?: 'muted' | 'danger' }[] = [
-              { k: 'List', v: sel.list?.name || '—' },
-              { k: 'Priority', v: p?.label || 'None', tone: p?.emergency ? 'danger' : p ? undefined : 'muted' },
-              { k: 'Assignee', v: assignees.length ? assignees.map((a) => a.display_name || a.email).join(', ') : 'Unassigned', tone: assignees.length ? undefined : 'muted' },
-              { k: 'Work date', v: work?.text || 'Not set', tone: work ? undefined : 'muted' },
-              { k: 'Due date', v: due?.text || 'Not set', tone: !due ? 'muted' : due.state === 'overdue' && !done ? 'danger' : undefined },
-            ];
-            return (
-              <aside className="tov-card tov-inspector">
-                <div className="tov-insp-top">
-                  <span className="tov-insp-status">
-                    <span className="tov-dot" style={{ background: status?.color || '#A0A0A0' }} />
-                    {[sec?.label, status?.name].filter(Boolean).join(' · ') || 'No status'}
-                    {parked && <span className="tov-insp-parked">· {parked.name.charAt(0) + parked.name.slice(1).toLowerCase()}</span>}
-                  </span>
-                  <button type="button" className="tov-round" aria-label="Close" onClick={() => setSelId(null)}>
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M6 6l12 12M18 6 6 18" /></svg>
-                  </button>
-                </div>
-                <h4 className="tov-insp-title">{sel.title}</h4>
-                <div className="tov-insp-fields">
-                  {fields.map((f) => (
-                    <div key={f.k} className="tov-insp-field">
-                      <span className="k">{f.k}</span>
-                      <span className="v" data-tone={f.tone}>{f.v}</span>
-                    </div>
-                  ))}
-                </div>
-                <button type="button" className="tov-insp-primary" data-done={done || undefined} onClick={() => toggleDone(sel)}>
-                  {done ? 'Mark as open' : 'Mark complete'}
-                </button>
-                <button type="button" className="tov-insp-secondary" onClick={() => setActiveTask(sel.id)}>
-                  Open full task ↗
-                </button>
-              </aside>
-            );
-          })()}
         </div>
       </div>
     </div>
