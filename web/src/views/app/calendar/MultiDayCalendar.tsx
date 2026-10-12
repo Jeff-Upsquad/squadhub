@@ -67,7 +67,12 @@ interface Plan {
     time_estimate?: number | null;
     task_type_key?: string | null;
     task_type_color?: string | null;
+    linked_tasks?: Array<{ id: string; title: string; status?: string | null }>;
   } | null;
+}
+
+function isLinkableBlockKey(key?: string | null): boolean {
+  return key === 'work_block' || key === 'break_block';
 }
 
 // Stable identity for move/resize matching. Group blocks share task_id='' so we
@@ -637,7 +642,7 @@ export default function MultiDayCalendar({ days, todayKey, onOpenTask, onOpenDay
                 const renderStart = isResizing ? resizing!.previewStart : p.start_minute;
                 const renderDur = isResizing ? resizing!.previewDur : p.duration_minutes;
                 const done = isTaskDone(p.task?.status);
-                const isWb = p.task?.task_type_key === 'work_block';
+                const isWb = isLinkableBlockKey(p.task?.task_type_key);
                 const isGroup = p.kind === 'group_block';
                 const groupName = p.container?.name ?? 'Group';
                 const wbColor = p.task?.task_type_color || '#8b5cf6';
@@ -719,6 +724,31 @@ export default function MultiDayCalendar({ days, todayKey, onOpenTask, onOpenDay
                       )}
                       <div className="cal-tt-block-title">{title}</div>
                       {renderDur >= 30 && <div className="cal-tt-block-time">{fmtTimeRange(renderStart, renderDur)}</div>}
+                      {isWb && (p.task?.linked_tasks?.length ?? 0) > 0 && renderDur >= 45 && (
+                        <div className="cal-tt-block-links" onMouseDown={(e) => e.stopPropagation()}>
+                          {(p.task!.linked_tasks ?? []).slice(0, renderDur >= 120 ? 6 : 3).map((lt) => (
+                            <button
+                              key={lt.id}
+                              type="button"
+                              className="cal-tt-block-link"
+                              data-done={isTaskDone(lt.status) || undefined}
+                              title={lt.title}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onOpenTask(lt.id);
+                              }}
+                            >
+                              <span className="cal-tt-block-link-dot" aria-hidden="true" />
+                              <span className="cal-tt-block-link-title">{lt.title}</span>
+                            </button>
+                          ))}
+                          {(p.task!.linked_tasks ?? []).length > (renderDur >= 120 ? 6 : 3) && (
+                            <span className="cal-tt-block-link-more">
+                              +{(p.task!.linked_tasks ?? []).length - (renderDur >= 120 ? 6 : 3)} more
+                            </span>
+                          )}
+                        </div>
+                      )}
                     </div>
                     <div className="cal-tt-block-handle bottom" onMouseDown={startResize(p, day, 'bottom')} title="Drag to change end" />
                   </div>

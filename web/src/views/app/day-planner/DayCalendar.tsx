@@ -753,7 +753,7 @@ export default function DayCalendar({ date, today, onDateChange, keyboard = fals
             const COLLAPSED_LIMIT = 4;
             const collapsed = !allDayExpanded && total > COLLAPSED_LIMIT;
             const renderChip = (p: any) => {
-              const isWb = p.task?.task_type_key === 'work_block';
+              const isWb = isLinkableBlockKey(p.task?.task_type_key);
               const wbColor = p.task?.task_type_color || '#8b5cf6';
               const isGroup = p.kind === 'group_block';
               const chipTitle = isGroup
@@ -929,7 +929,8 @@ export default function DayCalendar({ date, today, onDateChange, keyboard = fals
           const height = Math.max(22, renderDur * PX_PER_MIN - 2);
           // Work-block occurrences carry a `task_type_key` from the server's
           // hydrate and a `virtual` flag from the day-plans GET extension.
-          const isWorkBlock = (p.task as any)?.task_type_key === 'work_block';
+          // Break blocks share the same linked-tasks UI.
+          const isWorkBlock = isLinkableBlockKey((p.task as any)?.task_type_key);
           const wbColor = (p.task as any)?.task_type_color || '#8b5cf6';
           const isVirtual = (p as any).virtual === true;
           const isGroup = p.kind === 'group_block';
@@ -1048,6 +1049,31 @@ export default function DayCalendar({ date, today, onDateChange, keyboard = fals
                       ? <span className="b-src">Time block</span>
                       : p.date_field && <span className="b-src">{dateFieldLabel(p.date_field)}</span>}
                 </div>
+                {isWorkBlock && (p.task?.linked_tasks?.length ?? 0) > 0 && renderDur >= 45 && (
+                  <div className="b-links" onMouseDown={(e) => e.stopPropagation()}>
+                    {(p.task!.linked_tasks as LinkedTaskRef[]).slice(0, renderDur >= 120 ? 6 : 3).map((lt) => (
+                      <button
+                        key={lt.id}
+                        type="button"
+                        className="b-link"
+                        data-done={isTaskDone(lt.status) || undefined}
+                        title={lt.title}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setActiveTask(lt.id);
+                        }}
+                      >
+                        <span className="b-link-dot" aria-hidden="true" />
+                        <span className="b-link-title">{lt.title}</span>
+                      </button>
+                    ))}
+                    {(p.task!.linked_tasks as LinkedTaskRef[]).length > (renderDur >= 120 ? 6 : 3) && (
+                      <span className="b-link-more">
+                        +{(p.task!.linked_tasks as LinkedTaskRef[]).length - (renderDur >= 120 ? 6 : 3)} more
+                      </span>
+                    )}
+                  </div>
+                )}
               </div>
 
               {/* Bottom resize handle — drag to extend later */}
@@ -1069,7 +1095,7 @@ export default function DayCalendar({ date, today, onDateChange, keyboard = fals
         {exitingTimed.map((p) => {
           const top = p.start_minute * PX_PER_MIN;
           const height = Math.max(22, p.duration_minutes * PX_PER_MIN - 2);
-          const isWorkBlock = (p.task as any)?.task_type_key === 'work_block';
+          const isWorkBlock = isLinkableBlockKey((p.task as any)?.task_type_key);
           const wbColor = (p.task as any)?.task_type_color || '#8b5cf6';
           const isGroup = p.kind === 'group_block';
           const blockTitle = isGroup ? `Grouped tasks under ${p.container?.name ?? 'Group'}` : p.task?.title ?? 'Task';
@@ -1106,12 +1132,25 @@ export default function DayCalendar({ date, today, onDateChange, keyboard = fals
   );
 }
 
+interface LinkedTaskRef {
+  id: string;
+  title: string;
+  status?: string | null;
+}
+
+// Time blocks and break blocks both carry manually linked tasks that render
+// inside the calendar block. Keys are matched here (not just work_block) so a
+// future break_block type lights up the same UI without another pass.
+function isLinkableBlockKey(key?: string | null): boolean {
+  return key === 'work_block' || key === 'break_block';
+}
+
 interface Positioned {
   id: string;
   task_id: string;
   start_minute: number;
   duration_minutes: number;
-  task?: { id: string; title: string; status?: string | null; priority?: string | null; task_type_key?: string | null; task_type_color?: string | null } | undefined;
+  task?: { id: string; title: string; status?: string | null; priority?: string | null; task_type_key?: string | null; task_type_color?: string | null; linked_tasks?: LinkedTaskRef[] } | undefined;
   col: number;
   cols: number;
   virtual?: boolean;
@@ -1169,6 +1208,9 @@ function positionBlocks(plans: any[]): Positioned[] {
             priority: p.task.priority ?? null,
             task_type_key: p.task.task_type_key ?? null,
             task_type_color: p.task.task_type_color ?? null,
+            linked_tasks: Array.isArray((p.task as any).linked_tasks)
+              ? (p.task as any).linked_tasks
+              : [],
           }
         : undefined,
       virtual: p.virtual === true,
