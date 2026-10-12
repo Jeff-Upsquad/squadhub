@@ -3,6 +3,8 @@ import { useQueryClient } from '@tanstack/react-query';
 import { getTaskStatusCategory } from '@squadhub/shared';
 import { usePMStore, focusBucketForMinute } from '../../../stores/pmStore';
 import { showToast } from '../../../components/Toast';
+import api from '../../../services/api';
+import RecurrenceDurationConfirm from '../../../components/pm/RecurrenceDurationConfirm';
 import { useUpdateTask } from '../../../hooks/useTasks';
 import { useLinkTaskToWorkBlock } from '../../../hooks/useWorkBlocks';
 import {
@@ -226,6 +228,15 @@ export default function DayCalendar({ date, today, onDateChange, keyboard = fals
     planId: string;
     previewStart: number;
     previewDur: number;
+  } | null>(null);
+  // Duration edit on a repeating block awaits scope choice: confirm pushes the
+  // new duration to future recurrences, cancel keeps only this item's block.
+  const [recurConfirm, setRecurConfirm] = useState<{
+    anchor: DOMRect;
+    taskId: string;
+    startMinute: number;
+    duration: number;
+    isWorkBlock: boolean;
   } | null>(null);
   // Native HTML5 drag in flight (all-day chip move) — held so hover hosts can
   // suppress their hover-close timer (pointerenter doesn't fire during it).
@@ -481,7 +492,7 @@ export default function DayCalendar({ date, today, onDateChange, keyboard = fals
     task_id: string;
     start_minute: number;
     duration_minutes: number;
-    kind?: 'group_block';
+    kind?: 'group_block' | 'recurrence_occurrence' | 'work_block_occurrence';
     container?: GroupContainer;
   }) => (e: React.MouseEvent) => {
     if (e.button !== 0) return; // left mouse only
@@ -558,8 +569,11 @@ export default function DayCalendar({ date, today, onDateChange, keyboard = fals
 
   // Resize via top/bottom handle. Tracks the drag on document so the cursor can
   // leave the block; commits on mouseup via useUpdateDayPlan (optimistic).
+  // On a repeating block the commit is only this item's override — a small
+  // pop-up right there then offers to push the new duration to future
+  // recurrences (cancel keeps just this item).
   const startResize = (
-    plan: { id: string; task_id: string; start_minute: number; duration_minutes: number; kind?: 'group_block'; container?: GroupContainer },
+    plan: { id: string; task_id: string; start_minute: number; duration_minutes: number; kind?: 'group_block' | 'recurrence_occurrence' | 'work_block_occurrence'; container?: GroupContainer; virtual?: boolean; task?: { task_type_key?: string | null; recurrence?: unknown | null; recurring_parent_id?: string | null } | undefined },
     edge: 'top' | 'bottom',
   ) => (e: React.MouseEvent) => {
     e.preventDefault();
@@ -592,7 +606,7 @@ export default function DayCalendar({ date, today, onDateChange, keyboard = fals
       setResizing({ planId: plan.id, previewStart, previewDur });
     };
 
-    const onUp = () => {
+    const onUp = (ev: MouseEvent) => {
       document.removeEventListener('mousemove', onMove);
       document.removeEventListener('mouseup', onUp);
       setResizing((cur) => {
@@ -612,6 +626,23 @@ export default function DayCalendar({ date, today, onDateChange, keyboard = fals
               start_minute: cur.previewStart,
               duration_minutes: cur.previewDur,
             });
+            // Repeating block: offer future-recurrence update right here.
+            // The day-plan write above already covers only this item.
+            const repeating = plan.kind === 'recurrence_occurrence'
+              || plan.kind === 'work_block_occurrence'
+              || !!(plan.task as any)?.recurrence
+              || !!(plan.task as any)?.recurring_parent_id
+              || (plan.virtual === true && isLinkableBlockKey((plan.task as any)?.task_type_key));
+            if (repeating) {
+              const anchor = new DOMRect(ev.clientX - 132, ev.clientY, 264, 10);
+              setRecurConfirm({
+                anchor,
+                taskId: plan.task_id,
+                startMinute: cur.previewStart,
+                duration: cur.previewDur,
+                isWorkBlock: isLinkableBlockKey((plan.task as any)?.task_type_key),
+              });
+            }
           }
         }
         return null;
@@ -1002,7 +1033,7 @@ export default function DayCalendar({ date, today, onDateChange, keyboard = fals
               {/* Top resize handle — drag to extend earlier */}
               <div
                 className="dp-block-handle top"
-                onMouseDown={startResize({ id: p.id, task_id: p.task_id, start_minute: p.start_minute, duration_minutes: p.duration_minutes, kind: p.kind, container: p.container }, 'top')}
+                onMouseDown={startResize({ id: p.id, task_id: p.task_id, start_minute: p.start_minute, duration_minutes: p.duration_minutes, kind: p.kind, container: p.container, virtual: p.virtual, task: p.task }, 'top')}
                 title="Drag to change start time"
               />
 
@@ -1079,7 +1110,7 @@ export default function DayCalendar({ date, today, onDateChange, keyboard = fals
               {/* Bottom resize handle — drag to extend later */}
               <div
                 className="dp-block-handle bottom"
-                onMouseDown={startResize({ id: p.id, task_id: p.task_id, start_minute: p.start_minute, duration_minutes: p.duration_minutes, kind: p.kind, container: p.container }, 'bottom')}
+                onMouseDown={startResize({ id: p.id, task_id: p.task_id, start_minute: p.start_minute, duration_minutes: p.duration_minutes, kind: p.kind, container: p.container, virtual: p.virtual, task: p.task }, 'bottom')}
                 title="Drag to change end time"
               />
             </div>
@@ -1128,6 +1159,35 @@ export default function DayCalendar({ date, today, onDateChange, keyboard = fals
       {slotCreate.pending && (
         <SlotCreatePanel slot={slotCreate.pending} today={today} onClose={slotCreate.clear} />
       )}
+
+      {recurConfirm && (
+        <RecurrenceDurationConfirm
+          anchorRect={recurConfirm.anchor}
+          minutes={recurConfirm.duration}
+          onConfirm={() => {
+            const rc = recurConfirm;
+            setRecurConfirm(null);
+            // Future recurrences adopt the new duration: routine tasks via the
+            // estimate propagation flag, time blocks via their config window.
+            updateTask.mutate({ id: rc.taskId, time_estimate: rc.duration, propagate_estimate_to_future: true });
+            if (rc.isWorkBlock) {
+              api.patch(`/pm/work-blocks/${rc.taskId}`, {
+                start_minute: rc.startMinute,
+                end_minute: Math.min(1440, rc.startMinute + rc.duration),
+              }).then(() => {
+                qc.invalidateQueries({ queryKey: ['work-block', rc.taskId] });
+                qc.invalidateQueries({ queryKey: ['day-plans'] });
+              }).catch((err) => {
+                console.error('Failed to update future time-block recurrences:', err);
+                showToast('Only this occurrence was updated', 'error');
+              });
+            } else {
+              qc.invalidateQueries({ queryKey: ['day-plans'] });
+            }
+          }}
+          onCancel={() => setRecurConfirm(null)}
+        />
+      )}
     </div>
   );
 }
@@ -1150,13 +1210,24 @@ interface Positioned {
   task_id: string;
   start_minute: number;
   duration_minutes: number;
-  task?: { id: string; title: string; status?: string | null; priority?: string | null; task_type_key?: string | null; task_type_color?: string | null; linked_tasks?: LinkedTaskRef[] } | undefined;
+  task?: { id: string; title: string; status?: string | null; priority?: string | null; task_type_key?: string | null; task_type_color?: string | null; linked_tasks?: LinkedTaskRef[]; recurrence?: unknown | null; recurring_parent_id?: string | null } | undefined;
   col: number;
   cols: number;
   virtual?: boolean;
   date_field?: 'work' | 'due' | 'start';
-  kind?: 'group_block';
+  kind?: 'group_block' | 'recurrence_occurrence' | 'work_block_occurrence';
   container?: GroupContainer;
+}
+
+// A resized block repeats when it is a routine/work-block occurrence or its
+// task carries a routine link — those are the cases where a duration edit
+// should offer to update future recurrences too.
+function isRepeatingPositioned(p: { kind?: string; virtual?: boolean; task?: { recurrence?: unknown | null; recurring_parent_id?: string | null; task_type_key?: string | null } | undefined }): boolean {
+  if (p.kind === 'recurrence_occurrence' || p.kind === 'work_block_occurrence') return true;
+  const t = p.task as any;
+  if (t?.recurrence || t?.recurring_parent_id) return true;
+  if (p.virtual && (t?.task_type_key === 'work_block' || t?.task_type_key === 'break_block')) return true;
+  return false;
 }
 
 // "Completed" covers both the catalog 'closed' key and the legacy 'done'/'closed'
@@ -1208,6 +1279,8 @@ function positionBlocks(plans: any[]): Positioned[] {
             priority: p.task.priority ?? null,
             task_type_key: p.task.task_type_key ?? null,
             task_type_color: p.task.task_type_color ?? null,
+            recurrence: (p.task as any).recurrence ?? null,
+            recurring_parent_id: (p.task as any).recurring_parent_id ?? null,
             linked_tasks: Array.isArray((p.task as any).linked_tasks)
               ? (p.task as any).linked_tasks
               : [],
@@ -1215,7 +1288,7 @@ function positionBlocks(plans: any[]): Positioned[] {
         : undefined,
       virtual: p.virtual === true,
       date_field: p.date_field,
-      kind: p.kind === 'group_block' ? 'group_block' : undefined,
+      kind: p.kind === 'group_block' ? 'group_block' : (p.kind === 'recurrence_occurrence' || p.kind === 'work_block_occurrence' ? p.kind : undefined),
       container: p.container,
       col,
       cols: 1,

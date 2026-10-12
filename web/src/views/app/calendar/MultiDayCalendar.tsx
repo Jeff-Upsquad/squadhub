@@ -3,6 +3,8 @@ import { useQueryClient } from '@tanstack/react-query';
 import { getTaskStatusCategory } from '@squadhub/shared';
 import { usePMStore, focusBucketForMinute } from '../../../stores/pmStore';
 import { showToast } from '../../../components/Toast';
+import api from '../../../services/api';
+import RecurrenceDurationConfirm from '../../../components/pm/RecurrenceDurationConfirm';
 import { useUpdateTask } from '../../../hooks/useTasks';
 import { useLinkTaskToWorkBlock } from '../../../hooks/useWorkBlocks';
 import {
@@ -67,6 +69,8 @@ interface Plan {
     time_estimate?: number | null;
     task_type_key?: string | null;
     task_type_color?: string | null;
+    recurrence?: unknown | null;
+    recurring_parent_id?: string | null;
     linked_tasks?: Array<{ id: string; title: string; status?: string | null }>;
   } | null;
 }
@@ -221,6 +225,15 @@ export default function MultiDayCalendar({ days, todayKey, onOpenTask, onOpenDay
   } | null>(null);
   const [resizing, setResizing] = useState<{
     key: string; date: string; previewStart: number; previewDur: number;
+  } | null>(null);
+  // Duration edit on a repeating block awaits scope choice: confirm pushes the
+  // new duration to future recurrences, cancel keeps only this item's block.
+  const [recurConfirm, setRecurConfirm] = useState<{
+    anchor: DOMRect;
+    taskId: string;
+    startMinute: number;
+    duration: number;
+    isWorkBlock: boolean;
   } | null>(null);
   const [nowMinute, setNowMinute] = useState(() => {
     const d = new Date();
@@ -442,7 +455,7 @@ export default function MultiDayCalendar({ days, todayKey, onOpenTask, onOpenDay
       live = { previewStart, previewDur };
       setResizing({ key, date: day, previewStart, previewDur });
     };
-    const onUp = () => {
+    const onUp = (ev: MouseEvent) => {
       document.removeEventListener('mousemove', onMove);
       document.removeEventListener('mouseup', onUp);
       setResizing(null);
@@ -457,6 +470,23 @@ export default function MultiDayCalendar({ days, todayKey, onOpenTask, onOpenDay
           });
         } else {
           updatePlan.mutate({ task_id: plan.task_id, plan_date: day, start_minute: live.previewStart, duration_minutes: live.previewDur });
+          // Repeating block: the day-plan write above covers only this item —
+          // a small pop-up right here offers to push it to future recurrences.
+          const repeating = plan.kind === 'recurrence_occurrence'
+            || plan.kind === 'work_block_occurrence'
+            || !!(plan.task as any)?.recurrence
+            || !!(plan.task as any)?.recurring_parent_id
+            || (plan.virtual === true && isLinkableBlockKey(plan.task?.task_type_key));
+          if (repeating) {
+            const anchor = new DOMRect(ev.clientX - 132, ev.clientY, 264, 10);
+            setRecurConfirm({
+              anchor,
+              taskId: plan.task_id,
+              startMinute: live.previewStart,
+              duration: live.previewDur,
+              isWorkBlock: isLinkableBlockKey(plan.task?.task_type_key),
+            });
+          }
         }
       }
     };
@@ -657,8 +687,8 @@ export default function MultiDayCalendar({ days, todayKey, onOpenTask, onOpenDay
                     data-virtual={p.virtual || undefined}
                     data-hidden={isMoving || undefined}
                     style={{
-                      top: renderStart * PX_PER_MIN,
-                      height: Math.max(18, renderDur * PX_PER_MIN),
+                      top: renderStart * PX_PER_MIN + 1,
+                      height: Math.max(18, renderDur * PX_PER_MIN - 3),
                       left: `calc(${p.col} * (100% - 6px) / ${p.cols})`,
                       width: `calc((100% - 6px) / ${p.cols} - 2px)`,
                       ...(isWb ? { background: `color-mix(in oklch, ${wbColor} 22%, var(--surface))`, borderLeftColor: wbColor, color: `color-mix(in oklch, ${wbColor} 45%, var(--sh-ink))` } : {}),
@@ -765,8 +795,8 @@ export default function MultiDayCalendar({ days, todayKey, onOpenTask, onOpenDay
               <div
                 className="cal-tt-block cal-tt-preview"
                 style={{
-                  top: moving.previewStart * PX_PER_MIN,
-                  height: Math.max(18, moving.duration * PX_PER_MIN),
+                  top: moving.previewStart * PX_PER_MIN + 1,
+                  height: Math.max(18, moving.duration * PX_PER_MIN - 3),
                   left: colLeft(idx),
                   width: colWidth,
                 }}
@@ -792,6 +822,33 @@ export default function MultiDayCalendar({ days, todayKey, onOpenTask, onOpenDay
 
       {slotCreate.pending && (
         <SlotCreatePanel slot={slotCreate.pending} today={todayKey} onClose={slotCreate.clear} />
+      )}
+
+      {recurConfirm && (
+        <RecurrenceDurationConfirm
+          anchorRect={recurConfirm.anchor}
+          minutes={recurConfirm.duration}
+          onConfirm={() => {
+            const rc = recurConfirm;
+            setRecurConfirm(null);
+            updateTask.mutate({ id: rc.taskId, time_estimate: rc.duration, propagate_estimate_to_future: true });
+            if (rc.isWorkBlock) {
+              api.patch(`/pm/work-blocks/${rc.taskId}`, {
+                start_minute: rc.startMinute,
+                end_minute: Math.min(1440, rc.startMinute + rc.duration),
+              }).then(() => {
+                qc.invalidateQueries({ queryKey: ['work-block', rc.taskId] });
+                qc.invalidateQueries({ queryKey: ['day-plans'] });
+              }).catch((err) => {
+                console.error('Failed to update future time-block recurrences:', err);
+                showToast('Only this occurrence was updated', 'error');
+              });
+            } else {
+              qc.invalidateQueries({ queryKey: ['day-plans'] });
+            }
+          }}
+          onCancel={() => setRecurConfirm(null)}
+        />
       )}
     </div>
   );

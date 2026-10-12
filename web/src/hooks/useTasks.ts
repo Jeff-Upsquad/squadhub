@@ -230,6 +230,7 @@ export function useUpdateTask(listId: string | null) {
       metadata?: TaskMetadata;
       list_id?: string;
       recurrence?: TaskRecurrence | null;
+      propagate_estimate_to_future?: boolean;
     }) => {
       const res = await api.put(`/pm/tasks/${id}`, body);
       return res.data.data;
