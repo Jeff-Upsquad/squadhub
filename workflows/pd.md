@@ -69,5 +69,5 @@ Sync an already merged `main` and deploy to production only when the merged chan
 ## Safety and edge cases
 
 - If the fast-forward sync fails, fetch and inspect before doing anything else. Never force local `main` past `origin/main`. Preserve local work.
-- If a deploy fails mid-build, re-run `bash tools/deploy.sh` — it picks up from the current git state.
+- If a deploy fails mid-build after the checkout advanced, retry with `bash tools/deploy.sh --rebuild web` (or the affected `server`, `admin`, or `all` target). Confirm the running image matches the rebuilt image; Git HEAD and HTTP 200 alone do not prove the new release is active.
 - A request for PD is not authorization to dispatch `desktop-app-release.yml` or tag a desktop release.

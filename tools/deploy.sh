@@ -5,6 +5,18 @@ VPS="root@72.61.245.97"
 DEPLOY_DIR="/opt/squadhub"
 LOCK_FILE="/var/lock/squadhub-deploy.lock"
 LOCK_TIMEOUT=600  # seconds — longer than any realistic full rebuild
+FORCE_SERVICES=""
+if [ "$#" -gt 0 ]; then
+    if [ "$#" != 2 ] || [ "$1" != "--rebuild" ]; then
+        echo "Usage: bash tools/deploy.sh [--rebuild server|web|admin|all]" >&2
+        exit 2
+    fi
+    case "$2" in
+        server|web|admin) FORCE_SERVICES="$2" ;;
+        all) FORCE_SERVICES="server web admin" ;;
+        *) echo "Unknown rebuild service: $2" >&2; exit 2 ;;
+    esac
+fi
 
 # Timestamp-tag images per deploy so rollback is a cheap `docker tag + up`.
 # See workflows/rollback.md for the rollback procedure.
@@ -57,7 +69,7 @@ fi
 # recomputed server-side inside the lock so a queued deploy sees post-first-deploy state.
 # DEPLOY_TAG is passed via ssh env so the remote tagging step can use it.
 set +e
-ssh "$VPS" "DEPLOY_TAG=$DEPLOY_TAG flock -w $LOCK_TIMEOUT -E 78 $LOCK_FILE bash -s" <<'REMOTE'
+ssh "$VPS" "DEPLOY_TAG=$DEPLOY_TAG FORCE_SERVICES='$FORCE_SERVICES' flock -w $LOCK_TIMEOUT -E 78 $LOCK_FILE bash -s" <<'REMOTE'
 set -euo pipefail
 cd /opt/squadhub
 
@@ -86,7 +98,7 @@ rm -rf "$CADDY_TMP"
 AFTER_SHA=$(git rev-parse HEAD)
 echo "New VPS commit: ${AFTER_SHA:0:7}"
 
-if [ "$BEFORE_SHA" = "$AFTER_SHA" ]; then
+if [ "$BEFORE_SHA" = "$AFTER_SHA" ] && [ -z "$FORCE_SERVICES" ]; then
     echo ""
     echo "No new changes to deploy. VPS is already up to date."
     echo ""
@@ -156,10 +168,30 @@ else
     SERVICES=$(echo "$SERVICES" | xargs)
 fi
 
+for force_svc in $FORCE_SERVICES; do
+    case " $SERVICES " in
+        *" $force_svc "*) ;;
+        *) SERVICES="$SERVICES $force_svc" ;;
+    esac
+done
+
 if [ -n "$SERVICES" ]; then
     echo "Rebuilding: $SERVICES"
     echo "---"
-    docker compose build $SERVICES && docker compose up -d $SERVICES
+    # Separate commands: a failed build in an && list bypasses Bash's set -e.
+    # Never tag old images or report success after a failed build/start.
+    docker compose build $SERVICES
+    docker compose up -d $SERVICES
+    for svc in $SERVICES; do
+        expected_image=$(docker image inspect "squadhub-${svc}:latest" --format '{{.Id}}')
+        running_image=$(docker inspect "squadhub-${svc}" --format '{{.Image}}')
+        running_state=$(docker inspect "squadhub-${svc}" --format '{{.State.Running}}')
+        if [ "$running_image" != "$expected_image" ] || [ "$running_state" != true ]; then
+            echo "Deployment verification failed for $svc: the built image is not running." >&2
+            exit 1
+        fi
+        echo "Verified $svc image: $running_image"
+    done
 
     # Habit: tag ALL three images with the deploy timestamp, even if only some
     # rebuilt. This gives a consistent 3-service snapshot per deploy — rolling back
@@ -218,7 +250,7 @@ fi
 # Verify outside the lock — read-only, safe while another deploy could be queuing.
 AFTER_SHA=$(ssh "$VPS" "cd $DEPLOY_DIR && git rev-parse HEAD")
 
-if [ "$BEFORE_SHA" = "$AFTER_SHA" ]; then
+if [ "$BEFORE_SHA" = "$AFTER_SHA" ] && [ -z "$FORCE_SERVICES" ]; then
     # Nothing shipped (heredoc already showed status in the fast-exit path).
     exit 0
 fi
