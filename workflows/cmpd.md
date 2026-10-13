@@ -26,7 +26,7 @@ Desktop app releases (`desktop-app/` + `desktop-app-release.yml`) are never trig
    gh pr merge --repo Jeff-Upsquad/squadhub <PR-number> --merge
    ```
 
-   Do not delete the branch here — `CU` owns branch cleanup and requires confirmation first.
+   Do not delete the branch here — `CU` owns branch cleanup, and invoking it authorizes cleanup without another confirmation.
 5. Sync the primary checkout and execute [pd.md](pd.md). Pass the merged PR number so deployment is scoped from that PR's changed files.
 6. Confirm the primary checkout is clean and synchronized with `origin/main`.
 7. Report the branch, PR link, merge commit, push, CI state, any deployment, and testing instructions (see [test-handoff.md](test-handoff.md)).
