@@ -71,6 +71,9 @@ jobs:
       - name: Check shared admin imports
         run: npm run check:shared-imports
 
+      - name: Test deployment failure handling
+        run: bash -n tools/deploy.sh && node --test tools/__tests__/deploy.test.mjs
+
       - name: Type-check server
         run: npx tsc --noEmit -p server/tsconfig.json
 

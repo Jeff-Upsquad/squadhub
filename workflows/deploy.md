@@ -41,6 +41,22 @@ The script automatically:
 8. Shows container status and recent logs
 9. Prints the rollback command for this deploy (`bash tools/rollback.sh <TAG>`)
 
+Build and container-start failures abort deployment before release tagging.
+After startup, each rebuilt container must be running the freshly built image.
+Do not confirm a release from Git HEAD or HTTP 200 alone: those can still refer
+to an old running image after a failed build.
+
+If a build failed after the VPS checkout advanced, retry the affected service
+explicitly; a normal rerun has no changed source files left to detect:
+
+```bash
+bash tools/deploy.sh --rebuild web
+```
+
+Supported retry targets are `server`, `web`, `admin`, and `all`. This uses the
+same deployment lock and image verification as a normal deploy. Run the
+deployment regression checks with `node --test tools/__tests__/deploy.test.mjs`.
+
 ### Concurrent deploys
 
 Only one deploy can run on the VPS at a time. If another deploy is already running, `deploy.sh` prints `Another deploy is in progress on the VPS. Waiting up to 600s...` and automatically resumes once the first one finishes — no manual retry needed. If the first deploy hangs beyond 10 minutes, the queued one gives up with exit code 78 and you should investigate the stuck deploy on the VPS before retrying.
