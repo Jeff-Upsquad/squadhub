@@ -114,7 +114,7 @@ function CalendarData({ events, commitment, loading = false, error = false, onRe
   // Drag-to-move / resize for TIME TRACKER blocks (task + time-block entries).
   // Move preserves every entry's duration and only shifts started_at; resize
   // changes duration via the top/bottom handles. Multi-segment groups (one
-  // task, several entries that day) support move-only.
+  // task, several continuous entries) support move-only.
   const [entryDrag, setEntryDrag] = useState<null | {
     key: string; mode: 'move' | 'start' | 'end';
     items: { taskId: string; entryId: string; origStartMs: number; durationSec: number }[];
@@ -165,37 +165,16 @@ function CalendarData({ events, commitment, loading = false, error = false, onRe
       const origStartMs = Date.parse(row.started_at);
       const durationSec = row.duration_seconds;
       if (!Number.isFinite(origStartMs) || !Number.isFinite(durationSec) || durationSec <= 0) return null;
+      // A card clipped at midnight cannot move/resize the whole backing entry.
+      const stopMs = Date.parse(row.stopped_at), ds = dayStart(dayKey(event.start));
+      if (!Number.isFinite(stopMs) || origStartMs < ds || stopMs > ds + 86400000) return null;
       return { taskId: row.task_id, entryId, origStartMs, durationSec };
     };
-    if (event.id.startsWith('entry:')) {
-      const single = collect(event.id);
+    if (event.entryId || event.id.startsWith('entry:')) {
+      const single = collect(event.entryId ? `entry:${event.entryId}` : event.id);
       return single ? [single] : null;
     }
-    if (event.id.startsWith('task-day:')) {
-      // Singleton groups drop their segments (see combineTaskSegments), so
-      // resolve the one backing entry by task + IST day + manual/timer
-      // class. Only when exactly one entry sits fully inside the day —
-      // midnight-spanning entries stay static rather than move wrongly.
-      const parts = event.id.split(':');
-      const taskId = parts[1], date = parts[2], manualKey = parts[3];
-      if (taskId && date && /^\d{4}-\d{2}-\d{2}$/.test(date)) {
-        const ds = dayStart(date), de = ds + 86400000;
-        const cands = (entries || []).filter(e => {
-          if (e.task_id !== taskId || e.source === 'work_block') return false;
-          if ((e.source === 'manual') !== (manualKey === 'manual')) return false;
-          const s = Date.parse(e.started_at), t = Date.parse(e.stopped_at);
-          return Number.isFinite(s) && Number.isFinite(t) && t > s && s >= ds && t <= de;
-        });
-        if (cands.length === 1) {
-          const row = cands[0];
-          if (Number.isFinite(row.duration_seconds) && row.duration_seconds > 0) {
-            return [{ taskId: row.task_id, entryId: row.id, origStartMs: Date.parse(row.started_at), durationSec: row.duration_seconds }];
-          }
-        }
-      }
-      // Fall through to the multi-segment path below (segments carry entry: ids).
-    }
-    // Combined task-day group: move every underlying entry by the same delta.
+    // Continuous session group: move every underlying entry by the same delta.
     const segs = event.segments?.length ? event.segments : null;
     if (!segs) return null;
     const items: { taskId: string; entryId: string; origStartMs: number; durationSec: number }[] = [];
