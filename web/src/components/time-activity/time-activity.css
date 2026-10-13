@@ -148,6 +148,19 @@ html.dark .ta-panel, html[data-theme="noir"] .ta-panel {
 .ta-children b { font-weight: 500; }
 .ta-open-task { border: 0; background: transparent; color: #71a7ee; font-size: 11px !important; display: flex; align-items: center; gap: 6px; margin-top: 10px; padding: 0; }
 .ta-open-task svg { width: 13px; }
+.ta-planner-popup { position: fixed; z-index: 12; box-sizing: border-box; border: 1px solid var(--ta-line); border-radius: 12px; background: var(--ta-bg); box-shadow: 0 12px 36px #0003; overflow: hidden; }
+.ta-planner-popup-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 12px; border-bottom: 1px solid var(--ta-line); }
+.ta-planner-popup-head strong { display: block; font-size: 12px; }
+.ta-planner-popup-head span { display: block; margin-top: 3px; color: var(--ta-muted); font-size: 10px; }
+.ta-planner-popup-list { max-height: min(300px, 45dvh); overflow-y: auto; overscroll-behavior: contain; }
+.ta-planner-popup-list button { display: flex; align-items: center; gap: 8px; width: 100%; padding: 11px 12px; text-align: left; background: transparent; color: var(--ta-ink); border: 0; border-bottom: 1px solid var(--ta-line); }
+.ta-planner-popup-list button:last-child { border-bottom: 0; }
+.ta-planner-popup-list button:hover { background: var(--ta-soft); }
+.ta-planner-popup-list button > span { flex: 1; min-width: 0; }
+.ta-planner-popup-list strong { display: block; font-size: 11px; font-weight: 550; overflow-wrap: anywhere; }
+.ta-planner-popup-list small { display: block; margin-top: 4px; color: var(--ta-muted); font-size: 9px; overflow-wrap: anywhere; }
+.ta-planner-popup-list b { flex-shrink: 0; font-size: 10px; font-weight: 500; color: #38bdf8; }
+.ta-planner-popup-list svg { flex-shrink: 0; width: 13px; color: var(--ta-muted); }
 .ta-footer { flex-shrink: 0; display: flex; justify-content: space-between; gap: 10px; font-size: 8px; color: var(--ta-muted); padding: 10px 26px; border-top: 1px solid var(--ta-line); background: var(--ta-grid); }
 .ta-picker { position: absolute; top: 30px; left: 28px; width: 255px; padding: 12px; border: 1px solid var(--ta-line); background: var(--ta-bg); border-radius: 12px; box-shadow: 0 12px 40px #0004; z-index: 10; }
 .ta-picker-head { display: flex; align-items: center; justify-content: space-between; font-size: 12px; margin-bottom: 10px; }

@@ -163,6 +163,8 @@ const adapter: AxiosAdapter = async (config) => {
   // A small delay keeps loading/optimistic states honest.
   await new Promise((r) => setTimeout(r, 120));
 
+  if (method === 'get' && path === '/pm/goals') return ok(config, { projects: [], goals: [] });
+
   if (method === 'get' && path === '/pm/tasks/my') {
     const now = Date.now();
     const live = (t: MockTask) => !t.snoozed_until || new Date(t.snoozed_until).getTime() <= now;
@@ -252,7 +254,11 @@ const adapter: AxiosAdapter = async (config) => {
 };
 
 let installed = false;
-export function installPreviewApi() {
+export function installPreviewApi(extraTasks: MockTask[] = []) {
+  for (const extra of extraTasks) {
+    const sample = task(extra.title, { list: LISTS.web, space: SPACES.product, ...extra });
+    allTasks.set(sample.id, sample);
+  }
   if (installed) return;
   installed = true;
   api.defaults.adapter = adapter;

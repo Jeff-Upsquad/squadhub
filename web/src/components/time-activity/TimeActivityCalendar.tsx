@@ -1,11 +1,11 @@
 'use client';
 
-import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode, type CSSProperties } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode, type CSSProperties } from 'react';
 import { createPortal } from 'react-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import type { TaskTimeEntry, TimerSession } from '@squadhub/shared';
 import api from '../../services/api';
-import { KINDS, clipActivity, combineTaskSegments, clock, dateLabel, dayKey, dayStart, duration, isAttendance, layoutActivities, shiftDay, weekStart, type Activity, type ActivityKind } from './activityModel';
+import { KINDS, clipActivity, combineTaskSegments, clock, dateLabel, dayKey, dayStart, duration, groupDayPlanActivities, isAttendance, layoutActivities, shiftDay, weekStart, type Activity, type ActivityKind } from './activityModel';
 import './time-activity.css';
 
 type CalendarState = {
@@ -105,6 +105,8 @@ function CalendarData({ events, commitment, loading = false, error = false, onRe
   const qc = useQueryClient();
   const [filters, setFilters] = useState<ActivityKind[]>(KINDS.map(k => k.kind));
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [plannerPopup, setPlannerPopup] = useState<{ id: string; anchor: HTMLButtonElement } | null>(null);
+  const closePlannerPopup = useCallback(() => setPlannerPopup(null), []);
   const [picker, setPicker] = useState(false);
   const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
   const [dragError, setDragError] = useState<string | null>(null);
@@ -371,14 +373,15 @@ function CalendarData({ events, commitment, loading = false, error = false, onRe
       return () => clearTimeout(timer);
     });
     setSelectedId(null);
+    setPlannerPopup(null);
     return () => cancelAnimationFrame(raf);
   }, [from, to, loading, view]);
-  useEffect(() => { setSelectedId(null); }, [filters]);
+  useEffect(() => { setSelectedId(null); setPlannerPopup(null); }, [filters]);
   const gutterWidth = typeof window !== 'undefined' && window.matchMedia('(max-width: 640px)').matches ? 48 : 64;
   const availableWidth = Math.max(0, calendarWidth - gutterWidth);
   const dayLayouts = days.map(key => {
     const start = dayStart(key);
-    const items = visibleEvents.filter(e => filters.includes(e.kind)).map(e => clipActivity(e, start, start + 86400000)).filter((e): e is Activity => !!e);
+    const items = groupDayPlanActivities(visibleEvents.filter(e => filters.includes(e.kind)).map(e => clipActivity(e, start, start + 86400000)).filter((e): e is Activity => !!e), (MIN_EVENT_HEIGHT + EVENT_GAP) / HOUR_HEIGHT * 3600000);
     // Three sections in day view:
     // 1. Work and break section (compact)
     // 2. Day planner section (less wide)
@@ -393,7 +396,7 @@ function CalendarData({ events, commitment, loading = false, error = false, onRe
     const layout = lanes.map((lane, i) =>
       layoutActivities(lane, view === 'day' && i === 0 ? 0 : (MIN_EVENT_HEIGHT + EVENT_GAP) / HOUR_HEIGHT * 3600000)
     );
-    const columnCount = (lane: typeof layout[number]) => Math.max(1, ...lane.map(e => e.columns));
+    const columnCount = (lane: typeof layout[number] = []) => Math.max(1, ...lane.map(e => e.columns));
 
     // Section 1: Work & Break (compact status column)
     const section1Base = Math.max(92, Math.min(115, Math.round(availableWidth * 0.13)));
@@ -401,7 +404,7 @@ function CalendarData({ events, commitment, loading = false, error = false, onRe
 
     // Section 2: Day Planner (less wide)
     const section2Base = Math.max(140, Math.min(220, Math.round(availableWidth * 0.25)));
-    const section2Width = Math.max(section2Base, columnCount(layout[1]) * 120);
+    const section2Width = section2Base;
 
     // Section 3: Time Tracker (priority, takes the remainder)
     const section3Base = Math.max(280, availableWidth - section1Width - section2Width);
@@ -412,6 +415,7 @@ function CalendarData({ events, commitment, loading = false, error = false, onRe
       : [Math.max(availableWidth / 7, columnCount(layout[0]) * 140)];
     return { key, start, items, layout, widths, width: widths.reduce((sum, width) => sum + width, 0) };
   });
+  const popupGroup = plannerPopup ? dayLayouts.flatMap(day => day.items).find(event => event.id === plannerPopup.id) : undefined;
   const gridWidth = Math.max(calendarWidth, gutterWidth + dayLayouts.reduce((sum, day) => sum + day.width, 0));
   const beginResize = (e: React.PointerEvent, session: TimerSession, edge: 'start' | 'end') => {
     e.preventDefault();
@@ -509,15 +513,25 @@ function CalendarData({ events, commitment, loading = false, error = false, onRe
     const previewEnd = entryDrag && entryDrag.key === event.id && entryDrag.mode !== 'start'
       ? (entryDrag.mode === 'move' ? entryDrag.origBlockEnd + entryDrag.deltaMs : entryDrag.curMs)
       : event.end;
-    const handleClick = () => {
+    const handleClick = (e: React.MouseEvent<HTMLButtonElement>) => {
       if (suppressClick.current) { suppressClick.current = false; return; }
       if (entryDrag?.moved) return;
+      if (event.plannerTasks) {
+        const anchor = e.currentTarget;
+        setSelectedId(null);
+        setPlannerPopup(current => current?.id === event.id ? null : { id: event.id, anchor });
+        return;
+      }
+      setPlannerPopup(null);
+      if (event.taskId && onOpenTask) { onOpenTask(event.taskId); return; }
       setSelectedId(event.id === selectedId ? null : event.id);
     };
     return (
-    <button key={event.id} className="ta-event" data-kind={event.kind} data-selected={event.id === selectedId} data-short={adjHeight < 43} data-narrow={isNarrow} data-tight={isTight} data-dragging={isEntryDragging} data-movable={entryMovable}
+    <button key={event.id} className="ta-event" data-kind={event.kind} data-selected={event.id === selectedId || event.id === plannerPopup?.id} data-short={adjHeight < 43} data-narrow={isNarrow} data-tight={isTight} data-dragging={isEntryDragging} data-movable={entryMovable}
       style={{ top: adjTop, height: Math.max(MIN_EVENT_HEIGHT, adjHeight - EVENT_GAP), left, width, '--event-color': KINDS.find(k => k.kind === event.kind)?.color || '#38bdf8' } as CSSProperties}
       onClick={handleClick}
+      aria-haspopup={event.plannerTasks ? 'dialog' : undefined}
+      aria-expanded={event.plannerTasks ? event.id === plannerPopup?.id : undefined}
       onPointerDown={entryMovable && dayStartMs != null ? e => beginEntryMove(e, event, dayStartMs) : undefined}
       aria-label={`${event.title}, ${clock(event.start)} to ${event.live ? 'now' : clock(event.end)}, ${duration(event.seconds)}${event.isManual ? ', manually entered' : ''}${editable ? ', editable: open details to trim time or drag the edges' : ''}${entryMovable ? ', draggable: drag to move without changing duration' : ''}`}
       title={`${event.title} · ${clock(event.start)}–${event.live ? 'now' : clock(event.end)} · ${duration(event.seconds)}${event.isManual ? ' · Manually entered' : ''}${editable ? ' · Drag edges to trim (reduce only)' : ''}${entryMovable ? ' · Drag to move (duration preserved)' : ''}${entryResizable ? ' · Drag edges to adjust' : ''}`}>
@@ -531,7 +545,7 @@ function CalendarData({ events, commitment, loading = false, error = false, onRe
           <span className="ta-event-text">{event.title}</span>
           {event.isManual && <span className="ta-manual-tag">manual</span>}
         </span>
-        <b title="Logged time">{duration(event.seconds)}</b>
+        <b title={event.plannerTasks ? 'Show planned tasks' : 'Logged time'}>{event.plannerTasks ? 'View' : duration(event.seconds)}</b>
       </span>
       {adjHeight >= 43 && <span className="ta-event-time">{clock(previewStart)} – {event.live && !(entryDrag && entryDrag.key === event.id) ? 'now' : clock(previewEnd)}</span>}
       {adjHeight >= 78 && event.project && <span className="ta-event-project">{event.project}</span>}
@@ -567,7 +581,7 @@ function CalendarData({ events, commitment, loading = false, error = false, onRe
       {gridWidth > calendarWidth + 1 && <div className="ta-scroll-hint">↔ Scroll sideways to see all tasks</div>}
       {loading ? <div className="ta-state" role="status"><Glyph name="clock" /><strong>Loading your timeline…</strong><span>Gathering attendance, tasks and time blocks.</span></div>
         : error ? <div className="ta-state" role="alert"><strong>We couldn’t load all your time</strong><span>Please try again to see the complete timeline.</span><button className="ta-today" onClick={onRetry}>Try again</button></div>
-        : <div className="ta-grid-scroll" ref={scroller} tabIndex={0} aria-label="Time calendar. Scroll sideways to see overlapping tasks.">
+        : <div className="ta-grid-scroll" ref={scroller} onScroll={() => setPlannerPopup(null)} tabIndex={0} aria-label="Time calendar. Scroll sideways to see overlapping tasks.">
       <div className="ta-grid-head" style={{ width: gridWidth }}><div className="ta-zone">IST</div>{dayLayouts.map(({ key, width, widths }) => <div key={key} style={{ flex: `0 0 ${width}px` }} className="ta-day-head" data-today={key === dayKey(now)}>
         <button onClick={() => { setDate(key); setView('day'); }}><span>{dateLabel(dayStart(key), { weekday: view === 'day' ? 'long' : 'short' })}</span><b>{dateLabel(dayStart(key), { day: '2-digit' })}</b></button>
         {view === 'day' ? <div className="ta-lane-labels"><span style={{ width: widths[0] }}>WORK & BREAK</span><span style={{ width: widths[1] }}>DAY PLANNER</span><span style={{ width: widths[2], flex: 1 }}>TIME TRACKER</span></div> : <small>{duration(visibleEvents.filter(e => dayKey(e.start) === key && (e.kind === 'work' || e.kind === 'overtime')).reduce((s, e) => s + e.seconds, 0))} worked</small>}
@@ -594,6 +608,12 @@ function CalendarData({ events, commitment, loading = false, error = false, onRe
           </div>
         </div>}
     </div>
+    {plannerPopup && popupGroup?.plannerTasks && <PlannerTaskPopup group={popupGroup} anchor={plannerPopup.anchor}
+      onClose={closePlannerPopup} onSelect={event => {
+        setPlannerPopup(null);
+        if (event.taskId && onOpenTask) onOpenTask(event.taskId);
+        else setSelectedId(event.id);
+      }} />}
     {selected && <div className="ta-detail" aria-live="polite">
       <><div className="ta-detail-top"><i style={{ background: KINDS.find(k => k.kind === selected.kind)!.color }} /><strong>{selected.title}</strong>{selected.isManual && <span className="ta-manual-tag">manual</span>}<span>{duration(selected.seconds)}</span><button className="ta-icon-btn" onClick={() => setSelectedId(null)} aria-label="Dismiss session details"><Glyph name="close" /></button></div>
         <p>{clock(selected.start)} – {selected.live ? 'Now · tracking' : clock(selected.end)}<span>·</span>{selected.source}{selected.project && <><span>·</span>{selected.project}</>}</p>
@@ -622,6 +642,50 @@ function CalendarData({ events, commitment, loading = false, error = false, onRe
     </div>}
     <footer className="ta-footer"><span>Task and block time can overlap with attendance.</span><span>Overtime = work beyond daily commitment</span></footer>
   </>;
+}
+
+function PlannerTaskPopup({ group, anchor, onClose, onSelect }: {
+  group: Activity; anchor: HTMLButtonElement; onClose: () => void; onSelect: (event: Activity) => void;
+}) {
+  const popup = useRef<HTMLDivElement>(null);
+  const [position, setPosition] = useState({ left: 0, top: 0, width: 320 });
+  useEffect(() => {
+    const element = popup.current;
+    const panel = anchor.closest('dialog');
+    if (!element || !panel) return;
+    const place = () => {
+      const bounds = panel.getBoundingClientRect(), target = anchor.getBoundingClientRect();
+      const width = Math.min(320, bounds.width - 24);
+      const height = element.offsetHeight;
+      setPosition({ width,
+        left: Math.max(bounds.left + 12, Math.min(target.left, bounds.right - width - 12)),
+        top: Math.max(bounds.top + 12, Math.min(target.bottom + 8, bounds.bottom - height - 12)),
+      });
+    };
+    place();
+    element.querySelector<HTMLButtonElement>('button')?.focus({ preventScroll: true });
+    const observer = new ResizeObserver(place);
+    observer.observe(element); observer.observe(panel);
+    const outside = (event: PointerEvent) => {
+      if (!element.contains(event.target as Node) && !anchor.contains(event.target as Node)) onClose();
+    };
+    const escape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      event.preventDefault(); event.stopPropagation(); onClose(); anchor.focus({ preventScroll: true });
+    };
+    document.addEventListener('pointerdown', outside);
+    document.addEventListener('keydown', escape, true);
+    return () => { observer.disconnect(); document.removeEventListener('pointerdown', outside); document.removeEventListener('keydown', escape, true); };
+  }, [anchor, onClose]);
+  return <div ref={popup} className="ta-planner-popup" role="dialog" aria-label="Planned tasks" style={position}>
+    <div className="ta-planner-popup-head"><div><strong>{group.title}</strong><span>{clock(group.start)} – {clock(group.end)}</span></div>
+      <button className="ta-icon-btn" aria-label="Close planned tasks" onClick={() => { onClose(); anchor.focus({ preventScroll: true }); }}><Glyph name="close" /></button>
+    </div>
+    <div className="ta-planner-popup-list">{group.plannerTasks?.map(event => <button key={event.id} onClick={() => onSelect(event)}>
+      <span><strong>{event.title}</strong><small>{clock(event.start)} – {clock(event.end)}{event.project ? ` · ${event.project}` : ''}{event.note ? ` · ${event.note}` : ''}</small></span>
+      <b>{duration(event.seconds)}</b><Glyph name="arrow" />
+    </button>)}</div>
+  </div>;
 }
 
 function AttendanceEditForm({ session, onClose, onSaved }: { session: TimerSession; onClose: () => void; onSaved: () => void }) {
