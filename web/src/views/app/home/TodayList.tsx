@@ -16,6 +16,7 @@ import NoAssigneeCompleteDialog from '../pm/NoAssigneeCompleteDialog';
 import { formatTracked, toLocalDateKey } from '../../../lib/formatDuration';
 import { groupTasks, isFutureDay, isTaskFocused, collapseGroupedTasks, isGroupedRow, GROUP_BY_OPTIONS, isTaskCompleted } from '../../../lib/taskGrouping';
 import GroupedTaskRow from './GroupedTaskRow';
+import { buildInProgressTasks } from '../../../lib/inProgressTasks';
 import DayCalendar from '../day-planner/DayCalendar';
 import { GoalTaskFlag } from '../goals/GoalIntegration';
 import TaskRelationshipsButton from '../../../components/pm/TaskRelationshipsButton';
@@ -206,15 +207,9 @@ export default function TodayList() {
     return { secondsTodayByTask: map, totalTodaySeconds: total, liveByTask };
   }, [timeEntries, today, timers, timerSegmentStart, nowTick, activeWB]);
 
-  // "In progress" — tasks worked TODAY (time tracked today, computed
-  // client-side from today's entries) plus any task actively being timed right
-  // now. Renders as its own section ABOVE the focus list. Anything not worked
-  // today surfaces in Focus / Today instead — past time alone never keeps it here.
+  // The server carries unfinished tasks worked on any date. Running timers
+  // also surface immediately, before their first saved time entry arrives.
   const rawInProgress: Task[] = useMemo(() => {
-    const list = [...(data?.in_progress_today ?? [])];
-    const seen = new Set(list.map((t) => t.id));
-
-    // Also include any task currently being timed if not already in the list
     const allAvailable = [
       ...(data?.in_progress_today ?? []),
       ...(data?.today ?? []),
@@ -226,30 +221,10 @@ export default function TodayList() {
       ...(data?.day_planner ?? []),
       ...(data?.unscheduled ?? []),
     ];
-
-    if (activeWB?.task && !seen.has(activeWB.task.id)) {
-      const found = allAvailable.find((t) => t.id === activeWB.task.id);
-      if (found && !isTaskCompleted(found)) {
-        list.unshift(found);
-        seen.add(activeWB.task.id);
-      }
-    }
-    for (const rt of timers) {
-      if (!seen.has(rt.taskId)) {
-        const found = allAvailable.find((t) => t.id === rt.taskId);
-        if (found && !isTaskCompleted(found)) {
-          list.unshift(found);
-          seen.add(rt.taskId);
-        }
-      }
-    }
-
-    return list.filter((t) => {
-      if (isTaskCompleted(t)) return false;
-      if (isActivelyTimed(t.id) || (secondsTodayByTask.get(t.id) || 0) > 0) return true;
-      return false;
-    });
-  }, [data, activeWB?.task, timers, isActivelyTimed, secondsTodayByTask]);
+    const activeIds = timers.map((rt) => rt.taskId);
+    if (activeWB?.task && !activeWB.run.ended_at) activeIds.push(activeWB.task.id);
+    return buildInProgressTasks(data?.in_progress_today ?? [], allAvailable, activeIds);
+  }, [data, activeWB, timers]);
   const inProgressTasks = useRetainFading(rawInProgress, fadingTaskIds);
   const inProgressIds = useMemo(() => new Set(inProgressTasks.map((t) => t.id)), [inProgressTasks]);
 
