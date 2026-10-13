@@ -20,7 +20,7 @@ import { buildInProgressTasks } from '../../../lib/inProgressTasks';
 import DayCalendar from '../day-planner/DayCalendar';
 import { GoalTaskFlag } from '../goals/GoalIntegration';
 import TaskRelationshipsButton from '../../../components/pm/TaskRelationshipsButton';
-import { planDateKey, computeSnoozeTargets } from '../../../hooks/useDayPlanner';
+import { planDateKey, computeSnoozeTargets, useFocusTask } from '../../../hooks/useDayPlanner';
 import { useIsMobile } from '../../../hooks/useIsMobile';
 
 // Full group-by set shared with Home tabs + Space/Folder views (None, Work
@@ -680,7 +680,7 @@ function TodayRow({ task: t, onOpen, secondsToday = 0, liveSecs = 0, isInProgres
     if (menuPos) { setMenuPos(null); return; }
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
     const MENU_W = 188;
-    const MENU_H = 260;
+    const MENU_H = 300;
     const MARGIN = 6;
     const flipUp = rect.bottom + MARGIN + MENU_H > window.innerHeight;
     setMenuPos({
@@ -716,6 +716,20 @@ function TodayRow({ task: t, onOpen, secondsToday = 0, liveSecs = 0, isInProgres
     // future copies inherit it and it survives the midnight rollover.
     setFocusBucket(t.id, next, t.recurring_parent_id ?? undefined);
     setMenuPos(null);
+  };
+
+  // "Remove from focus list" — drop the task from the Home focus list. Clears
+  // any Evening/Night/Focus bucket (including an inherited template bucket so
+  // a recurring task doesn't reappear there), and when the task carries a
+  // focus star, clears the star server-side too. Tasks without a star (e.g.
+  // In Progress tasks surfaced via a bucket) simply leave the focus list.
+  const focusTask = useFocusTask();
+  const isStarred = isTaskFocused(t);
+  const removeFromFocus = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setMenuPos(null);
+    setFocusBucket(t.id, null, t.recurring_parent_id ?? undefined);
+    if (isStarred) focusTask.mutate({ id: t.id, focused: false });
   };
 
   // Date moves — push the task's work_date to the target local-midnight. A
@@ -966,6 +980,10 @@ function TodayRow({ task: t, onOpen, secondsToday = 0, liveSecs = 0, isInProgres
           <button type="button" role="menuitem" className="hm-bucket-menu-item" onClick={(e) => moveWorkDate(e, snoozeTargets.nextMonday.iso)}>
             <span>Next week</span>
             <span className="dim">{snoozeTargets.nextMonday.date}</span>
+          </button>
+          <div className="hm-bucket-menu-sep" role="separator" />
+          <button type="button" role="menuitem" className="hm-bucket-menu-item" onClick={removeFromFocus}>
+            <span>Remove from focus list</span>
           </button>
         </div>,
         document.body,
