@@ -18,6 +18,7 @@ import { getUserSkillLevel, checkLoggedTimeChange, isUserAdmin } from '../../uti
 import { resolveClientSource } from '../../utils/clientSource';
 import { recordWorkBlockCompletionIfActive } from './workBlocks';
 import { recordGroupRunCompletionIfActive } from './groupRuns';
+import { getUserWorkedTaskIds } from '../../utils/inProgressTasks';
 import { normalizeTaskStatusForList, defaultTaskStatusForList, getListStageInfo } from '../../utils/statusGroups';
 
 const router = Router();
@@ -872,18 +873,10 @@ router.get('/tasks/my', async (req: Request, res: Response) => {
       buckets.focused = [...fromExisting, ...filteredExtra];
     }
 
-    // "In progress" — tasks the caller has time-tracked TODAY, via ANY entry:
-    // real timer sessions or manual "Time logged" edits, plus currently-active
-    // runs. Full task objects (assignees, dates, parents) so the Home list
-    // renders these rows identically to the focus list. Anything not worked
-    // today surfaces in Focus / Today instead — past time alone never keeps
-    // a task here.
-    const { data: recentEntries } = await supabaseAdmin
-      .from('task_time_entries')
-      .select('task_id, started_at, created_at, source')
-      .eq('user_id', req.userId!)
-      .order('started_at', { ascending: false })
-      .limit(2000);
+    // In progress persists across dates for tasks the caller has worked on.
+    // Keep the legacy bucket name for existing clients; membership is no longer
+    // limited to today's entries. Completed tasks are excluded below.
+    const workedIds = await getUserWorkedTaskIds(req.userId!);
 
     const { data: activeWbRuns } = await supabaseAdmin
       .from('work_block_runs')
@@ -891,36 +884,15 @@ router.get('/tasks/my', async (req: Request, res: Response) => {
       .eq('user_id', req.userId!)
       .is('ended_at', null);
 
-    const workedIds: string[] = [];
-    const seenWorked = new Set<string>();
-    const workedTodayIds = new Set<string>();
-
+    const seenWorked = new Set(workedIds);
     for (const run of activeWbRuns || []) {
-      const id = (run as any).task_id as string;
-      if (id) {
-        workedTodayIds.add(id);
-        if (!seenWorked.has(id)) {
-          seenWorked.add(id);
-          workedIds.push(id);
-        }
+      const id = run.task_id;
+      if (id && !seenWorked.has(id)) {
+        seenWorked.add(id);
+        workedIds.unshift(id);
       }
     }
 
-    for (const e of recentEntries || []) {
-      const id = (e as any).task_id as string;
-      if (!id) continue;
-      const entryStartedDay = toTzDay((e as any).started_at);
-      const entryCreatedDay = toTzDay((e as any).created_at);
-      if (entryStartedDay === todayStr || entryCreatedDay === todayStr) {
-        workedTodayIds.add(id);
-      }
-      if (seenWorked.has(id)) continue;
-      seenWorked.add(id);
-      workedIds.push(id);
-    }
-
-    // NOTE: In Progress is "worked TODAY" only. If not worked today it
-    // belongs in Focus / Today, not here — even overdue tasks with past time.
     if (workedIds.length > 0) {
       const have = new Map(tasks.map((t: any) => [t.id, t]));
       const missingWorked = workedIds.filter((id) => !have.has(id));
@@ -965,8 +937,7 @@ router.get('/tasks/my', async (req: Request, res: Response) => {
       buckets.in_progress_today = workedIds
         .map((id) => workedById.get(id))
         .filter(Boolean)
-        .filter((t) => includeDone || !isTaskDone(t))
-        .filter((t) => workedTodayIds.has(t.id));
+        .filter((t) => includeDone || !isTaskDone(t));
     }
 
     res.json({ success: true, data: buckets });
