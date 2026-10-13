@@ -16,6 +16,7 @@ export interface Activity {
   isManual?: boolean;
   children?: WorkBlockChildEntry[];
   segments?: Activity[];
+  plannerTasks?: Activity[];
 }
 export const KINDS: { kind: ActivityKind; label: string; color: string }[] = [
   { kind: 'work', label: 'Work', color: '#4bc88d' },
@@ -171,6 +172,31 @@ export function combineTaskSegments(events: Activity[]): Activity[] {
       segments: segments.length > 1 ? segments : undefined,
     });
   }
+  return result;
+}
+
+/** Collapse overlapping planner cards, including their minimum visible height. */
+export function groupDayPlanActivities(events: Activity[], minimumDuration = 0): Activity[] {
+  const result = events.filter(event => event.kind !== 'day_plan');
+  const plans = events.filter(event => event.kind === 'day_plan').sort((a, b) => a.start - b.start || a.id.localeCompare(b.id));
+  let group: Activity[] = [], visualEnd = -Infinity;
+  const flush = () => {
+    if (group.length === 1) result.push(group[0]);
+    else if (group.length > 1) result.push({
+      id: `plan-group:${group[0].id}:${group[0].start}`,
+      kind: 'day_plan', title: `${group.length} planned tasks`,
+      start: group[0].start, end: Math.max(...group.map(event => event.end)),
+      seconds: group.reduce((sum, event) => sum + event.seconds, 0),
+      source: 'Day Planner', plannerTasks: group,
+    });
+    group = [];
+  };
+  for (const plan of plans) {
+    if (plan.start >= visualEnd) flush();
+    group.push(plan);
+    visualEnd = Math.max(group.length === 1 ? -Infinity : visualEnd, plan.end, plan.start + minimumDuration);
+  }
+  flush();
   return result;
 }
 

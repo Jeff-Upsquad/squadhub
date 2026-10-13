@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import type { TaskDayPlan, TaskTimeEntry, TimerSession } from '@squadhub/shared';
-import { attendanceActivities, clipActivity, combineTaskSegments, dayKey, dayPlanActivities, dayStart, isAttendance, layoutActivities, taskActivities, weekStart, type Activity } from '../activityModel';
+import { attendanceActivities, clipActivity, combineTaskSegments, dayKey, dayPlanActivities, dayStart, groupDayPlanActivities, isAttendance, layoutActivities, taskActivities, weekStart, type Activity } from '../activityModel';
 const hour = 3600000;
 const start = dayStart('2026-10-04');
 function session(id: string, from: number, to: number | null, type: TimerSession['timer_type'] = 'work'): TimerSession {
@@ -47,6 +47,32 @@ test('range clipping preserves allocated task shares across midnight', () => {
 test('concurrent sessions have independent columns and later sessions regain full width', () => {
   const events = layoutActivities([activity('a', 0, 100), activity('b', 10, 60), activity('c', 60, 90), activity('d', 100, 200)]);
   assert.deepEqual(events.map(e => [e.event.id, e.column, e.columns]), [['a', 0, 2], ['b', 1, 2], ['c', 1, 2], ['d', 0, 1]]);
+});
+
+test('overlapping planner tasks collapse without losing task identities, times, or durations', () => {
+  const plans = Array.from({ length: 12 }, (_, i) => ({ ...activity(`plan-${i}`, start + 9 * hour, start + 9.5 * hour), kind: 'day_plan' as const, taskId: `task-${i}` }));
+  const later = { ...activity('later', start + 10 * hour, start + 11 * hour), kind: 'day_plan' as const };
+  const tracked = { ...activity('tracked', start + 9 * hour, start + 10 * hour), taskId: 'tracked' };
+  const grouped = groupDayPlanActivities([...plans, later, tracked], 27 * 60000);
+  const group = grouped.find(event => event.plannerTasks)!;
+  assert.deepEqual(group.plannerTasks, [...plans].sort((a, b) => a.id.localeCompare(b.id)));
+  assert.equal(group.seconds, 12 * 1800);
+  assert.equal(group.taskId, undefined);
+  assert.ok(grouped.includes(tracked));
+  const layout = layoutActivities(grouped.filter(event => event.kind === 'day_plan'), 27 * 60000);
+  assert.equal(layout.length, 2);
+  assert.ok(layout.every(item => item.columns === 1));
+});
+
+test('planner grouping handles overlap chains and short visible cards, but separates adjacent tasks', () => {
+  const plan = (id: string, a: number, b: number): Activity => ({ ...activity(id, a, b), kind: 'day_plan' });
+  const grouped = groupDayPlanActivities([plan('a', 0, 30 * 60000), plan('b', 20 * 60000, 50 * 60000), plan('c', 45 * 60000, 60 * 60000), plan('adjacent', 72 * 60000, 102 * 60000)], 27 * 60000);
+  assert.equal(grouped.length, 2);
+  assert.deepEqual(grouped[0].plannerTasks?.map(event => event.id), ['a', 'b', 'c']);
+  assert.equal(grouped[1].id, 'adjacent');
+  assert.equal(groupDayPlanActivities([plan('short-a', 0, 15 * 60000), plan('short-b', 15 * 60000, 30 * 60000)], 27 * 60000).length, 1);
+  assert.equal(groupDayPlanActivities([plan('a', 0, 30 * 60000), plan('b', 30 * 60000, 60 * 60000)], 27 * 60000).length, 2);
+  assert.deepEqual(groupDayPlanActivities([]), []);
 });
 
 test('short sequential entries reserve their visible footprint without changing credited time', () => {

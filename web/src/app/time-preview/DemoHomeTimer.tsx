@@ -3,6 +3,9 @@ import { useEffect, useState, type CSSProperties } from 'react';
 import type { TimerSession } from '@squadhub/shared';
 import TimeActivityCalendar from '../../components/time-activity/TimeActivityCalendar';
 import { attendanceActivities, dayKey, dayStart, duration, shiftDay, type Activity } from '../../components/time-activity/activityModel';
+import { installPreviewApi } from '../day-planner-preview/mockApi';
+import { usePMStore } from '../../stores/pmStore';
+import GlobalTaskDetailPanel from '../../views/app/home/GlobalTaskDetailPanel';
 
 function sampleSessions(): TimerSession[] {
   const date = dayKey();
@@ -22,6 +25,7 @@ function sampleTasks(): Activity[] {
   const date = dayKey();
   const make = (key: string, start: number, end: number, kind: 'task' | 'block', title: string, project: string): Activity => ({
     id: `sample:${key}:${start}:${kind}`, kind, title, project, start: dayStart(key) + start * 60000, end: dayStart(key) + end * 60000,
+    taskId: `sample-task-${key}-${start}-${kind}`,
     seconds: (end - start) * 60, source: kind === 'task' ? 'Task timer' : 'Time block timer',
   });
   const result = [
@@ -50,6 +54,7 @@ function sampleDayPlans(): Activity[] {
   const date = dayKey();
   const make = (key: string, startMin: number, durMin: number, title: string, project?: string): Activity => ({
     id: `demo-plan:${key}:${startMin}`,
+    taskId: `sample-plan-${key}-${startMin}`,
     kind: 'day_plan',
     title,
     project,
@@ -65,6 +70,10 @@ function sampleDayPlans(): Activity[] {
     make(date, 960, 45, 'Create an ad targeting Kerala women', 'Marketing'),
     make(date, 1080, 60, 'GST filings checking', 'Accounts / Finance'),
   ];
+  for (let i = 0; i < 8; i++) {
+    result.push({ ...make(date, 540, 30, ['Create a monthly report', 'Haris personal follow-up', 'Move BigReview assets', 'Cashfree payment review', 'Group meeting notes', 'Check this sprint’s feedback', 'Review release checklist', 'Prepare launch announcement'][i], 'My Tasks'),
+      id: `demo-overlap:${i}`, taskId: `sample-overlap-${i}` });
+  }
   for (let i = 1; i <= 6; i++) {
     const key = shiftDay(date, -i);
     result.push(
@@ -82,7 +91,10 @@ export default function DemoHomeTimer() {
   const [dayPlans, setDayPlans] = useState<Activity[]>([]);
   const [now, setNow] = useState(Date.now());
   useEffect(() => {
-    setSessions(sampleSessions()); setTasks(sampleTasks()); setDayPlans(sampleDayPlans());
+    const sampleTaskEvents = sampleTasks(), samplePlans = sampleDayPlans();
+    installPreviewApi([...sampleTaskEvents, ...samplePlans].filter(event => event.taskId).map(event => ({ id: event.taskId!, title: event.title, time_tracked: event.kind === 'day_plan' ? 0 : event.seconds })));
+    usePMStore.getState().setActiveTask(null);
+    setSessions(sampleSessions()); setTasks(sampleTaskEvents); setDayPlans(samplePlans);
     setOpen(new URLSearchParams(window.location.search).get('calendar') === 'open');
     const id = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(id);
@@ -109,6 +121,8 @@ export default function DemoHomeTimer() {
       <div className="hm-timer-ctrls">{(['work', 'break', 'no_work'] as const).map(kind => <button key={kind} className="hm-timer-btn" data-type={kind} data-on={active?.timer_type === kind} onClick={() => switchTimer(kind)} aria-label={`${active?.timer_type === kind ? 'Stop' : 'Start'} ${kind.replace('_', ' ')}`}>
         <span className="ic">{active?.timer_type === kind ? '■' : '▸'}</span><span className="lb">{kind === 'no_work' ? 'No work' : kind === 'work' ? 'Work' : 'Break'}</span></button>)}</div>
     </div>
-    {open && <TimeActivityCalendar demo onClose={() => setOpen(false)} renderData={(_from, _to, stamp) => <TimeActivityCalendar.Data commitment={9 * 3600} events={[...attendanceActivities(sessions, 9 * 3600, stamp), ...dayPlans, ...tasks]} />} />}
+    {open && <TimeActivityCalendar demo onClose={() => setOpen(false)} renderData={(_from, _to, stamp) => <TimeActivityCalendar.Data commitment={9 * 3600} events={[...attendanceActivities(sessions, 9 * 3600, stamp), ...dayPlans, ...tasks]}
+      onOpenTask={id => { usePMStore.getState().setActiveTask(id); setOpen(false); }} />} />}
+    <GlobalTaskDetailPanel />
   </>;
 }

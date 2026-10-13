@@ -9,6 +9,11 @@ My Home. Close the drawer and click the percentage ring to open it again. Day an
 week views, date selection, category filters, session details, and local timer
 controls are interactive. Sample timers reset when the page reloads.
 
+Overlapping Day planner tasks share a single card within the fixed planner
+column. Click it to see every planned task in an inline popup. Selecting a
+popup task or any individual task/time block opens the normal task side panel;
+the preview uses an in-memory API for those sample task details.
+
 My Home uses authenticated, workspace-scoped attendance sessions and task time
 entries, plus active task/work-block timers. History is fetched for the displayed
 range, including sessions that cross midnight. Calendar dates use IST to match
