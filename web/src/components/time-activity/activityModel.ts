@@ -10,6 +10,7 @@ export interface Activity {
   seconds: number;
   live?: boolean;
   taskId?: string;
+  entryId?: string;
   project?: string;
   note?: string | null;
   source?: string;
@@ -79,7 +80,7 @@ export function attendanceActivities(sessions: TimerSession[], commitment: numbe
 }
 export function taskActivities(entries: TaskTimeEntry[]): Activity[] {
   return entries.filter(e => e.duration_seconds > 0).map(e => ({
-    id: `entry:${e.id}`, kind: e.source === 'work_block' ? 'block' : 'task',
+    id: `entry:${e.id}`, entryId: e.id, kind: e.source === 'work_block' ? 'block' : 'task',
     title: e.task?.title || 'Archived task', start: Date.parse(e.started_at), end: Date.parse(e.stopped_at),
     seconds: e.duration_seconds, taskId: e.task_id, project: [e.task?.space?.name, e.task?.list?.name].filter(Boolean).join(' / '),
     note: e.note, source: e.source === 'manual' ? 'Manually logged' : e.source === 'work_block' ? 'Time block timer' : 'Task timer',
@@ -133,9 +134,8 @@ export function clipActivity(event: Activity, from: number, to: number): Activit
   return { ...event, start, end, seconds: event.seconds * (end - start) / (event.end - event.start) };
 }
 
-/** One calendar block per task per IST day: earliest start to latest end,
- *  carrying the sum of actually allocated seconds. Parallel timers must not
- *  split a task into multiple sections. */
+/** Combine touching/overlapping task fragments within each IST day.
+ *  Gaps start separate sessions; credited seconds remain distinct from elapsed time. */
 export function combineTaskSegments(events: Activity[]): Activity[] {
   const grouped = new Map<string, Activity[]>();
   const result: Activity[] = [];
@@ -156,21 +156,34 @@ export function combineTaskSegments(events: Activity[]): Activity[] {
     }
   }
   for (const [key, segments] of grouped) {
-    segments.sort((a, b) => a.start - b.start || a.end - b.end);
-    const isManual = segments.some(s => s.isManual);
-    const latest = segments.reduce((a, b) => (b.end > a.end ? b : a));
-    result.push({
-      ...latest,
-      id: key,
-      start: Math.min(...segments.map(s => s.start)),
-      end: Math.max(...segments.map(s => s.end)),
-      seconds: segments.reduce((sum, s) => sum + s.seconds, 0),
-      live: segments.some(s => s.live),
-      source: segments.length > 1 ? (isManual ? 'Manually logged' : 'Task time') : segments[0].source,
-      isManual,
-      note: segments.length > 1 ? null : segments[0].note,
-      segments: segments.length > 1 ? segments : undefined,
-    });
+    segments.sort((a, b) => a.start - b.start || a.end - b.end || a.id.localeCompare(b.id));
+    let session: Activity[] = [], sessionEnd = -Infinity;
+    const flush = () => {
+      if (!session.length) return;
+      const isManual = session.some(s => s.isManual);
+      const latest = session.reduce((a, b) => (b.end > a.end ? b : a));
+      result.push({
+        ...latest,
+        id: session[0].id.startsWith(`${key}:`) ? session[0].id : `${key}:${session[0].id}`,
+        entryId: session.length === 1 ? session[0].entryId : undefined,
+        start: session[0].start,
+        end: sessionEnd,
+        seconds: session.reduce((sum, s) => sum + s.seconds, 0),
+        live: session.some(s => s.live),
+        source: session.length > 1 ? (isManual ? 'Manually logged' : 'Task time') : session[0].source,
+        isManual,
+        note: session.length > 1 ? null : session[0].note,
+        segments: session.length > 1 ? session : undefined,
+      });
+      session = [];
+      sessionEnd = -Infinity;
+    };
+    for (const segment of segments) {
+      if (segment.start > sessionEnd) flush();
+      session.push(segment);
+      sessionEnd = Math.max(sessionEnd, segment.end);
+    }
+    flush();
   }
   return result;
 }

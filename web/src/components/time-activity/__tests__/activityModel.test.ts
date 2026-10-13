@@ -96,18 +96,22 @@ test('contiguous split task timers combine into one continuous session with cred
   assert.equal(grouped.reduce((sum, e) => sum + (e.segments?.length || 1), 0), 55);
   assert.equal(combineTaskSegments(grouped).length, 11);
 });
-test('task sessions on the same task stay one block from first start to last end with allocated time', () => {
+test('a gap separates task sessions and only the current session is live', () => {
   const events = combineTaskSegments([
     { ...activity('first', start, start + 27 * 60000, 27 * 60), taskId: 'email-cleanup' },
-    // 69m gap until 1:36 AM — still one block per task
+    // 69m gap until 1:36 AM.
     { ...activity('second', start + 96 * 60000, start + 118 * 60000, 22 * 60), taskId: 'email-cleanup', live: true },
   ]);
-  assert.equal(events.length, 1);
+  assert.equal(events.length, 2);
   assert.equal(events[0].start, start);
-  assert.equal(events[0].end, start + 118 * 60000);
-  assert.equal(events[0].seconds, (27 + 22) * 60);
-  assert.equal(events[0].live, true);
-  assert.equal(events[0].segments?.length, 2);
+  assert.equal(events[0].end, start + 27 * 60000);
+  assert.equal(events[0].seconds, 27 * 60);
+  assert.equal(events[0].live, false);
+  assert.equal(events[1].start, start + 96 * 60000);
+  assert.equal(events[1].end, start + 118 * 60000);
+  assert.equal(events[1].seconds, 22 * 60);
+  assert.equal(events[1].live, true);
+  assert.notEqual(events[0].id, events[1].id);
 });
 test('group clipping sums actual contiguous segments and excludes gaps outside bounds', () => {
   const grouped = combineTaskSegments([
@@ -141,7 +145,7 @@ test('eleven overlapping tasks remain eleven separate positioned cards with cred
   assert.ok(layout.every(e => e.event.start === start + 20 * hour && e.event.end === start + 21 * hour));
 });
 
-test('one task is one block even with gaps; overlapping tasks share columns', () => {
+test('a task in the gap between two sessions uses its own full-width block', () => {
   const events = combineTaskSegments([
     // Email cleanup: morning session 9:00 - 9:30
     { ...activity('ec-1', start + 9 * hour, start + 9.5 * hour, 1800), taskId: 'email-cleanup' },
@@ -150,32 +154,62 @@ test('one task is one block even with gaps; overlapping tasks share columns', ()
     // Email cleanup: afternoon session 11:00 - 11:45
     { ...activity('ec-2', start + 11 * hour, start + 11.75 * hour, 2700), taskId: 'email-cleanup' },
   ]);
-  assert.equal(events.length, 2);
+  assert.equal(events.length, 3);
   const ecSessions = events.filter(e => e.taskId === 'email-cleanup');
-  assert.equal(ecSessions.length, 1);
+  assert.equal(ecSessions.length, 2);
   assert.equal(ecSessions[0].start, start + 9 * hour);
-  assert.equal(ecSessions[0].end, start + 11.75 * hour);
-  assert.equal(ecSessions[0].seconds, 1800 + 2700);
-  assert.equal(ecSessions[0].segments?.length, 2);
+  assert.equal(ecSessions[0].end, start + 9.5 * hour);
+  assert.equal(ecSessions[0].seconds, 1800);
+  assert.equal(ecSessions[1].start, start + 11 * hour);
+  assert.equal(ecSessions[1].end, start + 11.75 * hour);
+  assert.equal(ecSessions[1].seconds, 2700);
 
   const layout = layoutActivities(events);
-  // Email cleanup spans 9:00-11:45 and overlaps the 10:00 call, so they share columns.
-  assert.ok(layout.every(l => l.columns === 2));
+  assert.ok(layout.every(l => l.columns === 1));
 });
 
-test('all segments of one task merge into a single block regardless of gap size', () => {
+test('even short pauses separate sessions instead of filling untracked gaps', () => {
   const events = combineTaskSegments([
     // Two segments within 3s of each other (e.g. parallel timer tick/sync)
     { ...activity('tick-1', start + hour, start + 1.25 * hour, 900), taskId: 't1' },
     { ...activity('tick-2', start + 1.25 * hour + 3000, start + 1.5 * hour, 900), taskId: 't1' },
-    // A 10s pause/break — still the same task block
+    // A 10s pause/break.
     { ...activity('after-break', start + 1.5 * hour + 10000, start + 2 * hour, 1800), taskId: 't1' },
   ]);
-  assert.equal(events.length, 1);
-  assert.equal(events[0].start, start + hour);
-  assert.equal(events[0].end, start + 2 * hour);
-  assert.equal(events[0].seconds, 3600);
+  assert.equal(events.length, 3);
+  assert.deepEqual(events.map(e => e.seconds), [900, 900, 1800]);
+});
+
+test('manual sessions from the screenshot keep separate entry identities, notes and totals', () => {
+  const date = dayStart('2026-10-13');
+  const entries = [
+    { id: 'first', started_at: '2026-10-13T13:51:00+05:30', stopped_at: '2026-10-13T14:51:00+05:30', duration_seconds: 3600, note: 'First visit' },
+    { id: 'second', started_at: '2026-10-13T18:24:00+05:30', stopped_at: '2026-10-13T20:24:00+05:30', duration_seconds: 7200, note: 'Follow-up' },
+  ].map(entry => ({ ...entry, task_id: 'airtel', user_id: 'user', workspace_id: 'workspace', source: 'manual', created_at: entry.started_at })) as TaskTimeEntry[];
+  const events = combineTaskSegments(taskActivities(entries.reverse()));
+  assert.deepEqual(events.map(e => [e.start, e.end, e.seconds, e.entryId, e.note]), [
+    [date + (13 * 60 + 51) * 60000, date + (14 * 60 + 51) * 60000, 3600, 'first', 'First visit'],
+    [date + (18 * 60 + 24) * 60000, date + (20 * 60 + 24) * 60000, 7200, 'second', 'Follow-up'],
+  ]);
+  assert.ok(events.every(e => e.isManual && !e.segments));
+  assert.equal(events.reduce((sum, e) => sum + e.seconds, 0), 10800);
+  assert.deepEqual(combineTaskSegments(events), events);
+  assert.equal(clipActivity(events[0], date + 15 * hour, date + 18 * hour), null);
+  assert.equal(clipActivity(events[1], date + 15 * hour, date + 18 * hour), null);
+});
+
+test('overlapping fragment chains combine without splitting at a nested fragment end', () => {
+  const events = combineTaskSegments([
+    { ...activity('long', start + hour, start + 3 * hour, 1800), taskId: 'a' },
+    { ...activity('nested', start + 1.5 * hour, start + 2 * hour, 900), taskId: 'a' },
+    { ...activity('tail', start + 2.5 * hour, start + 4 * hour, 2700), taskId: 'a' },
+    { ...activity('later', start + 5 * hour, start + 6 * hour), taskId: 'a' },
+  ]);
+  assert.equal(events.length, 2);
+  assert.equal(events[0].end, start + 4 * hour);
+  assert.equal(events[0].seconds, 5400);
   assert.equal(events[0].segments?.length, 3);
+  assert.deepEqual(combineTaskSegments(events), events);
 });
 
 test('task activities flag manually logged entries with isManual', () => {
