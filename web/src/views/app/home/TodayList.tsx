@@ -14,9 +14,9 @@ import AssigneePicker from '../pm/AssigneePicker';
 import IncompleteItemsDialog from '../pm/IncompleteItemsDialog';
 import NoAssigneeCompleteDialog from '../pm/NoAssigneeCompleteDialog';
 import { formatTracked, toLocalDateKey } from '../../../lib/formatDuration';
-import { groupTasks, isFutureDay, isTaskFocused, collapseGroupedTasks, isGroupedRow, GROUP_BY_OPTIONS, isTaskCompleted } from '../../../lib/taskGrouping';
+import { groupTasks, isTaskFocused, collapseGroupedTasks, isGroupedRow, GROUP_BY_OPTIONS, isTaskCompleted } from '../../../lib/taskGrouping';
 import GroupedTaskRow from './GroupedTaskRow';
-import { buildInProgressTasks } from '../../../lib/inProgressTasks';
+import { buildFocusTasks, buildInProgressTasks, isDeferredWorkedTask } from '../../../lib/inProgressTasks';
 import DayCalendar from '../day-planner/DayCalendar';
 import { GoalTaskFlag } from '../goals/GoalIntegration';
 import TaskRelationshipsButton from '../../../components/pm/TaskRelationshipsButton';
@@ -107,25 +107,20 @@ export default function TodayList() {
   };
 
   const tz = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC', []);
+  const [today, setToday] = useState(() => planDateKey());
+  const workedTaskContext = useMemo(() => ({
+    workedAtByTask: data?.worked_at_by_task ?? {}, timeZone: tz, today,
+  }), [data?.worked_at_by_task, tz, today]);
 
-  // Show ONLY tasks the user has starred (★ Focus) — the focus list is
-  // persistent and no longer resets overnight. A starred task whose work_date
-  // is in the future is hidden until that day arrives (set it ahead → it drops
-  // off here, then comes back when its work date is today). The server-side
-  // `focused` bucket carries starred tasks regardless of date so they're always
-  // candidates here. (done/closed tasks are filtered out server-side.)
+  // Starred tasks and tasks rescheduled after their last worked day return to
+  // Focus when their work date arrives. Saved history is caller-specific and
+  // complete, rather than relying on the Time Sheet's most recent 500 entries.
   const rawTasks: Task[] = useMemo(() => {
     if (!data) return [];
-    const merged = [...data.overdue, ...data.today, ...(data.focused ?? [])];
-    const seen = new Set<string>();
-    const unique = merged.filter((t) => (seen.has(t.id) ? false : (seen.add(t.id), true)));
-    // Match the canonical Focus Today ordering used by the web task lists.
-    // Previously this inherited the overdue/today bucket order above, which
-    // made the same focused tasks appear in a different sequence on Home.
-    return unique
-      .filter((t) => !isTaskCompleted(t) && isTaskFocused(t) && !isFutureDay(t.work_date, tz))
-      .sort((a, b) => (a.focused_at ?? '').localeCompare(b.focused_at ?? ''));
-  }, [data, tz]);
+    return buildFocusTasks([
+      ...data.overdue, ...data.today, ...(data.focused ?? []), ...(data.in_progress_today ?? []),
+    ], workedTaskContext, dismissedInProgressIds);
+  }, [data, workedTaskContext, dismissedInProgressIds]);
   // Keep just-completed rows rendered until their slide-out finishes. The
   // my-tasks query DROPS done tasks, and completing one triggers a refetch —
   // without this the row unmounts (~250ms) before the .35s-delayed slide even
@@ -146,7 +141,6 @@ export default function TodayList() {
     [timers, activeWB],
   );
 
-  const today = useMemo(() => planDateKey(), []);
   const [viewDate, setViewDate] = useState<string>(today);
 
   // Time tracked TODAY, per task and in total, from saved time entries plus the
@@ -225,8 +219,8 @@ export default function TodayList() {
     ];
     const activeIds = timers.map((rt) => rt.taskId);
     if (activeWB?.task && !activeWB.run.ended_at) activeIds.push(activeWB.task.id);
-    return buildInProgressTasks(data?.in_progress_today ?? [], allAvailable, activeIds);
-  }, [data, activeWB, timers]);
+    return buildInProgressTasks(data?.in_progress_today ?? [], allAvailable, activeIds, workedTaskContext);
+  }, [data, activeWB, timers, workedTaskContext]);
   const inProgressTasks = useRetainFading(rawInProgress, fadingTaskIds);
   const inProgressIds = useMemo(() => new Set(inProgressTasks.map((t) => t.id)), [inProgressTasks]);
 
@@ -337,7 +331,11 @@ export default function TodayList() {
   useEffect(() => {
     rolloverFocusBuckets();
     rolloverDismissedInProgress();
-    const id = setInterval(() => { rolloverFocusBuckets(); rolloverDismissedInProgress(); }, 60_000);
+    const id = setInterval(() => {
+      setToday(planDateKey());
+      rolloverFocusBuckets();
+      rolloverDismissedInProgress();
+    }, 60_000);
     return () => clearInterval(id);
   }, [rolloverFocusBuckets, rolloverDismissedInProgress]);
 
@@ -357,11 +355,11 @@ export default function TodayList() {
           onToggle={() => toggleGroupedExpanded(item.key)}
           onOpenContainer={openContainer}
           renderChild={(t) => (
-            <TodayRow key={t.id} task={t} onOpen={openTask} secondsToday={secondsTodayByTask.get(t.id) || 0} liveSecs={liveByTask.get(t.id) || 0} isInProgress={inProgressIds.has(t.id)} />
+            <TodayRow key={t.id} task={t} onOpen={openTask} secondsToday={secondsTodayByTask.get(t.id) || 0} liveSecs={liveByTask.get(t.id) || 0} isInProgress={inProgressIds.has(t.id)} isDeferredFocus={isDeferredWorkedTask(t, workedTaskContext)} />
           )}
         />
       ) : (
-        <TodayRow key={item.id} task={item} onOpen={openTask} secondsToday={secondsTodayByTask.get(item.id) || 0} liveSecs={liveByTask.get(item.id) || 0} isInProgress={inProgressIds.has(item.id)} />
+        <TodayRow key={item.id} task={item} onOpen={openTask} secondsToday={secondsTodayByTask.get(item.id) || 0} liveSecs={liveByTask.get(item.id) || 0} isInProgress={inProgressIds.has(item.id)} isDeferredFocus={isDeferredWorkedTask(item, workedTaskContext)} />
       ),
     );
 
@@ -625,7 +623,7 @@ function BucketSection({
   );
 }
 
-function TodayRow({ task: t, onOpen, secondsToday = 0, liveSecs = 0, isInProgress = false }: { task: Task; onOpen: (id: string) => void; secondsToday?: number; liveSecs?: number; isInProgress?: boolean }) {
+function TodayRow({ task: t, onOpen, secondsToday = 0, liveSecs = 0, isInProgress = false, isDeferredFocus = false }: { task: Task; onOpen: (id: string) => void; secondsToday?: number; liveSecs?: number; isInProgress?: boolean; isDeferredFocus?: boolean }) {
   const updateTask = useUpdateTask(null);
   const setFocusBucket = usePMStore((s) => s.setFocusBucket);
   const ownBucket = usePMStore((s) => s.focusBuckets[t.id]);
@@ -738,7 +736,7 @@ function TodayRow({ task: t, onOpen, secondsToday = 0, liveSecs = 0, isInProgres
     setMenuPos(null);
     setFocusBucket(t.id, null, t.recurring_parent_id ?? undefined);
     if (isStarred) focusTask.mutate({ id: t.id, focused: false });
-    if (isInProgress && !isTiming) dismissInProgressTask(t.id);
+    if ((isInProgress || isDeferredFocus) && !isTiming) dismissInProgressTask(t.id);
   };
 
   // Date moves — push the task's work_date to the target local-midnight. A

@@ -110,10 +110,10 @@ export type MyTasksBuckets = {
   upcoming: Task[];
   later: Task[];
   focused: Task[];
-  // Tasks worked TODAY (user tz), most-recent first.
-  // Surfaced as the "In progress" section above the Home focus list.
-  // Past time alone never keeps a task here.
+  // Unfinished tasks worked on any day, newest first (legacy bucket name).
+  // Home uses each caller's latest saved work to defer rescheduled tasks.
   in_progress_today: Task[];
+  worked_at_by_task?: Record<string, string>;
   day_planner?: Task[];
   unscheduled?: Task[];
 };

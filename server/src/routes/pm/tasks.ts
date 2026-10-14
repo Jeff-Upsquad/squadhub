@@ -18,7 +18,7 @@ import { getUserSkillLevel, checkLoggedTimeChange, isUserAdmin } from '../../uti
 import { resolveClientSource } from '../../utils/clientSource';
 import { recordWorkBlockCompletionIfActive } from './workBlocks';
 import { recordGroupRunCompletionIfActive } from './groupRuns';
-import { getUserWorkedTaskIds } from '../../utils/inProgressTasks';
+import { getUserWorkedTaskHistory } from '../../utils/inProgressTasks';
 import { normalizeTaskStatusForList, defaultTaskStatusForList, getListStageInfo } from '../../utils/statusGroups';
 
 const router = Router();
@@ -876,7 +876,8 @@ router.get('/tasks/my', async (req: Request, res: Response) => {
     // In progress persists across dates for tasks the caller has worked on.
     // Keep the legacy bucket name for existing clients; membership is no longer
     // limited to today's entries. Completed tasks are excluded below.
-    const workedIds = await getUserWorkedTaskIds(req.userId!);
+    const workedHistory = await getUserWorkedTaskHistory(req.userId!);
+    const workedIds = [...workedHistory.keys()];
 
     const { data: activeWbRuns } = await supabaseAdmin
       .from('work_block_runs')
@@ -940,7 +941,7 @@ router.get('/tasks/my', async (req: Request, res: Response) => {
         .filter((t) => includeDone || !isTaskDone(t));
     }
 
-    res.json({ success: true, data: buckets });
+    res.json({ success: true, data: { ...buckets, worked_at_by_task: Object.fromEntries(workedHistory) } });
   } catch (err) {
     console.error('Get my tasks error:', err);
     res.status(500).json({ success: false, error: 'Internal server error' });
