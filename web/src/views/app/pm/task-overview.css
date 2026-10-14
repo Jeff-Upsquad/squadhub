@@ -177,6 +177,38 @@
 }
 .tov-sub-add:hover { background: var(--tov-soft); color: var(--tov-ink); }
 
+/* Column header above editable rows — same grid as TaskRow (glyph + title + fields + more) */
+.tov-colheader {
+  display: grid;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px 4px;
+  color: var(--tov-ink-4);
+}
+.tov-colheader .gh-left { min-width: 0; }
+.tov-colheader .gh-col {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .02em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Editable list rows — reuse normal list TaskRow inside overview cards */
+.tov-lvrow { min-width: 0; }
+.tov-lvrow .lv-row {
+  background: transparent;
+  border-top: 1px solid var(--tov-rule);
+  border-radius: 0;
+}
+.tov-lvrow .lv-row:first-child { border-top: none; }
+.tov-lvrow .lv-row:hover { background: var(--tov-soft); }
+.tov-sub .tov-lvrow .lv-row { padding-left: 10px; padding-right: 10px; }
+.tov-lvrow .lv-title { color: var(--tov-ink); }
+.tov-lvrow .lv-cell-value { color: var(--tov-ink-2); }
+
 /* Rows */
 .tov-row {
   display: grid;

@@ -1,6 +1,5 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import type { SpaceStatus, Task, TaskPriority, User } from '@squadhub/shared';
-import { getTaskStatusCategory } from '@squadhub/shared';
 import { usePMStore } from '../../../stores/pmStore';
 import { useAuthStore } from '../../../stores/authStore';
 import { useUpdateTask } from '../../../hooks/useTasks';
@@ -23,8 +22,9 @@ import { formatWhen } from './taskHelpers';
 import { GROUP_ORDER as TASK_TYPE_GROUP_ORDER, getTaskTypeGroup } from '../../../components/pm/TaskTypeDropdown';
 import FieldManagerPanel from '../../../components/pm/FieldManagerPanel';
 import { useColumnPrefs } from '../../../hooks/useColumnPrefs';
-import { visibleColumnIds, type ColumnControls } from '../../../lib/columns';
+import { visibleColumnIds, COLUMN_DEFS, gridTemplateFor, type ColumnControls } from '../../../lib/columns';
 import type { ListViewColumnId } from '@squadhub/shared';
+import TaskRow from './TaskRow';
 import './task-overview.css';
 
 // "List View v2" for Space and Folder pages: a header card with a one-line
@@ -166,14 +166,10 @@ export default function TaskOverview({
     [columnStates, setScopeColumns, resetScopeColumns, hasColumnOverride],
   );
   void columnControls;
-  // Tasks completed here: remembered with their pre-completion status so they
-  // strike through in place, then slide away (450ms) unless "show" is on.
-  const [doneSnap, setDoneSnap] = useState<Map<string, string>>(new Map());
-  const [gone, setGone] = useState<Set<string>>(new Set());
-  const [removed, setRemoved] = useState<Set<string>>(new Set());
-  const timers = useRef<number[]>([]);
-
-  useEffect(() => () => { timers.current.forEach((id) => window.clearTimeout(id)); }, []);
+  // Completion state comes from the server (isTaskCompleted) + the shared
+  // fading map that TaskRow drives while its complete animation runs. The
+  // previous local doneSnap/gone/removed slide-out is gone: rows are real
+  // TaskRows now, identical to normal lists.
   useEffect(() => {
     if (!menu) return;
     const onDown = (e: MouseEvent) => {
@@ -189,13 +185,9 @@ export default function TaskOverview({
   }, []);
 
   const tz = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC', []);
-  const fading = useMemo(() => {
-    const m = new Map<string, string>(fadingTaskIds);
-    doneSnap.forEach((v, k) => m.set(k, v));
-    return m;
-  }, [fadingTaskIds, doneSnap]);
+  const fading = useMemo(() => new Map<string, string>(fadingTaskIds), [fadingTaskIds]);
 
-  const isDone = (t: Task) => doneSnap.has(t.id) || isTaskCompleted(t);
+  const isDone = (t: Task) => isTaskCompleted(t);
 
   // Where a task really sits: its stage (original stage while parked in a
   // placeholder) and, when parked, the placeholder itself.
@@ -248,10 +240,7 @@ export default function TaskOverview({
     && filterTasks([t], filters, tz).length > 0
     && (!q || t.title.toLowerCase().includes(q)));
   const doneCount = matching.filter(isDone).length;
-  // Keep locally completed rows during their slide-out, then remove them so
-  // their status / task type / priority group disappears when it becomes empty.
-  const visible = matching.filter((t) => !isDone(t) || showDone || (doneSnap.has(t.id) && !removed.has(t.id)));
-  const hiddenRow = (t: Task) => isDone(t) && !showDone && gone.has(t.id);
+  const visible = matching.filter((t) => !isDone(t) || showDone);
 
   // ---- Grouping ---------------------------------------------------------
   const cards: Card[] = (() => {
@@ -320,23 +309,8 @@ export default function TaskOverview({
   })();
 
   // ---- Actions ------------------------------------------------------------
-  const toggleDone = (t: Task) => {
-    if (isDone(t)) {
-      // Undo of a completion made here restores the exact stage; otherwise
-      // the server maps 'open' to the list's starting stage.
-      const prev = doneSnap.get(t.id);
-      setDoneSnap((m) => { const n = new Map(m); n.delete(t.id); return n; });
-      setGone((g) => { const n = new Set(g); n.delete(t.id); return n; });
-      setRemoved((r) => { const n = new Set(r); n.delete(t.id); return n; });
-      const prevCat = prev ? getTaskStatusCategory(prev) : null;
-      updateTask.mutate({ id: t.id, status: prev && prevCat !== 'closed' && prevCat !== 'done' ? prev : 'open' });
-      return;
-    }
-    setDoneSnap((m) => new Map(m).set(t.id, (t as any).status || ''));
-    updateTask.mutate({ id: t.id, status: 'closed' });
-    timers.current.push(window.setTimeout(() => setGone((g) => new Set(g).add(t.id)), 450));
-    // Remove after the row's 600ms CSS transition has finished.
-    timers.current.push(window.setTimeout(() => setRemoved((r) => new Set(r).add(t.id)), 1050));
+  const handleStatusChange = (taskId: string, statusId: string) => {
+    updateTask.mutate({ id: taskId, status: statusId });
   };
   const openCreate = () => window.dispatchEvent(new CustomEvent('sh:open-create-task'));
   const setGroup = (g: OverviewGroup) => { setScopedGroupBy(scopeKey, g as GroupBy); setMenu(null); };
@@ -423,33 +397,52 @@ export default function TaskOverview({
     );
   };
 
-  const renderRow = (t: Task) => {
-    const done = isDone(t);
-    const hide = hiddenRow(t);
+  const labelForCol = (id: ListViewColumnId) => COLUMN_DEFS.find((d) => d.id === id)?.label ?? id;
+
+  const renderColHeader = () => {
+    if (visibleCols.length === 0) return null;
     return (
       <div
-        key={t.id}
-        className="tov-row"
-        data-hidden={hide || undefined}
-        onClick={() => setActiveTask(t.id)}
+        className="tov-colheader"
+        aria-hidden="true"
+        style={{ gridTemplateColumns: gridTemplateFor(visibleCols) }}
       >
-        <button
-          type="button"
-          className="tov-check"
-          data-done={done || undefined}
-          aria-label={done ? 'Mark as open' : 'Complete'}
-          onClick={(e) => { e.stopPropagation(); toggleDone(t); }}
-        >
-          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="m5 12 5 5 9-10" /></svg>
-        </button>
-        <div className="tov-row-text">
-          <span className="tov-row-title" data-done={done || undefined}>{t.title}</span>
-          <span className="tov-row-sub">{rowMeta(t)}</span>
-        </div>
-        {renderPills(t)}
+        <div className="gh-left" />
+        {visibleCols.map((id) => (
+          <span key={id} className="gh-col">{labelForCol(id)}</span>
+        ))}
+        <span style={{ display: 'inline-flex', justifyContent: 'center' }}>
+          <button
+            type="button"
+            className="lv-col-add"
+            onClick={(e) => { e.stopPropagation(); setFieldsOpen(true); }}
+            title="Add / manage fields in this view"
+            aria-label="Add / manage fields in this view"
+            aria-haspopup="dialog"
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+              <path d="M12 5v14M5 12h14" />
+            </svg>
+          </button>
+        </span>
       </div>
     );
   };
+
+  // List rows are the exact same editable TaskRow used by normal lists: every
+  // visible field column renders inline and updates from this view itself.
+  const renderRow = (t: Task) => (
+    <div key={t.id} className="tov-lvrow">
+      <TaskRow
+        task={t}
+        statuses={lookup}
+        onStatusChange={handleStatusChange}
+        canEdit
+        listId={t.list?.id || (t as unknown as { list_id?: string }).list_id || ''}
+        columns={visibleCols}
+      />
+    </div>
+  );
 
   const renderColumns = (cols: { key: string; name: string; color: string; tasks: Task[] }[]) => (
     <div className="tov-board">
@@ -706,6 +699,7 @@ export default function TaskOverview({
                                 </button>
                               </div>
                             )}
+                            {renderColHeader()}
                             {s.tasks.map(renderRow)}
                           </div>
                         );
