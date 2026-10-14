@@ -6159,6 +6159,16 @@ button.td-bcrumb:hover .name { color: var(--sh-ink); }
 }
 .td-bcrumb .chev { opacity: 0.5; }
 
+/* New-task header: only the breadcrumb may shrink (ellipsis). Every button and
+   the "NEW TASK" label keep their size so the Create button never gets pushed
+   off the panel edge when the space/folder/list path is long. */
+.td-create-head > * { flex-shrink: 0; }
+.td-create-head > .td-create-crumb,
+.td-create-head > .td-bcrumb { flex: 0 1 auto; min-width: 0; }
+.td-create-head .td-bcrumb { max-width: 100%; }
+.td-create-head .td-bcrumb .name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.td-create-head .td-create-label { white-space: nowrap; }
+
 /* Secondary-list strip — shown under the header when a task has been ADDED to
    other lists (multi-homing). One removable path chip per added list. */
 .td-also {
