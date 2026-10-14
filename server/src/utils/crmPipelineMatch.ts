@@ -72,6 +72,21 @@ function sameService(a: string, b: string): boolean {
   return false;
 }
 
+/** Explicit roles keep shared words (video, content, creative) from assigning
+ * a new specialist brief to a different role's commercial owner. */
+export function contentServiceKey(label: string | null | undefined): string | null {
+  const s = (label ?? '').toLowerCase();
+  if (/\bai\b/.test(s) && /video|image|creator/.test(s)) return 'ai_creator';
+  if (/creative/.test(s) && /director/.test(s)) return 'creative_director';
+  if (/writer|copywriting/.test(s)) return 'writer';
+  if (/social/.test(s) && /media/.test(s)) return 'social_media';
+  if (/videograph|photograph/.test(s)) return 'shoot';
+  if (/\bads?\b|paid media/.test(s)) return 'ads';
+  if (/account/.test(s)) return 'accountant';
+  if (/design|editor/.test(s)) return 'designer_editor';
+  return null;
+}
+
 /**
  * Does this pipeline belong to the card's service line? Returns false when
  * either side has nothing to go on — an unknown service line must never look
@@ -81,6 +96,9 @@ export function pipelineMatchesService(
   pipelineName: string | null | undefined,
   cardServiceLabel: string | null | undefined,
 ): boolean {
+  const cardRole = contentServiceKey(cardServiceLabel);
+  const pipelineRole = contentServiceKey(pipelineName);
+  if (cardRole && pipelineRole) return cardRole === pipelineRole;
   const cardTokens = serviceTokens(cardServiceLabel);
   const pipeTokens = serviceTokens(pipelineName);
   if (cardTokens.length === 0 || pipeTokens.length === 0) return false;
@@ -97,6 +115,9 @@ export function pipelineConflictsWithService(
   pipelineName: string | null | undefined,
   cardServiceLabel: string | null | undefined,
 ): boolean {
+  const cardRole = contentServiceKey(cardServiceLabel);
+  const pipelineRole = contentServiceKey(pipelineName);
+  if (cardRole && pipelineRole) return cardRole !== pipelineRole;
   const cardTokens = serviceTokens(cardServiceLabel);
   const pipeTokens = serviceTokens(pipelineName);
   if (cardTokens.length === 0 || pipeTokens.length === 0) return false;

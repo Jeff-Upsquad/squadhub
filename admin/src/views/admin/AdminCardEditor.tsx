@@ -17,6 +17,12 @@ const SERVICE_TYPE_TO_SLUG: Record<string, string> = {
   'Designer plus Editor': 'designer_video_editor',
   Accountants: 'accountant',
   'Ads Specialists': 'ads_specialist',
+  'Creative Directors': 'creative_director',
+  'Copy and Content Writers': 'copy_content_writer',
+  'Social Media Managers': 'social_media_manager',
+  'Videographers and Photographers': 'videographer_photographer',
+  'AI Video and Image Creators': 'ai_video_image_creator',
+
 };
 
 const PLAN_TO_CANONICAL: Record<string, string> = {
@@ -251,7 +257,7 @@ const TIER_DISPLAY_RANK: Record<string, number> = {
   'top talents': 0, pro: 1, junior: 2, agencies: 3, custom: 4,
 };
 const VALID_PLANS = ['starter', 'basic', 'plus', 'pro', 'personal'];
-const SERVICE_TYPES = ['Designers', 'Editors', 'Designer plus Editor', 'Accountants', 'Ads Specialists'];
+const SERVICE_TYPES = ['Designers', 'Editors', 'Designer plus Editor', 'Accountants', 'Ads Specialists', 'Creative Directors', 'Copy and Content Writers', 'Social Media Managers', 'Videographers and Photographers', 'AI Video and Image Creators'];
 
 export default function AdminCardEditor({
   cardId,

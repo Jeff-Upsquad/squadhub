@@ -234,6 +234,12 @@ router.post('/subscription-cards/from-request', async (req: Request, res: Respon
       'Designer plus Editor': 'designer_video_editor',
       Accountants: 'accountant',
       'Ads Specialists': 'ads_specialist',
+      'Creative Directors': 'creative_director',
+      'Copy and Content Writers': 'copy_content_writer',
+      'Social Media Managers': 'social_media_manager',
+      'Videographers and Photographers': 'videographer_photographer',
+      'AI Video and Image Creators': 'ai_video_image_creator',
+
     };
     const subscriptionSlug = serviceToSlug[requestData.service_type] || '';
     let squadhireCategoryIds: string[] = [];
@@ -555,6 +561,12 @@ router.post('/subscription-cards/client-brief', async (req: Request, res: Respon
       'Designer plus Editor': 'designer_video_editor',
       Accountants: 'accountant',
       'Ads Specialists': 'ads_specialist',
+      'Creative Directors': 'creative_director',
+      'Copy and Content Writers': 'copy_content_writer',
+      'Social Media Managers': 'social_media_manager',
+      'Videographers and Photographers': 'videographer_photographer',
+      'AI Video and Image Creators': 'ai_video_image_creator',
+
     };
     const briefTiers = body.target_tiers || [];
     const briefTierBudgets: Record<string, number> = {};
@@ -900,6 +912,12 @@ router.patch('/subscription-cards/:id/edit', async (req: Request, res: Response)
         'Designer plus Editor': 'designer_video_editor',
         Accountants: 'accountant',
         'Ads Specialists': 'ads_specialist',
+        'Creative Directors': 'creative_director',
+        'Copy and Content Writers': 'copy_content_writer',
+        'Social Media Managers': 'social_media_manager',
+        'Videographers and Photographers': 'videographer_photographer',
+        'AI Video and Image Creators': 'ai_video_image_creator',
+
       };
       const newServiceType = body.service_type as string | null | undefined;
       const subscriptionSlug = newServiceType ? serviceToSlug[newServiceType] : null;
@@ -1099,6 +1117,12 @@ router.post('/subscription-cards/:id/publish', async (req: Request, res: Respons
       'Designer plus Editor': 'designer_video_editor',
       Accountants: 'accountant',
       'Ads Specialists': 'ads_specialist',
+      'Creative Directors': 'creative_director',
+      'Copy and Content Writers': 'copy_content_writer',
+      'Social Media Managers': 'social_media_manager',
+      'Videographers and Photographers': 'videographer_photographer',
+      'AI Video and Image Creators': 'ai_video_image_creator',
+
     };
     const currentServiceType = card.service_type as string | null | undefined;
     const subscriptionSlug = currentServiceType ? SERVICE_TYPE_TO_SLUG[currentServiceType] : null;
