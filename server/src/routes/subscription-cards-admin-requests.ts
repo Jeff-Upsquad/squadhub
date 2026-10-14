@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
-import { sanitizeAdditionalRequirements } from '@squadhub/shared';
+import { SERVICE_TYPE_TO_SLUG, sanitizeAdditionalRequirements } from '@squadhub/shared';
 import { requireAuth } from '../middleware/auth';
 import { requireMiniAppOrAdmin } from '../middleware/miniApp';
 import { supabaseAdmin } from '../supabase';
@@ -228,19 +228,7 @@ router.post('/subscription-cards/from-request', async (req: Request, res: Respon
     // "SquadHire Profiles" dropdown (subscription_squadhire_profiles). With
     // this prefill, request-source cards behave like sales-source cards: the
     // squadhireWebhook gate sees a non-empty array and actually delivers.
-    const serviceToSlug: Record<string, string> = {
-      Designers: 'designer',
-      Editors: 'video_editor',
-      'Designer plus Editor': 'designer_video_editor',
-      Accountants: 'accountant',
-      'Ads Specialists': 'ads_specialist',
-      'Creative Directors': 'creative_director',
-      'Copy and Content Writers': 'copy_content_writer',
-      'Social Media Managers': 'social_media_manager',
-      'Videographers and Photographers': 'videographer_photographer',
-      'AI Video and Image Creators': 'ai_video_image_creator',
-
-    };
+    const serviceToSlug: Record<string, string> = SERVICE_TYPE_TO_SLUG;
     const subscriptionSlug = serviceToSlug[requestData.service_type] || '';
     let squadhireCategoryIds: string[] = [];
     if (subscriptionSlug) {
@@ -555,19 +543,6 @@ router.post('/subscription-cards/client-brief', async (req: Request, res: Respon
       body.service_type,
     );
 
-    const SERVICE_TYPE_TO_SLUG: Record<string, string> = {
-      Designers: 'designer',
-      Editors: 'video_editor',
-      'Designer plus Editor': 'designer_video_editor',
-      Accountants: 'accountant',
-      'Ads Specialists': 'ads_specialist',
-      'Creative Directors': 'creative_director',
-      'Copy and Content Writers': 'copy_content_writer',
-      'Social Media Managers': 'social_media_manager',
-      'Videographers and Photographers': 'videographer_photographer',
-      'AI Video and Image Creators': 'ai_video_image_creator',
-
-    };
     const briefTiers = body.target_tiers || [];
     const briefTierBudgets: Record<string, number> = {};
     if (body.tier_budgets && typeof body.tier_budgets === 'object') {
@@ -906,19 +881,7 @@ router.patch('/subscription-cards/:id/edit', async (req: Request, res: Response)
     if (body.service_type !== undefined) {
       updates.service_type = body.service_type;
       // Resolve new squadhire_category_ids based on the updated service_type
-      const serviceToSlug: Record<string, string> = {
-        Designers: 'designer',
-        Editors: 'video_editor',
-        'Designer plus Editor': 'designer_video_editor',
-        Accountants: 'accountant',
-        'Ads Specialists': 'ads_specialist',
-        'Creative Directors': 'creative_director',
-        'Copy and Content Writers': 'copy_content_writer',
-        'Social Media Managers': 'social_media_manager',
-        'Videographers and Photographers': 'videographer_photographer',
-        'AI Video and Image Creators': 'ai_video_image_creator',
-
-      };
+      const serviceToSlug: Record<string, string> = SERVICE_TYPE_TO_SLUG;
       const newServiceType = body.service_type as string | null | undefined;
       const subscriptionSlug = newServiceType ? serviceToSlug[newServiceType] : null;
       if (subscriptionSlug) {
@@ -1111,19 +1074,6 @@ router.post('/subscription-cards/:id/publish', async (req: Request, res: Respons
     }
 
     // Ensure squadhire_category_ids are synced to the current service_type
-    const SERVICE_TYPE_TO_SLUG: Record<string, string> = {
-      Designers: 'designer',
-      Editors: 'video_editor',
-      'Designer plus Editor': 'designer_video_editor',
-      Accountants: 'accountant',
-      'Ads Specialists': 'ads_specialist',
-      'Creative Directors': 'creative_director',
-      'Copy and Content Writers': 'copy_content_writer',
-      'Social Media Managers': 'social_media_manager',
-      'Videographers and Photographers': 'videographer_photographer',
-      'AI Video and Image Creators': 'ai_video_image_creator',
-
-    };
     const currentServiceType = card.service_type as string | null | undefined;
     const subscriptionSlug = currentServiceType ? SERVICE_TYPE_TO_SLUG[currentServiceType] : null;
     if (subscriptionSlug) {

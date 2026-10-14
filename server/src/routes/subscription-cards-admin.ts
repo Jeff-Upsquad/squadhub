@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
+import { SERVICE_TYPE_TO_SLUG } from '@squadhub/shared';
 import { requireAuth } from '../middleware/auth';
 import { requireMiniAppOrAdmin } from '../middleware/miniApp';
 import { supabaseAdmin } from '../supabase';
@@ -263,19 +264,6 @@ router.get('/', async (req: Request, res: Response) => {
     // submission_subscription_id. They store service_type + plan_name on the
     // card itself; mirror AdminCardEditor's catalog lookup (slug + canonical
     // plan + first target tier) to find the matching subscription_plans row.
-    const SERVICE_TYPE_TO_SLUG: Record<string, string> = {
-      Designers: 'designer',
-      Editors: 'video_editor',
-      'Designer plus Editor': 'designer_video_editor',
-      Accountants: 'accountant',
-      'Ads Specialists': 'ads_specialist',
-      'Creative Directors': 'creative_director',
-      'Copy and Content Writers': 'copy_content_writer',
-      'Social Media Managers': 'social_media_manager',
-      'Videographers and Photographers': 'videographer_photographer',
-      'AI Video and Image Creators': 'ai_video_image_creator',
-
-    };
     const PLAN_NAME_TO_CANONICAL: Record<string, string> = {
       starter: 'Starter', basic: 'Basic', plus: 'Plus', pro: 'Pro', personal: 'Personal',
     };

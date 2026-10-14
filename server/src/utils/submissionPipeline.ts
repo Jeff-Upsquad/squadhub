@@ -1,3 +1,4 @@
+import { SERVICE_TYPE_TO_SLUG } from '@squadhub/shared';
 import { supabaseAdmin } from '../supabase';
 import { copyExternalLinksToClient } from './clientExternalLinks';
 import { ensureClientPortalAccess } from './ensureClientPortalAccess';
@@ -24,19 +25,7 @@ export type TransitionResult =
 
 // Mirrors the resolution rules in migration 084_card_plan_snapshot.sql — keep in sync.
 // service_type → subscription slug, lowercase(plan_name) → canonical plan, target_tiers[0] → tier.
-const CARD_SERVICE_TYPE_TO_SUB_SLUG: Record<string, string> = {
-  'Designers': 'designer',
-  'Editors': 'video_editor',
-  'Designer plus Editor': 'designer_video_editor',
-  'Accountants': 'accountant',
-  'Ads Specialists': 'ads_specialist',
-  'Creative Directors': 'creative_director',
-  'Copy and Content Writers': 'copy_content_writer',
-  'Social Media Managers': 'social_media_manager',
-  'Videographers and Photographers': 'videographer_photographer',
-  'AI Video and Image Creators': 'ai_video_image_creator',
-
-};
+const CARD_SERVICE_TYPE_TO_SUB_SLUG: Record<string, string> = SERVICE_TYPE_TO_SLUG;
 const CARD_PLAN_NAME_TO_CANONICAL: Record<string, string> = {
   starter: 'Starter',
   basic: 'Basic',

@@ -1,3 +1,4 @@
+import { SERVICE_TYPE_TO_SLUG } from '@squadhub/shared';
 import { supabaseAdmin } from '../supabase';
 
 /**
@@ -211,20 +212,6 @@ export function coerceProposedPrice(value: number | null | undefined): number | 
  * auto-broadcasts as request-quote when not selected (no catalog price).
  */
 export const BROADCAST_STANDARD_TIERS = ['Top Talents', 'Pro', 'Junior', 'Agencies'] as const;
-
-const SERVICE_TYPE_TO_SLUG: Record<string, string> = {
-  Designers: 'designer',
-  Editors: 'video_editor',
-  'Designer plus Editor': 'designer_video_editor',
-  Accountants: 'accountant',
-  'Ads Specialists': 'ads_specialist',
-  'Creative Directors': 'creative_director',
-  'Copy and Content Writers': 'copy_content_writer',
-  'Social Media Managers': 'social_media_manager',
-  'Videographers and Photographers': 'videographer_photographer',
-  'AI Video and Image Creators': 'ai_video_image_creator',
-
-};
 
 /**
  * Expand a draft's selected tiers + pricing into the full broadcast set:

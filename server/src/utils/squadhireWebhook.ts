@@ -6,6 +6,7 @@ import {
   resolveMinCustomerPrice,
   resolveMinPartnerPrice,
   resolvePartnerPrice,
+  SERVICE_TYPE_TO_SLUG,
   type PlanMarginFields,
 } from '@squadhub/shared';
 import { config } from '../config';
@@ -378,19 +379,7 @@ export async function buildSquadhirePayloadForCard(
       // Mirror the upsquad-label → SquadHub-slug map used by the request-publish
       // path (server/src/routes/subscription-cards-admin-requests.ts). Try slug
       // first, then case-insensitive name match for hand-typed custom cards.
-      const SERVICE_SLUG_MAP: Record<string, string> = {
-        Designers: 'designer',
-        Editors: 'video_editor',
-        'Designer plus Editor': 'designer_video_editor',
-        Accountants: 'accountant',
-        'Ads Specialists': 'ads_specialist',
-        'Creative Directors': 'creative_director',
-        'Copy and Content Writers': 'copy_content_writer',
-        'Social Media Managers': 'social_media_manager',
-        'Videographers and Photographers': 'videographer_photographer',
-        'AI Video and Image Creators': 'ai_video_image_creator',
-
-      };
+      const SERVICE_SLUG_MAP: Record<string, string> = SERVICE_TYPE_TO_SLUG;
       const guessedSlug =
         SERVICE_SLUG_MAP[subscriptionName] ??
         subscriptionName.toLowerCase().trim().replace(/\s+/g, '_');

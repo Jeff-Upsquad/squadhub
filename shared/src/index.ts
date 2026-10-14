@@ -1,3 +1,4 @@
+import { CONTENT_ROLES } from './contentRoles';
 import type { SquadBotHomeApp } from '@squad-bots/core/types';
 // ============================================================
 // SquadHub Shared Types
@@ -2424,6 +2425,26 @@ export interface PartnerClientAssignment {
 export type SubscriptionPlan = 'Starter' | 'Basic' | 'Plus' | 'Pro' | 'Personal';
 export type SubscriptionTier = 'Junior' | 'Pro' | 'Top Talents';
 export type SubscriptionSlug = 'designer' | 'video_editor' | 'designer_video_editor' | 'accountant' | 'ads_specialist' | 'creative_director' | 'copy_content_writer' | 'social_media_manager' | 'videographer_photographer' | 'ai_video_image_creator';
+
+/** Card `service_type` label → subscription slug. Single source for every
+ *  server route and the admin card editor. */
+export const SERVICE_TYPE_TO_SLUG: Record<string, SubscriptionSlug> = {
+  Designers: 'designer',
+  Editors: 'video_editor',
+  'Designer plus Editor': 'designer_video_editor',
+  Accountants: 'accountant',
+  'Ads Specialists': 'ads_specialist',
+  'Creative Directors': 'creative_director',
+  'Copy and Content Writers': 'copy_content_writer',
+  'Social Media Managers': 'social_media_manager',
+  'Videographers and Photographers': 'videographer_photographer',
+  'AI Video and Image Creators': 'ai_video_image_creator',
+};
+
+/** Subscription slug → card `service_type` label (inverse of the above). */
+export const SLUG_TO_SERVICE_TYPE: Record<string, string> = Object.fromEntries(
+  Object.entries(SERVICE_TYPE_TO_SLUG).map(([label, slug]) => [slug, label]),
+);
 export type DeliverableKind = 'hours' | 'item';
 export type CurrencyCode = 'INR' | 'USD';
 
@@ -3050,37 +3071,13 @@ export const ADDITIONAL_REQUIREMENT_CATALOG: Record<string, AdditionalRequiremen
   video_editor: AR_VIDEO,
   designer_video_editor: AR_DESIGNER,
   ads_specialist: AR_ADS_SPECIALIST,
-  creative_director: [
-    { key: 'categories', label: 'Categories', options: ["Brand strategy", "Campaign concepts", "Art direction", "Content strategy", "Video direction", "Creative production", "Brand guidelines", "Creative audits"] },
-    { key: 'skills', label: 'Skill sets', options: ["Creative strategy", "Concept development", "Art direction", "Storytelling", "Team leadership", "Production planning", "Client presentation", "Creative quality control"] },
-    { key: 'tools', label: 'Tools', options: ["Figma", "Adobe Creative Cloud", "Miro", "Notion", "Google Slides", "Frame.io"] },
-    { key: 'ai_tools', label: 'AI tools', options: ["ChatGPT", "Claude", "Midjourney", "Adobe Firefly"] },
-  ],
-  copy_content_writer: [
-    { key: 'categories', label: 'Categories', options: ["Website copy", "Blog articles", "SEO content", "Ad copy", "Email campaigns", "Social captions", "Video scripts", "Brand messaging"] },
-    { key: 'skills', label: 'Skill sets', options: ["Copywriting", "Content research", "SEO writing", "Editing and proofreading", "Brand voice", "Scriptwriting", "Conversion writing", "Fact checking"] },
-    { key: 'tools', label: 'Tools', options: ["Google Docs", "Microsoft Word", "Grammarly", "WordPress", "Semrush", "Ahrefs", "Notion"] },
-    { key: 'ai_tools', label: 'AI tools', options: ["ChatGPT", "Claude", "Jasper", "Perplexity"] },
-  ],
-  social_media_manager: [
-    { key: 'categories', label: 'Categories', options: ["Instagram", "Facebook", "LinkedIn", "YouTube", "TikTok", "X / Twitter", "Pinterest", "Community management"] },
-    { key: 'skills', label: 'Skill sets', options: ["Social strategy", "Content calendars", "Community management", "Social copywriting", "Social analytics", "Audience growth", "Influencer coordination", "Crisis response"] },
-    { key: 'tools', label: 'Tools', options: ["Meta Business Suite", "Buffer", "Hootsuite", "Later", "Sprout Social", "Canva", "Google Analytics"] },
-    { key: 'ai_tools', label: 'AI tools', options: ["ChatGPT", "Claude", "Canva Magic Studio", "CapCut AI"] },
-  ],
-  videographer_photographer: [
-    { key: 'categories', label: 'Categories', options: ["Product photography", "Brand films", "Events", "Portraits", "Food photography", "Real estate", "Interviews", "Social video shoots"] },
-    { key: 'skills', label: 'Skill sets', options: ["Camera operation", "Lighting", "Composition", "Audio recording", "Shot planning", "On-set direction", "Photo retouching", "Production coordination"] },
-    { key: 'tools', label: 'Tools', options: ["Adobe Lightroom", "Adobe Photoshop", "DaVinci Resolve", "Adobe Premiere Pro", "Capture One", "Frame.io"] },
-    { key: 'ai_tools', label: 'AI tools', options: ["Adobe Firefly", "Photoshop Generative Fill", "Topaz Photo AI", "Runway"] },
-  ],
-  ai_video_image_creator: [
-    { key: 'categories', label: 'Categories', options: ["AI product images", "AI brand visuals", "AI video ads", "AI short films", "Storyboards", "Character design", "Image enhancement", "Visual concepts"] },
-    { key: 'skills', label: 'Skill sets', options: ["Prompt design", "Image generation", "Video generation", "Style consistency", "Character consistency", "Compositing", "Upscaling", "Creative quality control"] },
-    { key: 'tools', label: 'Tools', options: ["Adobe Photoshop", "Adobe Premiere Pro", "DaVinci Resolve", "ComfyUI", "Canva", "After Effects"] },
-    { key: 'ai_tools', label: 'AI tools', options: ["Midjourney", "Runway", "Kling", "Adobe Firefly", "Stable Diffusion", "Sora", "Veo"] },
-  ],
-
+  // Content Squad roles: catalogs come straight from the synced role file.
+  ...Object.fromEntries(CONTENT_ROLES.map((r) => [r.serviceSlug, [
+    { key: 'categories', label: 'Categories', options: [...r.categories] },
+    { key: 'skills', label: 'Skill sets', options: [...r.skills] },
+    { key: 'tools', label: 'Tools', options: [...r.tools] },
+    { key: 'ai_tools', label: 'AI tools', options: [...r.aiTools] },
+  ]])),
 };
 
 export function additionalRequirementCatalog(slug: string | null | undefined): AdditionalRequirementGroup[] {
@@ -5363,5 +5360,4 @@ export interface SquadBotActivityReport {
 }
 
 export * from './goals';
-
 export * from './contentRoles';
