@@ -50,6 +50,8 @@ export default function GroupedTaskRow({
   const recurringFocusBuckets = usePMStore((s) => s.recurringFocusBuckets);
   const updateTask = useUpdateTask(null);
   const focusTask = useFocusTask();
+  const dismissInProgressTask = usePMStore((s) => s.dismissInProgressTask);
+  const runningTimers = usePMStore((s) => s.timers);
 
   // Mirror GroupRunDetailPanel.openPanel's key so the timer here and the
   // Start/Stop in the detail panel drive the same server-side group run.
@@ -141,13 +143,17 @@ export default function GroupedTaskRow({
 
   // "Remove from focus list" — drop the whole group from the Home focus list.
   // Clears any bucket (including inherited template buckets) and clears the
-  // focus star on any starred task; unstarred tasks simply leave the list.
+  // focus star on any starred task. Tasks sitting in the In progress section
+  // are additionally hidden from there for the rest of today (untouched in
+  // their project list) — except while a timer or group session is running,
+  // when they keep showing.
   const removeFromFocus = (e: React.MouseEvent) => {
     e.stopPropagation();
     setMenuPos(null);
     for (const t of row.tasks) {
       setFocusBucket(t.id, null, t.recurring_parent_id ?? undefined);
       if (t.focused_at != null) focusTask.mutate({ id: t.id, focused: false });
+      if (!isRunningHere && !runningTimers.some((rt) => rt.taskId === t.id)) dismissInProgressTask(t.id);
     }
   };
 

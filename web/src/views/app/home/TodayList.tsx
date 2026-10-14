@@ -80,6 +80,8 @@ export default function TodayList() {
   const focusBuckets = usePMStore((s) => s.focusBuckets);
   const recurringFocusBuckets = usePMStore((s) => s.recurringFocusBuckets);
   const rolloverFocusBuckets = usePMStore((s) => s.rolloverFocusBuckets);
+  const dismissedInProgressIds = usePMStore((s) => s.dismissedInProgressIds);
+  const rolloverDismissedInProgress = usePMStore((s) => s.rolloverDismissedInProgress);
   const groupedExpanded = usePMStore((s) => s.groupedExpanded);
   const toggleGroupedExpanded = usePMStore((s) => s.toggleGroupedExpanded);
   const focusBucketCollapsed = usePMStore((s) => s.focusBucketCollapsed);
@@ -231,9 +233,11 @@ export default function TodayList() {
   // In-progress tasks that have NOT been assigned a bucket — these stay in the
   // "In progress" card. Those with a bucket ('evening', 'night', 'focus') flow
   // into their respective section below. Any task actively running a timer always stays in In progress.
+  // Tasks the user explicitly hid via "Remove from focus list" stay out for
+  // the rest of today (unless a timer is running on them right now).
   const unbucketedInProgress = useMemo(
-    () => inProgressTasks.filter((t) => isActivelyTimed(t.id) || !effectiveFocusBucket(t, focusBuckets, recurringFocusBuckets, true)),
-    [inProgressTasks, focusBuckets, recurringFocusBuckets, timers, activeWB],
+    () => inProgressTasks.filter((t) => isActivelyTimed(t.id) || (!effectiveFocusBucket(t, focusBuckets, recurringFocusBuckets, true) && !dismissedInProgressIds.includes(t.id))),
+    [inProgressTasks, focusBuckets, recurringFocusBuckets, dismissedInProgressIds, timers, activeWB],
   );
 
   // Union of regular starred tasks + any in-progress tasks that have an explicit bucket.
@@ -329,12 +333,13 @@ export default function TodayList() {
   // (remembered per template in recurringFocusBuckets, so the next spawned copy
   // reappears there). rolloverFocusBuckets no-ops until the day flips, so the
   // mount call + once-a-minute tick fire it exactly once when midnight passes,
-  // even with the app left open.
+  // even with the app left open. Tasks hidden from In progress come back too.
   useEffect(() => {
     rolloverFocusBuckets();
-    const id = setInterval(rolloverFocusBuckets, 60_000);
+    rolloverDismissedInProgress();
+    const id = setInterval(() => { rolloverFocusBuckets(); rolloverDismissedInProgress(); }, 60_000);
     return () => clearInterval(id);
-  }, [rolloverFocusBuckets]);
+  }, [rolloverFocusBuckets, rolloverDismissedInProgress]);
 
   const currentLabel = GROUP_OPTIONS.find((o) => o.value === groupBy)?.label ?? 'None';
 
@@ -721,15 +726,19 @@ function TodayRow({ task: t, onOpen, secondsToday = 0, liveSecs = 0, isInProgres
   // "Remove from focus list" — drop the task from the Home focus list. Clears
   // any Evening/Night/Focus bucket (including an inherited template bucket so
   // a recurring task doesn't reappear there), and when the task carries a
-  // focus star, clears the star server-side too. Tasks without a star (e.g.
-  // In Progress tasks surfaced via a bucket) simply leave the focus list.
+  // focus star, clears the star server-side too. A task sitting in the
+  // In progress section is additionally hidden from there for the rest of
+  // today (it stays untouched in its project list) — unless a timer is
+  // running on it right now, in which case it keeps showing while tracked.
   const focusTask = useFocusTask();
+  const dismissInProgressTask = usePMStore((s) => s.dismissInProgressTask);
   const isStarred = isTaskFocused(t);
   const removeFromFocus = (e: React.MouseEvent) => {
     e.stopPropagation();
     setMenuPos(null);
     setFocusBucket(t.id, null, t.recurring_parent_id ?? undefined);
     if (isStarred) focusTask.mutate({ id: t.id, focused: false });
+    if (isInProgress && !isTiming) dismissInProgressTask(t.id);
   };
 
   // Date moves — push the task's work_date to the target local-midnight. A

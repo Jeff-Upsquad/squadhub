@@ -215,6 +215,14 @@ interface PMState {
   // When it goes stale, rolloverFocusBuckets clears focusBuckets back to the
   // main Focus list (recurringFocusBuckets is left untouched).
   focusBucketsRolloverDate: string;
+  // Tasks the user explicitly hid from Home's In progress section via
+  // "Remove from focus list". A running timer always overrides the dismissal,
+  // so actively tracked work never vanishes. Reset each local day (see
+  // rolloverDismissedInProgress) — In progress itself is a today-derived list,
+  // so a hide is a today-triage, not a permanent burial (the task stays in its
+  // project list either way).
+  dismissedInProgressIds: string[];
+  dismissedInProgressDate: string;
   groupByScope: Record<string, GroupBy>;
   sortByScope: Record<string, SortBy>;
   focusTodayScope: Record<string, boolean>;
@@ -298,6 +306,8 @@ interface PMState {
   toggleFocusToday: (taskId: string) => void;
   setFocusBucket: (taskId: string, bucket: FocusBucket | null, recurringParentId?: string | null) => void;
   rolloverFocusBuckets: () => void;
+  dismissInProgressTask: (taskId: string) => void;
+  rolloverDismissedInProgress: () => void;
   isFocusedToday: (taskId: string) => boolean;
   resetFocusTodayIfStale: () => void;
   _hydrateFromServer: (prefs: Record<string, unknown>) => void;
@@ -387,6 +397,8 @@ export const usePMStore = create<PMState>()(
       focusBuckets: {},
       recurringFocusBuckets: {},
       focusBucketsRolloverDate: todayKey(),
+      dismissedInProgressIds: [],
+      dismissedInProgressDate: todayKey(),
       groupByScope: {},
       sortByScope: {},
       focusTodayScope: {},
@@ -801,6 +813,31 @@ export const usePMStore = create<PMState>()(
         });
         if (changed) triggerSave();
       },
+      // Hide a task from Home's In progress section for the rest of today.
+      // The task itself is untouched — it stays in its project list.
+      dismissInProgressTask: (taskId) => {
+        set((state) => {
+          if (state.dismissedInProgressIds.includes(taskId)) return state;
+          return {
+            dismissedInProgressIds: [...state.dismissedInProgressIds, taskId],
+            dismissedInProgressDate: todayKey(),
+          };
+        });
+        triggerSave();
+      },
+      // Clear today's In progress hides once the local day flips. No-op until
+      // the stored date is stale, so the mount call + once-a-minute tick fire
+      // it exactly once when midnight passes, even with the app left open.
+      rolloverDismissedInProgress: () => {
+        const today = todayKey();
+        let changed = false;
+        set((state) => {
+          if (state.dismissedInProgressDate === today) return state;
+          changed = true;
+          return { dismissedInProgressIds: [], dismissedInProgressDate: today };
+        });
+        if (changed) triggerSave();
+      },
       isFocusedToday: (taskId) => get().focusedTodayIds.includes(taskId),
       _hydrateFromServer: (prefs) => {
         const patch: Partial<PMState> = {};
@@ -843,6 +880,12 @@ export const usePMStore = create<PMState>()(
         }
         if (typeof prefs.focusBucketsRolloverDate === 'string') {
           patch.focusBucketsRolloverDate = prefs.focusBucketsRolloverDate as string;
+        }
+        if (Array.isArray(prefs.dismissedInProgressIds)) {
+          patch.dismissedInProgressIds = prefs.dismissedInProgressIds as string[];
+        }
+        if (typeof prefs.dismissedInProgressDate === 'string') {
+          patch.dismissedInProgressDate = prefs.dismissedInProgressDate as string;
         }
         if (prefs.collapsedGroups && typeof prefs.collapsedGroups === 'object') {
           patch.collapsedGroups = prefs.collapsedGroups as Record<string, boolean>;
@@ -901,6 +944,8 @@ export const usePMStore = create<PMState>()(
           focusBuckets: s.focusBuckets,
           recurringFocusBuckets: s.recurringFocusBuckets,
           focusBucketsRolloverDate: s.focusBucketsRolloverDate,
+          dismissedInProgressIds: s.dismissedInProgressIds,
+          dismissedInProgressDate: s.dismissedInProgressDate,
           collapsedGroups: s.collapsedGroups,
           groupedExpanded: s.groupedExpanded,
           focusBucketCollapsed: s.focusBucketCollapsed,
@@ -913,7 +958,7 @@ export const usePMStore = create<PMState>()(
           sidebarSectionOrder: s.sidebarSectionOrder,
         };
       },
-      reset: () => set({ activeSpaceId: null, activeListId: null, activeFolderId: null, activeSpacePageId: null, activeTaskId: null, activeDesignFolderId: null, activeDashboardTab: null, activeSecondaryCard: null, newTasksOpen: false, newTaskFabVisible: false, homeView: 'hub', contextListId: null, viewMode: 'list', activeViewIdByList: {}, listGroupBy: 'status', myTasksOnly: false, collapsedGroups: {}, groupedExpanded: {}, focusBucketCollapsed: {}, focusBucketAutoOpenedDate: {}, sidebarSectionsExpanded: DEFAULT_SIDEBAR_SECTIONS, expandedSpaces: {}, expandedFolders: {}, expandedClients: {}, favoriteItemsOrder: [], appFavoritesOrder: [], sidebarSectionOrder: DEFAULT_SIDEBAR_SECTION_ORDER, selectedTasks: [], fadingTaskIds: new Map<string, string>(), peekTaskId: null, groupRunPanel: null, timers: [], timerSegmentStart: null, pendingTimerStart: null, pendingTimeSync: [], filtersByScope: {}, columnPrefsByScope: {}, focusedTodayIds: [], focusedTodayDate: todayKey(), focusBuckets: {}, recurringFocusBuckets: {}, focusBucketsRolloverDate: todayKey(), groupByScope: {}, sortByScope: {}, focusTodayScope: {}, groupDirByScope: {}, secondaryCardGroupBy: {}, todayListGroupBy: 'none', todayListView: 'list', lastActiveSection: 'home', lastHomeView: 'hub' }),
+      reset: () => set({ activeSpaceId: null, activeListId: null, activeFolderId: null, activeSpacePageId: null, activeTaskId: null, activeDesignFolderId: null, activeDashboardTab: null, activeSecondaryCard: null, newTasksOpen: false, newTaskFabVisible: false, homeView: 'hub', contextListId: null, viewMode: 'list', activeViewIdByList: {}, listGroupBy: 'status', myTasksOnly: false, collapsedGroups: {}, groupedExpanded: {}, focusBucketCollapsed: {}, focusBucketAutoOpenedDate: {}, sidebarSectionsExpanded: DEFAULT_SIDEBAR_SECTIONS, expandedSpaces: {}, expandedFolders: {}, expandedClients: {}, favoriteItemsOrder: [], appFavoritesOrder: [], sidebarSectionOrder: DEFAULT_SIDEBAR_SECTION_ORDER, selectedTasks: [], fadingTaskIds: new Map<string, string>(), peekTaskId: null, groupRunPanel: null, timers: [], timerSegmentStart: null, pendingTimerStart: null, pendingTimeSync: [], filtersByScope: {}, columnPrefsByScope: {}, focusedTodayIds: [], focusedTodayDate: todayKey(), focusBuckets: {}, recurringFocusBuckets: {}, focusBucketsRolloverDate: todayKey(), dismissedInProgressIds: [], dismissedInProgressDate: todayKey(), groupByScope: {}, sortByScope: {}, focusTodayScope: {}, groupDirByScope: {}, secondaryCardGroupBy: {}, todayListGroupBy: 'none', todayListView: 'list', lastActiveSection: 'home', lastHomeView: 'hub' }),
     }),
     {
       name: 'squadhub-pm',
@@ -940,6 +985,8 @@ export const usePMStore = create<PMState>()(
         focusBuckets: state.focusBuckets,
         recurringFocusBuckets: state.recurringFocusBuckets,
         focusBucketsRolloverDate: state.focusBucketsRolloverDate,
+        dismissedInProgressIds: state.dismissedInProgressIds,
+        dismissedInProgressDate: state.dismissedInProgressDate,
         groupByScope: state.groupByScope,
         sortByScope: state.sortByScope,
         focusTodayScope: state.focusTodayScope,
