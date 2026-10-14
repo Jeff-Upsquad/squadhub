@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import type { Task } from '@squadhub/shared';
 import { usePMStore, focusBucketForMinute } from '../../../stores/pmStore';
 import { useAuthStore } from '../../../stores/authStore';
@@ -87,7 +88,11 @@ export function SlotCreatePanel({ slot, today, onClose }: { slot: SlotSelection;
     if (slot.date === today) setFocusBucket(task.id, focusBucketForMinute(slot.start));
   };
 
-  return (
+  // Portal to document.body so the fixed drawer escapes any transformed /
+  // overflow-hidden ancestor (e.g. the Cal sidebar hover peek) instead of
+  // being trapped and clipped inside it.
+  if (typeof document === 'undefined') return null;
+  return createPortal(
     <TaskCreatePanel
       pickable
       workspaceId={workspaceId}
@@ -109,6 +114,7 @@ export function SlotCreatePanel({ slot, today, onClose }: { slot: SlotSelection;
       }}
       onCreated={onCreated}
       onClose={onClose}
-    />
+    />,
+    document.body,
   );
 }
