@@ -4,7 +4,6 @@ import type { Folder, List, Space, SpaceStatus, Task } from '@squadhub/shared';
 import api from '../../../services/api';
 import { usePMStore } from '../../../stores/pmStore';
 import { useSpace } from '../../../hooks/useSpaces';
-import ContainerChatButton from '../../../components/pm/ContainerChatButton';
 import TaskOverview from './TaskOverview';
 
 type SpaceWithChildren = Space & { folders?: (Folder & { lists?: List[] })[]; lists?: List[] };
@@ -116,14 +115,6 @@ export default function SpacePage({ spacePageId: propSpacePageId }: { spacePageI
         scopeKey={`space:${activeSpacePageId}`}
         statusFallback={spaceStatuses}
         loading={isLoading}
-        headerExtra={
-          <ContainerChatButton
-            resourceType="space"
-            resourceId={activeSpacePageId}
-            name={space?.name || 'Space'}
-            accessLevel={space?.my_access_level}
-          />
-        }
       />
     </div>
   );

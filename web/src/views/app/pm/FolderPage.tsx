@@ -4,7 +4,6 @@ import type { Folder, List, SpaceStatus, Task } from '@squadhub/shared';
 import api from '../../../services/api';
 import { usePMStore } from '../../../stores/pmStore';
 import { useSpace } from '../../../hooks/useSpaces';
-import ContainerChatButton from '../../../components/pm/ContainerChatButton';
 import ClientFolderReport from './client-design/ClientFolderReport';
 import TaskOverview from './TaskOverview';
 
@@ -106,14 +105,6 @@ export default function FolderPage({ folderId: propFolderId }: { folderId?: stri
         scopeKey={`folder:${activeFolderId}`}
         statusFallback={spaceStatuses}
         loading={isLoading}
-        headerExtra={
-          <ContainerChatButton
-            resourceType="folder"
-            resourceId={activeFolderId}
-            name={folder?.name || 'Folder'}
-            accessLevel={(folder as { my_access_level?: string } | undefined)?.my_access_level}
-          />
-        }
       />
     </div>
   );
