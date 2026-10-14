@@ -21,6 +21,10 @@ import {
 } from '../../../lib/stageWorkflow';
 import { formatWhen } from './taskHelpers';
 import { GROUP_ORDER as TASK_TYPE_GROUP_ORDER, getTaskTypeGroup } from '../../../components/pm/TaskTypeDropdown';
+import FieldManagerPanel from '../../../components/pm/FieldManagerPanel';
+import { useColumnPrefs } from '../../../hooks/useColumnPrefs';
+import { visibleColumnIds, type ColumnControls } from '../../../lib/columns';
+import type { ListViewColumnId } from '@squadhub/shared';
 import './task-overview.css';
 
 // "List View v2" for Space and Folder pages: a header card with a one-line
@@ -138,8 +142,30 @@ export default function TaskOverview({
   const [query, setQuery] = useState('');
   const [tile, setTile] = useState<TileKey>('all');
   const [view, setView] = useState<ViewMode>('list');
-  const [menu, setMenu] = useState<'group' | 'filter' | null>(null);
+  const [menu, setMenu] = useState<'group' | 'filter' | 'fields' | null>(null);
   const [showDone, setShowDone] = useState(false);
+  const [fieldsOpen, setFieldsOpen] = useState(false);
+  // Field (column) visibility, same system as normal lists. Scope is per
+  // space/folder overview (scopeKey like `space:<id>`), persisted per user.
+  const {
+    columns: columnStates,
+    hasPersonalOverride: hasColumnOverride,
+    setColumns: setScopeColumns,
+    resetColumns: resetScopeColumns,
+  } = useColumnPrefs(scopeKey);
+  const visibleCols = useMemo(() => visibleColumnIds(columnStates), [columnStates]);
+  const showCol = (id: ListViewColumnId) => visibleCols.includes(id);
+  const columnControls: ColumnControls = useMemo(
+    () => ({
+      states: columnStates,
+      onChange: setScopeColumns,
+      onReset: resetScopeColumns,
+      hasOverride: hasColumnOverride,
+      onOpenManager: () => setFieldsOpen(true),
+    }),
+    [columnStates, setScopeColumns, resetScopeColumns, hasColumnOverride],
+  );
+  void columnControls;
   // Tasks completed here: remembered with their pre-completion status so they
   // strike through in place, then slide away (450ms) unless "show" is on.
   const [doneSnap, setDoneSnap] = useState<Map<string, string>>(new Map());
@@ -338,7 +364,7 @@ export default function TaskOverview({
     const work = t.work_date ? formatWhen(t.work_date) : null;
     return [
       t.list?.name,
-      work && work.state !== 'none' ? `Work ${work.text.replace(/^(Today|Tomorrow|Overdue)/, (w) => w.toLowerCase())}` : null,
+      showCol('workDate') && work && work.state !== 'none' ? `Work ${work.text.replace(/^(Today|Tomorrow|Overdue)/, (w) => w.toLowerCase())}` : null,
       parked ? parked.name.charAt(0) + parked.name.slice(1).toLowerCase() : null,
     ].filter(Boolean).join(' · ');
   };
@@ -347,23 +373,52 @@ export default function TaskOverview({
     const p = PRIORITY_PILL[(t.priority as string) || 'none'];
     const due = t.due_date && !isDone(t) ? formatWhen(t.due_date) : null;
     const od = !!due && due.state === 'overdue';
+    const work = t.work_date && !isDone(t) ? formatWhen(t.work_date) : null;
     const assignees = (t.assignees || []) as User[];
     const u = assignees[0];
+    const { status } = placeOf(t);
+    const tags = (t as Task).tags || [];
+    const estimate = (t as Task).time_estimate;
+    const tracked = (t as Task).time_tracked;
+    const commentCount = (t as Task).comment_count ?? 0;
+    const showPriority = showCol('priority');
+    const showDue = showCol('dueDate');
+    const showWork = showCol('workDate');
+    const showAssignee = showCol('assignee');
+    const showStatus = showCol('status');
+    const showLabels = showCol('labels');
+    const showEstimate = showCol('estimate');
+    const showTracked = showCol('tracked');
+    const showComments = showCol('comments');
     return (
       <div className="tov-pills">
-        {p && (
+        {showStatus && status && (
+          <span className="tov-pill">
+            <span className="tov-dot" style={{ background: status.color || '#A0A0A0' }} />{status.name}
+          </span>
+        )}
+        {showPriority && p && (
           <span className="tov-pill" data-tone={p.emergency ? 'danger' : undefined}>
             <span className="tov-dot" style={{ background: p.dot }} />{p.label}
           </span>
         )}
-        {due && <span className="tov-pill tov-num" data-tone={od ? 'danger' : undefined}>{od ? 'Overdue' : due.text}</span>}
-        {u ? (
+        {showLabels && tags.slice(0, 2).map((tag) => (
+          <span key={tag.id} className="tov-pill">
+            <span className="tov-dot" style={{ background: tag.color || '#A0A0A0' }} />{tag.name}
+          </span>
+        ))}
+        {showWork && work && <span className="tov-pill tov-num">Work {work.text}</span>}
+        {showDue && due && <span className="tov-pill tov-num" data-tone={od ? 'danger' : undefined}>{od ? 'Overdue' : due.text}</span>}
+        {showEstimate && !!estimate && <span className="tov-pill tov-num">{Math.round(estimate / 60)}m est</span>}
+        {showTracked && !!tracked && <span className="tov-pill tov-num">{Math.round(tracked / 60)}m tracked</span>}
+        {showComments && commentCount > 0 && <span className="tov-pill tov-num">{commentCount} comments</span>}
+        {showAssignee && (u ? (
           u.avatar_url
             ? <img className="tov-avatar" src={u.avatar_url} alt="" title={u.display_name || u.email} />
             : <span className="tov-avatar" style={{ background: avatarColor(u.id) }} title={assignees.map((a) => a.display_name || a.email).join(', ')}>{initialsOf(u)}</span>
         ) : (
           <span className="tov-avatar" data-empty title="Unassigned" />
-        )}
+        ))}
       </div>
     );
   };
@@ -596,6 +651,11 @@ export default function TaskOverview({
                   </div>
                 )}
               </div>
+              <button type="button" className="tov-ctl" data-on={hasColumnOverride || undefined} onClick={() => setFieldsOpen(true)} title="Show / hide fields">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M4 6h16M4 12h16M4 18h16" /><circle cx="9" cy="6" r="2" fill="var(--tov-card)" /><circle cx="15" cy="12" r="2" fill="var(--tov-card)" /><circle cx="8" cy="18" r="2" fill="var(--tov-card)" /></svg>
+                  Fields
+                  {hasColumnOverride && <span className="tov-ctl-badge">{visibleCols.length}</span>}
+                </button>
               <div className="tov-views">
                 {(['list', 'board', 'calendar'] as const).map((v) => (
                   <button key={v} type="button" data-on={view === v || undefined} onClick={() => setView(v)}>
@@ -671,6 +731,14 @@ export default function TaskOverview({
           </div>
         </div>
       </div>
+      <FieldManagerPanel
+        open={fieldsOpen}
+        onClose={() => setFieldsOpen(false)}
+        columns={columnStates}
+        onChange={setScopeColumns}
+        onReset={resetScopeColumns}
+        hasOverride={hasColumnOverride}
+      />
     </div>
   );
 }
