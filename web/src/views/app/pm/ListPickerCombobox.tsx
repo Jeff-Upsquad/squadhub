@@ -54,7 +54,10 @@ export default function ListPickerCombobox({
   open: openProp,
   onOpenChange,
   anchorRect,
+  className,
 }: {
+  /** Extra classes for the wrapper (e.g. let it shrink inside a flex header). */
+  className?: string;
   /** Viewport anchor for pickers opened from a row action. */
   anchorRect?: DOMRect | null;
   workspaceId: string;
@@ -172,7 +175,7 @@ export default function ListPickerCombobox({
   const toggle = () => setOpen((v) => !v);
 
   return (
-    <div ref={containerRef} className="relative inline-block">
+    <div ref={containerRef} className={`relative inline-block${className ? ` ${className}` : ''}`}>
       {renderTrigger ? (
         renderTrigger({ open, toggle })
       ) : (

@@ -1000,6 +1000,7 @@ export default function TaskCreatePanel({
           <span className="td-head-divider" aria-hidden />
           {pickable && workspaceId ? (
             <ListPickerCombobox
+              className="td-create-crumb"
               workspaceId={workspaceId}
               selectedListId={selectedListId}
               selectedListName={effectiveListName}
