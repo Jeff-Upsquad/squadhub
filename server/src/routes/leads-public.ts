@@ -1,6 +1,6 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
-import { isValidStoredPhone, normalizeStoredPhone, sanitizeAdditionalRequirements } from '@squadhub/shared';
+import { CONTENT_ROLES, isValidStoredPhone, normalizeStoredPhone, sanitizeAdditionalRequirements } from '@squadhub/shared';
 import { supabaseAdmin } from '../supabase';
 import { ensureHubContact } from '../utils/leadLookup';
 import { resolveCrmCardAssigneesFromSubmission } from '../utils/cardCrmAssignees';
@@ -33,6 +33,12 @@ const SLUG_TO_SERVICE_TYPE: Record<string, string> = {
   designer_video_editor: 'Designer plus Editor',
   accountant: 'Accountants',
   ads_specialist: 'Ads Specialists',
+  creative_director: 'Creative Directors',
+  copy_content_writer: 'Copy and Content Writers',
+  social_media_manager: 'Social Media Managers',
+  videographer_photographer: 'Videographers and Photographers',
+  ai_video_image_creator: 'AI Video and Image Creators',
+
 };
 
 const VALID_DAYS = new Set(['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']);
@@ -45,6 +51,12 @@ const SERVICE_TYPE_TO_SLUG: Record<string, string> = {
   'Designer plus Editor': 'designer_video_editor',
   Accountants: 'accountant',
   'Ads Specialists': 'ads_specialist',
+  'Creative Directors': 'creative_director',
+  'Copy and Content Writers': 'copy_content_writer',
+  'Social Media Managers': 'social_media_manager',
+  'Videographers and Photographers': 'videographer_photographer',
+  'AI Video and Image Creators': 'ai_video_image_creator',
+
 };
 
 // Card sources that surface in the admin "Form Requests" queue and can be
@@ -333,9 +345,9 @@ const submissionSchema = z.object({
   // two cards. The "Designer + Editor" combo box is its own distinct slug
   // (`designer_video_editor`) meaning one hybrid person, not two specialists.
   service_types: z
-    .array(z.enum(['designer', 'video_editor', 'designer_video_editor', 'accountant', 'ads_specialist']))
+    .array(z.enum(['designer', 'video_editor', 'designer_video_editor', 'accountant', 'ads_specialist', 'creative_director', 'copy_content_writer', 'social_media_manager', 'videographer_photographer', 'ai_video_image_creator']))
     .min(1)
-    .max(5)
+    .max(10)
     .refine((arr) => new Set(arr).size === arr.length, {
       message: 'service_types must be unique',
     }),
@@ -368,7 +380,7 @@ const submissionSchema = z.object({
   // forward; legacy rows retain their existing value.
   role_requirements: z
     .record(
-      z.enum(['designer', 'video_editor', 'designer_video_editor', 'accountant', 'ads_specialist']),
+      z.enum(['designer', 'video_editor', 'designer_video_editor', 'accountant', 'ads_specialist', 'creative_director', 'copy_content_writer', 'social_media_manager', 'videographer_photographer', 'ai_video_image_creator']),
       z.object({
         note: z.string().trim().max(2000).optional(),
         hours: z.string().trim().max(200).optional(),
@@ -408,7 +420,7 @@ const submissionSchema = z.object({
         additional_requirements: z
           .record(
             z.string().trim().min(1).max(40),
-            z.array(z.string().trim().min(1).max(80)).max(40),
+            z.array(z.string().trim().min(1).max(1000)).max(40),
           )
           .optional(),
       }),
@@ -419,6 +431,15 @@ const submissionSchema = z.object({
   // (project budget + scope + timeline instead of a weekly plan + monthly price).
   card_type: z.enum(['subscription', 'assignment']).optional().default('subscription'),
 }).superRefine((val, ctx) => {
+    for (const service of val.service_types) {
+      const role = CONTENT_ROLES.find((r) => r.serviceSlug === service);
+      if (!role) continue;
+      const requirement = val.role_requirements?.[service];
+      for (const field of role.briefFields) {
+        if (field.required && !requirement?.additional_requirements?.[field.key]?.some((value) => value.trim())) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['role_requirements', service, field.key], message: `${field.label} is required.` });
+      }
+    }
+
   // Subscriptions still require at least one working day; assignments don't.
   if (val.card_type !== 'assignment' && val.working_days.length === 0) {
     ctx.addIssue({

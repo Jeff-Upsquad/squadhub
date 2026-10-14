@@ -1,3 +1,4 @@
+import { startContentBriefCrmCron } from './cron/content-brief-crm-cron';
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
@@ -367,6 +368,7 @@ server.listen(config.port, () => {
   if (process.env.DISABLE_CRONS === 'true') {
     console.log('Cron jobs disabled (DISABLE_CRONS=true)');
   } else {
+    startContentBriefCrmCron();
     startCheckInCron();
     startTimesheetCron();
     startTimerCron();

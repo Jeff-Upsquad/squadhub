@@ -384,6 +384,12 @@ export async function buildSquadhirePayloadForCard(
         'Designer plus Editor': 'designer_video_editor',
         Accountants: 'accountant',
         'Ads Specialists': 'ads_specialist',
+        'Creative Directors': 'creative_director',
+        'Copy and Content Writers': 'copy_content_writer',
+        'Social Media Managers': 'social_media_manager',
+        'Videographers and Photographers': 'videographer_photographer',
+        'AI Video and Image Creators': 'ai_video_image_creator',
+
       };
       const guessedSlug =
         SERVICE_SLUG_MAP[subscriptionName] ??

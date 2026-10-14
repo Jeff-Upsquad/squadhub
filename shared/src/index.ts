@@ -2423,7 +2423,7 @@ export interface PartnerClientAssignment {
 // ---- Clients Mini-App ----
 export type SubscriptionPlan = 'Starter' | 'Basic' | 'Plus' | 'Pro' | 'Personal';
 export type SubscriptionTier = 'Junior' | 'Pro' | 'Top Talents';
-export type SubscriptionSlug = 'designer' | 'video_editor' | 'designer_video_editor' | 'accountant' | 'ads_specialist';
+export type SubscriptionSlug = 'designer' | 'video_editor' | 'designer_video_editor' | 'accountant' | 'ads_specialist' | 'creative_director' | 'copy_content_writer' | 'social_media_manager' | 'videographer_photographer' | 'ai_video_image_creator';
 export type DeliverableKind = 'hours' | 'item';
 export type CurrencyCode = 'INR' | 'USD';
 
@@ -2855,7 +2855,7 @@ export type BrandSource = 'shared_form' | 'landing_page_form';
 
 // Service-type slug stored on the brand. Lets the brief form rehydrate
 // Step 1 roles on autofill without a label<->slug reverse map.
-export type BrandServiceType = 'designer' | 'video_editor' | 'designer_video_editor' | 'accountant' | 'ads_specialist';
+export type BrandServiceType = 'designer' | 'video_editor' | 'designer_video_editor' | 'accountant' | 'ads_specialist' | 'creative_director' | 'copy_content_writer' | 'social_media_manager' | 'videographer_photographer' | 'ai_video_image_creator';
 
 export interface ClientSubmissionBrand {
   id: string;
@@ -3050,6 +3050,37 @@ export const ADDITIONAL_REQUIREMENT_CATALOG: Record<string, AdditionalRequiremen
   video_editor: AR_VIDEO,
   designer_video_editor: AR_DESIGNER,
   ads_specialist: AR_ADS_SPECIALIST,
+  creative_director: [
+    { key: 'categories', label: 'Categories', options: ["Brand strategy", "Campaign concepts", "Art direction", "Content strategy", "Video direction", "Creative production", "Brand guidelines", "Creative audits"] },
+    { key: 'skills', label: 'Skill sets', options: ["Creative strategy", "Concept development", "Art direction", "Storytelling", "Team leadership", "Production planning", "Client presentation", "Creative quality control"] },
+    { key: 'tools', label: 'Tools', options: ["Figma", "Adobe Creative Cloud", "Miro", "Notion", "Google Slides", "Frame.io"] },
+    { key: 'ai_tools', label: 'AI tools', options: ["ChatGPT", "Claude", "Midjourney", "Adobe Firefly"] },
+  ],
+  copy_content_writer: [
+    { key: 'categories', label: 'Categories', options: ["Website copy", "Blog articles", "SEO content", "Ad copy", "Email campaigns", "Social captions", "Video scripts", "Brand messaging"] },
+    { key: 'skills', label: 'Skill sets', options: ["Copywriting", "Content research", "SEO writing", "Editing and proofreading", "Brand voice", "Scriptwriting", "Conversion writing", "Fact checking"] },
+    { key: 'tools', label: 'Tools', options: ["Google Docs", "Microsoft Word", "Grammarly", "WordPress", "Semrush", "Ahrefs", "Notion"] },
+    { key: 'ai_tools', label: 'AI tools', options: ["ChatGPT", "Claude", "Jasper", "Perplexity"] },
+  ],
+  social_media_manager: [
+    { key: 'categories', label: 'Categories', options: ["Instagram", "Facebook", "LinkedIn", "YouTube", "TikTok", "X / Twitter", "Pinterest", "Community management"] },
+    { key: 'skills', label: 'Skill sets', options: ["Social strategy", "Content calendars", "Community management", "Social copywriting", "Social analytics", "Audience growth", "Influencer coordination", "Crisis response"] },
+    { key: 'tools', label: 'Tools', options: ["Meta Business Suite", "Buffer", "Hootsuite", "Later", "Sprout Social", "Canva", "Google Analytics"] },
+    { key: 'ai_tools', label: 'AI tools', options: ["ChatGPT", "Claude", "Canva Magic Studio", "CapCut AI"] },
+  ],
+  videographer_photographer: [
+    { key: 'categories', label: 'Categories', options: ["Product photography", "Brand films", "Events", "Portraits", "Food photography", "Real estate", "Interviews", "Social video shoots"] },
+    { key: 'skills', label: 'Skill sets', options: ["Camera operation", "Lighting", "Composition", "Audio recording", "Shot planning", "On-set direction", "Photo retouching", "Production coordination"] },
+    { key: 'tools', label: 'Tools', options: ["Adobe Lightroom", "Adobe Photoshop", "DaVinci Resolve", "Adobe Premiere Pro", "Capture One", "Frame.io"] },
+    { key: 'ai_tools', label: 'AI tools', options: ["Adobe Firefly", "Photoshop Generative Fill", "Topaz Photo AI", "Runway"] },
+  ],
+  ai_video_image_creator: [
+    { key: 'categories', label: 'Categories', options: ["AI product images", "AI brand visuals", "AI video ads", "AI short films", "Storyboards", "Character design", "Image enhancement", "Visual concepts"] },
+    { key: 'skills', label: 'Skill sets', options: ["Prompt design", "Image generation", "Video generation", "Style consistency", "Character consistency", "Compositing", "Upscaling", "Creative quality control"] },
+    { key: 'tools', label: 'Tools', options: ["Adobe Photoshop", "Adobe Premiere Pro", "DaVinci Resolve", "ComfyUI", "Canva", "After Effects"] },
+    { key: 'ai_tools', label: 'AI tools', options: ["Midjourney", "Runway", "Kling", "Adobe Firefly", "Stable Diffusion", "Sora", "Veo"] },
+  ],
+
 };
 
 export function additionalRequirementCatalog(slug: string | null | undefined): AdditionalRequirementGroup[] {
@@ -5332,3 +5363,5 @@ export interface SquadBotActivityReport {
 }
 
 export * from './goals';
+
+export * from './contentRoles';
