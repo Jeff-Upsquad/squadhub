@@ -3,27 +3,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import api from '@/services/api';
+import { SERVICE_TYPE_TO_SLUG } from '@squadhub/shared';
 import { STATES_BY_COUNTRY_NAME, LANGUAGE_OPTIONS } from './locationLanguageOptions';
 import ShareCardLinkModal from './ShareCardLinkModal';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import { showToast } from '@/components/Toast';
 import CardViewToggle, { type CardViewMode } from './CardViewToggle';
 import CardAssigneePicker, { type CardAssigneeUser } from './CardAssigneePicker';
-
-// Map the upsquad-style service_type label to the subscriptions catalog slug.
-const SERVICE_TYPE_TO_SLUG: Record<string, string> = {
-  Designers: 'designer',
-  Editors: 'video_editor',
-  'Designer plus Editor': 'designer_video_editor',
-  Accountants: 'accountant',
-  'Ads Specialists': 'ads_specialist',
-  'Creative Directors': 'creative_director',
-  'Copy and Content Writers': 'copy_content_writer',
-  'Social Media Managers': 'social_media_manager',
-  'Videographers and Photographers': 'videographer_photographer',
-  'AI Video and Image Creators': 'ai_video_image_creator',
-
-};
 
 const PLAN_TO_CANONICAL: Record<string, string> = {
   starter: 'Starter', basic: 'Basic', plus: 'Plus', pro: 'Pro', personal: 'Personal',

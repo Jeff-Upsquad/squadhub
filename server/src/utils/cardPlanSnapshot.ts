@@ -7,6 +7,7 @@
 // have already seen. To make changes the card must be recalled,
 // which puts it back to draft and clears the snapshot.
 // ============================================================
+import { SERVICE_TYPE_TO_SLUG } from '@squadhub/shared';
 import { supabaseAdmin } from '../supabase';
 
 export type PlanSnapshot = {
@@ -38,22 +39,6 @@ export type PlanSnapshot = {
     price: number;
   }>;
   snapshotted_at: string;
-};
-
-// Service-type → subscription-slug lookup. Mirrors the live read path used
-// for request/custom cards in subscription-cards-admin.ts.
-const SERVICE_TYPE_TO_SLUG: Record<string, string> = {
-  Designers: 'designer',
-  Editors: 'video_editor',
-  'Designer plus Editor': 'designer_video_editor',
-  Accountants: 'accountant',
-  'Ads Specialists': 'ads_specialist',
-  'Creative Directors': 'creative_director',
-  'Copy and Content Writers': 'copy_content_writer',
-  'Social Media Managers': 'social_media_manager',
-  'Videographers and Photographers': 'videographer_photographer',
-  'AI Video and Image Creators': 'ai_video_image_creator',
-
 };
 
 const PLAN_NAME_TO_CANONICAL: Record<string, string> = {

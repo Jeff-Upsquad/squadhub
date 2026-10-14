@@ -1,23 +1,8 @@
 import { supabaseAdmin } from '../supabase';
-import type { PlanMarginFields } from '@squadhub/shared';
+import { SERVICE_TYPE_TO_SLUG, type PlanMarginFields } from '@squadhub/shared';
 
 export const ASSIGNMENT_TIERS = ['Junior', 'Pro', 'Top Talents'] as const;
 export type AssignmentTier = (typeof ASSIGNMENT_TIERS)[number];
-
-/** Card service_type labels → assignment catalog slugs (same map the card editor uses). */
-const SERVICE_TYPE_TO_SLUG: Record<string, string> = {
-  Designers: 'designer',
-  Editors: 'video_editor',
-  'Designer plus Editor': 'designer_video_editor',
-  Accountants: 'accountant',
-  'Ads Specialists': 'ads_specialist',
-  'Creative Directors': 'creative_director',
-  'Copy and Content Writers': 'copy_content_writer',
-  'Social Media Managers': 'social_media_manager',
-  'Videographers and Photographers': 'videographer_photographer',
-  'AI Video and Image Creators': 'ai_video_image_creator',
-
-};
 
 /**
  * Load one assignment service with its margin rows (level × country).

@@ -1,6 +1,6 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
-import { CONTENT_ROLES, isValidStoredPhone, normalizeStoredPhone, sanitizeAdditionalRequirements } from '@squadhub/shared';
+import { CONTENT_ROLES, SERVICE_TYPE_TO_SLUG, SLUG_TO_SERVICE_TYPE, isValidStoredPhone, normalizeStoredPhone, sanitizeAdditionalRequirements } from '@squadhub/shared';
 import { supabaseAdmin } from '../supabase';
 import { ensureHubContact } from '../utils/leadLookup';
 import { resolveCrmCardAssigneesFromSubmission } from '../utils/cardCrmAssignees';
@@ -24,40 +24,7 @@ const phoneSchema = z
     message: 'Enter a valid phone number (10 digits for India)',
   });
 
-// Map the form's service_type slug back to the upsquad-style display label
-// the rest of the system already uses (AdminCardEditor + plan resolution
-// in subscription-cards-admin.ts both key off these exact strings).
-const SLUG_TO_SERVICE_TYPE: Record<string, string> = {
-  designer: 'Designers',
-  video_editor: 'Editors',
-  designer_video_editor: 'Designer plus Editor',
-  accountant: 'Accountants',
-  ads_specialist: 'Ads Specialists',
-  creative_director: 'Creative Directors',
-  copy_content_writer: 'Copy and Content Writers',
-  social_media_manager: 'Social Media Managers',
-  videographer_photographer: 'Videographers and Photographers',
-  ai_video_image_creator: 'AI Video and Image Creators',
-
-};
-
 const VALID_DAYS = new Set(['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']);
-
-// Reverse of SLUG_TO_SERVICE_TYPE — the card stores a display label, but
-// client_submission_brands.service_type stores the slug vocabulary.
-const SERVICE_TYPE_TO_SLUG: Record<string, string> = {
-  Designers: 'designer',
-  Editors: 'video_editor',
-  'Designer plus Editor': 'designer_video_editor',
-  Accountants: 'accountant',
-  'Ads Specialists': 'ads_specialist',
-  'Creative Directors': 'creative_director',
-  'Copy and Content Writers': 'copy_content_writer',
-  'Social Media Managers': 'social_media_manager',
-  'Videographers and Photographers': 'videographer_photographer',
-  'AI Video and Image Creators': 'ai_video_image_creator',
-
-};
 
 // Card sources that surface in the admin "Form Requests" queue and can be
 // shared with a client pre-fill link (mirrors subscription-cards-admin-requests).

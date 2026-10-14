@@ -1,3 +1,7 @@
+// SYNCED COPY — keep identical in Profiles, SquadHub (squadhub) and SquadCRM
+// (squadcrm) at shared/src/contentRoles.ts. Each repo has a content-roles
+// sync test pinning this file's SHA-256: change all three copies together and
+// update the hash in all three tests.
 /** Content Squad vocabulary shared by onboarding, profiles and business briefs.
  * Category UUIDs are stable soft references used by SquadHub's catalog. */
 export const CONTENT_ROLES = [
