@@ -241,11 +241,18 @@ export default function Notch() {
     void pollStats();
     const a = window.setInterval(() => void pollActive(), ACTIVE_POLL_MS);
     const s = window.setInterval(() => void pollStats(), STATS_POLL_MS);
-    const t = window.setInterval(() => setNow(Date.now()), 1000);
+    // Tick on each wall-clock second boundary; a free-running 1s interval
+    // drifts against the floored clock and visibly skips seconds.
+    let t = 0;
+    const tick = () => {
+      setNow(Date.now());
+      t = window.setTimeout(tick, 1000 - (Date.now() % 1000) + 5);
+    };
+    tick();
     return () => {
       window.clearInterval(a);
       window.clearInterval(s);
-      window.clearInterval(t);
+      window.clearTimeout(t);
     };
   }, [authHydrated, isAuthenticated, userId, pollActive, pollStats]);
 
@@ -353,6 +360,26 @@ export default function Notch() {
       void un.then((f) => f());
     };
   }, [win, dismiss]);
+
+  // Timer view behaves like a hover card: once the pointer has been over the
+  // panel, moving off it closes it. Add task / Tray keep click-away only.
+  const hoverArmedRef = useRef(false);
+  const leaveTimerRef = useRef<number | null>(null);
+  const hoverCloses = view === 'expanded' && tab === 'timer' && !taskPickerOpen && !busy;
+  const clearLeave = useCallback(() => {
+    if (leaveTimerRef.current != null) { clearTimeout(leaveTimerRef.current); leaveTimerRef.current = null; }
+  }, []);
+  useEffect(() => {
+    hoverArmedRef.current = false;
+    clearLeave();
+  }, [view, tab, clearLeave]);
+  const onPanelEnter = useCallback(() => { hoverArmedRef.current = true; clearLeave(); }, [clearLeave]);
+  const onPanelLeave = useCallback(() => {
+    if (!hoverCloses || !hoverArmedRef.current) return;
+    clearLeave();
+    leaveTimerRef.current = window.setTimeout(() => { leaveTimerRef.current = null; dismiss(); }, 250);
+  }, [hoverCloses, clearLeave, dismiss]);
+  useEffect(() => clearLeave, [clearLeave]);
 
   // Esc dismisses the notch whenever it's key (works regardless of focus).
   useEffect(() => {
@@ -469,7 +496,7 @@ export default function Notch() {
   // ── render: expanded panel (Timer / Add task / Tray) ────────────────────────
   return (
     <div className="notch-root">
-      <div className="notch-panel" ref={cardRef as any}>
+      <div className="notch-panel" ref={cardRef as any} onMouseEnter={onPanelEnter} onMouseMove={onPanelEnter} onMouseLeave={onPanelLeave}>
         <div className="notch-head">
           <div className="notch-tabs" role="tablist" aria-label="Companion views">
             <button type="button" role="tab" aria-selected={tab === 'timer'} className={`notch-tab${tab === 'timer' ? ' active' : ''}`} onClick={() => setTab('timer')}>

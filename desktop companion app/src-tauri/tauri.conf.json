@@ -1,7 +1,7 @@
 {
   "$schema": "https://raw.githubusercontent.com/nicedoc/tauri-docs/main/references/config.schema.json",
   "productName": "SquadHub Companion",
-  "version": "0.1.26",
+  "version": "0.1.27",
   "identifier": "in.squadhub.desktop",
   "build": {
     "frontendDist": "../dist",
@@ -41,6 +41,7 @@
       {
         "label": "notch",
         "title": "SquadHub Timer",
+        "backgroundThrottling": "disabled",
         "width": 460,
         "height": 54,
         "resizable": false,
