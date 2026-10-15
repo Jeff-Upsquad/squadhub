@@ -226,6 +226,11 @@ clips.squadhub.in {
 	}
 }
 
+clipper.squadhub.in {
+	encode zstd gzip
+	reverse_proxy host.docker.internal:5001
+}
+
 appsquad.upsquadconnect.com {
 	encode gzip
 	reverse_proxy appsquad-web:80
