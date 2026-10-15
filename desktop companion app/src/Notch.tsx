@@ -120,9 +120,33 @@ export default function Notch() {
     }
   }, []);
 
+  // The visible card (pill when collapsed, panel when expanded). Only one is
+  // mounted at a time; the entrance/exit animation plays on this element.
+  const cardRef = useRef<HTMLElement | null>(null);
+  const ANIM_OUT_MS = 150;
+
+  /** Restart the drop-in animation on the current card (runs after React paints). */
+  const playEnter = useCallback(() => {
+    requestAnimationFrame(() => {
+      const el = cardRef.current;
+      if (!el) return;
+      el.classList.remove('sh-out', 'sh-in');
+      void el.offsetWidth; // force reflow so the animation restarts on re-show
+      el.classList.add('sh-in');
+    });
+  }, []);
+
   const dismiss = useCallback(() => {
     cancelAutoHide();
-    void win.hide();
+    const el = cardRef.current;
+    if (!el) {
+      void win.hide();
+      return;
+    }
+    el.classList.remove('sh-in');
+    void el.offsetWidth;
+    el.classList.add('sh-out');
+    window.setTimeout(() => void win.hide(), ANIM_OUT_MS);
   }, [cancelAutoHide, win]);
 
   const surface = useCallback(
@@ -135,15 +159,16 @@ export default function Notch() {
       } catch {
         await win.show().catch(() => {});
       }
+      playEnter();
       if (autoHide) {
         autoHideRef.current = window.setTimeout(() => {
           autoHideRef.current = null;
           // Only auto-hide if the user hasn't expanded it in the meantime.
-          if (viewRef.current === 'collapsed') void win.hide();
+          if (viewRef.current === 'collapsed') dismiss();
         }, AUTO_HIDE_MS);
       }
     },
-    [cancelAutoHide, place, win],
+    [cancelAutoHide, place, win, playEnter, dismiss],
   );
 
   const expand = useCallback(() => {
@@ -299,11 +324,12 @@ export default function Notch() {
       setTab('timer');
       setView('expanded');
       void place(PANEL_W, PANEL_H);
+      playEnter();
     });
     return () => {
       void unexpand.then((f) => f());
     };
-  }, [win, place, cancelAutoHide]);
+  }, [win, place, cancelAutoHide, playEnter]);
 
   // Click-away dismiss (menu-bar popover behaviour). Once the notch covers the
   // tray it can't be toggled from there, so losing focus hides it — the menu-bar
@@ -318,8 +344,7 @@ export default function Notch() {
         if (t != null) clearTimeout(t);
         t = window.setTimeout(() => {
           t = null;
-          cancelAutoHide();
-          void win.hide();
+          dismiss();
         }, 180);
       }
     });
@@ -327,7 +352,7 @@ export default function Notch() {
       if (t != null) clearTimeout(t);
       void un.then((f) => f());
     };
-  }, [win, cancelAutoHide]);
+  }, [win, dismiss]);
 
   // ── actions ─────────────────────────────────────────────────────────────────
   const switchMode = useCallback(
@@ -404,6 +429,7 @@ export default function Notch() {
       <div className="notch-root">
         <button
           type="button"
+          ref={cardRef as any}
           className="notch-pill"
           onClick={expand}
           title="Open timer"
@@ -431,7 +457,7 @@ export default function Notch() {
   // ── render: expanded panel (Timer / Add task / Tray) ────────────────────────
   return (
     <div className="notch-root">
-      <div className="notch-panel">
+      <div className="notch-panel" ref={cardRef as any}>
         <div className="notch-head">
           <div className="notch-tabs" role="tablist" aria-label="Companion views">
             <button type="button" role="tab" aria-selected={tab === 'timer'} className={`notch-tab${tab === 'timer' ? ' active' : ''}`} onClick={() => setTab('timer')}>

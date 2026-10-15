@@ -491,6 +491,33 @@ export default function QuickAdd() {
     }
   };
 
+  // The quick-add card — the entrance/exit animation plays on this element.
+  const cardRef = useRef<HTMLDivElement | null>(null);
+  const QA_ANIM_OUT_MS = 150;
+  /** Restart the drop-in animation (runs after React paints the current card). */
+  const playEnter = () => {
+    requestAnimationFrame(() => {
+      const el = cardRef.current;
+      if (!el) return;
+      el.classList.remove('sh-out', 'sh-in');
+      void el.offsetWidth; // reflow so the animation restarts on each summon
+      el.classList.add('sh-in');
+    });
+  };
+  /** Play the exit animation, then hide the window once it finishes. */
+  const hideAnimated = () => {
+    cancelPendingHide();
+    const el = cardRef.current;
+    if (!el) {
+      void win.hide();
+      return;
+    }
+    el.classList.remove('sh-in');
+    void el.offsetWidth;
+    el.classList.add('sh-out');
+    window.setTimeout(() => void win.hide(), QA_ANIM_OUT_MS);
+  };
+
   const clearAttachments = () => {
     setAttachments((cur) => {
       for (const a of cur) if (a.previewUrl) URL.revokeObjectURL(a.previewUrl);
@@ -565,6 +592,7 @@ export default function QuickAdd() {
       useAuthStore.getState().hydrate();
       void resolvePersonal();
       reset();
+      playEnter();
     });
 
     const unlisten = win.onFocusChanged(({ payload: isFocused }) => {
@@ -573,6 +601,7 @@ export default function QuickAdd() {
         useAuthStore.getState().hydrate();
         void resolvePersonal();
         reset();
+        playEnter();
       } else {
         // Spotlight behaviour: dismiss when focus is lost — but defer briefly.
         // Starting a file-drag from another app (Finder, a browser) blurs this
@@ -582,7 +611,7 @@ export default function QuickAdd() {
         cancelPendingHide();
         hideTimerRef.current = window.setTimeout(() => {
           hideTimerRef.current = null;
-          if (!draggingRef.current) void win.hide();
+          if (!draggingRef.current) hideAnimated();
         }, 200);
       }
     });
@@ -841,7 +870,7 @@ export default function QuickAdd() {
 
       setPhase('done');
       setTimeout(() => {
-        void win.hide();
+        hideAnimated();
       }, 550);
     } catch (e) {
       // A stale cached id (e.g. list deleted) — clear so the next try re-resolves.
@@ -857,7 +886,7 @@ export default function QuickAdd() {
     if (e.key === 'Escape') {
       e.preventDefault();
       if (openMenu) setOpenMenu(null);
-      else void win.hide();
+      else hideAnimated();
     } else if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
       e.preventDefault();
       void submit();
@@ -1111,11 +1140,11 @@ export default function QuickAdd() {
   if (authHydrated && !isAuthenticated) {
     return (
       <div className="qa-scroll" onKeyDown={onContainerKeyDown}>
-        <div className="qa">
+        <div className="qa" ref={cardRef}>
           <button
             type="button"
             className="qa-close"
-            onClick={() => void win.hide()}
+            onClick={() => hideAnimated()}
             title="Close (Esc)"
             aria-label="Close"
           >
@@ -1166,7 +1195,7 @@ export default function QuickAdd() {
       onDragLeave={onDragLeave}
       onDrop={onDrop}
     >
-      <div className={`qa${dragOver ? ' qa-drop-active' : ''}`}>
+      <div className={`qa${dragOver ? ' qa-drop-active' : ''}`} ref={cardRef}>
         {dragOver && <div className="qa-drop-overlay">Drop files to attach</div>}
 
         {/* Header: Add task / Tray tabs + hotkey keycaps + close */}
@@ -1202,7 +1231,7 @@ export default function QuickAdd() {
             <button
               type="button"
               className="qa-close"
-              onClick={() => void win.hide()}
+              onClick={() => hideAnimated()}
               title="Close (Esc)"
               aria-label="Close"
             >
