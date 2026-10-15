@@ -463,6 +463,8 @@ export default function QuickAdd() {
   const [startTimerOnCreate, setStartTimerOnCreate] = useState(false);
   const [loggedInput, setLoggedInput] = useState('');
   const [estimateInput, setEstimateInput] = useState('');
+  // Header tabs: the task form ('add') vs the attachment/upload tray ('tray').
+  const [tab, setTab] = useState<'add' | 'tray'>('add');
 
   // Once the task is created we keep its id so a retry (e.g. after an attachment
   // upload fails) re-uses it instead of creating a duplicate task.
@@ -517,6 +519,7 @@ export default function QuickAdd() {
     setStartTimerOnCreate(false);
     setLoggedInput('');
     setEstimateInput('');
+    setTab('add');
     loggedTimeAppliedRef.current = false;
     setLoginError('');
     // Assignee starts empty — the circle next to the pill self-assigns.
@@ -1008,6 +1011,10 @@ export default function QuickAdd() {
   const labelButtonText =
     labelCount === 0 ? 'Labels' : labelCount === 1 ? selectedLabels[0].name : `${labelCount} labels`;
 
+  // Tray badge: queued-but-not-yet-uploaded attachments + in-flight/failed jobs.
+  const activeBgJobs = bgJobs.filter((j) => j.active || j.files.length > 0);
+  const trayCount = attachments.length + activeBgJobs.length;
+
   // ── task type + status (derived) ──────────────────────────────────────────
   const currentType = taskTypes?.find((t) => t.id === taskTypeId) ?? null;
   const isTaskCatalogType = !currentType || currentType.key === 'task';
@@ -1159,236 +1166,274 @@ export default function QuickAdd() {
       onDrop={onDrop}
     >
       <div className={`qa${dragOver ? ' qa-drop-active' : ''}`}>
-        {dragOver && <div className="qa-drop-overlay">Drop image to attach</div>}
-        <button
-          type="button"
-          className="qa-close"
-          onClick={() => void win.hide()}
-          title="Close (Esc)"
-          aria-label="Close"
-        >
-          ×
-        </button>
-      <div className="qa-row">
-        <span className="qa-icon">+</span>
-        <input
-          ref={inputRef}
-          className="qa-input"
-          placeholder="Add a task…"
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          onKeyDown={onTitleKeyDown}
-          autoFocus
-          disabled={phase === 'saving'}
-        />
-      </div>
+        {dragOver && <div className="qa-drop-overlay">Drop files to attach</div>}
 
-      <div className="qa-desc">
-        <textarea
-          className="qa-textarea"
-          placeholder="Add a description…"
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-          rows={2}
-          disabled={phase === 'saving'}
-        />
-      </div>
-
-      {/* Where: every recent location, scrollable */}
-      <div className="qa-sec-label">Where</div>
-      <div className="qa-chips qa-where">
-        {chips.map((c) => (
-          <button
-            key={c.id}
-            type="button"
-            className={`qa-chip${selectedList?.id === c.id ? ' active' : ''}`}
-            onClick={() => pickList(c)}
-            title={c.name}
-          >
-            {c.id === personalId ? '★ ' : ''}
-            {c.name}
-          </button>
-        ))}
-        <button
-          type="button"
-          className={`qa-chip qa-locsearch${openMenu === 'list' ? ' active' : ''}`}
-          onClick={() => toggleMenu('list')}
-          title="Search all locations"
-          aria-label="Search locations"
-        >
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
-            <circle cx="11" cy="11" r="8" />
-            <path d="m21 21-4.3-4.3" />
-          </svg>
-        </button>
-      </div>
-
-      {/* What: assignee first (circle self-assigns), then type/status/priority/labels */}
-      <div className="qa-sec-label">What</div>
-      <div className="qa-attrs">
-        <span className="qa-assign-wrap">
-          <button
-            type="button"
-            className={`qa-mecircle${isSelfAssigned ? ' on' : ''}`}
-            title={isSelfAssigned ? `Assigned to ${selfName} — click to remove` : 'Assign to me'}
-            aria-label={isSelfAssigned ? 'Remove self assignment' : 'Assign to me'}
-            onClick={toggleSelfAssign}
-          >
-            {isSelfAssigned ? (
-              <span className="qa-mecircle-initials">
-                {initials(assignable.find((u) => u.id === selfId)?.display_name, assignable.find((u) => u.id === selfId)?.email)}
-              </span>
-            ) : (
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-                <circle cx="12" cy="7" r="4" />
-              </svg>
-            )}
-          </button>
-          <button
-            type="button"
-            className={`qa-pill${assigneeIds.length ? ' active' : ' muted'}`}
-            onClick={() => toggleMenu('assignee')}
-          >
-            <span className="qa-pill-label">{assigneeLabel}</span>
-          </button>
-        </span>
-
-        <button
-          type="button"
-          className={`qa-pill${taskTypeId ? ' active' : ' muted'}`}
-          onClick={() => toggleMenu('type')}
-        >
-          <span className="qa-dot" style={{ background: currentType?.color || '#6b7280' }} />
-          <span className="qa-pill-label">{currentType?.name || 'Type'}</span>
-        </button>
-
-        <button
-          type="button"
-          className="qa-pill active"
-          onClick={() => toggleMenu('status')}
-        >
-          <span className="qa-dot" style={{ background: statusColor }} />
-          <span className="qa-pill-label">{statusLabel}</span>
-        </button>
-
-        <button
-          type="button"
-          className={`qa-pill${priority !== 'none' ? ' active' : ' muted'}`}
-          onClick={() => toggleMenu('priority')}
-        >
-          <span className="qa-dot" style={{ background: selectedPriority.color }} />
-          <span className="qa-pill-label">{priority === 'none' ? 'Priority' : selectedPriority.label}</span>
-        </button>
-
-        <button
-          type="button"
-          className={`qa-pill${labelCount ? ' active' : ' muted'}`}
-          onClick={() => toggleMenu('labels')}
-          title={selectedList ? `Labels in ${selectedList.name}` : 'Labels'}
-        >
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M20.59 13.41 11 3.83A2 2 0 0 0 9.59 3.24H4a1 1 0 0 0-1 1v5.59a2 2 0 0 0 .59 1.41l9.58 9.59a2 2 0 0 0 2.83 0l4.59-4.59a2 2 0 0 0 0-2.83z" />
-            <circle cx="7.5" cy="7.5" r="1" fill="currentColor" />
-          </svg>
-          <span className="qa-pill-label">{labelButtonText}</span>
-        </button>
-      </div>
-
-      {/* When: work date, start→due range, estimate, logged */}
-      <div className="qa-sec-label">When</div>
-      <div className="qa-attrs">
-        <button
-          type="button"
-          className={`qa-pill${workDate ? ' active' : ' muted'}`}
-          onClick={() => toggleMenu('date')}
-        >
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <rect x="3" y="4" width="18" height="18" rx="2" />
-            <path d="M16 2v4M8 2v4M3 10h18" />
-          </svg>
-          <span className="qa-pill-label">{workDate ? `Work: ${dateLabel(workDate)}` : 'Work date'}</span>
-        </button>
-
-        <button
-          type="button"
-          className={`qa-pill${startDate || dueDate ? ' active' : ' muted'}`}
-          onClick={() => toggleMenu('rangedate')}
-        >
-          <span aria-hidden>▶</span>
-          <span className="qa-pill-label">
-            {(startDate ? dateLabel(startDate) : 'Start')} → {(dueDate ? dateLabel(dueDate) : 'Due')}
-          </span>
-        </button>
-
-        <button type="button" className={`qa-pill${estimateInput.trim() ? ' active' : ' muted'}`} onClick={() => toggleMenu('estimate')}>
-          <span aria-hidden>◷</span>
-          <span className="qa-pill-label">{estimateMinutes && estimateMinutes > 0 ? `Estimate ${formatDuration(estimateMinutes)}` : 'Estimate'}</span>
-        </button>
-
-        <button type="button" className={`qa-pill${loggedInput.trim() ? ' active' : ' muted'}`} onClick={() => toggleMenu('logged')}>
-          <span aria-hidden>◴</span>
-          <span className="qa-pill-label">{loggedMinutes && loggedMinutes > 0 ? `Logged ${formatDuration(loggedMinutes)}` : 'Time logged'}</span>
-        </button>
-      </div>
-
-      {/* Details: focus, completion, timer */}
-      <div className="qa-sec-label">Details</div>
-      <div className="qa-attrs">
-        <button
-          type="button"
-          className={`qa-pill qa-star${focused ? ' active' : ' muted'}`}
-          onClick={() => setFocused((v) => !v)}
-          title="Focus star"
-        >
-          {focused ? '★ Focused' : '☆ Focus'}
-        </button>
-
-        <button
-          type="button"
-          className={`qa-pill${completeOnCreate ? ' active' : ' muted'}`}
-          onClick={() => {
-            setCompleteOnCreate((v) => !v);
-            setStartTimerOnCreate(false);
-          }}
-          title="Create this task already completed"
-        >
-          <span aria-hidden>✓</span>
-          <span className="qa-pill-label">{completeOnCreate ? 'Complete on add' : 'Mark complete'}</span>
-        </button>
-
-        <button
-          type="button"
-          className={`qa-pill${startTimerOnCreate ? ' active' : ' muted'}`}
-          onClick={() => {
-            setStartTimerOnCreate((v) => !v);
-            setCompleteOnCreate(false);
-          }}
-          aria-pressed={startTimerOnCreate}
-          title="Start tracking as soon as this task is added"
-        >
-          <span aria-hidden>◷</span>
-          <span className="qa-pill-label">{startTimerOnCreate ? 'Start timer on add' : 'Start timer'}</span>
-        </button>
-      </div>
-
-      {labelCount > 0 && (
-        <div className="qa-labelsel">
-          {selectedLabels.map((t) => (
+        {/* Header: Add task / Tray tabs + hotkey keycaps + close */}
+        <div className="qa-head">
+          <div className="qa-tabs" role="tablist" aria-label="Quick add views">
             <button
-              key={t.id}
               type="button"
-              className="qa-labelchip"
-              onClick={() => toggleLabel(t)}
-              title="Remove label"
+              role="tab"
+              aria-selected={tab === 'add'}
+              className={`qa-tab${tab === 'add' ? ' active' : ''}`}
+              onClick={() => setTab('add')}
             >
-              <span className="qa-dot" style={{ background: t.color || '#6b7280' }} />
-              <span className="qa-labelchip-name">{t.name}</span>
-              <span aria-hidden>×</span>
+              <span className="qa-tab-plus" aria-hidden>+</span>
+              Add task
             </button>
-          ))}
+            <button
+              type="button"
+              role="tab"
+              aria-selected={tab === 'tray'}
+              className={`qa-tab${tab === 'tray' ? ' active' : ''}`}
+              onClick={() => setTab('tray')}
+            >
+              Tray
+              {trayCount > 0 && <span className="qa-tab-badge">{trayCount}</span>}
+            </button>
+          </div>
+          <div className="qa-head-right">
+            <span className="qa-keys" aria-hidden>
+              <kbd className="qa-keycap">⌘</kbd>
+              <kbd className="qa-keycap">⇧</kbd>
+              <kbd className="qa-keycap">T</kbd>
+            </span>
+            <button
+              type="button"
+              className="qa-close"
+              onClick={() => void win.hide()}
+              title="Close (Esc)"
+              aria-label="Close"
+            >
+              ×
+            </button>
+          </div>
         </div>
-      )}
+
+        {tab === 'add' ? (
+          <>
+            <div className="qa-cols">
+              {/* LEFT: title, description, where */}
+              <div className="qa-col qa-col-left">
+                <input
+                  ref={inputRef}
+                  className="qa-input"
+                  placeholder="Add a task…"
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  onKeyDown={onTitleKeyDown}
+                  autoFocus
+                  disabled={phase === 'saving'}
+                />
+                <textarea
+                  className="qa-textarea"
+                  placeholder="Add a description…"
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  rows={2}
+                  disabled={phase === 'saving'}
+                />
+                <div className="qa-sec-label">Where</div>
+                <div className="qa-chips qa-where">
+                  {chips.map((c) => (
+                    <button
+                      key={c.id}
+                      type="button"
+                      className={`qa-chip${selectedList?.id === c.id ? ' active' : ''}`}
+                      onClick={() => pickList(c)}
+                      title={c.name}
+                    >
+                      {c.id === personalId ? '★ ' : ''}
+                      {c.name}
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    className={`qa-chip qa-locsearch${openMenu === 'list' ? ' active' : ''}`}
+                    onClick={() => toggleMenu('list')}
+                    title="Search all locations"
+                    aria-label="Search locations"
+                  >
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+                      <circle cx="11" cy="11" r="8" />
+                      <path d="m21 21-4.3-4.3" />
+                    </svg>
+                  </button>
+                </div>
+                {labelCount > 0 && (
+                  <div className="qa-labelsel">
+                    {selectedLabels.map((t) => (
+                      <button
+                        key={t.id}
+                        type="button"
+                        className="qa-labelchip"
+                        onClick={() => toggleLabel(t)}
+                        title="Remove label"
+                      >
+                        <span className="qa-dot" style={{ background: t.color || '#6b7280' }} />
+                        <span className="qa-labelchip-name">{t.name}</span>
+                        <span aria-hidden>×</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* MIDDLE: 2-column grid of attribute pills */}
+              <div className="qa-col qa-col-mid">
+                <div className="qa-grid">
+                  <span className="qa-assign-wrap">
+                    <button
+                      type="button"
+                      className={`qa-mecircle${isSelfAssigned ? ' on' : ''}`}
+                      title={isSelfAssigned ? `Assigned to ${selfName} — click to remove` : 'Assign to me'}
+                      aria-label={isSelfAssigned ? 'Remove self assignment' : 'Assign to me'}
+                      onClick={toggleSelfAssign}
+                    >
+                      {isSelfAssigned ? (
+                        <span className="qa-mecircle-initials">
+                          {initials(assignable.find((u) => u.id === selfId)?.display_name, assignable.find((u) => u.id === selfId)?.email)}
+                        </span>
+                      ) : (
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                          <circle cx="12" cy="7" r="4" />
+                        </svg>
+                      )}
+                    </button>
+                    <button
+                      type="button"
+                      className={`qa-pill${assigneeIds.length ? ' active' : ' muted'}`}
+                      onClick={() => toggleMenu('assignee')}
+                    >
+                      <span className="qa-pill-label">{assigneeLabel}</span>
+                    </button>
+                  </span>
+
+                  <button
+                    type="button"
+                    className={`qa-pill${taskTypeId ? ' active' : ' muted'}`}
+                    onClick={() => toggleMenu('type')}
+                  >
+                    <span className="qa-dot" style={{ background: currentType?.color || '#6b7280' }} />
+                    <span className="qa-pill-label">{currentType?.name || 'Type'}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    className="qa-pill active"
+                    onClick={() => toggleMenu('status')}
+                  >
+                    <span className="qa-dot" style={{ background: statusColor }} />
+                    <span className="qa-pill-label">{statusLabel}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    className={`qa-pill${priority !== 'none' ? ' active' : ' muted'}`}
+                    onClick={() => toggleMenu('priority')}
+                  >
+                    <span className="qa-dot" style={{ background: selectedPriority.color }} />
+                    <span className="qa-pill-label">{priority === 'none' ? 'Priority' : selectedPriority.label}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    className={`qa-pill${workDate ? ' active' : ' muted'}`}
+                    onClick={() => toggleMenu('date')}
+                  >
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <rect x="3" y="4" width="18" height="18" rx="2" />
+                      <path d="M16 2v4M8 2v4M3 10h18" />
+                    </svg>
+                    <span className="qa-pill-label">{workDate ? dateLabel(workDate) : 'Work date'}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    className={`qa-pill${startDate || dueDate ? ' active' : ' muted'}`}
+                    onClick={() => toggleMenu('rangedate')}
+                  >
+                    <span aria-hidden>▶</span>
+                    <span className="qa-pill-label">
+                      {(startDate ? dateLabel(startDate) : 'Start')} → {(dueDate ? dateLabel(dueDate) : 'Due')}
+                    </span>
+                  </button>
+
+                  <button type="button" className={`qa-pill${estimateInput.trim() ? ' active' : ' muted'}`} onClick={() => toggleMenu('estimate')}>
+                    <span aria-hidden>◷</span>
+                    <span className="qa-pill-label">{estimateMinutes && estimateMinutes > 0 ? `Estimate ${formatDuration(estimateMinutes)}` : 'Estimate'}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    className={`qa-pill${labelCount ? ' active' : ' muted'}`}
+                    onClick={() => toggleMenu('labels')}
+                    title={selectedList ? `Labels in ${selectedList.name}` : 'Labels'}
+                  >
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M20.59 13.41 11 3.83A2 2 0 0 0 9.59 3.24H4a1 1 0 0 0-1 1v5.59a2 2 0 0 0 .59 1.41l9.58 9.59a2 2 0 0 0 2.83 0l4.59-4.59a2 2 0 0 0 0-2.83z" />
+                      <circle cx="7.5" cy="7.5" r="1" fill="currentColor" />
+                    </svg>
+                    <span className="qa-pill-label">{labelButtonText}</span>
+                  </button>
+
+                  <button type="button" className={`qa-pill${loggedInput.trim() ? ' active' : ' muted'}`} onClick={() => toggleMenu('logged')}>
+                    <span aria-hidden>◴</span>
+                    <span className="qa-pill-label">{loggedMinutes && loggedMinutes > 0 ? `Logged ${formatDuration(loggedMinutes)}` : 'Time logged'}</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* RIGHT: big circular Add + focus / complete / timer toggles */}
+              <div className="qa-col qa-col-right">
+                <button
+                  type="button"
+                  className="qa-add-circle"
+                  onClick={() => void submit()}
+                  disabled={!title.trim() || phase === 'saving'}
+                  title="Add task (Enter)"
+                >
+                  <span className="qa-add-plus" aria-hidden>+</span>
+                  <span className="qa-add-text">Add</span>
+                </button>
+                <div className="qa-toggles">
+                  <button
+                    type="button"
+                    className={`qa-toggle${focused ? ' on qa-toggle-star' : ''}`}
+                    onClick={() => setFocused((v) => !v)}
+                    aria-pressed={focused}
+                    title={focused ? 'Focused — in your focus list' : 'Focus this task'}
+                  >
+                    {focused ? '★' : '☆'}
+                  </button>
+                  <button
+                    type="button"
+                    className={`qa-toggle${completeOnCreate ? ' on qa-toggle-done' : ''}`}
+                    onClick={() => {
+                      setCompleteOnCreate((v) => !v);
+                      setStartTimerOnCreate(false);
+                    }}
+                    aria-pressed={completeOnCreate}
+                    title="Create this task already completed"
+                  >
+                    ✓
+                  </button>
+                  <button
+                    type="button"
+                    className={`qa-toggle${startTimerOnCreate ? ' on qa-toggle-timer' : ''}`}
+                    onClick={() => {
+                      setStartTimerOnCreate((v) => !v);
+                      setCompleteOnCreate(false);
+                    }}
+                    aria-pressed={startTimerOnCreate}
+                    title="Start tracking as soon as this task is added"
+                  >
+                    ▶
+                  </button>
+                </div>
+              </div>
+            </div>
 
       {/* Inline menus (one at a time; they push content down so nothing clips) */}
       {openMenu === 'list' && <ListPicker onPick={pickList} />}
@@ -1790,82 +1835,89 @@ export default function QuickAdd() {
         </div>
       )}
 
-      {attachments.length > 0 && (
-        <div className="qa-attachments">
-          {attachments.map((a) => (
-            <div key={a.id} className="qa-att" title={a.file.name}>
-              {a.previewUrl ? (
-                <img className="qa-att-thumb" src={a.previewUrl} alt={a.file.name} />
-              ) : (
-                <div className="qa-att-thumb qa-att-file">📎</div>
-              )}
-              <span className="qa-att-name">{a.file.name}</span>
-              <button
-                type="button"
-                className="qa-att-remove"
-                onClick={() => removeAttachment(a.id)}
-                title="Remove"
-                aria-label={`Remove ${a.file.name}`}
-              >
-                ×
-              </button>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {bgJobs.some((j) => j.active || j.files.length > 0) && (
-        <div className="qa-bgjobs">
-          {bgJobs.filter((j) => j.active || j.files.length > 0).map((j) => (
-            <div key={j.key} className="qa-bgjob">
-              {j.active ? (
-                <span className="qa-bg-note">
-                  Uploading {j.files.length} {j.files.length === 1 ? 'attachment' : 'attachments'} · “{j.taskTitle}”
-                </span>
-              ) : (
-                <>
-                  <span className="qa-err">
-                    “{j.taskTitle}” — {j.files.length} {j.files.length === 1 ? 'file' : 'files'} failed to upload
+            {/* Footer: keyboard hint + current list */}
+            <div className="qa-footer">
+              <div className="qa-hint">
+                {phase === 'saving' && <span>Adding…</span>}
+                {phase === 'done' && <span className="qa-ok">Added ✓</span>}
+                {phase === 'error' && <span className="qa-err">{error}</span>}
+                {phase === 'idle' && (
+                  <span>
+                    <b>Enter</b> to add · <b>Esc</b> to dismiss · drop files anywhere to attach
                   </span>
-                  <button type="button" className="qa-chip" onClick={() => retryBgJob(j.key)}>
-                    Retry
-                  </button>
-                  <button
-                    type="button"
-                    className="qa-att-remove"
-                    onClick={() => dismissBgJob(j.key)}
-                    title="Dismiss"
-                    aria-label="Dismiss failed uploads"
-                  >
-                    ×
-                  </button>
-                </>
-              )}
+                )}
+              </div>
+              <div className="qa-footer-list" title={selectedList?.name || 'My Tasks'}>
+                {selectedList?.name || 'My Tasks'}
+              </div>
             </div>
-          ))}
-        </div>
-      )}
-
-<div className="qa-footer">
-        <div className="qa-hint">
-          {phase === 'saving' && <span>Adding…</span>}
-          {phase === 'done' && <span className="qa-ok">Added ✓</span>}
-          {phase === 'error' && <span className="qa-err">{error}</span>}
-          {phase === 'idle' && (
-            <span>
-              <b>Enter</b> to add · <b>Esc</b> to dismiss
-            </span>
-          )}
-        </div>
-        <button
-          type="button"
-          className="qa-add-btn"
-          onClick={() => void submit()}
-          disabled={!title.trim() || phase === 'saving'}
-        >
-          Add a Task
-        </button>
-      </div>
+          </>
+        ) : (
+          <div className="qa-tray">
+            {attachments.length === 0 && activeBgJobs.length === 0 ? (
+              <div className="qa-tray-empty">
+                Nothing in the tray yet. Drop files anywhere to attach them to your next task.
+              </div>
+            ) : (
+              <>
+                {attachments.length > 0 && (
+                  <div className="qa-attachments">
+                    {attachments.map((a) => (
+                      <div key={a.id} className="qa-att" title={a.file.name}>
+                        {a.previewUrl ? (
+                          <img className="qa-att-thumb" src={a.previewUrl} alt={a.file.name} />
+                        ) : (
+                          <div className="qa-att-thumb qa-att-file">📎</div>
+                        )}
+                        <span className="qa-att-name">{a.file.name}</span>
+                        <button
+                          type="button"
+                          className="qa-att-remove"
+                          onClick={() => removeAttachment(a.id)}
+                          title="Remove"
+                          aria-label={`Remove ${a.file.name}`}
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {activeBgJobs.length > 0 && (
+                  <div className="qa-bgjobs">
+                    {activeBgJobs.map((j) => (
+                      <div key={j.key} className="qa-bgjob">
+                        {j.active ? (
+                          <span className="qa-bg-note">
+                            Uploading {j.files.length} {j.files.length === 1 ? 'attachment' : 'attachments'} · “{j.taskTitle}”
+                          </span>
+                        ) : (
+                          <>
+                            <span className="qa-err">
+                              “{j.taskTitle}” — {j.files.length} {j.files.length === 1 ? 'file' : 'files'} failed to upload
+                            </span>
+                            <button type="button" className="qa-chip" onClick={() => retryBgJob(j.key)}>
+                              Retry
+                            </button>
+                            <button
+                              type="button"
+                              className="qa-att-remove"
+                              onClick={() => dismissBgJob(j.key)}
+                              title="Dismiss"
+                              aria-label="Dismiss failed uploads"
+                            >
+                              ×
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
