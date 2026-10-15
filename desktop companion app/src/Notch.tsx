@@ -123,7 +123,7 @@ export default function Notch() {
   // The visible card (pill when collapsed, panel when expanded). Only one is
   // mounted at a time; the entrance/exit animation plays on this element.
   const cardRef = useRef<HTMLElement | null>(null);
-  const ANIM_OUT_MS = 150;
+  const ANIM_OUT_MS = 300;
 
   /** Restart the drop-in animation on the current card (runs after React paints). */
   const playEnter = useCallback(() => {
@@ -353,6 +353,18 @@ export default function Notch() {
       void un.then((f) => f());
     };
   }, [win, dismiss]);
+
+  // Esc dismisses the notch whenever it's key (works regardless of focus).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        dismiss();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [dismiss]);
 
   // ── actions ─────────────────────────────────────────────────────────────────
   const switchMode = useCallback(
