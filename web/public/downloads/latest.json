@@ -1,10 +1,10 @@
 {
-  "version": "0.1.26",
-  "notes": "The quick-add and timer panels now slide down from the notch to appear and lift back up to hide.",
-  "pub_date": "2026-10-15T18:23:06Z",
+  "version": "0.1.27",
+  "notes": "Running task timers now show in the timer panel, the clock ticks every second, and the Timer view closes when your pointer leaves it.",
+  "pub_date": "2026-10-15T20:46:48Z",
   "platforms": {
     "darwin-aarch64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUQ003TTR4K1pKdzA1UEl3VEtNOVV0THhLY0Eyekp6b2p0ZkQ1MTZNeDBybU1JdnFMbmdYTWlmUUJnTkhyM2w3YnFDd3hJU0pGUVB1TThndk5pOEhGODJyUVZ2MVFnK3djPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkyMDg4NTQ0CWZpbGU6U3F1YWRIdWIgQ29tcGFuaW9uLmFwcC50YXIuZ3oKc1IycHUwMEY4QWRUU2FhaHBKdUc2YTZ1Z3h0V2prbDhqc3dISC9wTDBsY2g1T09Ka3FzaUZ2bENVOEhLVUlxYVlXMWhNb1JrK01TYVZZVXFiY040Q3c9PQo=",
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUQ003TTR4K1pKd3pQbGhKNzBNMVAwY0xCWTM3a2gxWVg0Z3NpUEtIeFQ5UWRwV01rRmZ2TW4ydmI0U1EvMVVGcEg3RDR0RjZ1UVdnVFkyOUhWMjV3TVNpbWozTmZKT2dnPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkyMDk3MTk0CWZpbGU6U3F1YWRIdWIgQ29tcGFuaW9uLmFwcC50YXIuZ3oKb2tpR3MvN2JkVDdwT25ac050TzZZRmROR1l4blZtSlQ4aW9nbWlTK2c5N3ZYK3h4Q0daNXZFYlo1OW5VOGRPTW9OS21qbFNxS1ZOSGs0RlU1dVlhQlE9PQo=",
       "url": "https://squadhub.in/downloads/SquadHub.app.tar.gz"
     }
   }

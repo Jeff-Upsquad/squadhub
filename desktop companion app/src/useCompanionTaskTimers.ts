@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { io, type Socket } from 'socket.io-client';
+import { getCurrentWindow } from '@tauri-apps/api/window';
 import type { CompanionTimerCommand, CompanionTimerReply, CompanionTimerSnapshot } from '@squadhub/shared';
 import { useAuthStore } from './stores/authStore';
 import { refreshTokens } from './services/auth';
@@ -32,7 +33,19 @@ export function useCompanionTaskTimers() {
         if (socketRef.current === socket) socket.connect();
       }
     });
-    return () => { socketRef.current = null; socket.disconnect(); };
+    // macOS can still suspend this webview while the notch is hidden, which
+    // lets the ping time out and leaves socket.io sleeping in its backoff.
+    // Reconnect the moment the panel is shown instead of waiting it out.
+    const wake = () => { if (!socket.connected) { socket.disconnect(); socket.connect(); } };
+    const win = getCurrentWindow();
+    const unlisten = [win.listen('notch:show', wake), win.listen('notch:expand', wake)];
+    document.addEventListener('visibilitychange', wake);
+    return () => {
+      socketRef.current = null;
+      document.removeEventListener('visibilitychange', wake);
+      unlisten.forEach(p => void p.then(f => f()));
+      socket.disconnect();
+    };
   }, [authenticated, userId]);
   const control = useCallback((action: CompanionTimerCommand['action'], taskId?: string) =>
     new Promise<void>((resolve, reject) => {
