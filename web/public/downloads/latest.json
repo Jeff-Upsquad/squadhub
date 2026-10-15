@@ -1,10 +1,10 @@
 {
-  "version": "0.1.21",
-  "notes": "New: a live work-timer in your menu bar and a notch panel. The menu bar shows your running Work / Break / No-work session; click it for the full timer \u2014 switch modes, stop, and see today's totals \u2014 with a heads-up at every 30-minute mark. Settings has a refreshed look too.",
-  "pub_date": "2026-10-15T00:31:58Z",
+  "version": "0.1.22",
+  "notes": "Quick Add gets a faster, three-column layout: title and description on the left, every task attribute at a glance in the middle, and a big Add button with focus / complete / start-timer toggles on the right. Attachments and uploads now live in their own Tray tab.",
+  "pub_date": "2026-10-15T14:17:23Z",
   "platforms": {
     "darwin-aarch64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUQ003TTR4K1pKdzBGZ29kOWJBc3hXbFRJbWlYUGJTSEIwaWNCNU5kbzJEUEVSZ01iQmk2VFFKMHZUT3lLY3dmdTRCeW1IRW9aWUJSakY3ZHYwOEpNOFBic0pKbzFIUmc4PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkyMDI0Mjg1CWZpbGU6U3F1YWRIdWIgQ29tcGFuaW9uLmFwcC50YXIuZ3oKSzRmeEJKU3NObWFMZkNydXRlY1pRcmRSY0Z0clN3ZzFFdnFKUHVaZ00vYWwzRGtIOEJCeXJHQXg0YmpLRndTWEV0eVd5bWFtK2N2bWovYTdqYVB2QXc9PQo=",
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUQ003TTR4K1pKdzVRbjc1NnhHVmVNV1RYMWFqam81QmhsQzZJRW05RmFyTHNUY21jWEcyb3VjTzhmNVNNeC9SekJjUUw2eXB5RmNscHYzbjJTc0l1Mk1Gem9EemowamdvPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkyMDczMzYxCWZpbGU6U3F1YWRIdWIgQ29tcGFuaW9uLmFwcC50YXIuZ3oKQmkrZWJDamJxQ042S2xzMUJ1enU2cXZ4cGxPcmw3eTZJMVRXaW9VUGhDVlg0WFdJQVhhdlB0cnprUXpYY2ZpVXpQWGhjWGNOYWhQSVhmcm9hSVQ2RHc9PQo=",
       "url": "https://squadhub.in/downloads/SquadHub.app.tar.gz"
     }
   }
