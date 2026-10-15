@@ -1,3 +1,5 @@
+export * from './taskTimerBridge';
+import type { CompanionTaskTimer, CompanionTimerSnapshot, CompanionTimerCommand, CompanionTimerReply } from './taskTimerBridge';
 import { CONTENT_ROLES } from './contentRoles';
 import type { SquadBotHomeApp } from '@squad-bots/core/types';
 // ============================================================
@@ -1928,6 +1930,9 @@ export interface HuddleJoinCredentials {
 
 // ---- Socket.io Events ----
 export interface ServerToClientEvents {
+  companion_timer_state: (snapshot: CompanionTimerSnapshot) => void;
+  companion_timer_command: (command: CompanionTimerCommand, reply: (result: CompanionTimerReply) => void) => void;
+
   new_message: (message: Message) => void;
   thread_reply: (message: Message) => void;
   message_updated: (message: Message) => void;
@@ -1969,6 +1974,11 @@ export interface ServerToClientEvents {
 }
 
 export interface ClientToServerEvents {
+  companion_timer_publish: (timers: CompanionTaskTimer[]) => void;
+  companion_timer_unpublish: () => void;
+  companion_timer_watch: () => void;
+  companion_timer_control: (command: CompanionTimerCommand, reply: (result: CompanionTimerReply) => void) => void;
+
   join_workspace: (workspace_id: string) => void;
   join_channel: (channel_id: string) => void;
   leave_channel: (channel_id: string) => void;

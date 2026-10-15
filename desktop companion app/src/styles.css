@@ -1,3 +1,19 @@
+@font-face {
+  font-family: 'Inter';
+  src: url('./assets/fonts/inter-latin-wght-normal.woff2') format('woff2');
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Plus Jakarta Sans';
+  src: url('./assets/fonts/plus-jakarta-sans-latin-wght-normal.woff2') format('woff2');
+  font-style: normal;
+  font-weight: 200 800;
+  font-display: swap;
+}
+
 * {
   margin: 0;
   padding: 0;
@@ -221,8 +237,22 @@ body {
    top and grows downward with its content (menus/description) into the
    transparent space below — so menus are never clipped by the window, without
    needing a runtime window resize (macOS won't resize this nspanel). */
-body.qa-window {
+body.qa-window,
+body.notch-window {
+  --bg-card: #0b0c0e;
+  --bg-input: #1b1e21;
+  --border: rgba(255, 255, 255, 0.08);
+  --text: #fff;
+  --text-muted: #b7bcc0;
+  font-family: 'Inter', system-ui, sans-serif;
+  letter-spacing: -0.012em;
   background: transparent;
+}
+
+.qa button,
+.qa input,
+.qa textarea {
+  font-family: inherit;
 }
 
 .qa-scroll {
@@ -230,20 +260,42 @@ body.qa-window {
   overflow-x: hidden;
   overflow-y: auto;
   background: transparent;
-  padding: 10px;
+  padding: 0 18px 48px;
 }
 
 .qa {
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding: 12px 14px 14px;
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: 16px;
-  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.5);
+  gap: 14px;
+  padding: 12px 20px 20px;
+  background: linear-gradient(#000 0%, #000 40%, #0b0c0e 100%);
+  border: none;
+  border-radius: 0 0 34px 34px;
+  box-shadow: 0 18px 42px rgba(0, 0, 0, 0.18), 0 3px 12px rgba(0, 0, 0, 0.08);
   transition: border-color 0.12s;
+}
+
+.qa::before,
+.qa::after,
+.notch-panel::before,
+.notch-panel::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  width: 18px;
+  height: 18px;
+  pointer-events: none;
+}
+.qa::before,
+.notch-panel::before {
+  left: -18px;
+  background: radial-gradient(circle at 0 100%, transparent 17.5px, #000 18px);
+}
+.qa::after,
+.notch-panel::after {
+  right: -18px;
+  background: radial-gradient(circle at 100% 100%, transparent 17.5px, #000 18px);
 }
 
 /* Quick-add: header (Add task / Tray tabs + hotkey keycaps + close) */
@@ -257,24 +309,22 @@ body.qa-window {
 .qa-tabs {
   display: inline-flex;
   align-items: center;
-  gap: 2px;
-  background: var(--bg-input);
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  padding: 2px;
+  gap: 6px;
 }
 
 .qa-tab {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: 8px;
+  height: 36px;
   background: transparent;
   border: none;
   color: var(--text-muted);
   border-radius: 999px;
-  padding: 4px 12px;
-  font-size: 12px;
-  font-weight: 600;
+  padding: 0 14px 0 11px;
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-size: 14px;
+  font-weight: 700;
   cursor: pointer;
   transition: background 0.12s, color 0.12s;
 }
@@ -284,9 +334,9 @@ body.qa-window {
 }
 
 .qa-tab.active {
-  background: var(--bg-card);
+  background: var(--bg-input);
   color: var(--text);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.1);
 }
 
 .qa-tab-plus {
@@ -338,9 +388,10 @@ body.qa-window {
 
 /* Quick-add: 3-column body */
 .qa-cols {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr) 128px;
   align-items: stretch;
-  gap: 12px;
+  gap: 40px;
 }
 
 .qa-col {
@@ -350,27 +401,39 @@ body.qa-window {
 }
 
 .qa-col-left {
-  flex: 1 1 0;
-  gap: 8px;
+  gap: 10px;
+  padding-left: 4px;
+}
+
+.qa-col-mid,
+.qa-col-right {
+  position: relative;
+}
+.qa-col-mid::before,
+.qa-col-right::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -21px;
+  width: 1px;
+  background: var(--border);
 }
 
 .qa-col-mid {
-  flex: 0 0 212px;
-  justify-content: flex-start;
+  justify-content: center;
 }
 
 .qa-col-right {
-  flex: 0 0 72px;
   align-items: center;
-  justify-content: flex-start;
-  gap: 12px;
-  padding-top: 2px;
+  justify-content: center;
+  gap: 10px;
 }
 
 .qa-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 6px;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 8px;
 }
 
 .qa-grid .qa-pill,
@@ -389,24 +452,25 @@ body.qa-window {
 
 /* Quick-add: right column — big circular Add + state toggles */
 .qa-add-circle {
-  width: 72px;
-  height: 72px;
+  width: 112px;
+  height: 112px;
   border-radius: 50%;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 1px;
-  background: var(--bg-input);
-  border: 1px solid var(--border);
-  color: var(--text);
+  gap: 6px;
+  background: #fff;
+  border: none;
+  color: #0a0a0a;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.45), 0 1px 2px rgba(0, 0, 0, 0.3);
   cursor: pointer;
   transition: background 0.12s, border-color 0.12s, transform 0.08s;
 }
 
 .qa-add-circle:hover:not(:disabled) {
-  border-color: var(--primary);
-  background: rgba(99, 102, 241, 0.14);
+  background: #eee;
+  transform: scale(1.03);
 }
 
 .qa-add-circle:active:not(:disabled) {
@@ -419,13 +483,13 @@ body.qa-window {
 }
 
 .qa-add-plus {
-  font-size: 26px;
+  font-size: 32px;
   font-weight: 300;
   line-height: 1;
 }
 
 .qa-add-text {
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 600;
 }
 
@@ -436,8 +500,8 @@ body.qa-window {
 }
 
 .qa-toggle {
-  width: 28px;
-  height: 28px;
+  width: 32px;
+  height: 32px;
   border-radius: 50%;
   display: grid;
   place-items: center;
@@ -506,8 +570,8 @@ body.qa-window {
 
 /* Quick-add: close button (top-right; Esc does the same) */
 .qa-close {
-  width: 22px;
-  height: 22px;
+  width: 36px;
+  height: 36px;
   flex-shrink: 0;
   display: grid;
   place-items: center;
@@ -562,8 +626,10 @@ body.qa-window {
   border: none;
   outline: none;
   color: var(--text);
-  font-size: 18px;
-  font-weight: 600;
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
   padding: 2px 0;
 }
 
@@ -710,9 +776,9 @@ body.qa-window {
 }
 
 .qa-chip.active {
-  background: rgba(99, 102, 241, 0.16);
-  border-color: var(--primary);
-  color: var(--text);
+  background: #fff;
+  border-color: transparent;
+  color: #0a0a0a;
 }
 
 .qa-chip-more {
@@ -728,10 +794,11 @@ body.qa-window {
   background: var(--bg-input);
   border: 1px solid var(--border);
   color: var(--text);
-  border-radius: 8px;
-  padding: 4px 9px;
-  font-size: 12px;
-  font-weight: 500;
+  height: 40px;
+  border-radius: 999px;
+  padding: 0 14px;
+  font-size: 13px;
+  font-weight: 600;
   cursor: pointer;
   transition: border-color 0.12s, color 0.12s;
 }
@@ -1019,7 +1086,7 @@ body.qa-window {
   gap: 12px;
   margin-top: 2px;
   padding-top: 8px;
-  border-top: 1px solid var(--border);
+  border-top: none;
 }
 
 .qa-footer .qa-hint {
@@ -1145,13 +1212,12 @@ body.qa-window {
 
 /* Quick-add: redesign — section labels + Where row */
 .qa-sec-label {
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  font-size: 11.5px;
+  font-weight: 600;
+  margin-top: auto;
+  letter-spacing: normal;
   color: var(--text-muted);
   padding-left: 2px;
-  margin-top: 2px;
 }
 
 .qa-where {
@@ -1630,16 +1696,17 @@ body.notch-window {
 
 /* Expanded panel */
 .notch-panel {
-  width: calc(100% - 16px);
-  background: #0d0e12;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-top: none;
-  border-radius: 0 0 18px 18px;
-  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.55);
-  padding: 14px 18px 16px;
+  position: relative;
+  width: min(860px, calc(100% - 36px));
+  min-height: 264px;
+  background: linear-gradient(#000 0%, #000 40%, #0b0c0e 100%);
+  border-radius: 0 0 34px 34px;
+  box-shadow: 0 18px 42px rgba(0, 0, 0, 0.18), 0 3px 12px rgba(0, 0, 0, 0.08);
+  padding: 12px 20px 20px;
   color: var(--text);
 }
 .notch-head {
+  height: 36px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1653,31 +1720,36 @@ body.notch-window {
 .notch-tab {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 6px 12px;
+  gap: 8px;
+  height: 36px;
+  padding: 0 14px 0 12px;
   border: none;
-  border-radius: 8px;
+  border-radius: 999px;
   background: transparent;
   color: var(--text-muted);
-  font-size: 13px;
-  font-weight: 600;
-  font-family: inherit;
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
   cursor: pointer;
 }
 .notch-tab:hover {
   color: var(--text);
 }
 .notch-tab.active {
-  background: rgba(255, 255, 255, 0.08);
+  background: #1b1e21;
   color: var(--text);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.1);
 }
 .notch-tab-ico {
   font-size: 13px;
   opacity: 0.9;
 }
 .notch-collapse {
-  width: 28px;
-  height: 28px;
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
   border: none;
   border-radius: 8px;
   background: transparent;
@@ -1693,44 +1765,61 @@ body.notch-window {
 /* Timer tab — three columns */
 .notch-timer {
   display: grid;
-  grid-template-columns: 1.1fr 1.2fr 0.9fr;
-  gap: 22px;
+  grid-template-columns: minmax(0, 1.15fr) 1px minmax(0, 1fr) 1px 150px;
+  gap: 20px;
+  min-height: 182px;
 }
 .notch-col {
   min-width: 0;
 }
+.notch-divider {
+  background: rgba(255, 255, 255, 0.08);
+}
+.notch-col-mode {
+  padding-left: 4px;
+}
 .notch-col-label {
-  font-size: 11px;
+  font-size: 11.5px;
   font-weight: 600;
-  letter-spacing: 0.4px;
-  text-transform: uppercase;
-  color: var(--text-muted);
+  color: rgba(255, 255, 255, 0.52);
   margin-bottom: 10px;
 }
 
 .notch-seg {
-  display: inline-flex;
-  padding: 3px;
-  background: rgba(255, 255, 255, 0.06);
-  border-radius: 10px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px;
+  padding: 4px;
+  background: #1b1e21;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.07);
+  border-radius: 999px;
   margin-bottom: 14px;
 }
 .notch-seg-btn {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 6px 12px;
+  gap: 7px;
+  justify-content: center;
+  height: 34px;
+  padding: 0 8px;
+  white-space: nowrap;
   border: none;
-  border-radius: 8px;
+  border-radius: 999px;
   background: transparent;
   color: var(--text-muted);
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 600;
   font-family: inherit;
   cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease;
 }
+/* The selected mode uses the design's white pill. */
 .notch-seg-btn.active {
-  background: rgba(255, 255, 255, 0.12);
+  background: #fff;
+  color: #0a0a0a;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.45), 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+.notch-seg-btn:not(.active):hover {
   color: var(--text);
 }
 .notch-seg-btn:disabled {
@@ -1738,48 +1827,60 @@ body.notch-window {
   cursor: default;
 }
 .notch-seg-dot {
-  width: 7px;
-  height: 7px;
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
+  flex: none;
 }
 
 .notch-state-line {
   display: flex;
   align-items: center;
-  gap: 7px;
-  font-size: 13px;
+  gap: 8px;
+  font-size: 12.5px;
   font-weight: 600;
-  margin-bottom: 4px;
+  margin-bottom: 6px;
+}
+.notch-state-line .notch-dot {
+  box-shadow: 0 0 0 4px color-mix(in srgb, currentColor 18%, transparent);
 }
 .notch-bigclock {
-  font-size: 40px;
+  font-size: 52px;
   font-weight: 700;
-  line-height: 1.05;
+  line-height: 1;
   font-variant-numeric: tabular-nums;
-  letter-spacing: -0.5px;
+  letter-spacing: -0.05em;
 }
 .notch-sub {
-  font-size: 11.5px;
-  color: var(--text-muted);
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.45);
   margin-top: 6px;
   line-height: 1.4;
 }
 
 .notch-col-task {
-  border-left: 1px solid rgba(255, 255, 255, 0.07);
-  padding-left: 22px;
+  display: flex;
+  flex-direction: column;
 }
 .notch-task-empty-title {
-  font-size: 14px;
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-size: 17px;
   font-weight: 600;
   color: var(--text);
 }
+.notch-task-empty {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: flex-start;
+}
 .notch-ghost-btn {
-  margin-top: 10px;
-  padding: 6px 12px;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  border-radius: 8px;
-  background: transparent;
+  margin-top: auto;
+  height: 40px;
+  padding: 0 16px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg-input);
   color: var(--text);
   font-size: 12px;
   font-weight: 600;
@@ -1791,17 +1892,18 @@ body.notch-window {
 }
 
 .notch-col-today {
-  border-left: 1px solid rgba(255, 255, 255, 0.07);
-  padding-left: 22px;
+  display: flex;
+  flex-direction: column;
 }
 .notch-bar {
   display: flex;
+  gap: 2px;
   width: 100%;
   height: 6px;
   border-radius: 999px;
   overflow: hidden;
   background: rgba(255, 255, 255, 0.08);
-  margin-bottom: 12px;
+  margin-bottom: 10px;
 }
 .notch-bar-seg {
   height: 100%;
@@ -1826,13 +1928,16 @@ body.notch-window {
 }
 .notch-foot {
   display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-top: 14px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: auto;
+  padding-top: 10px;
 }
 .notch-sync {
-  font-size: 10.5px;
-  color: var(--text-muted);
+  font-size: 11.5px;
+  white-space: nowrap;
+  color: rgba(255, 255, 255, 0.4);
 }
 .notch-stop-btn {
   display: inline-flex;
@@ -2137,3 +2242,66 @@ body.notch-window {
 .cmp-footer-signout:hover {
   background: rgba(239, 68, 68, 0.12);
 }
+
+/* Keep all controls reachable on displays narrower than the design canvas. */
+@media (max-width: 760px) {
+  .qa-cols { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 112px; gap: 24px; }
+  .qa-col-mid::before, .qa-col-right::before { left: -13px; }
+  .qa-grid .qa-pill { padding: 0 8px; font-size: 12px; }
+  .notch-timer { grid-template-columns: minmax(0, 1fr) 1px minmax(0, 1fr) 1px 140px; gap: 12px; }
+  .notch-seg-btn { padding: 0 4px; gap: 4px; font-size: 12px; }
+  .notch-bigclock { font-size: 46px; }
+}
+
+.notch-col-task { position: relative; gap: 10px; }
+.notch-col-task .notch-col-label { margin-bottom: 0; }
+.notch-task-title {
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-size: 17px;
+  font-weight: 600;
+  line-height: 1.3;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.notch-task-meta { font-size: 12px; color: rgba(255, 255, 255, 0.45); margin-top: 2px; }
+.notch-task-time { display: flex; align-items: baseline; gap: 8px; }
+.notch-task-time > span { font-size: 28px; font-weight: 700; line-height: 1; letter-spacing: -0.05em; font-variant-numeric: tabular-nums; }
+.notch-task-time small { font-size: 11.5px; font-weight: 600; }
+.notch-task-time .running { color: #39c66b; }
+.notch-task-time .paused { color: #ffb340; }
+.notch-task-progress { height: 4px; border-radius: 999px; background: #1b1e21; overflow: hidden; }
+.notch-task-progress span { display: block; height: 100%; border-radius: inherit; background: #39c66b; }
+.notch-task-actions { display: flex; align-items: center; gap: 8px; margin-top: auto; }
+.notch-task-actions button { height: 40px; border: none; border-radius: 999px; cursor: pointer; flex-shrink: 0; }
+.notch-task-actions button:disabled { opacity: 0.5; cursor: default; }
+.notch-task-play, .notch-task-stop { width: 40px; display: grid; place-items: center; }
+.notch-task-play { background: #fff; color: #0a0a0a; box-shadow: 0 6px 16px rgba(0, 0, 0, 0.45); }
+.notch-task-stop { background: #1b1e21; color: #ff453a; box-shadow: inset 0 0 0 1px var(--border); }
+.notch-task-switch { padding: 0 16px; background: #1b1e21; color: #b7bcc0; font-family: inherit; font-size: 13px; font-weight: 600; box-shadow: inset 0 0 0 1px var(--border); }
+.notch-task-picker { position: absolute; z-index: 2; top: 0; left: 0; right: 0; max-height: 230px; overflow-y: auto; padding: 6px; border: 1px solid var(--border); border-radius: 16px; background: #1b1e21; box-shadow: 0 8px 24px #0008; }
+.notch-task-picker button { width: 100%; text-align: left; padding: 10px; background: transparent; border: none; border-radius: 10px; color: #fff; font: inherit; font-size: 12px; cursor: pointer; }
+.notch-task-picker button:hover { background: #ffffff12; }
+.notch-task-picker small { display: block; color: var(--text-muted); }
+.notch-pill-task { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 150px; font-size: 12px; }
+.notch-action-error { font-size: 12px; color: #fca5a5; padding: 0 4px 10px; }
+.qa .qa-grid .qa-assign-wrap { position: relative; gap: 0; }
+.qa .qa-grid .qa-assign-wrap .qa-pill { padding-left: 42px; }
+.qa .qa-grid .qa-mecircle { position: absolute; z-index: 1; left: 6px; width: 28px; height: 28px; }
+.qa .qa-textarea { font-size: 13.5px; line-height: 1.45; color: rgba(255, 255, 255, 0.62); }
+.qa .qa-chip { height: 30px; font-weight: 600; }
+.qa .qa-locsearch { width: 30px; }
+.qa .qa-hint { font-size: 11.5px; color: rgba(255, 255, 255, 0.45); }
+.qa .qa-input { font-family: 'Plus Jakarta Sans', sans-serif; }
+.qa .qa-tab { font-family: 'Plus Jakarta Sans', sans-serif; }
+.qa .qa-textarea { background: transparent; border: none; border-radius: 0; padding: 0; }
+.qa-status-scroll > div { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; padding: 0 10px 8px; }
+.qa-status-scroll .qa-status-group, .qa-status-scroll .qa-empty-title, .qa-status-scroll .qa-empty-sub { grid-column: 1 / -1; }
+.qa-status-scroll .qa-status-desc { display: none; }
+.qa-status-scroll .qa-status-row { border-radius: 9px; align-items: center; min-width: 0; }
+.qa-status-scroll .qa-status-name { font-size: 12px; }
+.qa-status-scroll .qa-status-badge { background: transparent !important; width: 14px; height: 14px; margin: 0; }
+.notch-clock { flex-shrink: 0; }
+.qa-logged-link { margin-left: auto; display: inline-flex; align-items: center; gap: 5px; padding: 0; background: transparent; border: none; color: var(--text-muted); font-size: 11.5px; cursor: pointer; white-space: nowrap; }
+.qa-logged-link.active { color: #fff; }
+.qa .qa-pill.active { border-color: var(--border); }

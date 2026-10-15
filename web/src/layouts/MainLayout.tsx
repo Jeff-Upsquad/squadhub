@@ -8,6 +8,7 @@ import { useAuthStore } from '../stores/authStore';
 import { useWorkUnlockWatch } from '../hooks/useWorkUnlockWatch';
 import { usePMStore } from '../stores/pmStore';
 import { useCompanionTimerSync } from '../hooks/useCompanionTimerSync';
+import { useCompanionTaskTimers } from '../hooks/useCompanionTaskTimers';
 import { useTimerAutoSave } from '../hooks/useTimerAutoSave';
 import { loadViewPreferences } from '../stores/viewPreferencesSync';
 import { isWorkLocked } from '@squadhub/shared';
@@ -296,6 +297,7 @@ export default function MainLayout() {
   const { currentWorkspace, activeChannelId, activeChannelKind, dmConversations, setWorkspace, setChannels, setActiveChannel, setDmConversations } = useWorkspaceStore();
   const user = useAuthStore((s) => s.user);
   useCompanionTimerSync(user?.id);
+  useCompanionTaskTimers(user?.id, currentWorkspace?.id);
   useTimerAutoSave(user?.id);
   const logout = useAuthStore((s) => s.logout);
   const pmReset = usePMStore((s) => s.reset);
@@ -896,7 +898,7 @@ export default function MainLayout() {
       socket.emit('join_workspace', currentWorkspace.id);
       return () => { disconnectSocket(); };
     }
-  }, [currentWorkspace]);
+  }, [currentWorkspace?.id]);
 
   // ---- Feature Tips (admin-triggered coachmarks / announcements) ----
   const queryClient = useQueryClient();

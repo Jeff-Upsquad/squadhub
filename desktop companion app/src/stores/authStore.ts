@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { emit } from '@tauri-apps/api/event';
 import { load, type Store } from '@tauri-apps/plugin-store';
 
 interface AuthState {
@@ -66,7 +67,8 @@ export const useAuthStore = create<AuthState>((set) => ({
           hydrated: true,
         });
       } else {
-        set({ hydrated: true });
+        set({ accessToken: null, refreshToken: null, userEmail: null, displayName: null,
+          userId: null, userType: null, isAuthenticated: false, hydrated: true });
       }
     } catch {
       set({ hydrated: true });
@@ -91,6 +93,7 @@ export const useAuthStore = create<AuthState>((set) => ({
       userType: data.userType ?? null,
       isAuthenticated: true,
     });
+    await emit('companion:auth-changed').catch(() => {});
   },
 
   updateTokens: async (accessToken, refreshToken) => {
@@ -98,6 +101,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     await s.set('accessToken', accessToken);
     await s.set('refreshToken', refreshToken);
     set({ accessToken, refreshToken });
+    await emit('companion:auth-changed').catch(() => {});
   },
 
   logout: async () => {
@@ -112,5 +116,6 @@ export const useAuthStore = create<AuthState>((set) => ({
       userType: null,
       isAuthenticated: false,
     });
+    await emit('companion:auth-changed').catch(() => {});
   },
 }));

@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { usePMStore } from '../stores/pmStore';
+import { usePMStore, type TimerState } from '../stores/pmStore';
 import { flushPendingTimeSync } from './useParallelTimers';
 
 /**
@@ -41,20 +41,20 @@ export function useTimerAutoSave(userId?: string) {
     document.addEventListener('visibilitychange', onSyncTrigger);
 
     // 4. Cross-tab timer state synchronization (BroadcastChannel + localStorage storage event)
-    const applyRemoteTimers = (remoteTimers: any[], remoteSegmentStart: number | null) => {
+    const applyRemoteTimers = (remoteTimers: any[], remoteSegmentStart: number | null, pausedTimers: TimerState[] = []) => {
       if (!Array.isArray(remoteTimers)) return;
       const currentTimers = usePMStore.getState().timers;
       const currentSegment = usePMStore.getState().timerSegmentStart;
       const changed =
+        JSON.stringify(usePMStore.getState().pausedTimers) !== JSON.stringify(pausedTimers) ||
         currentTimers.length !== remoteTimers.length ||
         currentSegment !== remoteSegmentStart ||
-        currentTimers.some(
-          (t, i) => t.taskId !== remoteTimers[i]?.taskId || t.startedAt !== remoteTimers[i]?.startedAt,
-        );
+        JSON.stringify(currentTimers) !== JSON.stringify(remoteTimers);
 
       if (changed) {
         usePMStore.setState({
           timers: remoteTimers,
+          pausedTimers,
           timerSegmentStart: remoteSegmentStart,
         });
         qc.invalidateQueries({ queryKey: ['task-time-entries'] });
@@ -69,7 +69,7 @@ export function useTimerAutoSave(userId?: string) {
         channel = new BroadcastChannel('squadhub_timer_sync');
         channel.onmessage = (event) => {
           if (event.data?.type === 'SYNC_TIMERS') {
-            applyRemoteTimers(event.data.timers, event.data.timerSegmentStart ?? null);
+            applyRemoteTimers(event.data.timers, event.data.timerSegmentStart ?? null, event.data.pausedTimers || []);
           }
         };
       } catch {}
@@ -80,7 +80,7 @@ export function useTimerAutoSave(userId?: string) {
       try {
         const parsed = JSON.parse(event.newValue);
         if (parsed?.state && Array.isArray(parsed.state.timers)) {
-          applyRemoteTimers(parsed.state.timers, parsed.state.timerSegmentStart ?? null);
+          applyRemoteTimers(parsed.state.timers, parsed.state.timerSegmentStart ?? null, parsed.state.pausedTimers || []);
         }
       } catch {}
     };
