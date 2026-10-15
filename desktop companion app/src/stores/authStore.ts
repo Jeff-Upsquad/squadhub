@@ -7,6 +7,8 @@ interface AuthState {
   userEmail: string | null;
   displayName: string | null;
   userId: string | null;
+  /** 'internal' | 'client' | 'client_staff' | 'partner' | 'partner_employee' — picks the timer context. */
+  userType: string | null;
   isAuthenticated: boolean;
   hydrated: boolean;
 
@@ -17,6 +19,7 @@ interface AuthState {
     userEmail: string;
     displayName: string;
     userId: string;
+    userType?: string | null;
   }) => Promise<void>;
   updateTokens: (accessToken: string, refreshToken: string) => Promise<void>;
   logout: () => Promise<void>;
@@ -37,6 +40,7 @@ export const useAuthStore = create<AuthState>((set) => ({
   userEmail: null,
   displayName: null,
   userId: null,
+  userType: null,
   isAuthenticated: false,
   hydrated: false,
 
@@ -48,6 +52,7 @@ export const useAuthStore = create<AuthState>((set) => ({
       const userEmail = await s.get<string>('userEmail');
       const displayName = await s.get<string>('displayName');
       const userId = await s.get<string>('userId');
+      const userType = await s.get<string>('userType');
 
       if (accessToken && refreshToken) {
         set({
@@ -56,6 +61,7 @@ export const useAuthStore = create<AuthState>((set) => ({
           userEmail: userEmail ?? null,
           displayName: displayName ?? null,
           userId: userId ?? null,
+          userType: userType ?? null,
           isAuthenticated: true,
           hydrated: true,
         });
@@ -74,9 +80,15 @@ export const useAuthStore = create<AuthState>((set) => ({
     await s.set('userEmail', data.userEmail);
     await s.set('displayName', data.displayName);
     await s.set('userId', data.userId);
+    await s.set('userType', data.userType ?? null);
 
     set({
-      ...data,
+      accessToken: data.accessToken,
+      refreshToken: data.refreshToken,
+      userEmail: data.userEmail,
+      displayName: data.displayName,
+      userId: data.userId,
+      userType: data.userType ?? null,
       isAuthenticated: true,
     });
   },
@@ -97,6 +109,7 @@ export const useAuthStore = create<AuthState>((set) => ({
       userEmail: null,
       displayName: null,
       userId: null,
+      userType: null,
       isAuthenticated: false,
     });
   },

@@ -114,6 +114,78 @@ fn qa_log(msg: &str) {
     }
 }
 
+/// Show the notch timer panel at the top-center of the screen. Like the quick-add
+/// panel it's a non-activating NSPanel floating over the active Space (even another
+/// app's full-screen Space), so the running timer can surface — on tray click or at
+/// a 30-minute mark — without switching Spaces or activating our Accessory app.
+/// Positioning + sizing (collapsed pill vs expanded panel) is done JS-side; this
+/// just orders it front over whatever's on screen. Hiding is done JS-side with
+/// `getCurrentWindow().hide()` (mirrors the quick-add panel).
+fn show_notch(app: &tauri::AppHandle) {
+    #[cfg(target_os = "macos")]
+    {
+        use cocoa::appkit::NSWindowCollectionBehavior;
+        use tauri_nspanel::ManagerExt;
+        if let Ok(panel) = app.get_webview_panel("notch") {
+            // Re-assert over-full-screen behaviour on every show — macOS can drop a
+            // non-activating panel back to the home Space after Space transitions.
+            panel.set_collection_behaviour(
+                NSWindowCollectionBehavior::NSWindowCollectionBehaviorCanJoinAllSpaces
+                    | NSWindowCollectionBehavior::NSWindowCollectionBehaviorFullScreenAuxiliary,
+            );
+            panel.set_level(25);
+            panel.show();
+            if let Some(window) = app.get_webview_window("notch") {
+                let _ = window.emit("notch:show", ());
+            }
+            return;
+        }
+    }
+    if let Some(window) = app.get_webview_window("notch") {
+        let _ = window.show();
+        let _ = window.emit("notch:show", ());
+    }
+}
+
+/// Toggle the notch panel from the menu-bar tray. When hidden it opens expanded
+/// (the full "Timer" design the user clicked to see); when already visible it hides.
+fn toggle_notch(app: &tauri::AppHandle) {
+    if let Some(window) = app.get_webview_window("notch") {
+        let visible = window.is_visible().unwrap_or(false);
+        if visible {
+            let _ = window.hide();
+        } else {
+            // Tell the webview to render the expanded panel before it surfaces.
+            let _ = window.emit("notch:expand", ());
+            show_notch(app);
+        }
+    }
+}
+
+/// JS-invokable: surface the notch panel (collapsed pill on timer start, or the
+/// expanded panel at a 30-minute mark). The webview chooses the view via its own
+/// state before calling this.
+#[tauri::command]
+fn notch_show(app: tauri::AppHandle) {
+    show_notch(&app);
+}
+
+/// JS-invokable: open the quick-add spotlight (used by the notch "Add task" tab).
+#[tauri::command]
+fn quick_add_show(app: tauri::AppHandle) {
+    show_quick_add(&app);
+}
+
+/// JS-invokable: set the menu-bar tray title to the live timer clock (e.g.
+/// "● 1:23:45"), or clear it (None) when no timer is running — the icon stays.
+#[tauri::command]
+fn set_timer_title(app: tauri::AppHandle, title: Option<String>) {
+    #[cfg(desktop)]
+    if let Some(tray) = app.tray_by_id("sh-tray") {
+        let _ = tray.set_title(title.as_deref());
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -127,7 +199,13 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_http::init())
-        .invoke_handler(tauri::generate_handler![notif::send_notification, set_quick_add_shortcut])
+        .invoke_handler(tauri::generate_handler![
+            notif::send_notification,
+            set_quick_add_shortcut,
+            notch_show,
+            quick_add_show,
+            set_timer_title
+        ])
         .setup(|app| {
             // Run as a menu-bar/tray companion (no Dock icon, no app-switcher
             // entry). REQUIRED for the quick-add panel to float over another
@@ -141,20 +219,43 @@ pub fn run() {
             // Set up UNUserNotificationCenter delegate for click handling
             notif::setup();
 
+            let open_timer_i = MenuItem::with_id(app, "open_timer", "Open timer", true, None::<&str>)?;
             let quick_add_i = MenuItem::with_id(app, "quick_add", "Quick add task", true, None::<&str>)?;
             let settings_i = MenuItem::with_id(app, "settings", "Settings", true, None::<&str>)?;
             let quit_i = MenuItem::with_id(app, "quit", "Quit SquadHub", true, None::<&str>)?;
-            let menu = Menu::with_items(app, &[&quick_add_i, &settings_i, &quit_i])?;
+            let menu = Menu::with_items(app, &[&open_timer_i, &quick_add_i, &settings_i, &quit_i])?;
 
-            let _tray = TrayIconBuilder::new()
+            let _tray = TrayIconBuilder::with_id("sh-tray")
                 // Menu-bar glyph: a monochrome template image so macOS tints it
                 // automatically for light/dark menu bars. Without an explicit icon
-                // the tray falls back to the app icon (a solid square).
+                // the tray falls back to the app icon (a solid square). The live
+                // timer clock is set as the tray TITLE (text beside this icon) from
+                // JS via `set_timer_title`.
                 .icon(tauri::include_image!("icons/icon.png"))
                 .icon_as_template(true)
                 .menu(&menu)
-                .show_menu_on_left_click(true)
+                // Left-click opens the notch timer; right-click (or control-click)
+                // still shows the menu. A left click with a timer running is the
+                // user's "click the menu-bar timer to see the full design" gesture.
+                .show_menu_on_left_click(false)
+                .on_tray_icon_event(|tray, event| {
+                    use tauri::tray::{MouseButton, MouseButtonState, TrayIconEvent};
+                    if let TrayIconEvent::Click {
+                        button: MouseButton::Left,
+                        button_state: MouseButtonState::Up,
+                        ..
+                    } = event
+                    {
+                        toggle_notch(tray.app_handle());
+                    }
+                })
                 .on_menu_event(|app, event| match event.id.as_ref() {
+                    "open_timer" => {
+                        let _ = app
+                            .get_webview_window("notch")
+                            .map(|w| w.emit("notch:expand", ()));
+                        show_notch(app);
+                    }
                     "quick_add" => {
                         show_quick_add(app);
                     }
@@ -243,6 +344,27 @@ pub fn run() {
                             qa_log("converted quick-add window to NSPanel");
                         }
                         Err(e) => qa_log(&format!("to_panel() failed: {e:?}")),
+                    }
+                }
+
+                // Convert the notch timer window into a non-activating NSPanel too,
+                // so the running-timer pill / expanded panel can float over the
+                // active Space (including another app's full-screen Space) without
+                // activating our Accessory app. Same mask/behaviour/level as the
+                // quick-add panel; sizing + top-center positioning is done JS-side.
+                if let Some(window) = app.get_webview_window("notch") {
+                    match window.to_panel() {
+                        Ok(panel) => {
+                            panel.set_style_mask(1 << 7); // NonActivatingPanel
+                            panel.set_collection_behaviour(
+                                NSWindowCollectionBehavior::NSWindowCollectionBehaviorCanJoinAllSpaces
+                                    | NSWindowCollectionBehavior::NSWindowCollectionBehaviorFullScreenAuxiliary,
+                            );
+                            panel.set_level(25);
+                            panel.set_hides_on_deactivate(false);
+                            qa_log("converted notch window to NSPanel");
+                        }
+                        Err(e) => qa_log(&format!("notch to_panel() failed: {e:?}")),
                     }
                 }
             }

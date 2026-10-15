@@ -1,6 +1,6 @@
 [package]
 name = "squadhub-desktop"
-version = "0.1.17"
+version = "0.1.21"
 description = "SquadHub desktop companion — native notifications relay"
 authors = ["SquadHub"]
 edition = "2021"

@@ -1,10 +1,10 @@
 {
-  "version": "0.1.20",
-  "notes": "Quick add no longer remembers your last task type — the Type field now starts empty every time you open it.",
-  "pub_date": "2026-10-08T11:38:30Z",
+  "version": "0.1.21",
+  "notes": "New: a live work-timer in your menu bar and a notch panel. The menu bar shows your running Work / Break / No-work session; click it for the full timer \u2014 switch modes, stop, and see today's totals \u2014 with a heads-up at every 30-minute mark. Settings has a refreshed look too.",
+  "pub_date": "2026-10-15T00:31:58Z",
   "platforms": {
     "darwin-aarch64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUQ003TTR4K1pKdzlxZFFXcG96NUlSRFZTNk9Ud1VUSnF1T0RBczdCdDVKTjE0YVpka0tuMFFacTc4U3lNeUEvNWl1MGQyOTJuVDRydXNNNnZsdGx1eTVMZ2JjQzQ2Snd3PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkxNDU5NTExCWZpbGU6U3F1YWRIdWIgQ29tcGFuaW9uLmFwcC50YXIuZ3oKd3JzNmZ1R2NFKzUwNnA3VUgvNzhkdTJGbEJ4RHFGMkJRZVZTR2NuUFA2Kzg4R3BPd2l6K0hod1pOaHQ4VFliT1FnSWpDWGI5WFdQZzU4UERrRXQ2REE9PQo=",
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUQ003TTR4K1pKdzBGZ29kOWJBc3hXbFRJbWlYUGJTSEIwaWNCNU5kbzJEUEVSZ01iQmk2VFFKMHZUT3lLY3dmdTRCeW1IRW9aWUJSakY3ZHYwOEpNOFBic0pKbzFIUmc4PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkyMDI0Mjg1CWZpbGU6U3F1YWRIdWIgQ29tcGFuaW9uLmFwcC50YXIuZ3oKSzRmeEJKU3NObWFMZkNydXRlY1pRcmRSY0Z0clN3ZzFFdnFKUHVaZ00vYWwzRGtIOEJCeXJHQXg0YmpLRndTWEV0eVd5bWFtK2N2bWovYTdqYVB2QXc9PQo=",
       "url": "https://squadhub.in/downloads/SquadHub.app.tar.gz"
     }
   }

@@ -9,6 +9,7 @@ interface LoginResponse {
       id: string;
       email: string;
       display_name: string;
+      user_type?: string;
     };
   };
   error?: string;

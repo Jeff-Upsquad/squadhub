@@ -708,6 +708,7 @@ export default function QuickAdd() {
           userEmail: res.data.user.email,
           displayName: res.data.user.display_name,
           userId: res.data.user.id,
+          userType: res.data.user.user_type ?? null,
         });
         setLoginPassword('');
         void resolvePersonal();
