@@ -1,10 +1,10 @@
 {
-  "version": "0.1.23",
-  "notes": "Refined Quick Add and Timer panels to match the design, with live task clocks, pause/resume/stop, task switching, and 30-minute reminders. Keep a signed-in SquadHub browser tab open for task timer controls.",
-  "pub_date": "2026-10-15T15:31:51Z",
+  "version": "0.1.24",
+  "notes": "Cleaner panels: removed the faint outer frame behind the quick-add panel, and the quick-add + timer panels now slide in and out smoothly.",
+  "pub_date": "2026-10-15T17:43:22Z",
   "platforms": {
     "darwin-aarch64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUQ003TTR4K1pKdzdBWEh2T3lnL0N0ajlTb2tJVVpGRkpLWUZ3eU9Ga0VZMlFKZzNqcHZ1RUNoNHNmc29yNVl5UE1FVG9KR05tMGhrT1NaaFBpYWlZOE1XWnlyeWlhbVF3PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkyMDc4MzExCWZpbGU6U3F1YWRIdWIgQ29tcGFuaW9uLmFwcC50YXIuZ3oKYWt0RjdTS3M4SnZnOGdzSTk0QWhKQnI1NDNoZm5XeXdadDZVL3NIaFU3SG13cDIwcE5uenRYNm5EUDZSQkdyQjN3TTh4QXNtc1BIS01PODNETVZ5QlE9PQo=",
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUQ003TTR4K1pKd3lIcCtNYlFLcjBtU090MW1zT1pjM1NGekY2WEVKTmo5MTJ6a0ppYmJzSGdaNzJMZ21WNFk3QzFVdHJEZ2I4bTduM0FQNnJ5eTRKTHB2ZFlBWER1K0EwPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkyMDg2MTM0CWZpbGU6U3F1YWRIdWIgQ29tcGFuaW9uLmFwcC50YXIuZ3oKM3BBRXJHK1VaVTBSV0JiZkVPNFg5K1VPR2t3NjVpeGRrTnFyaW1ERmwvVlhTWUpCNUVxVHhBRTFTVXltb0Y1WktjV2VFWU1rWjJOcVh3VnlNekd2QUE9PQo=",
       "url": "https://squadhub.in/downloads/SquadHub.app.tar.gz"
     }
   }
