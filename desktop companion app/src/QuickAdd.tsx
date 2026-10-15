@@ -493,7 +493,7 @@ export default function QuickAdd() {
 
   // The quick-add card — the entrance/exit animation plays on this element.
   const cardRef = useRef<HTMLDivElement | null>(null);
-  const QA_ANIM_OUT_MS = 150;
+  const QA_ANIM_OUT_MS = 300;
   /** Restart the drop-in animation (runs after React paints the current card). */
   const playEnter = () => {
     requestAnimationFrame(() => {
@@ -883,15 +883,30 @@ export default function QuickAdd() {
   };
 
   const onContainerKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Escape') {
-      e.preventDefault();
-      if (openMenu) setOpenMenu(null);
-      else hideAnimated();
-    } else if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+    // Esc is handled by a window-level listener (see below) so it works even
+    // when focus isn't inside a field; here we only handle ⌘/Ctrl+Enter submit.
+    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
       e.preventDefault();
       void submit();
     }
   };
+
+  // Window-level Esc: close the open picker, else dismiss the panel. Bound to
+  // the window (not the card div) so it fires whenever the panel is key, even
+  // when the keyboard focus isn't in the title/description field.
+  const openMenuRef = useRef(openMenu);
+  openMenuRef.current = openMenu;
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      e.preventDefault();
+      if (openMenuRef.current) setOpenMenu(null);
+      else hideAnimated();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const onTitleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.metaKey && !e.ctrlKey) {
