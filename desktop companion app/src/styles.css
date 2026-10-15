@@ -253,25 +253,26 @@ body.notch-window {
    Both panels drop in from the top (they hang from the notch), so they scale
    up + fade from just above their resting place, and reverse on dismiss. The
    JS restarts `.sh-in` on every show and plays `.sh-out` before hiding. */
+/* The panel extrudes DOWN from the notch/top edge on show, and retracts back
+   UP into it on hide — a pure top-anchored vertical slide (it starts fully
+   above its own top edge, so it's clipped off-screen until it drops in). */
 @keyframes sh-panel-in {
-  from { opacity: 0; transform: translateY(-22px) scale(0.955); }
-  60%  { opacity: 1; }
-  to   { opacity: 1; transform: translateY(0) scale(1); }
+  from { transform: translateY(-100%); }
+  to   { transform: translateY(0); }
 }
 @keyframes sh-panel-out {
-  from { opacity: 1; transform: translateY(0) scale(1); }
-  to   { opacity: 0; transform: translateY(-18px) scale(0.955); }
+  from { transform: translateY(0); }
+  to   { transform: translateY(-100%); }
 }
-/* Slower, eased motion so the drop-in and ease-out are actually felt. */
 .qa.sh-in,
 .notch-panel.sh-in,
 .notch-pill.sh-in {
-  animation: sh-panel-in 380ms cubic-bezier(0.16, 1, 0.3, 1);
+  animation: sh-panel-in 440ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 .qa.sh-out,
 .notch-panel.sh-out,
 .notch-pill.sh-out {
-  animation: sh-panel-out 300ms cubic-bezier(0.4, 0, 0.9, 1) forwards;
+  animation: sh-panel-out 340ms cubic-bezier(0.5, 0, 0.75, 0) forwards;
 }
 .qa,
 .notch-panel,

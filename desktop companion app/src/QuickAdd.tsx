@@ -493,7 +493,7 @@ export default function QuickAdd() {
 
   // The quick-add card — the entrance/exit animation plays on this element.
   const cardRef = useRef<HTMLDivElement | null>(null);
-  const QA_ANIM_OUT_MS = 300;
+  const QA_ANIM_OUT_MS = 340;
   /** Restart the drop-in animation (runs after React paints the current card). */
   const playEnter = () => {
     requestAnimationFrame(() => {
