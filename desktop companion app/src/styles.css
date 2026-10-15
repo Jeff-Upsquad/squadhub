@@ -1307,3 +1307,580 @@ body.qa-window {
   color: var(--text-muted);
   margin-top: 2px;
 }
+
+/* ── Notch timer window ────────────────────────────────────────────────────
+   A top-center panel that hangs from the camera notch. The window itself is
+   transparent; the pill/panel paints its own near-black surface so it reads as
+   an extension of the bezel. Mirrors the Quick Creation Panel design. */
+body.notch-window {
+  background: transparent;
+  overflow: hidden;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.notch-root {
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  width: 100vw;
+  height: 100vh;
+  background: transparent;
+}
+
+/* Collapsed pill — two "wings" under the notch */
+.notch-pill {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  width: 100%;
+  height: 44px;
+  padding: 0 18px;
+  background: #000;
+  color: #fff;
+  border: none;
+  border-radius: 0 0 20px 20px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
+  cursor: pointer;
+  font-family: inherit;
+}
+.notch-wing {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.notch-wing-right {
+  justify-content: flex-end;
+}
+.notch-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: none;
+}
+.notch-state {
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.notch-muted {
+  color: var(--text-muted);
+}
+.notch-clock {
+  font-size: 14px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.2px;
+}
+
+/* Expanded panel */
+.notch-panel {
+  width: calc(100% - 16px);
+  background: #0d0e12;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-top: none;
+  border-radius: 0 0 18px 18px;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.55);
+  padding: 14px 18px 16px;
+  color: var(--text);
+}
+.notch-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+.notch-tabs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.notch-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+}
+.notch-tab:hover {
+  color: var(--text);
+}
+.notch-tab.active {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text);
+}
+.notch-tab-ico {
+  font-size: 13px;
+  opacity: 0.9;
+}
+.notch-collapse {
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 16px;
+  cursor: pointer;
+}
+.notch-collapse:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text);
+}
+
+/* Timer tab — three columns */
+.notch-timer {
+  display: grid;
+  grid-template-columns: 1.1fr 1.2fr 0.9fr;
+  gap: 22px;
+}
+.notch-col {
+  min-width: 0;
+}
+.notch-col-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 10px;
+}
+
+.notch-seg {
+  display: inline-flex;
+  padding: 3px;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 10px;
+  margin-bottom: 14px;
+}
+.notch-seg-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 12.5px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+}
+.notch-seg-btn.active {
+  background: rgba(255, 255, 255, 0.12);
+  color: var(--text);
+}
+.notch-seg-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+.notch-seg-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+}
+
+.notch-state-line {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+.notch-bigclock {
+  font-size: 40px;
+  font-weight: 700;
+  line-height: 1.05;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.5px;
+}
+.notch-sub {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  margin-top: 6px;
+  line-height: 1.4;
+}
+
+.notch-col-task {
+  border-left: 1px solid rgba(255, 255, 255, 0.07);
+  padding-left: 22px;
+}
+.notch-task-empty-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+.notch-ghost-btn {
+  margin-top: 10px;
+  padding: 6px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+}
+.notch-ghost-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.notch-col-today {
+  border-left: 1px solid rgba(255, 255, 255, 0.07);
+  padding-left: 22px;
+}
+.notch-bar {
+  display: flex;
+  width: 100%;
+  height: 6px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.08);
+  margin-bottom: 12px;
+}
+.notch-bar-seg {
+  height: 100%;
+}
+.notch-today-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.notch-today-list li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+.notch-today-list li b {
+  margin-left: auto;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+.notch-foot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 14px;
+}
+.notch-sync {
+  font-size: 10.5px;
+  color: var(--text-muted);
+}
+.notch-stop-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border: none;
+  border-radius: 8px;
+  background: rgba(239, 68, 68, 0.16);
+  color: #fca5a5;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+}
+.notch-stop-btn:hover {
+  background: rgba(239, 68, 68, 0.26);
+  color: #fecaca;
+}
+.notch-stop-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+.notch-stop-sq {
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+  background: currentColor;
+}
+
+/* Add task + Tray tabs */
+.notch-add {
+  padding: 4px 2px 6px;
+  max-width: 460px;
+}
+.notch-add-title {
+  font-size: 16px;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+.notch-primary-btn {
+  margin-top: 14px;
+  padding: 9px 16px;
+  border: none;
+  border-radius: 9px;
+  background: var(--primary);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+}
+.notch-primary-btn:hover {
+  background: var(--primary-hover);
+}
+.notch-add-hint {
+  margin-top: 10px;
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+.notch-tray-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 10px;
+}
+.notch-tray-main {
+  font-size: 13px;
+  font-weight: 600;
+}
+.notch-tray-row .notch-clock {
+  margin-left: auto;
+}
+.notch-recents {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.notch-recents li {
+  font-size: 12.5px;
+  color: var(--text);
+  padding: 7px 12px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 8px;
+}
+
+/* ── Companion App (main window / Settings) redesign ───────────────────────── */
+.cmp-app {
+  padding: 18px;
+  align-items: stretch;
+  justify-content: flex-start;
+}
+.cmp-card {
+  width: 100%;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+}
+.cmp-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+.cmp-brand {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+}
+.cmp-logo {
+  width: 36px;
+  height: 36px;
+  border-radius: 9px;
+  background: linear-gradient(135deg, var(--primary), #8b5cf6);
+  position: relative;
+  flex: none;
+}
+.cmp-logo::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 16px;
+  height: 7px;
+  border-radius: 999px;
+  background: #0b0d12;
+}
+.cmp-brand-name {
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.1;
+}
+.cmp-brand-sub {
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+.cmp-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 600;
+  background: rgba(34, 197, 94, 0.14);
+  color: #4ade80;
+}
+.cmp-badge.disconnected {
+  background: rgba(239, 68, 68, 0.14);
+  color: #f87171;
+}
+.cmp-badge-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.cmp-user {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 12px;
+  background: var(--bg-input);
+  border-radius: 12px;
+  margin-bottom: 14px;
+}
+.cmp-avatar {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #3b82f6, #6366f1);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+}
+.cmp-user-name {
+  font-size: 13.5px;
+  font-weight: 600;
+}
+.cmp-user-sub {
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+.cmp-group {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.cmp-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 13px 14px;
+}
+.cmp-row + .cmp-row {
+  border-top: 1px solid var(--border);
+}
+.cmp-row-stack {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 9px;
+}
+.cmp-row-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.cmp-label {
+  font-size: 13px;
+  font-weight: 500;
+}
+.cmp-hint {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.cmp-shortcut {
+  display: inline-flex;
+  gap: 6px;
+  padding: 8px;
+  border: 1px dashed var(--border);
+  border-radius: 9px;
+  background: var(--bg-input);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+.cmp-shortcut.recording {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+.cmp-key {
+  min-width: 26px;
+  height: 26px;
+  padding: 0 7px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  font-size: 13px;
+  font-weight: 600;
+}
+.cmp-mini-btn {
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-input);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+}
+.cmp-mini-btn:hover:not(:disabled) {
+  border-color: var(--primary);
+}
+.cmp-footer {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 18px;
+}
+.cmp-footer-btn {
+  flex: 1;
+  padding: 11px;
+  border: none;
+  border-radius: 11px;
+  background: var(--bg-input);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+}
+.cmp-footer-btn:hover {
+  background: #2a2e3d;
+}
+.cmp-footer-signout {
+  padding: 11px 16px;
+  border: none;
+  border-radius: 11px;
+  background: transparent;
+  color: var(--danger);
+  font-size: 13px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+}
+.cmp-footer-signout:hover {
+  background: rgba(239, 68, 68, 0.12);
+}

@@ -230,6 +230,82 @@ export async function setTaskFocus(taskId: string, focused: boolean): Promise<vo
   });
 }
 
+// ── Work / Break / No-work session timer (server-backed via /timer/*) ────────
+// Mirrors the web app's RailTimer / useTimer: one running session per
+// workspace+context, where context is 'partners' for partner user types and
+// 'teammates' for everyone else. The companion polls /timer/active + /timer/stats
+// and drives switches through /timer/start (which auto-stops the prior session)
+// and /timer/stop. Keeping the same context the web app uses is what makes the
+// menu-bar + notch clock reflect exactly what the user is tracking in SquadHub.
+export type TimerType = 'work' | 'break' | 'no_work';
+
+/** User types that live in the 'partners' timer context (mirrors shared PARTNER_USER_TYPES). */
+const PARTNER_USER_TYPES = ['partner', 'partner_employee'];
+export function timerContextForUserType(userType: string | null | undefined): string {
+  return userType && PARTNER_USER_TYPES.includes(userType) ? 'partners' : 'teammates';
+}
+
+export interface TimerSession {
+  id: string;
+  user_id: string;
+  workspace_id: string;
+  context: string;
+  date: string;
+  timer_type: TimerType;
+  start_time: string;
+  end_time: string | null;
+}
+
+export interface ActiveTimer {
+  session: TimerSession | null;
+  elapsed_seconds: number;
+}
+
+export interface DailySummary {
+  total_work_seconds: number;
+  total_break_seconds: number;
+  total_no_work_seconds: number;
+  session_count?: number;
+  first_start?: string | null;
+  last_stop?: string | null;
+}
+
+export interface TimerStats {
+  today: DailySummary | null;
+  active_timer: TimerSession | null;
+  office_timing: { office_hours_total_seconds: number } | null;
+}
+
+/** GET /timer/active — the single running work/break/no-work session, if any. */
+export function fetchActiveTimer(workspaceId: string, context: string): Promise<ActiveTimer> {
+  return apiJson<ActiveTimer>(
+    `/timer/active?workspace_id=${encodeURIComponent(workspaceId)}&context=${encodeURIComponent(context)}`,
+  );
+}
+
+/** GET /timer/stats — today's work/break/no-work totals + office-hours commitment. */
+export function fetchTimerStats(workspaceId: string, context: string): Promise<TimerStats> {
+  return apiJson<TimerStats>(
+    `/timer/stats?workspace_id=${encodeURIComponent(workspaceId)}&context=${encodeURIComponent(context)}`,
+  );
+}
+
+/** POST /timer/start — switch to work/break/no-work (auto-stops the current session). */
+export function startTimerSession(timerType: TimerType, workspaceId: string, context: string): Promise<TimerSession> {
+  return apiJson<TimerSession>('/timer/start', {
+    method: 'POST',
+    body: JSON.stringify({ timer_type: timerType, workspace_id: workspaceId, context }),
+  });
+}
+
+/** POST /timer/stop — stop the running session (clock off entirely). */
+export function stopTimerSession(sessionId: string | undefined, workspaceId: string, context: string): Promise<TimerSession> {
+  return apiJson<TimerSession>('/timer/stop', {
+    method: 'POST',
+    body: JSON.stringify({ session_id: sessionId, workspace_id: workspaceId, context }),
+  });
+}
+
 interface PresignResponse {
   upload_url: string;
   public_url: string;

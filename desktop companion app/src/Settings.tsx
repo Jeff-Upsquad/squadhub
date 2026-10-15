@@ -121,61 +121,92 @@ export default function Settings() {
     getCurrentWindow().hide();
   };
 
+  const name = displayName || userEmail || 'SquadHub';
+  const avatarInitials = (() => {
+    const src = (displayName && displayName.trim()) || (userEmail && userEmail.trim()) || 'SH';
+    const parts = src.split(/\s+/).filter(Boolean);
+    if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+    return src.slice(0, 2).toUpperCase();
+  })();
+
   return (
-    <div className="app">
-      <div className="card">
-        <h1>SquadHub</h1>
-        <p>Desktop notifications companion</p>
-
-        <div className={`status-badge ${socketStatus}`}>
-          <span className="status-dot" />
-          {socketStatus === 'connected' ? 'Connected' : 'Disconnected'}
+    <div className="app cmp-app">
+      <div className="cmp-card">
+        <div className="cmp-header">
+          <div className="cmp-brand">
+            <span className="cmp-logo" aria-hidden />
+            <div>
+              <div className="cmp-brand-name">SquadHub</div>
+              <div className="cmp-brand-sub">Desktop companion</div>
+            </div>
+          </div>
+          <div className={`cmp-badge ${socketStatus}`}>
+            <span className="cmp-badge-dot" />
+            {socketStatus === 'connected' ? 'Connected' : 'Disconnected'}
+          </div>
         </div>
 
-        <div className="user-info">
-          Signed in as <strong>{displayName || userEmail}</strong>
+        <div className="cmp-user">
+          <span className="cmp-avatar">{avatarInitials}</span>
+          <div className="cmp-user-text">
+            <div className="cmp-user-name">{name}</div>
+            {userEmail && <div className="cmp-user-sub">{userEmail}</div>}
+          </div>
         </div>
 
-        <div className="settings-row">
-          <span>Launch on startup</span>
-          <div
-            className={`toggle ${autoLaunch ? 'active' : ''}`}
-            onClick={toggleAutoLaunch}
-            role="switch"
-            aria-checked={autoLaunch}
-          />
-        </div>
-
-        <div className="settings-row">
-          <span>Quick-add shortcut</span>
-          <button
-            type="button"
-            className={`shortcut-btn ${recording ? 'recording' : ''}`}
-            onClick={() => setRecording((r) => !r)}
-            title="Click, then press your desired key combination (Esc to cancel)"
-          >
-            {recording ? 'Press keys…' : prettyShortcut(shortcut)}
-          </button>
-        </div>
-
-        <div className="settings-row">
-          <span>Version{updater.currentVersion ? ` ${updater.currentVersion}` : ''}</span>
-          {updater.status === 'available' || updater.status === 'downloading' ? (
-            <span className="update-tag">Update available</span>
-          ) : (
+        <div className="cmp-group">
+          <div className="cmp-row cmp-row-stack">
+            <div className="cmp-row-head">
+              <span className="cmp-label">Quick add shortcut</span>
+              <span className="cmp-hint">Click to change</span>
+            </div>
             <button
               type="button"
-              className="shortcut-btn"
-              onClick={() => updater.check(false)}
-              disabled={updater.status === 'checking'}
+              className={`cmp-shortcut ${recording ? 'recording' : ''}`}
+              onClick={() => setRecording((r) => !r)}
+              title="Click, then press your desired key combination (Esc to cancel)"
             >
-              {updater.status === 'checking'
-                ? 'Checking…'
-                : updater.status === 'uptodate'
-                  ? 'Up to date'
-                  : 'Check'}
+              {recording
+                ? 'Press keys…'
+                : prettyShortcut(shortcut)
+                    .split('')
+                    .map((ch, i) => (
+                      <span key={i} className="cmp-key">{ch}</span>
+                    ))}
             </button>
-          )}
+          </div>
+
+          <div className="cmp-row">
+            <span className="cmp-label">Launch on startup</span>
+            <div
+              className={`toggle ${autoLaunch ? 'active' : ''}`}
+              onClick={toggleAutoLaunch}
+              role="switch"
+              aria-checked={autoLaunch}
+            />
+          </div>
+
+          <div className="cmp-row">
+            <span className="cmp-label">
+              Version{updater.currentVersion ? ` ${updater.currentVersion}` : ''}
+            </span>
+            {updater.status === 'available' || updater.status === 'downloading' ? (
+              <span className="update-tag">Update available</span>
+            ) : (
+              <button
+                type="button"
+                className="cmp-mini-btn"
+                onClick={() => updater.check(false)}
+                disabled={updater.status === 'checking'}
+              >
+                {updater.status === 'checking'
+                  ? 'Checking…'
+                  : updater.status === 'uptodate'
+                    ? 'Up to date'
+                    : 'Check'}
+              </button>
+            )}
+          </div>
         </div>
 
         {updater.status === 'available' && (
@@ -216,18 +247,14 @@ export default function Settings() {
           </div>
         )}
 
-        <div className="spacer" />
-        <div className="spacer" />
-
-        <button className="btn btn-primary" onClick={handleMinimize}>
-          Minimize to Menu Bar
-        </button>
-
-        <div className="spacer" />
-
-        <button className="btn btn-danger" onClick={handleSignOut}>
-          Sign Out
-        </button>
+        <div className="cmp-footer">
+          <button className="cmp-footer-btn" onClick={handleMinimize}>
+            Minimize to menu bar
+          </button>
+          <button className="cmp-footer-signout" onClick={handleSignOut}>
+            Sign out
+          </button>
+        </div>
       </div>
     </div>
   );

@@ -23,6 +23,7 @@ export default function Login() {
           userEmail: res.data.user.email,
           displayName: res.data.user.display_name,
           userId: res.data.user.id,
+          userType: res.data.user.user_type ?? null,
         });
       } else {
         setError(res.error || 'Login failed');
