@@ -46,6 +46,14 @@ fn set_quick_add_shortcut(app: tauri::AppHandle, accelerator: String) -> Result<
 /// become key over another app's full-screen Space, which is why earlier attempts
 /// with collectionBehavior/level alone didn't show.
 fn show_quick_add(app: &tauri::AppHandle) {
+    // Keep the full-width creation surface attached to the active screen's top edge.
+    if let Some(window) = app.get_webview_window("quickadd") {
+        if let (Ok(Some(monitor)), Ok(size)) = (window.current_monitor(), window.outer_size()) {
+            let x = monitor.position().x
+                + (monitor.size().width.saturating_sub(size.width) / 2) as i32;
+            let _ = window.set_position(tauri::PhysicalPosition::new(x, monitor.position().y));
+        }
+    }
     #[cfg(target_os = "macos")]
     {
         use cocoa::appkit::NSWindowCollectionBehavior;

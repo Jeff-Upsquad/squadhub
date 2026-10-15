@@ -1,6 +1,7 @@
 import { Server as HttpServer } from 'http';
 import { Server, Socket } from 'socket.io';
 import { config } from '../config';
+import { installCompanionTimers } from './companionTimers';
 import { supabaseAdmin, supabaseAuth } from '../supabase';
 import { sendPartnerPush } from '../push/partnerPush';
 import { sendWebPush } from '../push/webPush';
@@ -54,6 +55,8 @@ export function setupSocketIO(httpServer: HttpServer) {
       next(new Error('Invalid token'));
     }
   });
+
+  installCompanionTimers(io);
 
   io.on('connection', async (socket: Socket) => {
     const userId = (socket as any).userId as string;

@@ -1,7 +1,7 @@
 {
   "$schema": "https://raw.githubusercontent.com/nicedoc/tauri-docs/main/references/config.schema.json",
   "productName": "SquadHub Companion",
-  "version": "0.1.22",
+  "version": "0.1.23",
   "identifier": "in.squadhub.desktop",
   "build": {
     "frontendDist": "../dist",
@@ -26,8 +26,8 @@
       {
         "label": "quickadd",
         "title": "Quick Add Task",
-        "width": 560,
-        "height": 560,
+        "width": 896,
+        "height": 760,
         "resizable": false,
         "transparent": true,
         "center": true,

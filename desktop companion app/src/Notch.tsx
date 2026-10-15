@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { getCurrentWindow, LogicalSize, LogicalPosition, currentMonitor } from '@tauri-apps/api/window';
 import { invoke } from '@tauri-apps/api/core';
+import { open } from '@tauri-apps/plugin-shell';
+import { useCompanionTaskTimers } from './useCompanionTaskTimers';
 import { useAuthStore } from './stores/authStore';
 import {
   fetchWorkspaces,
@@ -15,12 +17,13 @@ import {
 } from './services/api';
 import { getRecentLists, type RecentList } from './services/recents';
 import { formatDuration } from './timeDuration';
+import { PanelIcon } from './PanelIcon';
 
 // ── layout constants (match the Quick Creation Panel design) ─────────────────
 const PILL_W = 460;
 const PILL_H = 54;
-const PANEL_W = 920;
-const PANEL_H = 300;
+const PANEL_W = 896;
+const PANEL_H = 344;
 const WEB_URL = 'https://squadhub.in';
 
 // Poll cadence mirrors the web app (active every 20s, stats every 60s) so the
@@ -35,22 +38,22 @@ type View = 'collapsed' | 'expanded';
 type Tab = 'timer' | 'add' | 'tray';
 
 const MODE_META: Record<TimerType, { label: string; tag: string; color: string; status: string }> = {
-  work: { label: 'Work', tag: 'WORK', color: '#22c55e', status: 'Working' },
-  break: { label: 'Break', tag: 'BREAK', color: '#f59e0b', status: 'On a break' },
-  no_work: { label: 'No work', tag: 'OFF', color: '#ef4444', status: 'Off task' },
+  work: { label: 'Work', tag: 'WORK', color: '#39c66b', status: 'Working' },
+  break: { label: 'Break', tag: 'BREAK', color: '#ffb340', status: 'On a break' },
+  no_work: { label: 'No work', tag: 'OFF', color: '#ff453a', status: 'Off task' },
 };
 const MODES: TimerType[] = ['work', 'break', 'no_work'];
 
 function pad(n: number): string {
   return String(n).padStart(2, '0');
 }
-/** h:mm:ss past an hour, m:ss before — mirrors RailTimer's fmtClock. */
-function formatClock(totalSeconds: number): string {
+/** The open panel shows h:mm:ss; the collapsed task wing uses m:ss below an hour. */
+function formatClock(totalSeconds: number, compact = false): string {
   const s = Math.max(0, Math.floor(totalSeconds));
   const h = Math.floor(s / 3600);
   const m = Math.floor((s % 3600) / 60);
   const sec = s % 60;
-  return h > 0 ? `${h}:${pad(m)}:${pad(sec)}` : `${pad(m)}:${pad(sec)}`;
+  return compact && h === 0 ? `${pad(m)}:${pad(sec)}` : `${h}:${pad(m)}:${pad(sec)}`;
 }
 function startClockLabel(iso: string): string {
   try {
@@ -64,6 +67,7 @@ export default function Notch() {
   const win = useMemo(() => getCurrentWindow(), []);
   const authHydrated = useAuthStore((s) => s.hydrated);
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const userId = useAuthStore((s) => s.userId);
 
   const [view, setView] = useState<View>('collapsed');
   const [tab, setTab] = useState<Tab>('timer');
@@ -72,6 +76,14 @@ export default function Notch() {
   const [now, setNow] = useState(() => Date.now());
   const [busy, setBusy] = useState(false);
   const [recents, setRecents] = useState<RecentList[]>([]);
+  const taskTimers = useCompanionTaskTimers();
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  const [taskPickerOpen, setTaskPickerOpen] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const taskMarks = useRef(new Map<string, number>());
+  const task = taskTimers.timers.find(t => t.taskId === selectedTaskId) || taskTimers.timers[0];
+  const taskSeconds = task ? task.elapsedSeconds + (task.status === 'running'
+    ? Math.max(0, Math.floor((now - task.sampledAt) / 1000)) : 0) : 0;
 
   // Resolved once per run: the workspace + context whose timer we mirror.
   const scopeRef = useRef<{ workspaceId: string; context: string } | null>(null);
@@ -93,8 +105,8 @@ export default function Notch() {
       if (mon) {
         const sf = mon.scaleFactor || 1;
         const screenW = mon.size.width / sf;
-        const x = Math.max(0, Math.round((screenW - w) / 2));
-        await win.setPosition(new LogicalPosition(x, 0));
+        const x = mon.position.x / sf + Math.max(0, Math.round((screenW - w) / 2));
+        await win.setPosition(new LogicalPosition(x, mon.position.y / sf));
       }
     } catch {
       /* placement is best-effort */
@@ -139,6 +151,16 @@ export default function Notch() {
     void surface('expanded');
   }, [surface]);
 
+  useEffect(() => {
+    scopeRef.current = null;
+    seenSessionRef.current = undefined;
+    markRef.current = { sessionId: null, lastMark: 0 };
+    taskMarks.current.clear();
+    setSession(null);
+    setStats(null);
+    setActionError(null);
+  }, [userId]);
+
   // ── resolve scope + hydrate auth ───────────────────────────────────────────
   useEffect(() => {
     useAuthStore.getState().hydrate();
@@ -148,7 +170,9 @@ export default function Notch() {
   const resolveScope = useCallback(async (): Promise<{ workspaceId: string; context: string } | null> => {
     if (scopeRef.current) return scopeRef.current;
     try {
+      const ownerId = useAuthStore.getState().userId;
       const workspaces = await fetchWorkspaces();
+      if (ownerId !== useAuthStore.getState().userId) return null;
       const wid = workspaces[0]?.id;
       if (!wid) return null;
       const context = timerContextForUserType(useAuthStore.getState().userType);
@@ -162,11 +186,12 @@ export default function Notch() {
   // ── polling loops ───────────────────────────────────────────────────────────
   const pollActive = useCallback(async () => {
     if (!useAuthStore.getState().accessToken) return;
+    const ownerId = useAuthStore.getState().userId;
     const scope = await resolveScope();
     if (!scope) return;
     try {
       const res = await fetchActiveTimer(scope.workspaceId, scope.context);
-      setSession(res.session);
+      if (ownerId === useAuthStore.getState().userId) setSession(res.session);
     } catch {
       /* keep last known state; next tick retries */
     }
@@ -174,10 +199,12 @@ export default function Notch() {
 
   const pollStats = useCallback(async () => {
     if (!useAuthStore.getState().accessToken) return;
+    const ownerId = useAuthStore.getState().userId;
     const scope = await resolveScope();
     if (!scope) return;
     try {
-      setStats(await fetchTimerStats(scope.workspaceId, scope.context));
+      const nextStats = await fetchTimerStats(scope.workspaceId, scope.context);
+      if (ownerId === useAuthStore.getState().userId) setStats(nextStats);
     } catch {
       /* non-critical */
     }
@@ -195,7 +222,7 @@ export default function Notch() {
       window.clearInterval(s);
       window.clearInterval(t);
     };
-  }, [authHydrated, isAuthenticated, pollActive, pollStats]);
+  }, [authHydrated, isAuthenticated, userId, pollActive, pollStats]);
 
   // ── derived live values ─────────────────────────────────────────────────────
   const elapsed = session ? Math.max(0, Math.floor((now - new Date(session.start_time).getTime()) / 1000)) : 0;
@@ -206,8 +233,8 @@ export default function Notch() {
   useEffect(() => {
     if (!session || !meta) {
       // No running session → clear the tray clock and hide the notch.
-      invoke('set_timer_title', { title: null }).catch(() => {});
-      if (seenSessionRef.current !== null) {
+      invoke('set_timer_title', { title: task?.status === 'running' ? `TASK ${formatClock(taskSeconds)}` : null }).catch(() => {});
+      if (seenSessionRef.current !== null && !task) {
         seenSessionRef.current = null;
         dismiss();
       }
@@ -244,12 +271,31 @@ export default function Notch() {
       void surface('collapsed', true);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session?.id, session?.timer_type, elapsed]);
+  }, [session?.id, session?.timer_type, elapsed, task?.taskId, task?.status, taskSeconds]);
+
+  useEffect(() => {
+    for (const timer of taskTimers.timers) {
+      const seconds = timer.elapsedSeconds + (timer.status === 'running'
+        ? Math.max(0, Math.floor((now - timer.sampledAt) / 1000)) : 0);
+      const mark = Math.floor(seconds / MARK_SECONDS);
+      const previous = taskMarks.current.get(timer.sessionId);
+      taskMarks.current.set(timer.sessionId, Math.max(previous ?? 0, mark));
+      if (previous != null && mark > previous && timer.status === 'running') {
+        invoke('send_notification', {
+          title: `${timer.taskTitle} · ${formatClock(seconds)}`,
+          body: `This task timer has reached ${mark * 30} minutes.`,
+          url: `${WEB_URL}/app`,
+        }).catch(() => {});
+        void surface('collapsed', true);
+      }
+    }
+  }, [taskTimers.timers, now, surface]);
 
   // ── react to Rust events (tray click / menu) ────────────────────────────────
   useEffect(() => {
     const unexpand = win.listen('notch:expand', () => {
       cancelAutoHide();
+      void useAuthStore.getState().hydrate();
       setTab('timer');
       setView('expanded');
       void place(PANEL_W, PANEL_H);
@@ -290,19 +336,23 @@ export default function Notch() {
       const scope = await resolveScope();
       if (!scope) return;
       setBusy(true);
+      setActionError(null);
       try {
+        if (next !== 'work' && taskTimers.timers.some(t => t.status === 'running')) {
+          await taskTimers.control('pause_all');
+        }
         const s = await startTimerSession(next, scope.workspaceId, scope.context);
         setSession(s);
         markRef.current = { sessionId: s.id, lastMark: 0 };
         seenSessionRef.current = s.id;
         void pollStats();
-      } catch {
-        /* surfaced by the unchanged UI; a later poll reconciles */
+      } catch (error) {
+        setActionError(error instanceof Error ? error.message : 'Could not switch timers.');
       } finally {
         setBusy(false);
       }
     },
-    [busy, mode, resolveScope, pollStats],
+    [busy, mode, resolveScope, pollStats, taskTimers.timers, taskTimers.control],
   );
 
   const stopAll = useCallback(async () => {
@@ -310,12 +360,13 @@ export default function Notch() {
     const scope = await resolveScope();
     if (!scope) return;
     setBusy(true);
+    setActionError(null);
     try {
       await stopTimerSession(session.id, scope.workspaceId, scope.context);
       setSession(null);
       void pollStats();
-    } catch {
-      /* a later poll reconciles */
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : 'Could not stop the timer.');
     } finally {
       setBusy(false);
     }
@@ -325,6 +376,19 @@ export default function Notch() {
     invoke('quick_add_show').catch(() => {});
     dismiss();
   }, [dismiss]);
+
+  const controlTask = async (action: 'pause' | 'resume' | 'stop') => {
+    if (!task || busy) return;
+    setBusy(true);
+    setActionError(null);
+    try {
+      await taskTimers.control(action, task.taskId);
+      await pollActive();
+      await pollStats();
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : 'Could not update the task timer.');
+    } finally { setBusy(false); }
+  };
 
   // ── Today totals (today's logged + the live current segment) ────────────────
   const today = stats?.today;
@@ -352,11 +416,12 @@ export default function Notch() {
                 <span className="notch-state" style={{ color: meta.color }}>{meta.status}</span>
               </>
             ) : (
-              <span className="notch-state notch-muted">No timer</span>
+              <span className="notch-state notch-muted">{task ? task.status === 'running' ? 'Task running' : 'Task paused' : 'No timer'}</span>
             )}
           </span>
           <span className="notch-wing notch-wing-right">
-            <span className="notch-clock">{meta ? formatClock(elapsed) : '—'}</span>
+            {task && <span className="notch-pill-task">{task.taskTitle}</span>}
+            <span className="notch-clock">{task ? formatClock(taskSeconds, true) : meta ? formatClock(elapsed, true) : '—'}</span>
           </span>
         </button>
       </div>
@@ -368,15 +433,15 @@ export default function Notch() {
     <div className="notch-root">
       <div className="notch-panel">
         <div className="notch-head">
-          <div className="notch-tabs">
-            <button type="button" className={`notch-tab${tab === 'timer' ? ' active' : ''}`} onClick={() => setTab('timer')}>
-              <span className="notch-tab-ico" aria-hidden>⏱</span> Timer
+          <div className="notch-tabs" role="tablist" aria-label="Companion views">
+            <button type="button" role="tab" aria-selected={tab === 'timer'} className={`notch-tab${tab === 'timer' ? ' active' : ''}`} onClick={() => setTab('timer')}>
+              <PanelIcon name="timer" /> Timer
             </button>
-            <button type="button" className={`notch-tab${tab === 'add' ? ' active' : ''}`} onClick={() => setTab('add')}>
-              <span className="notch-tab-ico" aria-hidden>＋</span> Add task
+            <button type="button" role="tab" aria-selected={tab === 'add'} className={`notch-tab${tab === 'add' ? ' active' : ''}`} onClick={() => setTab('add')}>
+              <PanelIcon name="add" /> Add task
             </button>
-            <button type="button" className={`notch-tab${tab === 'tray' ? ' active' : ''}`} onClick={() => setTab('tray')}>
-              <span className="notch-tab-ico" aria-hidden>▦</span> Tray
+            <button type="button" role="tab" aria-selected={tab === 'tray'} className={`notch-tab${tab === 'tray' ? ' active' : ''}`} onClick={() => setTab('tray')}>
+              <PanelIcon name="tray" /> Tray
             </button>
           </div>
           <button
@@ -386,10 +451,11 @@ export default function Notch() {
             title="Collapse"
             aria-label="Collapse"
           >
-            ⌃
+            <PanelIcon name="collapse" />
           </button>
         </div>
 
+        {actionError && <div className="notch-action-error" role="alert">{actionError}</div>}
         {tab === 'timer' && (
           <div className="notch-timer">
             {/* Left: Work / Break / No-work + the live session clock */}
@@ -426,15 +492,63 @@ export default function Notch() {
               )}
             </div>
 
+            <div className="notch-divider" aria-hidden="true" />
+
             {/* Middle: task timer (companion-started tasks surface here) */}
             <div className="notch-col notch-col-task">
               <div className="notch-col-label">Task timer</div>
-              <div className="notch-task-empty">
-                <div className="notch-task-empty-title">No task timer running</div>
-                <div className="notch-sub">Start one with “timer on” from the Add-task panel.</div>
-                <button type="button" className="notch-ghost-btn" onClick={openQuickAdd}>Add a task</button>
-              </div>
+              {task ? (
+                <>
+                  <div className="notch-task-info">
+                    <div className="notch-task-title" title={task.taskTitle}>{task.taskTitle}</div>
+                    <div className="notch-task-meta">
+                      {task.listName || 'SquadHub task'}
+                      {task.estimateSeconds ? ` · est. ${formatDuration(Math.round(task.estimateSeconds / 60))}` : ''}
+                    </div>
+                  </div>
+                  <div className="notch-task-time">
+                    <span>{formatClock(taskSeconds)}</span>
+                    <small className={task.status}>{task.status === 'running' ? 'Running' : 'Paused'}</small>
+                  </div>
+                  {task.estimateSeconds ? (
+                    <div className="notch-task-progress" role="progressbar" aria-label="Time against estimate"
+                      aria-valuemin={0} aria-valuemax={task.estimateSeconds} aria-valuenow={Math.min(taskSeconds, task.estimateSeconds)}>
+                      <span style={{ width: `${Math.min(100, taskSeconds / task.estimateSeconds * 100)}%` }} />
+                    </div>
+                  ) : <div className="notch-task-progress" aria-hidden="true" />}
+                  <div className="notch-task-actions">
+                    <button type="button" className="notch-task-play" disabled={busy || !taskTimers.available}
+                      onClick={() => void controlTask(task.status === 'running' ? 'pause' : 'resume')}
+                      title={task.status === 'running' ? 'Pause' : 'Resume'} aria-label={task.status === 'running' ? 'Pause task timer' : 'Resume task timer'}>
+                      <PanelIcon name={task.status === 'running' ? 'pause' : 'play'} />
+                    </button>
+                    <button type="button" className="notch-task-stop" disabled={busy || !taskTimers.available}
+                      onClick={() => void controlTask('stop')} title="Stop and log time" aria-label="Stop task timer and log time">
+                      <PanelIcon name="stop" />
+                    </button>
+                    <button type="button" className="notch-task-switch" disabled={busy}
+                      aria-expanded={taskPickerOpen} onClick={() => setTaskPickerOpen(v => !v)}>Switch task</button>
+                  </div>
+                  {taskPickerOpen && <div className="notch-task-picker" aria-label="Task timers">
+                    {taskTimers.timers.map(timer => <button type="button" key={timer.taskId}
+                      onClick={() => { setSelectedTaskId(timer.taskId); setTaskPickerOpen(false); }}>
+                      {timer.taskTitle}<small>{timer.status}</small>
+                    </button>)}
+                    <button type="button" onClick={() => { void open(`${WEB_URL}/app`); dismiss(); }}>Choose another task in SquadHub ↗</button>
+                  </div>}
+                </>
+              ) : (
+                <div className="notch-task-empty">
+                  <div className="notch-task-empty-title">{taskTimers.available ? 'No task timer running' : 'Connect your task timers'}</div>
+                  <div className="notch-sub">{taskTimers.available
+                    ? 'Start one from a task in SquadHub, or use “Start timer” when adding a task.'
+                    : 'Open SquadHub in your browser to see and control your task timers here.'}</div>
+                  <button type="button" className="notch-ghost-btn" onClick={() => { void open(`${WEB_URL}/app`); dismiss(); }}>Open SquadHub ↗</button>
+                </div>
+              )}
             </div>
+
+            <div className="notch-divider" aria-hidden="true" />
 
             {/* Right: Today — work / break / no-work totals */}
             <div className="notch-col notch-col-today">

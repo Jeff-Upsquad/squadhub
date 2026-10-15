@@ -25,7 +25,7 @@ export function useCompanionTimerSync(userId: string | undefined) {
     let busy = false;
 
     const sync = async () => {
-      if (!active || busy || document.visibilityState === 'hidden') return;
+      if (!active || busy) return;
       busy = true;
       try {
         const { data: envelope } = await api.get<{ data: PendingCompanionTimer[] }>('/pm/companion-timers');

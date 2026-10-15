@@ -56,6 +56,8 @@ export interface TimerState {
   listId: string;
   startedAt: number;
   baseTracked: number;
+  elapsedBefore?: number;
+  sessionId?: string;
 }
 
 // Parallel timers: 1 primary + up to 5 secondary. `timers[0]` is always the
@@ -113,7 +115,7 @@ export function broadcastTimerState(timers: TimerState[], timerSegmentStart: num
   if (typeof BroadcastChannel !== 'undefined') {
     try {
       const bc = new BroadcastChannel('squadhub_timer_sync');
-      bc.postMessage({ type: 'SYNC_TIMERS', timers, timerSegmentStart });
+      bc.postMessage({ type: 'SYNC_TIMERS', timers, timerSegmentStart, pausedTimers: usePMStore.getState().pausedTimers });
       bc.close();
     } catch {}
   }
@@ -199,6 +201,7 @@ interface PMState {
   // the next event closes the segment.
   timers: TimerState[];
   timerSegmentStart: number | null;
+  pausedTimers: TimerState[];
   pendingTimerStart: PendingTimerStart | null;
   pendingTimeSync: PendingTimeSyncItem[];
   filtersByScope: Record<string, TaskFilterState>;
@@ -388,6 +391,7 @@ export const usePMStore = create<PMState>()(
       groupRunPanel: null,
       timers: [],
       timerSegmentStart: null,
+      pausedTimers: [],
       pendingTimerStart: null,
       pendingTimeSync: [],
       filtersByScope: {},
@@ -595,6 +599,7 @@ export const usePMStore = create<PMState>()(
         const nextTimers = [...timers, { taskId, taskTitle, listId, startedAt: now, baseTracked }];
         set({
           timers: nextTimers,
+          pausedTimers: get().pausedTimers.filter(t => t.taskId !== taskId),
           timerSegmentStart: now,
         });
         broadcastTimerState(nextTimers, now);
@@ -958,7 +963,7 @@ export const usePMStore = create<PMState>()(
           sidebarSectionOrder: s.sidebarSectionOrder,
         };
       },
-      reset: () => set({ activeSpaceId: null, activeListId: null, activeFolderId: null, activeSpacePageId: null, activeTaskId: null, activeDesignFolderId: null, activeDashboardTab: null, activeSecondaryCard: null, newTasksOpen: false, newTaskFabVisible: false, homeView: 'hub', contextListId: null, viewMode: 'list', activeViewIdByList: {}, listGroupBy: 'status', myTasksOnly: false, collapsedGroups: {}, groupedExpanded: {}, focusBucketCollapsed: {}, focusBucketAutoOpenedDate: {}, sidebarSectionsExpanded: DEFAULT_SIDEBAR_SECTIONS, expandedSpaces: {}, expandedFolders: {}, expandedClients: {}, favoriteItemsOrder: [], appFavoritesOrder: [], sidebarSectionOrder: DEFAULT_SIDEBAR_SECTION_ORDER, selectedTasks: [], fadingTaskIds: new Map<string, string>(), peekTaskId: null, groupRunPanel: null, timers: [], timerSegmentStart: null, pendingTimerStart: null, pendingTimeSync: [], filtersByScope: {}, columnPrefsByScope: {}, focusedTodayIds: [], focusedTodayDate: todayKey(), focusBuckets: {}, recurringFocusBuckets: {}, focusBucketsRolloverDate: todayKey(), dismissedInProgressIds: [], dismissedInProgressDate: todayKey(), groupByScope: {}, sortByScope: {}, focusTodayScope: {}, groupDirByScope: {}, secondaryCardGroupBy: {}, todayListGroupBy: 'none', todayListView: 'list', lastActiveSection: 'home', lastHomeView: 'hub' }),
+      reset: () => set({ activeSpaceId: null, activeListId: null, activeFolderId: null, activeSpacePageId: null, activeTaskId: null, activeDesignFolderId: null, activeDashboardTab: null, activeSecondaryCard: null, newTasksOpen: false, newTaskFabVisible: false, homeView: 'hub', contextListId: null, viewMode: 'list', activeViewIdByList: {}, listGroupBy: 'status', myTasksOnly: false, collapsedGroups: {}, groupedExpanded: {}, focusBucketCollapsed: {}, focusBucketAutoOpenedDate: {}, sidebarSectionsExpanded: DEFAULT_SIDEBAR_SECTIONS, expandedSpaces: {}, expandedFolders: {}, expandedClients: {}, favoriteItemsOrder: [], appFavoritesOrder: [], sidebarSectionOrder: DEFAULT_SIDEBAR_SECTION_ORDER, selectedTasks: [], fadingTaskIds: new Map<string, string>(), peekTaskId: null, groupRunPanel: null, timers: [], timerSegmentStart: null, pausedTimers: [], pendingTimerStart: null, pendingTimeSync: [], filtersByScope: {}, columnPrefsByScope: {}, focusedTodayIds: [], focusedTodayDate: todayKey(), focusBuckets: {}, recurringFocusBuckets: {}, focusBucketsRolloverDate: todayKey(), dismissedInProgressIds: [], dismissedInProgressDate: todayKey(), groupByScope: {}, sortByScope: {}, focusTodayScope: {}, groupDirByScope: {}, secondaryCardGroupBy: {}, todayListGroupBy: 'none', todayListView: 'list', lastActiveSection: 'home', lastHomeView: 'hub' }),
     }),
     {
       name: 'squadhub-pm',
@@ -973,6 +978,7 @@ export const usePMStore = create<PMState>()(
         homeView: state.homeView,
         contextListId: state.contextListId,
         timers: state.timers,
+        pausedTimers: state.pausedTimers,
         timerSegmentStart: state.timerSegmentStart,
         pendingTimeSync: state.pendingTimeSync,
         activeViewIdByList: state.activeViewIdByList,

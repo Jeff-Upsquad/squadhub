@@ -1,10 +1,10 @@
 {
-  "version": "0.1.22",
-  "notes": "Quick Add gets a faster, three-column layout: title and description on the left, every task attribute at a glance in the middle, and a big Add button with focus / complete / start-timer toggles on the right. Attachments and uploads now live in their own Tray tab.",
-  "pub_date": "2026-10-15T14:17:23Z",
+  "version": "0.1.23",
+  "notes": "Refined Quick Add and Timer panels to match the design, with live task clocks, pause/resume/stop, task switching, and 30-minute reminders. Keep a signed-in SquadHub browser tab open for task timer controls.",
+  "pub_date": "2026-10-15T15:31:51Z",
   "platforms": {
     "darwin-aarch64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUQ003TTR4K1pKdzVRbjc1NnhHVmVNV1RYMWFqam81QmhsQzZJRW05RmFyTHNUY21jWEcyb3VjTzhmNVNNeC9SekJjUUw2eXB5RmNscHYzbjJTc0l1Mk1Gem9EemowamdvPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkyMDczMzYxCWZpbGU6U3F1YWRIdWIgQ29tcGFuaW9uLmFwcC50YXIuZ3oKQmkrZWJDamJxQ042S2xzMUJ1enU2cXZ4cGxPcmw3eTZJMVRXaW9VUGhDVlg0WFdJQVhhdlB0cnprUXpYY2ZpVXpQWGhjWGNOYWhQSVhmcm9hSVQ2RHc9PQo=",
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUQ003TTR4K1pKdzdBWEh2T3lnL0N0ajlTb2tJVVpGRkpLWUZ3eU9Ga0VZMlFKZzNqcHZ1RUNoNHNmc29yNVl5UE1FVG9KR05tMGhrT1NaaFBpYWlZOE1XWnlyeWlhbVF3PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkyMDc4MzExCWZpbGU6U3F1YWRIdWIgQ29tcGFuaW9uLmFwcC50YXIuZ3oKYWt0RjdTS3M4SnZnOGdzSTk0QWhKQnI1NDNoZm5XeXdadDZVL3NIaFU3SG13cDIwcE5uenRYNm5EUDZSQkdyQjN3TTh4QXNtc1BIS01PODNETVZ5QlE9PQo=",
       "url": "https://squadhub.in/downloads/SquadHub.app.tar.gz"
     }
   }

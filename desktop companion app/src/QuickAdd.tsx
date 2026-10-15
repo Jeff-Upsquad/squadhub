@@ -26,6 +26,7 @@ import {
 import { login } from './services/auth';
 import { getRecentLists, pushRecentList, type RecentList } from './services/recents';
 import { formatDuration, parseDuration } from './timeDuration';
+import { PanelIcon } from './PanelIcon';
 
 // Cached across summons of the (persistent) quickadd window so we only resolve
 // the personal list / list tree once per app run.
@@ -1178,7 +1179,7 @@ export default function QuickAdd() {
               className={`qa-tab${tab === 'add' ? ' active' : ''}`}
               onClick={() => setTab('add')}
             >
-              <span className="qa-tab-plus" aria-hidden>+</span>
+              <PanelIcon name="add" />
               Add task
             </button>
             <button
@@ -1188,7 +1189,7 @@ export default function QuickAdd() {
               className={`qa-tab${tab === 'tray' ? ' active' : ''}`}
               onClick={() => setTab('tray')}
             >
-              Tray
+              <PanelIcon name="tray" /> Tray
               {trayCount > 0 && <span className="qa-tab-badge">{trayCount}</span>}
             </button>
           </div>
@@ -1205,7 +1206,7 @@ export default function QuickAdd() {
               title="Close (Esc)"
               aria-label="Close"
             >
-              ×
+              <PanelIcon name="close" />
             </button>
           </div>
         </div>
@@ -1378,10 +1379,7 @@ export default function QuickAdd() {
                     <span className="qa-pill-label">{labelButtonText}</span>
                   </button>
 
-                  <button type="button" className={`qa-pill${loggedInput.trim() ? ' active' : ' muted'}`} onClick={() => toggleMenu('logged')}>
-                    <span aria-hidden>◴</span>
-                    <span className="qa-pill-label">{loggedMinutes && loggedMinutes > 0 ? `Logged ${formatDuration(loggedMinutes)}` : 'Time logged'}</span>
-                  </button>
+
                 </div>
               </div>
 
@@ -1692,7 +1690,7 @@ export default function QuickAdd() {
                 onClick={() => setStatusSearch('')}
                 aria-label="Clear search"
               >
-                ×
+                <PanelIcon name="close" />
               </button>
             )}
           </div>
@@ -1711,7 +1709,6 @@ export default function QuickAdd() {
                   <div key={g.group}>
                     <div className="qa-grouphead qa-status-group">
                       <span className="qa-status-group-label">
-                        <span aria-hidden>{g.emoji}</span>
                         <span>{g.label}</span>
                       </span>
                       <span className="qa-type-count">{g.items.length}</span>
@@ -1723,6 +1720,7 @@ export default function QuickAdd() {
                         <button
                           key={s.key}
                           type="button"
+                          title={s.description}
                           className={`qa-opt-row qa-status-row${selected ? ' selected' : ''}${flatIdx === statusHi ? ' hi' : ''}`}
                           onClick={() => pickStatus(s.key)}
                           onMouseEnter={() => setStatusHi(flatIdx)}
@@ -1757,7 +1755,6 @@ export default function QuickAdd() {
                 <div key={g.groupName}>
                   <div className="qa-grouphead qa-status-group">
                     <span className="qa-status-group-label">
-                      <span aria-hidden>{g.emoji}</span>
                       <span>{g.groupName}</span>
                     </span>
                     <span className="qa-type-count">{g.items.length}</span>
@@ -1847,6 +1844,10 @@ export default function QuickAdd() {
                   </span>
                 )}
               </div>
+              <button type="button" className={`qa-logged-link${loggedInput.trim() ? ' active' : ' muted'}`} onClick={() => toggleMenu('logged')}>
+                <span aria-hidden>◴</span>
+                <span className="qa-pill-label">{loggedMinutes && loggedMinutes > 0 ? `Logged ${formatDuration(loggedMinutes)}` : 'Time logged'}</span>
+              </button>
               <div className="qa-footer-list" title={selectedList?.name || 'My Tasks'}>
                 {selectedList?.name || 'My Tasks'}
               </div>
@@ -1877,7 +1878,7 @@ export default function QuickAdd() {
                           title="Remove"
                           aria-label={`Remove ${a.file.name}`}
                         >
-                          ×
+                          <PanelIcon name="close" />
                         </button>
                       </div>
                     ))}
@@ -1906,7 +1907,7 @@ export default function QuickAdd() {
                               title="Dismiss"
                               aria-label="Dismiss failed uploads"
                             >
-                              ×
+                              <PanelIcon name="close" />
                             </button>
                           </>
                         )}

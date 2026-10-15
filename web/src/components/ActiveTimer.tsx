@@ -38,7 +38,7 @@ function useTimerTiles(): Tile[] {
 
   if (!hasAny) return [];
 
-  const clockFrom = (startedAt: number) => formatClock(Math.max(0, Math.floor((now - startedAt) / 1000)));
+  const clockFrom = (startedAt: number, elapsedBefore = 0) => formatClock(elapsedBefore + Math.max(0, Math.floor((now - startedAt) / 1000)));
   const parallelTones = ['parallel-1', 'parallel-2', 'parallel-3'] as const;
   const timerTile = (t: (typeof timers)[number], i: number): Tile => ({
     key: t.taskId,
@@ -46,7 +46,7 @@ function useTimerTiles(): Tile[] {
     tone: i === 0 ? 'tracking' : i === 1 ? 'secondary' : parallelTones[(i - 2) % parallelTones.length],
     taskId: t.taskId,
     title: t.taskTitle,
-    clock: clockFrom(t.startedAt),
+    clock: clockFrom(t.startedAt, t.elapsedBefore),
     stopTitle: 'Stop task timer',
     onStop: () => stopTimer(t.taskId),
   });
