@@ -25,6 +25,8 @@ import { useColumnPrefs } from '../../../hooks/useColumnPrefs';
 import { visibleColumnIds, COLUMN_DEFS, gridTemplateFor, type ColumnControls } from '../../../lib/columns';
 import type { ListViewColumnId } from '@squadhub/shared';
 import TaskRow from './TaskRow';
+import TaskOverviewHeader from './TaskOverviewHeader';
+import { matchesOverviewTile, type OverviewTile } from '../../../lib/taskOverviewTiles';
 import './task-overview.css';
 import './stage-row.css';
 
@@ -37,7 +39,6 @@ import './stage-row.css';
 
 export type OverviewGroup = 'stage' | 'status' | 'priority' | 'assignee' | 'list' | 'task_type';
 type ViewMode = 'list' | 'board' | 'calendar';
-type TileKey = 'all' | 'not_started' | 'active' | 'urgent' | 'due';
 
 const GROUP_OPTIONS: { value: OverviewGroup; label: string }[] = [
   { value: 'stage', label: 'Stage' },
@@ -70,11 +71,6 @@ function initialsOf(u: Pick<User, 'display_name' | 'email'>): string {
   const name = (u.display_name || u.email || '?').trim();
   const parts = name.split(/\s+/).filter(Boolean);
   return ((parts[0]?.[0] || '') + (parts[1]?.[0] || '')).toUpperCase() || name[0].toUpperCase();
-}
-
-function isDueToday(t: Task): boolean {
-  if (!t.due_date) return false;
-  return formatWhen(t.due_date).state === 'today';
 }
 
 export const NO_FOLDER_KEY = '__none__';
@@ -156,7 +152,7 @@ export default function TaskOverview({
   const filters: TaskFilterState = filtersByScope[scopeKey] || EMPTY_FILTER;
 
   const [query, setQuery] = useState('');
-  const [tile, setTile] = useState<TileKey>('all');
+  const [tile, setTile] = useState<OverviewTile>('all');
   const [view, setView] = useState<ViewMode>('list');
   const [menu, setMenu] = useState<'group' | 'filter' | 'fields' | null>(null);
   const [showDone, setShowDone] = useState(false);
@@ -217,7 +213,6 @@ export default function TaskOverview({
     }
     return { status: findStatus(lookup, raw), parked: null };
   };
-  const sectionOf = (t: Task) => placeOf(t).status?.group || null;
 
   const visibleLists = useMemo(
     () => (folderFilter === 'all' ? lists : lists.filter((l) => (l.folderId ?? NO_FOLDER_KEY) === folderFilter)),
@@ -235,24 +230,9 @@ export default function TaskOverview({
     () => scoped.filter((t) => listFilter === 'all' || t.list?.id === listFilter),
     [scoped, listFilter],
   );
-  const openPool = pool.filter((t) => !isDone(t));
-  const urgent = openPool.filter((t) => t.priority === 'emergency' || t.priority === 'urgent');
-  const overdue = openPool.filter((t) => isTaskOverdue(t));
-  const dueNow = openPool.filter((t) => isTaskOverdue(t) || isDueToday(t));
-
-  const matchTile = (t: Task) => {
-    switch (tile) {
-      case 'not_started': return sectionOf(t) === 'not_started';
-      case 'active': return sectionOf(t) === 'in_motion';
-      case 'urgent': return t.priority === 'emergency' || t.priority === 'urgent';
-      case 'due': return isTaskOverdue(t) || isDueToday(t);
-      default: return true;
-    }
-  };
-
   const q = query.trim().toLowerCase();
   const matching = pool.filter((t) =>
-    matchTile(t)
+    matchesOverviewTile(t, tile, tz)
     && filterTasks([t], filters, tz).length > 0
     && (!q || t.title.toLowerCase().includes(q)));
   const doneCount = matching.filter(isDone).length;
@@ -365,20 +345,7 @@ export default function TaskOverview({
   const setFilters = (next: TaskFilterState) => setScopeFilters(scopeKey, next);
   const filterCount = (filters.priorities?.length ?? 0) + (filters.assigneeIds?.length ? 1 : 0) + (filters.hasDueDate ? 1 : 0);
 
-  // ---- Summary ------------------------------------------------------------
   const listsInScope = listFilter === 'all' ? `${visibleLists.length} ${visibleLists.length === 1 ? 'list' : 'lists'}` : (lists.find((l) => l.id === listFilter)?.name || 'this list');
-  const lead = overdue[0] || urgent[0];
-  const summary = `You have ${openPool.length} open ${openPool.length === 1 ? 'task' : 'tasks'} across ${listsInScope}`
-    + (urgent.length ? `, ${urgent.length} marked urgent.` : '.')
-    + (lead ? ` ${lead.title} is ${isTaskOverdue(lead) ? 'overdue' : 'due today'}.` : '');
-
-  const tiles: { key: TileKey; name: string; value: number; sub: string; dot: string }[] = [
-    { key: 'due', name: 'Due today', value: dueNow.length, sub: `${overdue.length} overdue`, dot: '#FFB340' },
-    { key: 'urgent', name: 'Urgent', value: urgent.length, sub: 'need you', dot: '#FF453A' },
-    { key: 'active', name: 'Active', value: openPool.filter((t) => sectionOf(t) === 'in_motion').length, sub: 'in progress', dot: '#39C66B' },
-    { key: 'not_started', name: 'Not started', value: openPool.filter((t) => sectionOf(t) === 'not_started').length, sub: 'tasks', dot: '#B7BCC0' },
-    { key: 'all', name: 'All open', value: openPool.length, sub: 'tasks', dot: '#B7BCC0' },
-  ];
 
   // ---- Rendering helpers --------------------------------------------------
   const rowMeta = (t: Task) => {
@@ -549,47 +516,9 @@ export default function TaskOverview({
     <div className="tov">
       <div className="tov-inner">
         {/* Header card */}
-        <div className="tov-card tov-head">
-          <div className="tov-head-row">
-            <div className="tov-title-wrap">
-              <h1 className="tov-title">{title}<span className="tov-title-dot">.</span></h1>
-              <p className="tov-summary">{loading && top.length === 0 ? 'Loading tasks…' : summary}</p>
-            </div>
-            <div className="tov-head-actions">
-              <label className="tov-search">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
-                <input placeholder="Search tasks" value={query} onChange={(e) => setQuery(e.target.value)} />
-              </label>
-              <button type="button" className="tov-new" onClick={() => openCreate()}>
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>
-                New task
-              </button>
-              {headerExtra}
-            </div>
-          </div>
-
-          {/* Stats strip — tiles filter the list; click again to clear */}
-          <div className="tov-tiles">
-            {tiles.map((x) => (
-              <button
-                key={x.key}
-                type="button"
-                className="tov-tile"
-                data-on={tile === x.key || undefined}
-                onClick={() => setTile(tile === x.key && x.key !== 'all' ? 'all' : x.key)}
-              >
-                <span className="tov-tile-top">
-                  <span className="tov-tile-name">{x.name}</span>
-                  <span className="tov-dot" style={{ background: x.dot }} />
-                </span>
-                <span className="tov-tile-val">
-                  <span className="tov-tile-num">{x.value}</span>
-                  <span className="tov-tile-sub">{x.sub}</span>
-                </span>
-              </button>
-            ))}
-          </div>
-
+        <TaskOverviewHeader title={title} tasks={pool} timeZone={tz} scopeLabel={listsInScope}
+          loading={loading} query={query} onQueryChange={setQuery} tile={tile} onTileChange={setTile}
+          onCreate={() => openCreate()} actions={headerExtra}>
           {/* Folder chips (Space pages) — narrow the list chips + tasks */}
           {folders && folders.length > 0 && onFolderFilter && (
             <div className="tov-chips tov-folders">
@@ -619,15 +548,23 @@ export default function TaskOverview({
 
           {/* List chips + Group / Filter / view switch */}
           <div className="tov-toolbar">
-            <div className="tov-chips">
+            {visibleLists.length > 1 && <div className="tov-chips tov-list-chips">
               {[{ id: 'all', name: 'All lists', count: scoped.length }, ...visibleLists.map((l) => ({ id: l.id, name: l.name, count: top.filter((t) => t.list?.id === l.id).length }))].map((l) => (
                 <button key={l.id} type="button" className="tov-chip" data-on={listFilter === l.id || undefined} onClick={() => onListFilter(l.id)}>
                   <span>{l.name}</span>
                   <span className="tov-chip-count">{l.count}</span>
                 </button>
               ))}
-            </div>
-            <div className="tov-controls">
+            </div>}
+            <div className="tov-toolbar-row">
+              <div className="tov-views" role="group" aria-label="Task view">
+                {(['list', 'board', 'calendar'] as const).map((v) => (
+                  <button key={v} type="button" aria-pressed={view === v} data-on={view === v || undefined} onClick={() => setView(v)}>
+                    {v.charAt(0).toUpperCase() + v.slice(1)}
+                  </button>
+                ))}
+              </div>
+              <div className="tov-controls">
               <div className="tov-menu-root" data-tov-menu>
                 <button type="button" className="tov-ctl" onClick={() => setMenu(menu === 'group' ? null : 'group')}>
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="4" y="4" width="16" height="6" rx="2" /><rect x="4" y="14" width="16" height="6" rx="2" /></svg>
@@ -697,16 +634,10 @@ export default function TaskOverview({
                   Fields
                   {hasColumnOverride && <span className="tov-ctl-badge">{visibleCols.length}</span>}
                 </button>
-              <div className="tov-views">
-                {(['list', 'board', 'calendar'] as const).map((v) => (
-                  <button key={v} type="button" data-on={view === v || undefined} onClick={() => setView(v)}>
-                    {v.charAt(0).toUpperCase() + v.slice(1)}
-                  </button>
-                ))}
               </div>
             </div>
           </div>
-        </div>
+        </TaskOverviewHeader>
 
         {/* Body */}
         <div className="tov-layout">

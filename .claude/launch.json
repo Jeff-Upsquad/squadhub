@@ -208,6 +208,24 @@
         "cd '/Users/jeffzeena/squadhub web/web' && INTERNAL_API_URL=http://localhost:4050 exec npx next dev -p 3050"
       ],
       "port": 3050
+    },
+    {
+      "name": "Stages Server",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": [
+        "-lc",
+        "cd '/Users/jeffzeena/squadhub web/server' && PORT=4060 DISABLE_CRONS=true exec npx tsx watch src/index.ts"
+      ],
+      "port": 4060
+    },
+    {
+      "name": "Stages Web",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": [
+        "-lc",
+        "cd '/Users/jeffzeena/squadhub web/web' && INTERNAL_API_URL=http://localhost:4060 exec npx next dev -p 3060"
+      ],
+      "port": 3060
     }
   ]
 }

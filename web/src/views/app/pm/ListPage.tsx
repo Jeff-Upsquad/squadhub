@@ -9,6 +9,9 @@ import { useAuthStore } from '../../../stores/authStore';
 import { canAtLeast } from '../../../lib/access';
 import type { SpaceStatus, AccessLevel, ListView as ListViewType, ListViewRow, ListViewConfig } from '@squadhub/shared';
 import ListView from './ListView';
+import TaskOverviewHeader from './TaskOverviewHeader';
+import type { OverviewTile } from '../../../lib/taskOverviewTiles';
+import { isTaskVisibleInView } from '../../../lib/viewKeywordMatching';
 import BoardView from './BoardView';
 import StageBoardView from './StageBoardView';
 import WhiteboardView from './WhiteboardView';
@@ -54,6 +57,7 @@ export default function ListPage({
   const [showShare, setShowShare] = useState(false);
   const [fieldsOpen, setFieldsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [overviewTile, setOverviewTile] = useState<OverviewTile>('all');
   // "Focus today" and "My tasks" stay per-user ephemeral toggles (not part of a
   // saved view's config), so they keep using the existing list-scoped store.
   const focusTodayScope = usePMStore((s) => s.focusTodayScope);
@@ -76,6 +80,8 @@ export default function ListPage({
     const savedId = activeListId ? activeViewIdByList[activeListId] : null;
     return views.find((v) => v.id === savedId) || views.find((v) => v.is_default) || views[0];
   }, [views, activeViewIdByList, activeListId]);
+
+  useEffect(() => { setOverviewTile('all'); }, [activeListId, activeView?.id]);
 
   const contentType: ListViewType = isMobile ? 'list' : (activeView?.view_type ?? 'list');
 
@@ -216,7 +222,8 @@ export default function ListPage({
 
   // Cached fetch of the same task set used by ListView/BoardView (React Query dedupes).
   // Used purely to derive filter dropdown options from the un-filtered set.
-  const { data: tasksForOptions } = useTasks(activeListId, undefined);
+  const { data: tasksForOptions, isLoading: tasksLoading } = useTasks(activeListId, undefined);
+  const overviewTasks = useMemo(() => (tasksForOptions ?? []).filter((t) => !t.parent_task_id && isTaskVisibleInView(t, activeView, views)), [tasksForOptions, activeView, views]);
   const assigneeOptions = useMemo(() => deriveAssigneeOptions(tasksForOptions ?? []), [tasksForOptions]);
   const tagOptions = useMemo(() => deriveTagOptions(tasksForOptions ?? []), [tasksForOptions]);
 
@@ -297,10 +304,91 @@ export default function ListPage({
   const listTaskTotal = (tasksForOptions ?? []).length;
   const listTaskDone = (tasksForOptions ?? []).filter(isTaskCompleted).length;
 
+  const useOverviewHeader = !isMobile && !embedded && contentType === 'list';
+  const viewTabs = (
+<div className="lv-tabs-row">
+        <ViewTabs
+          views={views}
+          activeViewId={activeView?.id ?? null}
+          currentUserId={currentUserId}
+          canEdit={canEdit && !isMobile}
+          listId={activeListId}
+          onSelect={selectView}
+          onCreate={handleCreateView}
+          onCreateCustom={handleCreateCustomView}
+          onUpdateCustom={handleUpdateCustomView}
+          onRename={handleRenameView}
+          onDuplicate={handleDuplicateView}
+          onSetDefault={handleSetDefaultView}
+          onTogglePrivate={handleTogglePrivate}
+          onDelete={handleDeleteView}
+        />
+        {activeListId && (
+          <ContainerChatButton
+            resourceType="list"
+            resourceId={activeListId}
+            name={listData?.name || 'List'}
+            accessLevel={myAccess}
+            style={{ marginLeft: 'auto' }}
+          />
+        )}
+      </div>
+  );
+  const filterBar = (
+contentType === 'list' && (
+        <MinimalGroupFilterBar
+          groupOptions={(stageMode ? [...LIST_GROUP_BY_OPTIONS, ...STAGE_GROUP_BY_OPTIONS] : LIST_GROUP_BY_OPTIONS) as { value: string; label: string }[]}
+          groupBy={listGroupBy}
+          onGroupChange={(v) => setWorkingConfig((c) => ({ ...c, groupBy: v }))}
+          groupDirection={listGroupDir}
+          onGroupDirectionChange={(d) => setWorkingConfig((c) => ({ ...c, groupDir: d }))}
+          filters={filters}
+          onFiltersChange={(next) => setWorkingConfig((c) => ({ ...c, filters: next }))}
+          statuses={statuses}
+          assigneeOptions={assigneeOptions}
+          tagOptions={tagOptions}
+          sortOptions={SORT_BY_OPTIONS as { value: string; label: string }[]}
+          sortBy={sortBy}
+          onSortChange={(v) => setWorkingConfig((c) => ({ ...c, sortBy: v }))}
+          extraRight={
+            <>
+              {canEdit && configDirty && (
+                <>
+                  <button type="button" className="mgf-mini" data-active onClick={saveView} title="Save these settings to this view">Save view</button>
+                  <button type="button" className="mgf-mini" onClick={saveAsNewView} title="Save as a new view">Save as new</button>
+                </>
+              )}
+              <button
+                type="button"
+                onClick={() => listScopeKey && setScopedFocusToday(listScopeKey, !focusToday)}
+                className="mgf-mini"
+                data-active={focusToday || undefined}
+                aria-pressed={focusToday}
+                title="Show only tasks scheduled for today"
+              >
+                Focus today
+              </button>
+              <button
+                type="button"
+                onClick={() => setMyTasksOnly(!myTasksOnly)}
+                className="mgf-mini"
+                data-active={myTasksOnly || undefined}
+                aria-pressed={myTasksOnly}
+                title="Show only tasks assigned to me"
+              >
+                My tasks
+              </button>
+            </>
+          }
+        />
+      )
+  );
+
   return (
     // min-h-0 is load-bearing: without it this flex child's automatic minimum
     // is its content height, so the .lv-canvas scroll area below gets clipped.
-    <div className={`relative flex min-h-0 flex-1 flex-col${embedded ? ' lv-embedded' : ''}`}>
+    <div className={`relative flex min-h-0 flex-1 flex-col${embedded ? ' lv-embedded' : ''}${useOverviewHeader ? ' tov-list-page' : ''}`}
+>
       {isMobile && !embedded && (
         <div className="mtk-phone-head">
           <h1>{listData?.name || 'List'}</h1>
@@ -312,7 +400,31 @@ export default function ListPage({
           )}
         </div>
       )}
+      {useOverviewHeader && (
+        <div className="tov tov-list-header">
+          <div className="tov-inner">
+            <TaskOverviewHeader title={listData?.name || 'List'} tasks={overviewTasks} loading={tasksLoading}
+              timeZone={tz} query={searchQuery} onQueryChange={setSearchQuery}
+              tile={overviewTile} onTileChange={setOverviewTile}
+              onCreate={canEdit ? () => window.dispatchEvent(new CustomEvent('sh:open-create-task')) : undefined}
+              breadcrumbs={(spaceData?.name || folderData?.name) && <nav className="tov-breadcrumbs" aria-label="List location">
+                {spaceData?.name && effectiveSpaceId && <button type="button" onClick={() => setActiveSpacePage(effectiveSpaceId)}>{spaceData.name}</button>}
+                {folderData?.name && folderId && <><span>/</span><button type="button" onClick={() => setActiveFolder(folderId)}>{folderData.name}</button></>}
+              </nav>}
+              actions={canAccessSettings && <button type="button" className="tov-ctl" onClick={() => { const next = !showSettings; setShowSettings(next); if (next) setActiveTask(null); }}>Settings</button>}>
+              <div className="tov-toolbar-row tov-list-controls">
+                {viewTabs}
+                <div className="tov-controls">
+                  {filterBar}
+                  <button type="button" className="tov-ctl" data-on={hasColumnOverride || undefined} onClick={() => setFieldsOpen(true)}>Fields</button>
+                </div>
+              </div>
+            </TaskOverviewHeader>
+          </div>
+        </div>
+      )}
       {/* Row 1: Breadcrumb + global actions */}
+      {!useOverviewHeader && (
       <div className="lv-breadcrumb-row">
         {/* Left: breadcrumb, or when embedded (e.g. My Tasks), a clean compact title header */}
         {!embedded ? (
@@ -397,84 +509,12 @@ export default function ListPage({
 
         </div>
       </div>
+      )}
 
-      {/* Row 2: Named view tabs (List / Board / Whiteboard views + "+") */}
-      <div className="lv-tabs-row">
-        <ViewTabs
-          views={views}
-          activeViewId={activeView?.id ?? null}
-          currentUserId={currentUserId}
-          canEdit={canEdit && !isMobile}
-          listId={activeListId}
-          onSelect={selectView}
-          onCreate={handleCreateView}
-          onCreateCustom={handleCreateCustomView}
-          onUpdateCustom={handleUpdateCustomView}
-          onRename={handleRenameView}
-          onDuplicate={handleDuplicateView}
-          onSetDefault={handleSetDefaultView}
-          onTogglePrivate={handleTogglePrivate}
-          onDelete={handleDeleteView}
-        />
-        {activeListId && (
-          <ContainerChatButton
-            resourceType="list"
-            resourceId={activeListId}
-            name={listData?.name || 'List'}
-            accessLevel={myAccess}
-            style={{ marginLeft: 'auto' }}
-          />
-        )}
-      </div>
+      {!useOverviewHeader && viewTabs}
 
       {/* Minimal Group + Filter bar (List view only) */}
-      {contentType === 'list' && (
-        <MinimalGroupFilterBar
-          groupOptions={(stageMode ? [...LIST_GROUP_BY_OPTIONS, ...STAGE_GROUP_BY_OPTIONS] : LIST_GROUP_BY_OPTIONS) as { value: string; label: string }[]}
-          groupBy={listGroupBy}
-          onGroupChange={(v) => setWorkingConfig((c) => ({ ...c, groupBy: v }))}
-          groupDirection={listGroupDir}
-          onGroupDirectionChange={(d) => setWorkingConfig((c) => ({ ...c, groupDir: d }))}
-          filters={filters}
-          onFiltersChange={(next) => setWorkingConfig((c) => ({ ...c, filters: next }))}
-          statuses={statuses}
-          assigneeOptions={assigneeOptions}
-          tagOptions={tagOptions}
-          sortOptions={SORT_BY_OPTIONS as { value: string; label: string }[]}
-          sortBy={sortBy}
-          onSortChange={(v) => setWorkingConfig((c) => ({ ...c, sortBy: v }))}
-          extraRight={
-            <>
-              {canEdit && configDirty && (
-                <>
-                  <button type="button" className="mgf-mini" data-active onClick={saveView} title="Save these settings to this view">Save view</button>
-                  <button type="button" className="mgf-mini" onClick={saveAsNewView} title="Save as a new view">Save as new</button>
-                </>
-              )}
-              <button
-                type="button"
-                onClick={() => listScopeKey && setScopedFocusToday(listScopeKey, !focusToday)}
-                className="mgf-mini"
-                data-active={focusToday || undefined}
-                aria-pressed={focusToday}
-                title="Show only tasks scheduled for today"
-              >
-                Focus today
-              </button>
-              <button
-                type="button"
-                onClick={() => setMyTasksOnly(!myTasksOnly)}
-                className="mgf-mini"
-                data-active={myTasksOnly || undefined}
-                aria-pressed={myTasksOnly}
-                title="Show only tasks assigned to me"
-              >
-                My tasks
-              </button>
-            </>
-          }
-        />
-      )}
+      {!useOverviewHeader && filterBar}
 
       {/* Phone scope chips — TaskFilter.kt's All / Today / Overdue pills with
           counts; replaces the desktop toolbar above on narrow screens. */}
@@ -553,6 +593,7 @@ export default function ListPage({
             columns={listVisibleColumns}
             columnControls={listColumnControls}
             stageMode={stageMode}
+            overviewTile={useOverviewHeader ? overviewTile : 'all'}
           />
         ) : contentType === 'board' && stageMode ? (
           <StageBoardView
