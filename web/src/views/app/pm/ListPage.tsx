@@ -159,8 +159,12 @@ export default function ListPage({
 
   const statuses: SpaceStatus[] = useMemo(() => {
     const rawStatuses: SpaceStatus[] = spaceData?.space_statuses || spaceData?.statuses || listData?.space_statuses || [];
-    if (catalogDefs && catalogDefs.length > 0 && assignment && !assignment.is_default_fallback) {
-      return catalogDefs.map((d, idx) => ({
+    // The untouched 3-row seed (To Do / In Progress / Done) isn't a real
+    // workflow — lists there follow the workspace stage group too.
+    const seedOnly = rawStatuses.length === 3
+      && ['to do', 'in progress', 'done'].every((n) => rawStatuses.some((r) => r.name.toLowerCase() === n));
+    if (catalogDefs && catalogDefs.length > 0 && assignment && (!assignment.is_default_fallback || seedOnly)) {
+      return catalogDefs.filter((d) => !d.is_legacy).map((d, idx) => ({
         id: d.key,
         space_id: effectiveSpaceId || '',
         name: d.label,
@@ -173,11 +177,13 @@ export default function ListPage({
         groupEmoji: d.groupEmoji,
         description: d.description,
         is_placeholder: d.is_placeholder,
+        groupColor: d.groupColor,
+        groupPosition: d.groupPosition,
       }));
     }
     if (rawStatuses.length > 0) return rawStatuses;
     if (catalogDefs && catalogDefs.length > 0) {
-      return catalogDefs.map((d, idx) => ({
+      return catalogDefs.filter((d) => !d.is_legacy).map((d, idx) => ({
         id: d.key,
         space_id: effectiveSpaceId || '',
         name: d.label,
@@ -190,6 +196,8 @@ export default function ListPage({
         groupEmoji: d.groupEmoji,
         description: d.description,
         is_placeholder: d.is_placeholder,
+        groupColor: d.groupColor,
+        groupPosition: d.groupPosition,
       }));
     }
     return [];

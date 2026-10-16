@@ -33,6 +33,8 @@ const sectionSchema = z.object({
   key: z.string().min(1).max(64).regex(slugRegex),
   label: z.string().trim().min(1).max(100),
   emoji: z.string().max(16),
+  color: z.string().max(40).nullable().optional(),
+  position: z.number().int().min(0).max(100000).nullable().optional(),
 });
 const groupCreateSchema = z.object({
   key: z.string().min(1).max(64).regex(slugRegex, 'Key must be lowercase letters, numbers and underscores'),

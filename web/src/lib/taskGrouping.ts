@@ -23,7 +23,7 @@ export const GROUP_BY_OPTIONS: { value: GroupBy; label: string }[] = [
 ];
 
 export const LIST_GROUP_BY_OPTIONS: { value: GroupBy; label: string }[] = [
-  { value: 'status', label: 'Status' },
+  { value: 'status', label: 'Stage' },
   { value: 'none', label: 'None' },
   { value: 'work_date', label: 'Work date' },
   { value: 'due_date', label: 'Due date' },

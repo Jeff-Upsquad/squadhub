@@ -56,7 +56,7 @@ const STATUS_SECTION_COLORS: Record<string, string> = {
 
 export function statusSection(s: SpaceStatus): ListSectionMeta | null {
   if (!s.group) return null;
-  return { key: s.group, label: s.groupLabel || s.group, emoji: s.groupEmoji, color: STATUS_SECTION_COLORS[s.group] || null };
+  return { key: s.group, label: s.groupLabel || s.group, emoji: s.groupEmoji, color: s.groupColor || STATUS_SECTION_COLORS[s.group] || null };
 }
 
 export function taskTypeSection(t: TaskType | null | undefined, groupOf: (t: TaskType) => string): ListSectionMeta | null {

@@ -9,6 +9,7 @@ export default function GlobalCreateTaskModal({
   resumeDraft,
   inListContext = false,
   inMyTasks = false,
+  defaultStatus,
 }: {
   onClose: () => void;
   resumeDraft?: SavedDraft | null;
@@ -26,6 +27,8 @@ export default function GlobalCreateTaskModal({
    * created directly inside My Tasks without hunting for it.
    */
   inMyTasks?: boolean;
+  /** Status key to start the task in (e.g. from a stage's "+" button). */
+  defaultStatus?: string | null;
 }) {
   const workspaceId = useWorkspaceStore((s) => s.currentWorkspace?.id);
   const activeSpaceId = usePMStore((s) => s.activeSpaceId);
@@ -58,6 +61,7 @@ export default function GlobalCreateTaskModal({
       initialSpaceId={resumeDraft?.spaceId ?? fallbackSpaceId}
       initialListId={resumeDraft?.listId ?? fallbackListId}
       initialDraft={resumeDraft ? { ...resumeDraft.draft, _draftId: resumeDraft.id } : undefined}
+      defaultStatus={defaultStatus || undefined}
       onClose={onClose}
     />
   );

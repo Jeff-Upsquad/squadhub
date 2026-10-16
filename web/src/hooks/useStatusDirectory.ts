@@ -26,9 +26,9 @@ export function useStatusDirectory(): SpaceStatus[] {
   });
 
   return useMemo(() => {
-    // Stage workflows first (their placeholder flags + labels win for shared
-    // keys), Default Task Statuses last.
-    const rank = (g: StatusGroup) => (g.is_stage_workflow ? 0 : g.key === 'task_workflow' ? 2 : 1);
+    // The workspace default stage group first: its stage + labels win for
+    // shared keys; custom stage groups then add their own statuses.
+    const rank = (g: StatusGroup) => (g.key === 'task_workflow' ? 0 : g.base_group_id ? 1 : 2);
     const groups = [...(data || [])].sort((a, b) => rank(a) - rank(b));
     const byKey = new Map<string, SpaceStatus>();
     for (const g of groups) {
@@ -48,6 +48,9 @@ export function useStatusDirectory(): SpaceStatus[] {
           groupEmoji: def.groupEmoji,
           description: def.description,
           is_placeholder: def.is_placeholder,
+          groupColor: def.groupColor,
+          groupPosition: def.groupPosition,
+          groupSource: g.key === 'task_workflow' || row.is_inherited ? null : g.name,
         });
       }
     }
@@ -64,6 +67,8 @@ export function useStatusDirectory(): SpaceStatus[] {
         color: s.color,
         is_default: s.is_default,
         is_placeholder: s.is_placeholder,
+        groupColor: s.groupColor,
+        groupPosition: s.groupPosition,
       })));
     }
     return list;
