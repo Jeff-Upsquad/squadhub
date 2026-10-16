@@ -975,6 +975,9 @@ function JobCardActivity({ cardId }: { cardId: string }) {
             <p className="mt-0.5 text-[11px] text-foreground-dim">
               {e.actor_label || e.actor_type || 'system'}
             </p>
+            {e.actor_type === 'bot' && typeof e.metadata?.summary === 'string' && (
+              <p className="mt-0.5 whitespace-pre-wrap text-xs text-foreground">{e.metadata.summary}</p>
+            )}
           </div>
           <span className="shrink-0 text-[11px] text-foreground-dim">
             {new Date(e.created_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
