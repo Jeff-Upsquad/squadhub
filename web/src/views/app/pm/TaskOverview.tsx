@@ -147,7 +147,10 @@ export default function TaskOverview({
   const statusDirectory = useStatusDirectory();
   const lookup = useMemo(() => [...statusDirectory, ...statusFallback], [statusDirectory, statusFallback]);
 
-  const stored = groupByScope[scopeKey] as string | undefined;
+  // Start the stage-card layout in Stage view once, including when an older
+  // overview saved Status/Priority. Subsequent choices still persist and sync.
+  const groupScopeKey = `${scopeKey}:stage-layout`;
+  const stored = groupByScope[groupScopeKey] as string | undefined;
   const group: OverviewGroup = (GROUP_OPTIONS.some((o) => o.value === stored) ? stored : 'stage') as OverviewGroup;
   const groupDir = groupDirByScope[scopeKey] === 'desc' ? 'desc' : 'asc';
   const filters: TaskFilterState = filtersByScope[scopeKey] || EMPTY_FILTER;
@@ -358,7 +361,7 @@ export default function TaskOverview({
     updateTask.mutate({ id: taskId, status: statusId });
   };
   const openCreate = (status?: string) => window.dispatchEvent(new CustomEvent('sh:open-create-task', status ? { detail: { status } } : undefined));
-  const setGroup = (g: OverviewGroup) => { setScopedGroupBy(scopeKey, g as GroupBy); setMenu(null); };
+  const setGroup = (g: OverviewGroup) => { setScopedGroupBy(groupScopeKey, g as GroupBy); setMenu(null); };
   const setFilters = (next: TaskFilterState) => setScopeFilters(scopeKey, next);
   const filterCount = (filters.priorities?.length ?? 0) + (filters.assigneeIds?.length ? 1 : 0) + (filters.hasDueDate ? 1 : 0);
 

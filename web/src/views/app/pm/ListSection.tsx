@@ -64,6 +64,7 @@ export default function ListSection({
   color,
   count,
   children,
+  stageCard = false,
 }: {
   id: string;
   label: string;
@@ -71,12 +72,13 @@ export default function ListSection({
   color?: string | null;
   count: number;
   children: ReactNode;
+  stageCard?: boolean;
 }) {
   const collapsed = usePMStore((s) => s.collapsedGroups[id] ?? false);
   const setGroupCollapsed = usePMStore((s) => s.setGroupCollapsed);
   return (
     <section
-      className="lv-section"
+      className={stageCard ? 'lv-section lv-stage-card' : 'lv-section'}
       data-collapsed={collapsed || undefined}
       style={{ ['--sec-color' as string]: color || 'var(--sh-ink-3)' }}
     >
@@ -167,6 +169,7 @@ export function StageSections<G>({
             emoji={st.emoji}
             color={st.color}
             count={items.reduce((n, g) => n + countOf(g), 0)}
+            stageCard
           >
             {shown.map(render)}
             {empty.length > 0 && (

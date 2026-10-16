@@ -23,7 +23,7 @@ interface TaskGroupCardProps {
   onDrop?: (taskId: string, statusId: string) => void;
   defaultCollapsed?: boolean;
   /** 'focus' renders the elevated amber "Focus Today" spotlight treatment. */
-  variant?: 'default' | 'focus';
+  variant?: 'default' | 'focus' | 'stage-status';
   /** Fade focused (but not completed) rows — signals they're already in the Focus Today banner above. */
   dimFocused?: boolean;
   defaultPriority?: string | null;
@@ -125,7 +125,7 @@ export default function TaskGroupCard({
 
   return (
     <div
-      className={isFocus ? 'lv-card lv-card--focus' : 'lv-card'}
+      className={isFocus ? 'lv-card lv-card--focus' : variant === 'stage-status' ? 'lv-card lv-card--stage-status' : 'lv-card'}
       data-dragover={isDragOver}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
@@ -241,7 +241,12 @@ export default function TaskGroupCard({
               />
             )}
             <span className="gh-title">{label}</span>
-            <span className="lv-progress">
+            {variant === 'stage-status' ? (
+              <svg className="lv-status-ring" width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+                <circle cx="8" cy="8" r="6" fill="none" stroke="var(--sh-hair-3)" strokeWidth="2.4" />
+                <circle cx="8" cy="8" r="6" fill="none" stroke={dotColor || 'var(--sh-ink-3)'} strokeWidth="2.4" strokeLinecap="round" strokeDasharray={`${pct / 100 * 2 * Math.PI * 6} ${2 * Math.PI * 6}`} transform="rotate(-90 8 8)" />
+              </svg>
+            ) : <span className="lv-progress">
               <span
                 className="lv-progress-fill"
                 style={{
@@ -249,7 +254,7 @@ export default function TaskGroupCard({
                   background: dotColor || 'var(--sh-ink-3)',
                 }}
               />
-            </span>
+            </span>}
             <span className="lv-fraction">
               {completedCount}/{totalCount}
             </span>
