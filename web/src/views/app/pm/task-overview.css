@@ -63,31 +63,33 @@
 /* Stats strip (dark in both themes) */
 .tov-tiles {
   background: linear-gradient(180deg, #191C1F 0%, #0B0C0E 100%);
-  border-radius: 26px;
-  padding: 8px;
+  border-radius: 20px;
+  padding: 6px;
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .08), inset 0 1px 0 rgba(255, 255, 255, .14), 0 10px 28px rgba(0, 0, 0, .17), 0 2px 6px rgba(0, 0, 0, .12);
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  grid-template-columns: minmax(0, .65fr) repeat(5, minmax(0, 1fr));
   gap: 6px;
 }
 .tov-tile {
-  border: 0; text-align: left; cursor: pointer; border-radius: 18px; padding: 14px 16px 16px;
-  display: flex; flex-direction: column; gap: 14px; background: #1B1E21; transition: background .15s, transform .14s;
+  border: 0; text-align: center; cursor: pointer; border-radius: 14px; padding: 10px 10px 12px; min-width: 0;
+  display: flex; flex-direction: column; align-items: center; gap: 8px; background: #1B1E21; transition: background .15s, transform .14s;
 }
 .tov-tile:hover { transform: translateY(-1px); }
 .tov-tile[data-on] { background: #FFFFFF; box-shadow: 0 6px 16px rgba(0, 0, 0, .45), 0 1px 2px rgba(0, 0, 0, .3); }
-.tov-tile-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.tov-tile-top { display: flex; align-items: center; justify-content: center; gap: 6px; min-width: 0; max-width: 100%; }
 .tov-tile-top .tov-dot { width: 7px; height: 7px; }
-.tov-tile-name { font-size: 11.5px; font-weight: 600; letter-spacing: -0.01em; color: rgba(255, 255, 255, .52); }
+.tov-tile-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 11.5px; font-weight: 600; letter-spacing: -0.01em; color: rgba(255, 255, 255, .52); }
 .tov-tile-val { display: flex; align-items: baseline; gap: 6px; }
-.tov-tile-num { font-size: 28px; line-height: 1; font-weight: 700; letter-spacing: -0.05em; font-variant-numeric: tabular-nums; color: #FFFFFF; }
+.tov-tile-num { font-size: 22px; line-height: 1; font-weight: 700; letter-spacing: -0.05em; font-variant-numeric: tabular-nums; color: #FFFFFF; }
 .tov-tile-sub { font-size: 11.5px; color: rgba(255, 255, 255, .52); }
 .tov-tile[data-on] .tov-tile-name,
 .tov-tile[data-on] .tov-tile-sub { color: #6A6A6A; }
 .tov-tile[data-on] .tov-tile-num { color: #0A0A0A; }
 
 /* Toolbar */
-.tov-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.tov-toolbar { display: flex; flex-direction: column; gap: 14px; }
+.tov-toolbar-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.tov-list-chips .tov-chip { height: 26px; padding: 0 10px; gap: 6px; font-size: 11.5px; }
 .tov-chips,
 .tov-controls { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .tov-controls { gap: 8px; }
@@ -313,3 +315,63 @@
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 320px;
 }
 .tov-empty-chips { padding: 12px 10px 2px; }
+
+/* Breadcrumbs inside header */
+.tov-breadcrumbs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--tov-ink-3);
+  margin-bottom: -6px;
+}
+.tov-breadcrumbs button {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  font: 500 12px 'Inter', sans-serif;
+  color: var(--tov-ink-3);
+  cursor: pointer;
+  transition: color 0.12s;
+}
+.tov-breadcrumbs button:hover {
+  color: var(--tov-ink);
+}
+.tov-breadcrumbs span {
+  color: var(--tov-ink-4);
+  font-size: 11px;
+}
+
+/* List page integration */
+.tov.tov-list-header {
+  flex: none;
+  overflow: visible;
+  padding: 16px 20px 0;
+  background: transparent;
+}
+.tov-list-page {
+  background: var(--tov-page);
+}
+.tov-list-page .lv-canvas {
+  background: transparent;
+}
+.tov-list-page .lv-wrap {
+  max-width: 1240px;
+  padding: 16px 20px 96px !important;
+}
+.tov-list-controls {
+  gap: 12px;
+}
+.tov-list-controls .lv-tabs-row {
+  height: auto;
+  padding: 0;
+  border-bottom: 0;
+  background: transparent;
+  gap: 4px;
+}
+.tov-list-controls .mgf-bar {
+  padding: 0;
+  border-bottom: 0;
+  background: transparent;
+  min-height: 0;
+}

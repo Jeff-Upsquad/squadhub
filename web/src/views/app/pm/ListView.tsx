@@ -13,6 +13,7 @@ import { groupTasksByStage, sortByStageOrder } from '../../../lib/stageWorkflow'
 import TaskGroupCard from './TaskGroupCard';
 import { SectionedGroups, StageOrSectionGroups } from './ListSection';
 import { stagesFromStatuses } from '../../../lib/stages';
+import { matchesOverviewTile, type OverviewTile } from '../../../lib/taskOverviewTiles';
 import { statusSection, taskTypeSection } from '../../../lib/listSections';
 import { GROUP_ORDER as TASK_TYPE_GROUP_ORDER, getTaskTypeGroup } from '../../../components/pm/TaskTypeDropdown';
 
@@ -33,6 +34,7 @@ export default function ListView({
   columns,
   columnControls,
   stageMode = false,
+  overviewTile = 'all',
 }: {
   listId: string;
   statuses: SpaceStatus[];
@@ -52,6 +54,7 @@ export default function ListView({
   /** List is on a stage workflow: group by exact stage and, with no explicit
    *  sort, order every group priority → overdue → due date. */
   stageMode?: boolean;
+  overviewTile?: OverviewTile;
 }) {
   // Include subtasks as flat rows, then nest them under their parents so each
   // parent row gets the expandable subtask dropdown (TaskRow's chevron) instead
@@ -71,6 +74,7 @@ export default function ListView({
     const q = searchQuery.trim().toLowerCase();
     const matches = (t: Task): boolean => {
       if (!isTaskVisibleInView(t, activeView, allViews)) return false;
+      if (!matchesOverviewTile(t, overviewTile, tz)) return false;
       if (filterTasks([t], filters ?? EMPTY_FILTER, tz).length === 0) return false;
       if (q && !t.title.toLowerCase().includes(q)) return false;
       if (myTasksOnly) {
@@ -86,7 +90,7 @@ export default function ListView({
     // task lands at the bottom of its group. Explicit sorts take precedence.
     arr = sortBy !== 'manual' ? sortTasks(arr, sortBy) : stageMode ? sortByStageOrder(arr) : sortByCreationOrder(arr);
     return arr;
-  }, [tasks, filters, searchQuery, myTasksOnly, currentUserId, tz, focusToday, sortBy, activeView, allViews, stageMode]);
+  }, [tasks, filters, searchQuery, myTasksOnly, currentUserId, tz, focusToday, sortBy, activeView, allViews, stageMode, overviewTile]);
 
   const activeFilterCount = countActiveFilters(filters);
 
@@ -104,7 +108,7 @@ export default function ListView({
   const upcomingTasks = useMemo(() => {
     // Stage workflows keep every open task in its stage / bucket / plan group;
     // "when" is shown by the Plan grouping instead of snoozing rows away.
-    if (stageMode) return [];
+    if (stageMode || overviewTile !== 'all') return [];
     const f = filters ?? EMPTY_FILTER;
     const hasDateFilter = (f.dueDate?.length ?? 0) > 0 || (f.workDate?.length ?? 0) > 0;
     if (!hasDateFilter) {
@@ -130,7 +134,7 @@ export default function ListView({
     const { open } = partitionByCompletion(base, fadingTaskIds);
     const upcoming = open.filter((t) => isTaskUpcoming(t, tz));
     return sortBy !== 'manual' ? sortTasks(upcoming, sortBy) : sortByCreationOrder(upcoming);
-  }, [tasks, filters, searchQuery, myTasksOnly, currentUserId, tz, focusToday, sortBy, openTasks, fadingTaskIds, activeView, allViews, stageMode]);
+  }, [tasks, filters, searchQuery, myTasksOnly, currentUserId, tz, focusToday, sortBy, openTasks, fadingTaskIds, activeView, allViews, stageMode, overviewTile]);
 
   const upcomingIds = useMemo(() => new Set(upcomingTasks.map((t) => t.id)), [upcomingTasks]);
 
