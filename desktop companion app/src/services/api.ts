@@ -321,7 +321,15 @@ interface PresignResponse {
  *   3. confirm   → server HEAD-validates the object and writes the DB row.
  * Throws on any step so the caller can surface a per-file failure.
  */
-export async function uploadTaskAttachment(taskId: string, file: File): Promise<void> {
+/** Upload stages reported to the UI. The native PUT has no byte progress, so
+ * `put` carries a size-based estimate the caller can animate across. */
+export type UploadStage = { stage: 'presign' | 'read' | 'put' | 'confirm' | 'done'; estimateMs?: number };
+
+export async function uploadTaskAttachment(
+  taskId: string,
+  file: File,
+  onStage?: (s: UploadStage) => void,
+): Promise<void> {
   const contentType = file.type || 'application/octet-stream';
 
   const presign = await apiJson<PresignResponse>('/pm/task-attachments/presign', {
@@ -333,12 +341,16 @@ export async function uploadTaskAttachment(taskId: string, file: File): Promise<
       file_size: file.size,
     }),
   });
+  onStage?.({ stage: 'presign' });
 
   // Use Tauri's native HTTP client (reqwest) rather than the webview's fetch:
   // the direct-to-R2 PUT is cross-origin and R2's bucket CORS doesn't allow the
   // desktop webview origin, so a browser fetch is blocked by the preflight.
   // The native client isn't subject to CORS and sends exactly the headers we set.
   const bytes = new Uint8Array(await file.arrayBuffer());
+  onStage?.({ stage: 'read' });
+  // ~1.5 MB/s is a conservative uplink guess; clamp so tiny files still animate.
+  onStage?.({ stage: 'put', estimateMs: Math.min(12_000, Math.max(700, file.size / 1500)) });
   const put = await tauriFetch(presign.upload_url, {
     method: 'PUT',
     headers: { 'Content-Type': contentType },
@@ -347,6 +359,8 @@ export async function uploadTaskAttachment(taskId: string, file: File): Promise<
   if (!put.ok) {
     throw new Error(`Upload failed (${put.status})`);
   }
+
+  onStage?.({ stage: 'confirm' });
 
   await apiJson('/pm/task-attachments/confirm', {
     method: 'POST',
@@ -357,4 +371,5 @@ export async function uploadTaskAttachment(taskId: string, file: File): Promise<
       mime_type: contentType,
     }),
   });
+  onStage?.({ stage: 'done' });
 }

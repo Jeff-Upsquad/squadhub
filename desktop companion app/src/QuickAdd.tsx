@@ -40,6 +40,14 @@ type SelectedList = { id: string; name: string; spaceId?: string };
 // itself is created. `previewUrl` is an object URL for images (revoked on
 // removal/reset) and null for everything else.
 type PendingAttachment = { id: string; file: File; previewUrl: string | null };
+type AttachmentUpload = { pct: number; ms: number; state: 'uploading' | 'done' | 'failed' };
+const STAGE_PCT = { presign: 12, read: 22, put: 88, confirm: 92, done: 100 } as const;
+
+function fileSizeLabel(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
 let attachmentSeq = 0;
 
 // A batch of files handed to the background uploader once its task exists.
@@ -436,6 +444,13 @@ export default function QuickAdd() {
   const [phase, setPhase] = useState<Phase>('idle');
   const [error, setError] = useState('');
   const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
+  // Per-attachment upload state for the inline upload row (keyed by attachment id).
+  const [uploadState, setUploadState] = useState<Record<string, AttachmentUpload>>({});
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  // Full "Space › Folder › List" path per list id, for the Where row.
+  const [listPaths, setListPaths] = useState<Record<string, string>>({});
+  // Bumped on each press so the Add button replays its press ripple.
+  const [pressKey, setPressKey] = useState(0);
   const [dragOver, setDragOver] = useState(false);
   // Auth is shared with the menu-bar window via auth.json — when empty we show
   // an inline sign-in form instead of just an error string.
@@ -470,6 +485,9 @@ export default function QuickAdd() {
   // Once the task is created we keep its id so a retry (e.g. after an attachment
   // upload fails) re-uses it instead of creating a duplicate task.
   const createdTaskRef = useRef<{ id: string } | null>(null);
+  // Bumped by reset() so an upload that finishes after the panel was reopened
+  // for a new task doesn't close or error the fresh form.
+  const formGenRef = useRef(0);
   const loggedTimeAppliedRef = useRef(false);
   // dragenter/dragleave fire per-child; count depth so we only clear the drop
   // highlight when the cursor truly leaves the panel.
@@ -537,6 +555,8 @@ export default function QuickAdd() {
     setPhase('idle');
     setError('');
     clearAttachments();
+    setUploadState({});
+    formGenRef.current += 1;
     createdTaskRef.current = null;
     dragDepthRef.current = 0;
     draggingRef.current = false;
@@ -852,20 +872,35 @@ export default function QuickAdd() {
         loggedTimeAppliedRef.current = true;
       }
 
-      // Hand dropped files to the background uploader and close right away —
-      // the task exists, so slow or flaky uploads shouldn't hold the panel
-      // open. Failures surface (with a retry) the next time it's summoned.
+      // Upload attached files with live progress in the upload row, then close
+      // once they land. The job lives on the persistent webview, so dismissing
+      // mid-upload keeps it going; failures stay in the Tray with a Retry.
       if (attachments.length) {
         const job: BgUploadJob = {
           key: ++bgSeqRef.current,
           taskId: task.id,
           taskTitle: trimmed,
-          files: attachments,
+          files: [...attachments],
           active: false,
         };
         bgJobsRef.current.push(job);
-        runBgUploads(job);
-        setAttachments([]);
+        const gen = formGenRef.current;
+        const failedCount = await runBgUploads(job);
+        if (gen !== formGenRef.current) return;
+        if (failedCount) {
+          // The failed files now belong to the Tray job (Retry there); drop them
+          // from the row without revoking their previews.
+          setAttachments([]);
+          setUploadState({});
+          setPhase('error');
+          setError(`${failedCount} ${failedCount === 1 ? 'file' : 'files'} failed to upload — retry from the Tray.`);
+          return;
+        }
+        setPhase('done');
+        setTimeout(() => {
+          if (gen === formGenRef.current) hideAnimated();
+        }, 1100);
+        return;
       }
 
       setPhase('done');
@@ -959,19 +994,31 @@ export default function QuickAdd() {
   // ── background attachment uploads (started on submit, survive dismissal) ───
   const syncBgJobs = () => setBgJobs([...bgJobsRef.current]);
 
-  const runBgUploads = (job: BgUploadJob) => {
+  const setUpload = (id: string, next: AttachmentUpload) =>
+    setUploadState((cur) => ({ ...cur, [id]: next }));
+
+  const runBgUploads = (job: BgUploadJob): Promise<number> => {
     job.active = true;
     syncBgJobs();
-    void (async () => {
+    return (async () => {
       const failed: PendingAttachment[] = [];
+      const uploaded: PendingAttachment[] = [];
       for (const a of job.files) {
+        setUpload(a.id, { pct: 4, ms: 200, state: 'uploading' });
         try {
-          await uploadTaskAttachment(job.taskId, a.file);
-          if (a.previewUrl) URL.revokeObjectURL(a.previewUrl);
+          await uploadTaskAttachment(job.taskId, a.file, ({ stage, estimateMs }) =>
+            setUpload(a.id, { pct: STAGE_PCT[stage], ms: estimateMs ?? 250, state: stage === 'done' ? 'done' : 'uploading' }),
+          );
+          uploaded.push(a);
         } catch {
+          setUpload(a.id, { pct: 100, ms: 200, state: 'failed' });
           failed.push(a);
         }
       }
+      // Keep previews alive long enough for the upload row's completed animation.
+      window.setTimeout(() => {
+        for (const a of uploaded) if (a.previewUrl) URL.revokeObjectURL(a.previewUrl);
+      }, 4000);
       job.files = failed;
       job.active = false;
       // A completed upload job is not an error. Remove it instead of leaving an
@@ -980,13 +1027,14 @@ export default function QuickAdd() {
         bgJobsRef.current = bgJobsRef.current.filter((j) => j.key !== job.key);
       }
       syncBgJobs();
+      return failed.length;
     })();
   };
 
   const retryBgJob = (key: number) => {
     const job = bgJobsRef.current.find((j) => j.key === key);
     if (!job || job.active) return;
-    runBgUploads(job);
+    void runBgUploads(job);
   };
 
   const dismissBgJob = (key: number) => {
@@ -1027,6 +1075,24 @@ export default function QuickAdd() {
     setTimeout(() => inputRef.current?.focus(), 0);
   };
 
+  // Resolve full location paths (cached tree) so the Where row can show them.
+  useEffect(() => {
+    if (!selectedList || listPaths[selectedList.id]) return;
+    let alive = true;
+    void loadPickableLists()
+      .then((ls) => {
+        if (!alive) return;
+        const next: Record<string, string> = {};
+        for (const l of ls) next[l.id] = [l.spaceName, l.folderName, l.name].filter(Boolean).join(' › ');
+        setListPaths(next);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedList?.id]);
+
   // ── chips: My Tasks + all recents (+ current selection if off-list) ─────────
   // The row scrolls horizontally, so every recent location is reachable.
   const personalId = cachedPersonal?.id;
@@ -1039,6 +1105,10 @@ export default function QuickAdd() {
   if (selectedList && !chips.some((c) => c.id === selectedList.id)) {
     chips.splice(1, 0, selectedList);
   }
+
+  const pathFor = (l: SelectedList) => listPaths[l.id] || (l.id === personalId ? 'My Tasks' : l.name);
+  const selectedPath = selectedList ? pathFor(selectedList) : 'My Tasks';
+  const uploading = attachments.some((a) => uploadState[a.id]?.state === 'uploading');
 
   const selectedPriority = PRIORITIES.find((p) => p.value === priority)!;
   const loggedMinutes = loggedInput.trim() ? parseDuration(loggedInput) : null;
@@ -1286,7 +1356,7 @@ export default function QuickAdd() {
                       type="button"
                       className={`qa-chip${selectedList?.id === c.id ? ' active' : ''}`}
                       onClick={() => pickList(c)}
-                      title={c.name}
+                      title={pathFor(c)}
                     >
                       {c.id === personalId ? '★ ' : ''}
                       {c.name}
@@ -1305,6 +1375,12 @@ export default function QuickAdd() {
                     </svg>
                   </button>
                 </div>
+                <div className="qa-where-path" title={selectedPath}>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                    <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+                  </svg>
+                  <span>{selectedPath}</span>
+                </div>
                 {labelCount > 0 && (
                   <div className="qa-labelsel">
                     {selectedLabels.map((t) => (
@@ -1322,6 +1398,57 @@ export default function QuickAdd() {
                     ))}
                   </div>
                 )}
+                <div className="qa-upload-row">
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    hidden
+                    onChange={(e) => {
+                      if (e.target.files?.length) queueFiles(e.target.files);
+                      e.target.value = '';
+                    }}
+                  />
+                  <button
+                    type="button"
+                    className="qa-upload-btn"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={phase === 'saving'}
+                  >
+                    <span aria-hidden>+</span> Upload images
+                  </button>
+                  {attachments.map((a) => {
+                    const up = uploadState[a.id];
+                    const state = up?.state;
+                    return (
+                      <div key={a.id} className={`qa-upitem${state ? ` ${state}` : ''}`} title={a.file.name}>
+                        <span className="qa-upitem-thumb">
+                          {a.previewUrl ? <img src={a.previewUrl} alt="" /> : <span aria-hidden>📎</span>}
+                          {state === 'done' && (
+                            <span className="qa-upitem-check" aria-hidden>
+                              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5" /></svg>
+                            </span>
+                          )}
+                        </span>
+                        <span className="qa-upitem-body">
+                          <span className="qa-upitem-name">{a.file.name}</span>
+                          <span className="qa-upitem-sub">
+                            {state === 'uploading' ? `Uploading… ${up!.pct}%` : state === 'done' ? 'Uploaded' : state === 'failed' ? 'Failed' : fileSizeLabel(a.file.size)}
+                          </span>
+                          <span className="qa-upitem-bar" aria-hidden>
+                            <span style={{ width: `${up ? up.pct : 0}%`, transitionDuration: `${up ? up.ms : 0}ms` }} />
+                          </span>
+                        </span>
+                        {!state && (
+                          <button type="button" className="qa-att-remove" onClick={() => removeAttachment(a.id)} aria-label={`Remove ${a.file.name}`}>
+                            <PanelIcon name="close" />
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
 
               {/* MIDDLE: 2-column grid of attribute pills */}
@@ -1431,13 +1558,15 @@ export default function QuickAdd() {
               <div className="qa-col qa-col-right">
                 <button
                   type="button"
-                  className="qa-add-circle"
+                  className={`qa-add-circle${phase === 'done' ? ' done' : ''}${phase === 'saving' ? ' saving' : ''}`}
+                  onPointerDown={() => setPressKey((k) => k + 1)}
                   onClick={() => void submit()}
                   disabled={!title.trim() || phase === 'saving'}
                   title="Add task (Enter)"
                 >
-                  <span className="qa-add-plus" aria-hidden>+</span>
-                  <span className="qa-add-text">Add</span>
+                  {pressKey > 0 && <span key={pressKey} className="qa-add-ripple" aria-hidden />}
+                  <span className="qa-add-plus" aria-hidden>{phase === 'done' ? '✓' : '+'}</span>
+                  <span className="qa-add-text">{phase === 'saving' ? (uploading ? 'Uploading' : 'Adding') : phase === 'done' ? 'Added' : 'Add'}</span>
                 </button>
                 <div className="qa-toggles">
                   <button
@@ -1474,6 +1603,34 @@ export default function QuickAdd() {
                     ▶
                   </button>
                 </div>
+                <label
+                  className={`qa-logchip${loggedInput.trim() ? ' on' : ''}${loggedInput.trim() && !(loggedMinutes && loggedMinutes > 0) ? ' invalid' : ''}`}
+                  title="Time already spent — e.g. 1h 20m, 90m or 1.5"
+                >
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                    <circle cx="12" cy="12" r="9" />
+                    <path d="M12 7v5l3 2" />
+                  </svg>
+                  <input
+                    value={loggedInput}
+                    placeholder="Log time"
+                    aria-label="Time logged"
+                    onChange={(e) => {
+                      setLoggedInput(e.target.value);
+                      if (phase === 'error') { setPhase('idle'); setError(''); }
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        void submit();
+                      }
+                    }}
+                    disabled={phase === 'saving'}
+                  />
+                </label>
+                {loggedMinutes && loggedMinutes > 0 && loggedInput.trim() !== formatDuration(loggedMinutes) ? (
+                  <span className="qa-logchip-readback">= {formatDuration(loggedMinutes)}</span>
+                ) : null}
               </div>
             </div>
 
@@ -1879,8 +2036,8 @@ export default function QuickAdd() {
             {/* Footer: keyboard hint + current list */}
             <div className="qa-footer">
               <div className="qa-hint">
-                {phase === 'saving' && <span>Adding…</span>}
-                {phase === 'done' && <span className="qa-ok">Added ✓</span>}
+                {phase === 'saving' && <span>{uploading ? 'Uploading attachments…' : 'Adding…'}</span>}
+                {phase === 'done' && <span className="qa-ok">{attachments.length ? 'Added · attachments uploaded ✓' : 'Added ✓'}</span>}
                 {phase === 'error' && <span className="qa-err">{error}</span>}
                 {phase === 'idle' && (
                   <span>
@@ -1888,12 +2045,8 @@ export default function QuickAdd() {
                   </span>
                 )}
               </div>
-              <button type="button" className={`qa-logged-link${loggedInput.trim() ? ' active' : ' muted'}`} onClick={() => toggleMenu('logged')}>
-                <span aria-hidden>◴</span>
-                <span className="qa-pill-label">{loggedMinutes && loggedMinutes > 0 ? `Logged ${formatDuration(loggedMinutes)}` : 'Time logged'}</span>
-              </button>
-              <div className="qa-footer-list" title={selectedList?.name || 'My Tasks'}>
-                {selectedList?.name || 'My Tasks'}
+              <div className="qa-footer-list" title={selectedPath}>
+                {selectedPath}
               </div>
             </div>
           </>
