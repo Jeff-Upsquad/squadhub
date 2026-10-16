@@ -1,10 +1,10 @@
 {
-  "version": "0.1.27",
-  "notes": "Running task timers now show in the timer panel, the clock ticks every second, and the Timer view closes when your pointer leaves it.",
-  "pub_date": "2026-10-15T20:46:48Z",
+  "version": "0.1.28",
+  "notes": "See every running task timer in the notch and stop each one there; Quick Add shows the full location path, image uploads with progress, a time-logged chip and a new 3D Add button.",
+  "pub_date": "2026-10-16T01:31:32Z",
   "platforms": {
     "darwin-aarch64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUQ003TTR4K1pKd3pQbGhKNzBNMVAwY0xCWTM3a2gxWVg0Z3NpUEtIeFQ5UWRwV01rRmZ2TW4ydmI0U1EvMVVGcEg3RDR0RjZ1UVdnVFkyOUhWMjV3TVNpbWozTmZKT2dnPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkyMDk3MTk0CWZpbGU6U3F1YWRIdWIgQ29tcGFuaW9uLmFwcC50YXIuZ3oKb2tpR3MvN2JkVDdwT25ac050TzZZRmROR1l4blZtSlQ4aW9nbWlTK2c5N3ZYK3h4Q0daNXZFYlo1OW5VOGRPTW9OS21qbFNxS1ZOSGs0RlU1dVlhQlE9PQo=",
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUQ003TTR4K1pKdy81UU9hZnhmc1lPdU11bjZrb2VTVWFZdXI0MFV0MkJHMXdyaEhCaXpURXVBak1lZzlBeUdJMkQvRUExV20yaUkyajA5YTZDT1c0L2UzV3VweGFGL1EwPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkyMTE0Mjc1CWZpbGU6U3F1YWRIdWIgQ29tcGFuaW9uLmFwcC50YXIuZ3oKdnJQWnRrRzVZN0VOaVlJNkpaVm42VFpqTGF0TkZzWHQ5TFE0WlFvRG4rNVQ3SXFWbHNoTzM4b0RIcHAzYTQ0TkVKV3d5aWdhdzVMZmt3eWtvbktMREE9PQo=",
       "url": "https://squadhub.in/downloads/SquadHub.app.tar.gz"
     }
   }
