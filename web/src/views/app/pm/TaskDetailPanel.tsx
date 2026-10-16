@@ -23,7 +23,7 @@ import {
 } from '../../../hooks/useChecklists';
 import api from '../../../services/api';
 import type { Task, TaskChecklist, SpaceStatus, TaskType, TaskTypeField, TaskMetadata, TaskPriority, TaskStatusKey, TaskRecurrence } from '@squadhub/shared';
-import { getTaskStatusDef, describeTaskRecurrence, CLIENT_SOURCE_LABELS, type TaskClientSource } from '@squadhub/shared';
+import { getTaskStatusDef, describeTaskRecurrence, CLIENT_SOURCE_LABELS, WORKSPACE_STAGES, type TaskClientSource } from '@squadhub/shared';
 import AssigneePicker from './AssigneePicker';
 import NoAssigneeCompleteDialog from './NoAssigneeCompleteDialog';
 import IncompleteItemsDialog from './IncompleteItemsDialog';
@@ -3754,14 +3754,9 @@ function CustomFieldRow({
 }
 
 const SPACE_STATUS_GROUP_CONFIG: { key: string; label: string; emoji: string }[] = [
+  ...WORKSPACE_STAGES.map((st) => ({ key: st.key, label: st.label, emoji: st.emoji })),
   { key: 'priority_urgency', label: 'Priority & Urgency', emoji: '⚡' },
-  { key: 'in_motion', label: 'In Motion', emoji: '🏃' },
-  { key: 'up_next', label: 'Up Next', emoji: '🎯' },
-  { key: 'scheduled_queued', label: 'Scheduled / Queued', emoji: '📅' },
   { key: 'routines', label: 'Routines', emoji: '🔁' },
-  { key: 'blocked_paused', label: 'Blocked / Paused', emoji: '⏸️' },
-  { key: 'not_started', label: 'Not Started', emoji: '📥' },
-  { key: 'done', label: 'Closed', emoji: '✅' },
 ];
 
 function SpaceStatusPicker({
