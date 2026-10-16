@@ -453,7 +453,10 @@ export async function getListStageInfo(listId: string | null | undefined): Promi
     const effective = await resolveEffectiveGroup({ listId: listId || null });
     const statuses = effective?.statuses || [];
     for (const s of statuses) if (s.is_placeholder && s.key) placeholders.add(s.key);
-    return { stage: !!effective?.assignment?.status_groups?.is_stage_workflow, placeholders, statuses };
+    const isStage = !!effective?.assignment?.status_groups?.is_stage_workflow
+      || (effective?.assignment?.status_groups?.custom_sections?.length ?? 0) > 0
+      || effective?.assignment?.status_groups?.key === 'task_workflow';
+    return { stage: isStage, placeholders, statuses };
   } catch (e) {
     console.error('[statusGroups] getListStageInfo failed:', e);
     return { stage: false, placeholders, statuses: [] };

@@ -407,7 +407,7 @@ export default function TaskCreatePanel({
       return next;
     });
 
-  const initialStatus = defaultStatus || effectiveStatuses[0]?.name || 'todo';
+  const initialStatus = defaultStatus || (taskCatalog.find((d) => d.is_default && !d.is_legacy)?.key) || 'open';
   const [draft, setDraft] = useState<Draft>(() => {
     if (initialDraft) {
       // Older persisted drafts predate recurrence, subtask sections, and goals.
@@ -440,33 +440,17 @@ export default function TaskCreatePanel({
   const invalidWorkRange = !!(draft.work_date && draft.work_end_date && Date.parse(draft.work_end_date) < Date.parse(draft.work_date));
 
 
-  // When the task type resolves (or changes) normalize draft.status.
-  // - task_type='task': status must be a TASK_STATUS_CATALOG key (default 'open')
-  //   (managed Task Workflow overrides resolve through getTaskStatusDef)
-  // - other types: status must match a space_status.category (default first)
+  // All tasks follow the workspace stage workflow from Notion.
   useEffect(() => {
-    // Wait for task types: until then the type is unknown and the space-status
-    // branch below would clobber a preset status (e.g. a stage's "+").
-    if (!taskTypes) return;
-    const typeKey = (taskTypes.find((t) => t.id === draft.task_type_id) as { key?: string } | undefined)?.key;
     const pickable = (k: string | undefined) => !!k && taskCatalog.some((d) => d.key === k && !d.is_legacy);
-    // Type not picked yet: keep a valid stage status rather than snapping to
-    // the space's first status (the default type is usually 'task').
-    if (!typeKey && pickable(draft.status)) return;
-    if (typeKey === 'task') {
-      if (!pickable(draft.status)) {
-        const legacyMap: Record<string, string> = { todo: 'open', done: 'closed', closed: 'closed' };
-        const mapped = legacyMap[draft.status] || RETIRED_STATUS_MAP[draft.status];
-        const defaultDef = taskCatalog.find((d) => d.is_default && !d.is_legacy);
-        const next = (pickable(mapped) ? mapped : defaultDef?.key ?? 'open') as TaskStatusKey;
-        if (next !== draft.status) setDraft((d) => ({ ...d, status: next }));
-      }
-      return;
+    if (!pickable(draft.status)) {
+      const legacyMap: Record<string, string> = { todo: 'open', done: 'closed', closed: 'closed' };
+      const mapped = legacyMap[draft.status] || RETIRED_STATUS_MAP[draft.status];
+      const defaultDef = taskCatalog.find((d) => d.is_default && !d.is_legacy);
+      const next = (pickable(mapped) ? mapped : defaultDef?.key ?? 'open') as TaskStatusKey;
+      if (next !== draft.status) setDraft((d) => ({ ...d, status: next }));
     }
-    if (!effectiveStatuses.length) return;
-    if (effectiveStatuses.some((s) => s.name === draft.status)) return;
-    setDraft((d) => ({ ...d, status: effectiveStatuses[0].name }));
-  }, [effectiveStatuses, draft.status, draft.task_type_id, taskTypes, taskCatalog]);
+  }, [draft.status, taskCatalog]);
 
   // Popover / menu anchors
   const [statusMenuOpen, setStatusMenuOpen] = useState(false);
@@ -1439,58 +1423,14 @@ export default function TaskCreatePanel({
               data-compact={isMobile ? undefined : 'true'}
               style={{ border: 'none', borderRadius: 0, marginBottom: 0 }}
             >
-              {/* Stage + status — full first row for catalog tasks */}
-              {currentType?.key === 'task' && (
-                <StageStatusRow
-                  defs={taskCatalog}
-                  value={draft.status}
-                  groupName={taskCatalogGroup?.name}
-                  icon={META_ICONS.Status}
-                  onChange={(key) => setDraft((d) => ({ ...d, status: key }))}
-                />
-              )}
-              {/* Status — space-status task types */}
-              {currentType?.key !== 'task' && (
-              <div
-                data-td="status" className="td-settings-row"
-                data-half="true"
-                style={{ cursor: 'pointer' }}
-              >
-                <span className="k">{META_ICONS.Status}Status</span>
-                <span className="v">
-                    <>
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setStatusAnchor((e.currentTarget as HTMLElement).getBoundingClientRect());
-                          setStatusMenuOpen(true);
-                        }}
-                        className="td-prop-chip"
-                        style={{
-                          background: currentStatus?.color ? `color-mix(in oklch, ${currentStatus.color} 14%, transparent)` : 'var(--surface-alt)',
-                          color: currentStatus?.color || 'var(--sh-ink-3)',
-                        }}
-                      >
-                        <span className="dot" style={{ background: currentStatus?.color || 'var(--sh-ink-4)' }} />
-                        {currentStatus?.name || draft.status || 'No status'}
-                      </button>
-                      {statusMenuOpen && (
-                        <StatusPicker
-                          anchorRect={statusAnchor}
-                          statuses={effectiveStatuses}
-                          currentStatus={currentStatus?.name || draft.status}
-                          onChange={(name) => setDraft((d) => ({ ...d, status: name }))}
-                          onClose={() => {
-                            setStatusMenuOpen(false);
-                            setStatusAnchor(null);
-                          }}
-                        />
-                      )}
-                    </>
-                </span>
-              </div>
-              )}
+              {/* Stage + status — full first row */}
+              <StageStatusRow
+                defs={taskCatalog}
+                value={draft.status}
+                groupName={taskCatalogGroup?.name}
+                icon={META_ICONS.Status}
+                onChange={(key) => setDraft((d) => ({ ...d, status: key }))}
+              />
 
               {/* Priority */}
               <div

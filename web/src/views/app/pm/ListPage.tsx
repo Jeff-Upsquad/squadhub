@@ -164,30 +164,6 @@ export default function ListPage({
   });
 
   const statuses: SpaceStatus[] = useMemo(() => {
-    const rawStatuses: SpaceStatus[] = spaceData?.space_statuses || spaceData?.statuses || listData?.space_statuses || [];
-    // The untouched 3-row seed (To Do / In Progress / Done) isn't a real
-    // workflow — lists there follow the workspace stage group too.
-    const seedOnly = rawStatuses.length === 3
-      && ['to do', 'in progress', 'done'].every((n) => rawStatuses.some((r) => r.name.toLowerCase() === n));
-    if (catalogDefs && catalogDefs.length > 0 && assignment && (!assignment.is_default_fallback || seedOnly)) {
-      return catalogDefs.filter((d) => !d.is_legacy).map((d, idx) => ({
-        id: d.key,
-        space_id: effectiveSpaceId || '',
-        name: d.label,
-        color: d.color,
-        position: idx,
-        is_default: !!d.is_default,
-        category: d.category,
-        group: d.group,
-        groupLabel: d.groupLabel,
-        groupEmoji: d.groupEmoji,
-        description: d.description,
-        is_placeholder: d.is_placeholder,
-        groupColor: d.groupColor,
-        groupPosition: d.groupPosition,
-      }));
-    }
-    if (rawStatuses.length > 0) return rawStatuses;
     if (catalogDefs && catalogDefs.length > 0) {
       return catalogDefs.filter((d) => !d.is_legacy).map((d, idx) => ({
         id: d.key,
@@ -206,13 +182,14 @@ export default function ListPage({
         groupPosition: d.groupPosition,
       }));
     }
-    return [];
-  }, [spaceData, listData, catalogDefs, assignment, effectiveSpaceId]);
+    const rawStatuses: SpaceStatus[] = spaceData?.space_statuses || spaceData?.statuses || listData?.space_statuses || [];
+    return rawStatuses;
+  }, [catalogDefs, spaceData, listData, effectiveSpaceId]);
 
-  // Resolved stage metadata also covers the workspace-default fallback on
-  // untouched seed lists. Those lists need exact status matching too.
+  // Resolved stage metadata covers all task lists.
   const stageMode = statuses.some((s) => !!s.group)
-    || !!(effectiveGroup?.is_stage_workflow && assignment && !assignment.is_default_fallback);
+    || !!(catalogDefs && catalogDefs.length > 0)
+    || !!(effectiveGroup?.is_stage_workflow && assignment);
 
   const myAccess: AccessLevel | undefined = spaceData?.my_access_level || listData?.my_access_level;
   const isManager = canAtLeast(myAccess, 'manager');

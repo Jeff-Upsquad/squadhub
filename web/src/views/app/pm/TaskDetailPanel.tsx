@@ -901,19 +901,15 @@ export default function TaskDetailPanel({
 
   const taskStatusCategory = task ? (task as any).status as string | undefined : undefined;
   const catalogDef = findTaskStatusDef(taskCatalog, taskStatusCategory) || getTaskStatusDef(taskStatusCategory);
-  // Stage-workflow lists are catalog-driven whatever the task type: their
-  // stages live in the status group, not in the space's seed statuses.
-  const isStageList = !!(catalogGroup?.is_stage_workflow && catalogAssignment && !catalogAssignment.is_default_fallback);
-  const isTaskType = currentType?.key === 'task' || isStageList;
+  // All tasks follow the workspace stage workflow from Notion.
+  const isStageList = true;
+  const isTaskType = true;
   const status = task
-    ? isTaskType
-      ? (catalogDef
-          ? ({ color: catalogDef.color, name: catalogDef.label } as Pick<SpaceStatus, 'color' | 'name'> as SpaceStatus)
-          : undefined)
-      : statuses.find((s) => s.name === taskStatusCategory) || statuses.find((s) => s.category === taskStatusCategory) || (catalogDef ? ({ color: catalogDef.color, name: catalogDef.label } as Pick<SpaceStatus, 'color' | 'name'> as SpaceStatus) : undefined)
+    ? (catalogDef
+        ? ({ color: catalogDef.color, name: catalogDef.label } as Pick<SpaceStatus, 'color' | 'name'> as SpaceStatus)
+        : undefined)
     : undefined;
-  const matchedStatus = !isTaskType ? (statuses.find((s) => s.name === taskStatusCategory) || statuses.find((s) => s.category === taskStatusCategory)) : null;
-  const isDone = catalogDef?.category === 'closed' || taskStatusCategory === 'done' || taskStatusCategory === 'closed' || taskStatusCategory === 'cancelled' || matchedStatus?.category === 'done' || matchedStatus?.category === 'closed';
+  const isDone = catalogDef?.category === 'closed' || taskStatusCategory === 'done' || taskStatusCategory === 'closed' || taskStatusCategory === 'cancelled';
 
   // Normalize legacy status for design/video tasks when the drawer opens
   useEffect(() => {
