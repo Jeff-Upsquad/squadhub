@@ -2417,7 +2417,7 @@ interface CardEvent {
   id: string;
   event_type: string;
   actor_id: string | null;
-  actor_type: 'admin' | 'partner' | 'talent' | 'system' | null;
+  actor_type: 'admin' | 'partner' | 'talent' | 'system' | 'bot' | null;
   actor_label: string | null;
   metadata: Record<string, any> | null;
   created_at: string;
@@ -2444,6 +2444,10 @@ const EVENT_META: Record<string, { color: string; label: string }> = {
   client_selected: { color: '#3b82f6', label: 'Selected (Client view)' },
   client_chat_opened: { color: '#0ea5e9', label: 'Opened chatroom (Client view)' },
   client_chat_message: { color: '#0ea5e9', label: 'Sent a chat message (Client view)' },
+  // Written by Squad Bots' Requirement cards skill (actor_type 'bot').
+  bot_updated: { color: '#6366f1', label: 'Brief updated by bot' },
+  bot_note: { color: '#6366f1', label: 'Customer update (bot)' },
+  bot_stage_request: { color: '#f59e0b', label: 'Bot asked the team to act' },
 };
 
 function formatEventTime(iso: string): string {
@@ -2525,6 +2529,9 @@ function CardActivityFeed({ cardId }: { cardId: string }) {
             </div>
             {actor && (
               <span className="text-xs text-[var(--color-sh-ink-muted)]">by {actor}</span>
+            )}
+            {e.actor_type === 'bot' && typeof e.metadata?.summary === 'string' && (
+              <p className="mt-0.5 whitespace-pre-wrap text-xs text-[var(--color-sh-ink)]">{e.metadata.summary}</p>
             )}
           </li>
         );
