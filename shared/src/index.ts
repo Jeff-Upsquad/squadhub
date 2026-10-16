@@ -431,12 +431,12 @@ export interface StageMeta {
 }
 
 export const WORKSPACE_STAGES: StageMeta[] = [
-  { key: 'not_started', label: 'Not started', emoji: '📥', color: '#A0A0A0', position: 10 },
-  { key: 'planning', label: 'Planning', emoji: '🧭', color: '#8b6fd6', position: 20 },
-  { key: 'up_next', label: 'Up next', emoji: '🎯', color: '#3b8ee6', position: 30 },
-  { key: 'scheduled_queued', label: 'Scheduled / queued', emoji: '📅', color: '#2ea3b8', position: 40 },
-  { key: 'in_motion', label: 'In progress', emoji: '🏃', color: '#39C66B', position: 50 },
-  { key: 'blocked_paused', label: 'Blocked / paused', emoji: '⏸️', color: '#FFB340', position: 60 },
+  { key: 'in_motion', label: 'In progress', emoji: '🏃', color: '#39C66B', position: 10 },
+  { key: 'up_next', label: 'Up next', emoji: '🎯', color: '#3b8ee6', position: 20 },
+  { key: 'scheduled_queued', label: 'Scheduled / queued', emoji: '📅', color: '#2ea3b8', position: 30 },
+  { key: 'planning', label: 'Planning', emoji: '🧭', color: '#8b6fd6', position: 40 },
+  { key: 'blocked_paused', label: 'Blocked / paused', emoji: '⏸️', color: '#FFB340', position: 50 },
+  { key: 'not_started', label: 'Not started', emoji: '📥', color: '#A0A0A0', position: 60 },
   { key: 'done', label: 'Closed', emoji: '✅', color: '#7c3aed', position: 70 },
 ];
 
@@ -476,11 +476,10 @@ const ST = (key: string) => {
 };
 
 export const TASK_STATUS_CATALOG: TaskStatusDef[] = [
-  // Not started
-  { key: 'open', label: 'Open', description: 'Newly created task, not yet triaged or planned.', ...ST('not_started'), category: 'todo', color: '#9ca3af', is_default: true },
-  // Planning
-  { key: 'planning', label: 'Plan', description: 'Being scoped and planned.', ...ST('planning'), category: 'todo', color: '#8b6fd6' },
-  { key: 'need_discussion', label: 'Need discussion', description: 'Needs a conversation before work can start.', ...ST('planning'), category: 'todo', color: '#a78bfa' },
+  // In progress
+  { key: 'time_tracked', label: 'Time tracked', description: 'Timer is running / hours being logged against it.', ...ST('in_motion'), category: 'active', color: '#0d9488' },
+  { key: 'front_burner', label: 'Front burner', description: 'Actively working on this task daily. Will complete asap.', ...ST('in_motion'), category: 'active', color: '#39C66B' },
+  { key: 'back_burner', label: 'Back burner', description: 'Working on this task on regular intervals. Will complete eventually.', ...ST('in_motion'), category: 'active', color: '#a8a29e' },
   // Up next
   { key: 'active', label: 'Starting today', description: 'Currently being worked on.', ...ST('up_next'), category: 'active', color: '#3b8ee6' },
   { key: 'tomorrow', label: 'Tomorrow', description: 'Planned for the next day.', ...ST('up_next'), category: 'active', color: '#06b6d4' },
@@ -488,16 +487,17 @@ export const TASK_STATUS_CATALOG: TaskStatusDef[] = [
   { key: 'this_week', label: 'This week', description: 'To be handled sometime this week.', ...ST('scheduled_queued'), category: 'active', color: '#22d3ee' },
   { key: 'scheduled', label: 'Scheduled', description: 'Has a specific date/time set.', ...ST('scheduled_queued'), category: 'active', color: '#60a5fa' },
   { key: 'follow_ups', label: 'Follow ups', description: 'Awaiting a reply; check back periodically.', ...ST('scheduled_queued'), category: 'active', color: '#4b5563' },
-  // In progress
-  { key: 'time_tracked', label: 'Time tracked', description: 'Timer is running / hours being logged against it.', ...ST('in_motion'), category: 'active', color: '#0d9488' },
-  { key: 'front_burner', label: 'Front burner', description: 'Actively working on this task daily. Will complete asap.', ...ST('in_motion'), category: 'active', color: '#39C66B' },
-  { key: 'back_burner', label: 'Back burner', description: 'Working on this task on regular intervals. Will complete eventually.', ...ST('in_motion'), category: 'active', color: '#a8a29e' },
+  // Planning
+  { key: 'planning', label: 'Plan', description: 'Being scoped and planned.', ...ST('planning'), category: 'todo', color: '#8b6fd6' },
+  { key: 'need_discussion', label: 'Need discussion', description: 'Needs a conversation before work can start.', ...ST('planning'), category: 'todo', color: '#a78bfa' },
   // Blocked / paused
   { key: 'on_hold', label: 'On hold', description: 'Intentionally paused for now.', ...ST('blocked_paused'), category: 'active', color: '#78716c' },
   { key: 'waiting_on_dependency', label: 'Waiting on dependency', description: 'Blocked until something/someone else moves.', ...ST('blocked_paused'), category: 'active', color: '#6b7280', is_system: true },
   { key: 'help', label: 'Help', description: 'Stuck; needs input or assistance from someone.', ...ST('blocked_paused'), category: 'active', color: '#a16207' },
   { key: 'blocked', label: 'Blocked', description: 'Halted by build failure, environment issue, or critical bug.', ...ST('blocked_paused'), category: 'active', color: '#ef4444' },
   { key: 'unblocked', label: 'Unblocked', description: 'Was blocked, now free to resume.', ...ST('blocked_paused'), category: 'active', color: '#84cc16', is_system: true, is_placeholder: true },
+  // Not started
+  { key: 'open', label: 'Open', description: 'Newly created task, not yet triaged or planned.', ...ST('not_started'), category: 'todo', color: '#9ca3af', is_default: true },
   // Closed
   { key: 'for_review', label: 'For review', description: 'Waiting for review before closing.', ...ST('done'), category: 'active', color: '#8b5cf6' },
   { key: 'closed', label: 'Closed', description: 'Completed and archived.', ...ST('done'), category: 'closed', color: '#10b981', is_system: true },

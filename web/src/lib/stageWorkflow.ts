@@ -145,7 +145,7 @@ export function planMeta(plan: TaskPlan) {
 
 /** Picker-section order for status groups shown across workflows. */
 export const STATUS_SECTION_ORDER = [
-  'not_started', 'planning', 'priority_urgency', 'up_next', 'scheduled_queued', 'in_motion', 'routines', 'blocked_paused', 'done',
+  'in_motion', 'up_next', 'scheduled_queued', 'planning', 'blocked_paused', 'not_started', 'done', 'priority_urgency', 'routines',
 ];
 
 export type DirectoryStatusGroup = { key: string; label: string; color: string; status: SpaceStatus | null; tasks: Task[] };
