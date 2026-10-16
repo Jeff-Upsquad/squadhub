@@ -2337,3 +2337,107 @@ body.notch-window {
 .qa-logged-link { margin-left: auto; display: inline-flex; align-items: center; gap: 5px; padding: 0; background: transparent; border: none; color: var(--text-muted); font-size: 11.5px; cursor: pointer; white-space: nowrap; }
 .qa-logged-link.active { color: #fff; }
 .qa .qa-pill.active { border-color: var(--border); }
+
+/* Notch: several task timers at once (web parity — primary + parallel timers) */
+.notch-pill-more { flex-shrink: 0; font-size: 11px; font-weight: 700; color: #0a0a0a; background: #39c66b; border-radius: 999px; padding: 1px 6px; }
+.notch-timer-list { list-style: none; margin: 0; padding: 0 2px 0 0; display: flex; flex-direction: column; gap: 6px; max-height: 196px; overflow-y: auto; scrollbar-width: thin; }
+.notch-timer-row { display: flex; align-items: center; gap: 9px; padding: 8px 8px 8px 10px; border-radius: 14px; background: #121416; box-shadow: inset 0 0 0 1px var(--border); transition: opacity 0.15s, background 0.15s; animation: notch-row-in 0.22s ease-out both; }
+.notch-timer-row.primary { background: #16191b; box-shadow: inset 0 0 0 1px rgba(57, 198, 107, 0.28); }
+.notch-timer-row.busy { opacity: 0.55; }
+.notch-timer-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; background: #ffb340; }
+.notch-timer-row.running .notch-timer-dot { background: #39c66b; box-shadow: 0 0 0 0 rgba(57, 198, 107, 0.6); animation: notch-dot-pulse 1.6s ease-out infinite; }
+.notch-timer-info { flex: 1; min-width: 0; }
+.notch-timer-title { font-family: 'Plus Jakarta Sans', sans-serif; font-size: 13px; font-weight: 600; line-height: 1.25; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.notch-timer-meta { font-size: 11px; color: rgba(255, 255, 255, 0.45); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.notch-timer-progress { height: 3px; margin-top: 5px; border-radius: 999px; background: #22262a; overflow: hidden; }
+.notch-timer-progress span { display: block; height: 100%; border-radius: inherit; background: #39c66b; }
+.notch-timer-clock { flex-shrink: 0; font-size: 15px; font-weight: 700; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; }
+.notch-timer-row.paused .notch-timer-clock { color: #ffb340; }
+.notch-timer-btn { width: 28px; height: 28px; flex-shrink: 0; display: grid; place-items: center; border: none; border-radius: 50%; cursor: pointer; }
+.notch-timer-btn svg { width: 12px; height: 12px; }
+.notch-timer-btn.play { background: #fff; color: #0a0a0a; }
+.notch-timer-btn.stop { background: #1f2326; color: #ff453a; box-shadow: inset 0 0 0 1px var(--border); }
+.notch-timer-btn:hover:not(:disabled) { transform: scale(1.08); }
+.notch-timer-btn:disabled { opacity: 0.5; cursor: default; }
+.notch-timer-more { align-self: flex-start; margin-top: auto; padding: 0; background: transparent; border: none; color: rgba(255, 255, 255, 0.5); font: inherit; font-size: 11.5px; cursor: pointer; }
+.notch-timer-more:hover { color: #fff; }
+@keyframes notch-row-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+@keyframes notch-dot-pulse { 0% { box-shadow: 0 0 0 0 rgba(57, 198, 107, 0.55); } 100% { box-shadow: 0 0 0 7px rgba(57, 198, 107, 0); } }
+
+/* Quick-add: selected Where chip shows the full Space › Folder › List path */
+.qa-where-path { display: flex; align-items: flex-start; gap: 6px; margin-top: -4px; font-size: 12px; font-weight: 600; line-height: 1.4; color: rgba(255, 255, 255, 0.72); overflow-wrap: anywhere; }
+.qa-where-path svg { flex-shrink: 0; margin-top: 2px; color: var(--text-muted); }
+.qa-footer-list { max-width: 260px; }
+
+/* Quick-add: inline upload row (pick images, live progress, completed check) */
+.qa-upload-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 2px; }
+.qa-upload-btn { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 12px; border-radius: 999px; border: 1px dashed rgba(255, 255, 255, 0.22); background: transparent; color: var(--text-muted); font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; transition: color 0.12s, border-color 0.12s, background 0.12s; }
+.qa-upload-btn span { font-size: 15px; line-height: 1; }
+.qa-upload-btn:hover:not(:disabled) { color: #fff; border-color: rgba(255, 255, 255, 0.5); background: rgba(255, 255, 255, 0.04); }
+.qa-upload-btn:disabled { opacity: 0.5; cursor: default; }
+.qa-upitem { display: inline-flex; align-items: center; gap: 8px; max-width: 210px; padding: 4px 8px 4px 4px; border-radius: 10px; background: var(--bg-input); border: 1px solid var(--border); animation: qa-up-in 0.22s ease-out both; transition: border-color 0.2s; }
+.qa-upitem.done { border-color: rgba(57, 198, 107, 0.55); }
+.qa-upitem.failed { border-color: rgba(255, 69, 58, 0.6); }
+.qa-upitem-thumb { position: relative; width: 34px; height: 34px; flex-shrink: 0; display: grid; place-items: center; border-radius: 7px; overflow: hidden; background: var(--bg); font-size: 15px; }
+.qa-upitem-thumb img { width: 100%; height: 100%; object-fit: cover; }
+.qa-upitem.uploading .qa-upitem-thumb img { filter: brightness(0.6); }
+.qa-upitem-check { position: absolute; inset: 0; display: grid; place-items: center; background: rgba(57, 198, 107, 0.82); color: #fff; animation: qa-check-pop 0.45s cubic-bezier(0.3, 1.6, 0.5, 1) both; }
+.qa-upitem-check path { stroke-dasharray: 24; stroke-dashoffset: 24; animation: qa-check-draw 0.35s 0.12s ease-out forwards; }
+.qa-upitem-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+.qa-upitem-name { font-size: 12px; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.qa-upitem-sub { font-size: 10.5px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.qa-upitem.done .qa-upitem-sub { color: #39c66b; }
+.qa-upitem.failed .qa-upitem-sub { color: #ff6b62; }
+.qa-upitem-bar { display: block; height: 3px; border-radius: 999px; background: rgba(255, 255, 255, 0.08); overflow: hidden; }
+.qa-upitem-bar span { display: block; height: 100%; width: 0; border-radius: inherit; background: linear-gradient(90deg, #6366f1, #8b8ff8); transition-property: width; transition-timing-function: cubic-bezier(0.2, 0.7, 0.3, 1); }
+.qa-upitem.done .qa-upitem-bar span { background: #39c66b; }
+.qa-upitem.failed .qa-upitem-bar span { background: #ff453a; }
+.qa-upitem:not(.uploading):not(.done):not(.failed) .qa-upitem-bar { display: none; }
+@keyframes qa-up-in { from { opacity: 0; transform: translateY(4px) scale(0.97); } to { opacity: 1; transform: none; } }
+@keyframes qa-check-pop { from { opacity: 0; transform: scale(0.4); } to { opacity: 1; transform: scale(1); } }
+@keyframes qa-check-draw { to { stroke-dashoffset: 0; } }
+
+/* Quick-add: time-logged chip under the three toggles (type directly) */
+.qa-logchip { display: inline-flex; align-items: center; gap: 6px; width: 112px; height: 30px; padding: 0 10px; border-radius: 999px; background: var(--bg-input); border: 1px solid var(--border); color: var(--text-muted); cursor: text; transition: border-color 0.12s, color 0.12s, background 0.12s; }
+.qa-logchip svg { flex-shrink: 0; }
+.qa-logchip input { flex: 1; min-width: 0; padding: 0; background: transparent; border: none; outline: none; color: var(--text); font: inherit; font-size: 12px; font-weight: 600; }
+.qa-logchip input::placeholder { color: var(--text-muted); font-weight: 500; }
+.qa-logchip:hover, .qa-logchip:focus-within { border-color: var(--text-muted); color: var(--text); }
+.qa-logchip.on { background: rgba(99, 102, 241, 0.14); border-color: var(--primary); color: var(--primary); }
+.qa-logchip.invalid { border-color: var(--danger); color: var(--danger); }
+.qa-logchip-readback { margin-top: -4px; font-size: 10.5px; color: var(--text-muted); }
+
+/* Quick-add: tactile 3D Add button with press + ripple */
+.qa .qa-add-circle {
+  position: relative;
+  overflow: hidden;
+  background: radial-gradient(circle at 35% 28%, #ffffff 0%, #f3f4f6 45%, #d9dce1 100%);
+  box-shadow:
+    inset 0 2px 1px rgba(255, 255, 255, 0.95),
+    inset 0 -4px 8px rgba(0, 0, 0, 0.12),
+    0 6px 0 #a9adb4,
+    0 7px 1px rgba(0, 0, 0, 0.35),
+    0 16px 26px rgba(0, 0, 0, 0.55);
+  transform: translateY(-3px);
+  transition: transform 0.09s ease-out, box-shadow 0.09s ease-out, filter 0.15s;
+}
+.qa .qa-add-circle:hover:not(:disabled) { background: radial-gradient(circle at 35% 28%, #ffffff 0%, #f7f8f9 45%, #e1e4e8 100%); transform: translateY(-4px); filter: brightness(1.02); }
+.qa .qa-add-circle:active:not(:disabled) {
+  transform: translateY(3px);
+  box-shadow:
+    inset 0 2px 6px rgba(0, 0, 0, 0.18),
+    inset 0 -1px 1px rgba(255, 255, 255, 0.6),
+    0 0 0 #a9adb4,
+    0 1px 1px rgba(0, 0, 0, 0.35),
+    0 4px 10px rgba(0, 0, 0, 0.45);
+}
+.qa .qa-add-circle:disabled { opacity: 0.5; transform: translateY(-1px); }
+.qa .qa-add-circle .qa-add-plus { position: relative; font-size: 36px; text-shadow: 0 1px 0 #fff; transition: transform 0.35s cubic-bezier(0.3, 1.6, 0.5, 1); }
+.qa .qa-add-circle:active:not(:disabled) .qa-add-plus { transform: rotate(90deg) scale(0.88); }
+.qa .qa-add-circle .qa-add-text { position: relative; }
+.qa .qa-add-circle.saving .qa-add-plus { animation: qa-plus-spin 0.9s linear infinite; }
+.qa .qa-add-circle.done { background: radial-gradient(circle at 35% 28%, #7ee2a2 0%, #39c66b 55%, #24a052 100%); color: #fff; opacity: 1; box-shadow: inset 0 2px 1px rgba(255, 255, 255, 0.5), inset 0 -4px 8px rgba(0, 0, 0, 0.15), 0 6px 0 #1b7a3e, 0 16px 26px rgba(0, 0, 0, 0.55); }
+.qa .qa-add-circle.done .qa-add-plus { text-shadow: none; animation: qa-check-pop 0.45s cubic-bezier(0.3, 1.6, 0.5, 1) both; }
+.qa-add-ripple { position: absolute; left: 50%; top: 50%; width: 112px; height: 112px; margin: -56px 0 0 -56px; border-radius: 50%; background: radial-gradient(circle, rgba(99, 102, 241, 0.35) 0%, rgba(99, 102, 241, 0) 70%); pointer-events: none; animation: qa-ripple 0.55s ease-out forwards; }
+@keyframes qa-ripple { from { transform: scale(0.2); opacity: 1; } to { transform: scale(1.6); opacity: 0; } }
+@keyframes qa-plus-spin { to { transform: rotate(360deg); } }

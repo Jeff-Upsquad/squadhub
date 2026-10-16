@@ -441,18 +441,23 @@ export default function Notch() {
     dismiss();
   }, [dismiss]);
 
-  const controlTask = async (action: 'pause' | 'resume' | 'stop') => {
-    if (!task || busy) return;
+  const [busyTaskId, setBusyTaskId] = useState<string | null>(null);
+  const controlTask = async (action: 'pause' | 'resume' | 'stop', taskId = task?.taskId) => {
+    if (!taskId || busy) return;
     setBusy(true);
+    setBusyTaskId(taskId);
     setActionError(null);
     try {
-      await taskTimers.control(action, task.taskId);
+      await taskTimers.control(action, taskId);
       await pollActive();
       await pollStats();
     } catch (error) {
       setActionError(error instanceof Error ? error.message : 'Could not update the task timer.');
-    } finally { setBusy(false); }
+    } finally { setBusy(false); setBusyTaskId(null); }
   };
+  const secondsFor = (timer: (typeof taskTimers.timers)[number]) => timer.elapsedSeconds + (timer.status === 'running'
+    ? Math.max(0, Math.floor((now - timer.sampledAt) / 1000)) : 0);
+  const runningCount = taskTimers.timers.filter(t => t.status === 'running').length;
 
   // ── Today totals (today's logged + the live current segment) ────────────────
   const today = stats?.today;
@@ -486,6 +491,7 @@ export default function Notch() {
           </span>
           <span className="notch-wing notch-wing-right">
             {task && <span className="notch-pill-task">{task.taskTitle}</span>}
+            {taskTimers.timers.length > 1 && <span className="notch-pill-more">+{taskTimers.timers.length - 1}</span>}
             <span className="notch-clock">{task ? formatClock(taskSeconds, true) : meta ? formatClock(elapsed, true) : '—'}</span>
           </span>
         </button>
@@ -561,8 +567,51 @@ export default function Notch() {
 
             {/* Middle: task timer (companion-started tasks surface here) */}
             <div className="notch-col notch-col-task">
-              <div className="notch-col-label">Task timer</div>
-              {task ? (
+              <div className="notch-col-label">
+                {taskTimers.timers.length > 1 ? `Task timers · ${runningCount} running` : 'Task timer'}
+              </div>
+              {taskTimers.timers.length > 1 ? (
+                <>
+                  <ul className="notch-timer-list" aria-label="Running task timers">
+                    {taskTimers.timers.map((timer, i) => {
+                      const secs = secondsFor(timer);
+                      const rowBusy = busyTaskId === timer.taskId;
+                      return (
+                        <li key={timer.taskId} className={`notch-timer-row ${timer.status}${i === 0 ? ' primary' : ''}${rowBusy ? ' busy' : ''}`}>
+                          <span className="notch-timer-dot" aria-hidden />
+                          <div className="notch-timer-info">
+                            <div className="notch-timer-title" title={timer.taskTitle}>{timer.taskTitle}</div>
+                            <div className="notch-timer-meta">
+                              {timer.listName || 'SquadHub task'}
+                              {timer.estimateSeconds ? ` · est. ${formatDuration(Math.round(timer.estimateSeconds / 60))}` : ''}
+                            </div>
+                            {timer.estimateSeconds ? (
+                              <div className="notch-timer-progress" aria-hidden>
+                                <span style={{ width: `${Math.min(100, secs / timer.estimateSeconds * 100)}%` }} />
+                              </div>
+                            ) : null}
+                          </div>
+                          <span className="notch-timer-clock">{formatClock(secs, true)}</span>
+                          <button type="button" className="notch-timer-btn play" disabled={busy || !taskTimers.available}
+                            onClick={() => void controlTask(timer.status === 'running' ? 'pause' : 'resume', timer.taskId)}
+                            title={timer.status === 'running' ? 'Pause' : 'Resume'}
+                            aria-label={`${timer.status === 'running' ? 'Pause' : 'Resume'} ${timer.taskTitle}`}>
+                            <PanelIcon name={timer.status === 'running' ? 'pause' : 'play'} />
+                          </button>
+                          <button type="button" className="notch-timer-btn stop" disabled={busy || !taskTimers.available}
+                            onClick={() => void controlTask('stop', timer.taskId)}
+                            title="Stop and log time" aria-label={`Stop ${timer.taskTitle} and log time`}>
+                            <PanelIcon name="stop" />
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                  <button type="button" className="notch-timer-more" onClick={() => { void open(`${WEB_URL}/app`); dismiss(); }}>
+                    Start another task in SquadHub ↗
+                  </button>
+                </>
+              ) : task ? (
                 <>
                   <div className="notch-task-info">
                     <div className="notch-task-title" title={task.taskTitle}>{task.taskTitle}</div>
