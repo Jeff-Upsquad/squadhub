@@ -203,8 +203,10 @@ export default function ListPage({
     return [];
   }, [spaceData, listData, catalogDefs, assignment, effectiveSpaceId]);
 
-  // Stage workflow: statuses are stages only; priority + plan are separate.
-  const stageMode = !!(effectiveGroup?.is_stage_workflow && assignment && !assignment.is_default_fallback);
+  // Resolved stage metadata also covers the workspace-default fallback on
+  // untouched seed lists. Those lists need exact status matching too.
+  const stageMode = statuses.some((s) => !!s.group)
+    || !!(effectiveGroup?.is_stage_workflow && assignment && !assignment.is_default_fallback);
 
   const myAccess: AccessLevel | undefined = spaceData?.my_access_level || listData?.my_access_level;
   const isManager = canAtLeast(myAccess, 'manager');

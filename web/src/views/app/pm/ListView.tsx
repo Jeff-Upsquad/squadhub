@@ -254,7 +254,7 @@ export default function ListView({
             showAddRow={false}
           />
         )}
-        {totalVisible === 0 ? (
+        {totalVisible === 0 && !(groupBy === 'status' && stageList?.length) ? (
           <div className="lv-empty">
             {emptyMessage}
             {activeFilterCount > 0 && onClearFilters && (
@@ -288,6 +288,7 @@ export default function ListView({
                 groupKey={status.id}
                 label={status.name}
                 dotColor={status.color}
+                variant={stageList ? 'stage-status' : 'default'}
                 tasks={groupTasks}
                 allStatuses={statuses}
                 columns={columns}

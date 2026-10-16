@@ -204,3 +204,46 @@
 .stg-empty-chip:hover { color: var(--sh-ink, #0a0a0a); border-style: solid; }
 .stg-empty-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--sec-color, #A0A0A0); opacity: .55; }
 .stg-empty-n { font-size: 11px; color: var(--sh-ink-4, #a6a6a6); }
+
+/* A populated stage is one card; statuses are sub-headings inside it. */
+.lv-section.lv-stage-card {
+  margin-bottom: 16px;
+  border: 1px solid var(--sh-hair-3);
+  border-radius: 18px;
+  background: var(--surface);
+  overflow: hidden;
+}
+.lv-stage-card > .lv-section-head {
+  margin: 0;
+  padding: 16px 20px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.lv-stage-card > .lv-section-head:hover { background: var(--surface-alt); }
+.lv-stage-card > .lv-section-head .label {
+  text-transform: none;
+  letter-spacing: -.01em;
+  color: var(--sh-ink);
+}
+.lv-stage-card > .lv-section-head .count {
+  margin-left: 0;
+  padding: 0;
+  font-weight: 400;
+  color: var(--sh-ink-3);
+  background: none;
+}
+.lv-stage-card > .lv-section-body { padding: 0; margin: 0; border: 0; }
+.lv-stage-card .lv-card.lv-card--stage-status {
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  background: transparent;
+}
+.lv-card--stage-status > .lv-card-head { background: transparent; border-top: 1px solid var(--sh-hair-2); }
+.lv-card--stage-status .lv-glyph-dot { display: none; }
+.lv-card--stage-status .lv-status-ring { flex: none; order: -1; }
+.lv-card--stage-status .gh-title { font-size: 13px; }
+.lv-stage-card .stg-empty-chips { padding: 12px 20px 16px; }
