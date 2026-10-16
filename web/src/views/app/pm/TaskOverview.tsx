@@ -7,7 +7,7 @@ import { useTaskTypes } from '../../../hooks/useTaskTypes';
 import { useStatusDirectory } from '../../../hooks/useStatusDirectory';
 import { filterTasks, EMPTY_FILTER, type TaskFilterState } from '../../../lib/filters';
 import { isTaskCompleted, type GroupBy } from '../../../lib/taskGrouping';
-import { sectionize, statusSection } from '../../../lib/listSections';
+import { stagesFromStatuses } from '../../../lib/stages';
 import {
   PRIORITY_LANES,
   findStatus,
@@ -26,6 +26,7 @@ import { visibleColumnIds, COLUMN_DEFS, gridTemplateFor, type ColumnControls } f
 import type { ListViewColumnId } from '@squadhub/shared';
 import TaskRow from './TaskRow';
 import './task-overview.css';
+import './stage-row.css';
 
 // "List View v2" for Space and Folder pages: a header card with a one-line
 // summary, a dark stats strip whose tiles filter the list, list chips +
@@ -79,7 +80,19 @@ function isDueToday(t: Task): boolean {
 export const NO_FOLDER_KEY = '__none__';
 
 type Sub = { key: string; name: string; color: string; tasks: Task[]; showHead: boolean };
-type Card = { key: string; name: string; subs: Sub[] };
+type Card = {
+  key: string;
+  name: string;
+  subs: Sub[];
+  /** Stage grouping: accent, every status name, empty statuses (chips), the
+   *  custom stage group it comes from, and whether it renders slim (no tasks). */
+  color?: string;
+  statusLine?: string;
+  emptyStatuses?: SpaceStatus[];
+  source?: string | null;
+  slim?: boolean;
+  addStatus?: string;
+};
 
 export default function TaskOverview({
   title,
@@ -249,19 +262,51 @@ export default function TaskOverview({
       key, name, subs: [{ key, name, color, tasks: sortByStageOrder(ts), showHead: false }],
     });
     let out: Card[] = [];
-    if (group === 'stage' || group === 'status') {
+    if (group === 'status') {
       const statusGroups = groupTasksByStatusDirectory(listed, statusDirectory, fading, statusFallback);
-      if (group === 'status') {
-        out = statusGroups.map((g) => one(g.key, g.status?.name || g.label, g.color, g.tasks));
-      } else {
-        const sections = sectionize(statusGroups, (g) => (g.status ? statusSection(g.status) : null)) || [
-          { section: { key: '__all__', label: 'Tasks' }, items: statusGroups },
-        ];
-        out = sections.map(({ section, items }) => ({
-          key: section.key,
-          name: section.label,
-          subs: items.map((g) => ({ key: g.key, name: g.status?.name || g.label, color: g.color, tasks: g.tasks, showHead: true })),
-        }));
+      out = statusGroups.map((g) => one(g.key, g.status?.name || g.label, g.color, g.tasks));
+    } else if (group === 'stage') {
+      // One card per stage, status sub-heads inside, in workflow order. The
+      // workspace default stages always show (slim when empty); a custom
+      // group's stages show when they hold tasks and say where they're from.
+      const statusGroups = groupTasksByStatusDirectory(listed, statusDirectory, fading, statusFallback);
+      const listNames = (ts: Task[]) => [...new Set(ts.map((t) => t.list?.name).filter(Boolean))].join(', ');
+      const placed = new Set<string>();
+      for (const st of stagesFromStatuses(lookup.filter((x) => !!x.group))) {
+        const subs = st.statuses
+          .map((x) => statusGroups.find((g) => g.status && g.status.id.toLowerCase() === x.id.toLowerCase()))
+          .filter((g): g is NonNullable<typeof g> => !!g && g.tasks.length > 0);
+        // Parked (placeholder) tasks group under their own status in this stage.
+        for (const g of statusGroups) {
+          if (g.status?.group === st.key && g.status.is_placeholder && g.tasks.length && !subs.includes(g)) subs.push(g);
+        }
+        const own = st.statuses.filter((x) => !x.groupSource);
+        if (own.length === 0 && subs.length === 0) continue;
+        subs.forEach((g) => placed.add(g.key));
+        const used = new Set(subs.map((g) => g.status?.id));
+        const emptyStatuses = own.filter((x) => !used.has(x.id) && x.category !== 'closed' && x.category !== 'done');
+        const source = own.length === 0 ? st.statuses.find((x) => x.groupSource)?.groupSource || null : null;
+        const allSubTasks = subs.flatMap((g) => g.tasks);
+        out.push({
+          key: st.key,
+          name: st.label,
+          color: st.color,
+          statusLine: (own.length ? own : st.statuses).map((x) => x.name).join(' · '),
+          emptyStatuses,
+          source: source ? `${source}${allSubTasks.length ? ` · ${listNames(allSubTasks)}` : ''}` : null,
+          slim: subs.length === 0,
+          addStatus: (own[0] || st.statuses[0])?.id,
+          subs: subs.map((g) => ({ key: g.key, name: g.status?.name || g.label, color: st.color, tasks: g.tasks, showHead: true })),
+        });
+      }
+      // Statuses outside any stage (per-space custom statuses) still show.
+      const rest = statusGroups.filter((g) => !placed.has(g.key) && g.tasks.length > 0);
+      if (rest.length) {
+        out.push({
+          key: '__other__',
+          name: 'Other statuses',
+          subs: rest.map((g) => ({ key: g.key, name: g.status?.name || g.label, color: g.color, tasks: g.tasks, showHead: true })),
+        });
       }
     } else if (group === 'priority') {
       out = PRIORITY_LANES.map((p) => one(p.key, p.label, p.color, listed.filter((t) => (t.priority || 'none') === p.key)));
@@ -303,7 +348,7 @@ export default function TaskOverview({
     }
     out = out
       .map((c) => ({ ...c, subs: c.subs.filter((s) => s.tasks.length > 0) }))
-      .filter((c) => c.subs.length > 0);
+      .filter((c) => c.slim || c.subs.length > 0);
     if (groupDir === 'desc') out = out.reverse().map((c) => ({ ...c, subs: [...c.subs].reverse() }));
     return out;
   })();
@@ -312,7 +357,7 @@ export default function TaskOverview({
   const handleStatusChange = (taskId: string, statusId: string) => {
     updateTask.mutate({ id: taskId, status: statusId });
   };
-  const openCreate = () => window.dispatchEvent(new CustomEvent('sh:open-create-task'));
+  const openCreate = (status?: string) => window.dispatchEvent(new CustomEvent('sh:open-create-task', status ? { detail: { status } } : undefined));
   const setGroup = (g: OverviewGroup) => { setScopedGroupBy(scopeKey, g as GroupBy); setMenu(null); };
   const setFilters = (next: TaskFilterState) => setScopeFilters(scopeKey, next);
   const filterCount = (filters.priorities?.length ?? 0) + (filters.assigneeIds?.length ? 1 : 0) + (filters.hasDueDate ? 1 : 0);
@@ -512,7 +557,7 @@ export default function TaskOverview({
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
                 <input placeholder="Search tasks" value={query} onChange={(e) => setQuery(e.target.value)} />
               </label>
-              <button type="button" className="tov-new" onClick={openCreate}>
+              <button type="button" className="tov-new" onClick={() => openCreate()}>
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>
                 New task
               </button>
@@ -664,6 +709,19 @@ export default function TaskOverview({
         <div className="tov-layout">
           <div className="tov-main">
             {view === 'list' && cards.map((c) => {
+              if (c.slim) {
+                return (
+                  <div key={c.key} className="stg-slim tov-slim" style={{ ['--sec-color' as string]: c.color || '#A0A0A0' }}>
+                    <span className="stg-slim-dot" />
+                    <span className="stg-slim-name">{c.name}</span>
+                    <span className="stg-slim-none">No tasks</span>
+                    <span className="stg-slim-line">{c.statusLine}</span>
+                    <button type="button" className="stg-slim-add" title={`Add a task in ${c.name}`} onClick={() => openCreate(c.addStatus)}>
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>
+                    </button>
+                  </div>
+                );
+              }
               const collapseKey = `${scopeKey}:tov:${group}:${c.key}`;
               const open = !collapsedGroups[collapseKey];
               const openCount = c.subs.reduce((n, s) => n + s.tasks.filter((t) => !isDone(t)).length, 0);
@@ -673,6 +731,7 @@ export default function TaskOverview({
                     <span className="tov-group-title">
                       <span className="tov-group-name">{c.name}</span>
                       <span className="tov-group-meta">{openCount} open</span>
+                      {c.source && <span className="tov-group-source">{c.source}</span>}
                     </span>
                     <span className="tov-chev" data-closed={!open || undefined}>
                       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6" /></svg>
@@ -694,7 +753,7 @@ export default function TaskOverview({
                                 <span className="tov-sub-name">{s.name}</span>
                                 <span className="tov-sub-progress">{d} of {s.tasks.length}</span>
                                 <span className="tov-sub-rule" />
-                                <button type="button" className="tov-sub-add" title="Add task" onClick={openCreate}>
+                                <button type="button" className="tov-sub-add" title="Add task" onClick={() => openCreate(group === 'stage' || group === 'status' ? s.key : undefined)}>
                                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>
                                 </button>
                               </div>
@@ -704,6 +763,15 @@ export default function TaskOverview({
                           </div>
                         );
                       })}
+                      {!!c.emptyStatuses?.length && (
+                        <div className="stg-empty-chips tov-empty-chips" style={{ ['--sec-color' as string]: c.color || '#A0A0A0' }}>
+                          {c.emptyStatuses.map((x) => (
+                            <button key={x.id} type="button" className="stg-empty-chip" title={`Add a task in ${x.name}`} onClick={() => openCreate(x.id)}>
+                              <span className="stg-empty-dot" />{x.name}<span className="stg-empty-n">0</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>

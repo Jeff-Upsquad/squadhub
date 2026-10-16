@@ -8,7 +8,7 @@ import { useMeetingPanelStore } from '../../../stores/meetingPanelStore';
 import { useSpace } from '../../../hooks/useSpaces';
 import { useAuthStore } from '../../../stores/authStore';
 import type { SpaceStatus, Task, TaskPriority, TaskStatusKey, TaskTypeField, TaskRecurrence } from '@squadhub/shared';
-import { getTaskStatusDef, describeTaskRecurrence } from '@squadhub/shared';
+import { getTaskStatusDef, describeTaskRecurrence, RETIRED_STATUS_MAP } from '@squadhub/shared';
 import api from '../../../services/api';
 import LabelPicker from './LabelPicker';
 import type { TaskTag } from '@squadhub/shared';
@@ -17,7 +17,7 @@ import DatePicker from './DatePicker';
 import RepeatPicker from './RepeatPicker';
 import EmergencyConfirm from './EmergencyConfirm';
 import ListPickerCombobox from './ListPickerCombobox';
-import TaskStatusPicker from './TaskStatusPicker';
+import StageStatusRow from './StageStatusRow';
 import { useTaskWorkflowCatalog, findTaskStatusDef } from '../../../hooks/useTaskWorkflowCatalog';
 import StatusPicker from './StatusPicker';
 import { nextQuickDate, groupDesignFields } from './taskHelpers';
@@ -379,7 +379,7 @@ export default function TaskCreatePanel({
 
   const targetSpaceId = (selectedSpaceId as string | undefined) || initialSpaceId || undefined;
   const targetListId = effectiveListId || listId || undefined;
-  const { defs: taskCatalog } = useTaskWorkflowCatalog({
+  const { defs: taskCatalog, group: taskCatalogGroup } = useTaskWorkflowCatalog({
     spaceId: targetSpaceId,
     listId: targetListId,
   });
@@ -445,17 +445,21 @@ export default function TaskCreatePanel({
   //   (managed Task Workflow overrides resolve through getTaskStatusDef)
   // - other types: status must match a space_status.category (default first)
   useEffect(() => {
-    const typeKey = (taskTypes?.find((t) => t.id === draft.task_type_id) as { key?: string } | undefined)?.key;
+    // Wait for task types: until then the type is unknown and the space-status
+    // branch below would clobber a preset status (e.g. a stage's "+").
+    if (!taskTypes) return;
+    const typeKey = (taskTypes.find((t) => t.id === draft.task_type_id) as { key?: string } | undefined)?.key;
+    const pickable = (k: string | undefined) => !!k && taskCatalog.some((d) => d.key === k && !d.is_legacy);
+    // Type not picked yet: keep a valid stage status rather than snapping to
+    // the space's first status (the default type is usually 'task').
+    if (!typeKey && pickable(draft.status)) return;
     if (typeKey === 'task') {
-      if (!findTaskStatusDef(taskCatalog, draft.status) && !getTaskStatusDef(draft.status)) {
-        const legacyMap: Record<string, TaskStatusKey> = {
-          todo: 'open',
-          active: 'in_progress',
-          done: 'closed',
-          closed: 'closed',
-        };
-        const defaultDef = taskCatalog.find((d) => d.is_default);
-        setDraft((d) => ({ ...d, status: legacyMap[d.status] || (defaultDef?.key ?? 'open') }));
+      if (!pickable(draft.status)) {
+        const legacyMap: Record<string, string> = { todo: 'open', done: 'closed', closed: 'closed' };
+        const mapped = legacyMap[draft.status] || RETIRED_STATUS_MAP[draft.status];
+        const defaultDef = taskCatalog.find((d) => d.is_default && !d.is_legacy);
+        const next = (pickable(mapped) ? mapped : defaultDef?.key ?? 'open') as TaskStatusKey;
+        if (next !== draft.status) setDraft((d) => ({ ...d, status: next }));
       }
       return;
     }
@@ -1435,7 +1439,18 @@ export default function TaskCreatePanel({
               data-compact={isMobile ? undefined : 'true'}
               style={{ border: 'none', borderRadius: 0, marginBottom: 0 }}
             >
-              {/* Status */}
+              {/* Stage + status — full first row for catalog tasks */}
+              {currentType?.key === 'task' && (
+                <StageStatusRow
+                  defs={taskCatalog}
+                  value={draft.status}
+                  groupName={taskCatalogGroup?.name}
+                  icon={META_ICONS.Status}
+                  onChange={(key) => setDraft((d) => ({ ...d, status: key }))}
+                />
+              )}
+              {/* Status — space-status task types */}
+              {currentType?.key !== 'task' && (
               <div
                 data-td="status" className="td-settings-row"
                 data-half="true"
@@ -1443,15 +1458,6 @@ export default function TaskCreatePanel({
               >
                 <span className="k">{META_ICONS.Status}Status</span>
                 <span className="v">
-                  {currentType?.key === 'task' ? (
-                    <TaskStatusPicker
-                      value={draft.status}
-                      spaceId={targetSpaceId}
-                      listId={targetListId}
-                      defs={taskCatalog}
-                      onChange={(key) => setDraft((d) => ({ ...d, status: key }))}
-                    />
-                  ) : (
                     <>
                       <button
                         type="button"
@@ -1482,9 +1488,9 @@ export default function TaskCreatePanel({
                         />
                       )}
                     </>
-                  )}
                 </span>
               </div>
+              )}
 
               {/* Priority */}
               <div

@@ -34,7 +34,8 @@ export function findStatus(statuses: SpaceStatus[], raw: string | null | undefin
  *  legacy dependency statuses that are placeholders everywhere. */
 export function isPlaceholderStatus(statuses: SpaceStatus[], raw: string | null | undefined): boolean {
   if (!raw) return false;
-  if ((LEGACY_PLACEHOLDER_KEYS as readonly string[]).includes(raw)) return true;
+  // The list's own workflow decides (Waiting on dependency is a real status
+  // in the Blocked / paused stage now); legacy keys only as a fallback.
   const s = findStatus(statuses, raw);
   if (s) return !!s.is_placeholder;
   return (LEGACY_PLACEHOLDER_KEYS as readonly string[]).includes(raw) || !!getTaskStatusDef(raw)?.is_placeholder;
@@ -144,7 +145,7 @@ export function planMeta(plan: TaskPlan) {
 
 /** Picker-section order for status groups shown across workflows. */
 export const STATUS_SECTION_ORDER = [
-  'not_started', 'priority_urgency', 'in_motion', 'up_next', 'scheduled_queued', 'routines', 'blocked_paused', 'done',
+  'not_started', 'planning', 'priority_urgency', 'up_next', 'scheduled_queued', 'in_motion', 'routines', 'blocked_paused', 'done',
 ];
 
 export type DirectoryStatusGroup = { key: string; label: string; color: string; status: SpaceStatus | null; tasks: Task[] };
@@ -188,8 +189,9 @@ export function groupTasksByStatusDirectory(
     g.tasks.push(t);
   }
   const sectionRank = (s: SpaceStatus | null) => {
+    if (s?.groupPosition != null) return s.groupPosition;
     const i = s?.group ? STATUS_SECTION_ORDER.indexOf(s.group) : -1;
-    return i === -1 ? STATUS_SECTION_ORDER.length : i;
+    return i === -1 ? 1e6 : (i + 1) * 10;
   };
   return [...groups.values()]
     .sort((a, b) => sectionRank(a.status) - sectionRank(b.status)

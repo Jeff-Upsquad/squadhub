@@ -11,7 +11,8 @@ import { isTaskVisibleInView } from '../../../lib/viewKeywordMatching';
 import { useIsMobile } from '../../../hooks/useIsMobile';
 import { groupTasksByStage, sortByStageOrder } from '../../../lib/stageWorkflow';
 import TaskGroupCard from './TaskGroupCard';
-import { SectionedGroups } from './ListSection';
+import { SectionedGroups, StageOrSectionGroups } from './ListSection';
+import { stagesFromStatuses } from '../../../lib/stages';
 import { statusSection, taskTypeSection } from '../../../lib/listSections';
 import { GROUP_ORDER as TASK_TYPE_GROUP_ORDER, getTaskTypeGroup } from '../../../components/pm/TaskTypeDropdown';
 
@@ -206,6 +207,14 @@ export default function ListView({
     ) : null;
 
   const sectionScope = `lvsec:${listId}:${groupBy}`;
+  // Stage group: every stage of the list's workflow, so empty stages still
+  // show (slim) and empty statuses sit as chips under their stage.
+  const stageList = useMemo(() => {
+    if (!statuses.some((x) => x.group)) return null;
+    return stagesFromStatuses(statuses).map((st) => ({
+      key: st.key, label: st.label, emoji: st.emoji, color: st.color, statuses: st.statuses.map((x) => ({ id: x.id, name: x.name, category: x.category })),
+    }));
+  }, [statuses]);
   const typeForGroup = (key: string) =>
     (taskTypes || []).find((t) => t.id === key || t.key === key) || null;
 
@@ -263,12 +272,16 @@ export default function ListView({
           </div>
         ) : groupBy === 'status' && statusGroups ? (
           <>
-            <SectionedGroups
+            <StageOrSectionGroups
+              stages={stageList}
               scope={sectionScope}
               direction={groupDirection}
               groups={statusGroups}
               sectionOf={({ status }) => statusSection(status)}
+              stageOf={({ status }) => status.group || null}
+              statusIdOf={({ status }) => status.id}
               countOf={(g) => g.tasks.length}
+              onAdd={canEdit ? (statusId) => window.dispatchEvent(new CustomEvent('sh:open-create-task', { detail: { status: statusId } })) : undefined}
               render={({ status, tasks: groupTasks }) => (
               <TaskGroupCard
                 key={status.id}

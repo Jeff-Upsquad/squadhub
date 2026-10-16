@@ -9,6 +9,7 @@ import {
   type SystemStatusPreset,
   isSystemStatus,
   SYSTEM_STATUS_PRESETS,
+  WORKSPACE_STAGES,
 } from '@squadhub/shared';
 
 type SubTab = 'statuses' | 'apply' | 'usage' | 'templates';
@@ -212,7 +213,7 @@ function NewGroupForm({ defaultGroup, onSubmit, pending }: { defaultGroup?: Stat
           <option value="linked" disabled={!defaultGroup}>Linked to Default Task Statuses</option>
         </select>
       </label>
-      <p className="text-xs text-foreground-dim">{linked ? 'Inherits all default statuses and future edits. Add your own statuses and sections.' : 'Create a separate set of statuses for this workflow.'}</p>
+      <p className="text-xs text-foreground-dim">{linked ? 'Inherits all default statuses and future edits. Add your own stages and statuses.' : 'Create a separate set of statuses for this workflow.'}</p>
       <input value={name} onChange={(e) => { setName(e.target.value); if (!key) setKey(slugify(e.target.value)); }} placeholder="Group name (e.g. Design Workflow)" className="w-full rounded-lg border border-divider px-3 py-2 text-sm focus:border-ink focus:outline-none" />
       <div className="flex gap-2">
         <input value={key} onChange={(e) => setKey(slugify(e.target.value))} placeholder="key (e.g. design_workflow)" className="flex-1 rounded-lg border border-divider px-3 py-2 font-mono text-xs focus:border-ink focus:outline-none" />
@@ -309,16 +310,10 @@ function GroupMetaCard({ defaultGroup, group, onChanged, onDelete }: { defaultGr
 // ============================================================
 // Statuses card
 // ============================================================
-const TASK_SECTIONS = [
-  { key: 'priority_urgency', label: 'Priority & Urgency', emoji: '⚡' },
-  { key: 'in_motion', label: 'In Motion', emoji: '🏃' },
-  { key: 'up_next', label: 'Up Next', emoji: '🎯' },
-  { key: 'scheduled_queued', label: 'Scheduled / Queued', emoji: '📅' },
-  { key: 'routines', label: 'Routines', emoji: '🔁' },
-  { key: 'blocked_paused', label: 'Blocked / Paused', emoji: '⏸️' },
-  { key: 'not_started', label: 'Not Started', emoji: '📥' },
-  { key: 'done', label: 'Closed', emoji: '✅' },
-];
+// Stages = picker sections. The workspace default stages, in workflow order;
+// a group's own stages (custom_sections) slot in by position.
+type StageInfo = { key: string; label: string; emoji: string; color?: string | null; position?: number | null };
+const TASK_SECTIONS: StageInfo[] = WORKSPACE_STAGES.map((s) => ({ ...s }));
 
 function DeleteStatusModal({
   status,
@@ -572,7 +567,7 @@ function ReplaceStatusModal({
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-foreground-dim mb-1">Picker Section</label>
+            <label className="block text-xs font-medium text-foreground-dim mb-1">Stage</label>
             <select
               value={section}
               onChange={(e) => setSection(e.target.value)}
@@ -623,18 +618,45 @@ function StatusesCard({ group, onChanged }: { group: StatusGroup; onChanged: () 
   const canEditSystem = group.key === 'task_workflow';
   const [sectionName, setSectionName] = useState('');
   const [sectionEmoji, setSectionEmoji] = useState('📋');
-  const sections = useMemo(() => {
-    const result = new Map(TASK_SECTIONS.map((s) => [s.key, s]));
-    for (const s of group.effective_sections || group.custom_sections || []) result.set(s.key, s);
+  const [sectionColor, setSectionColor] = useState('#e0569b');
+  const sections: StageInfo[] = useMemo(() => {
+    const result = new Map<string, StageInfo>(TASK_SECTIONS.map((s) => [s.key, s]));
+    for (const s of group.effective_sections || group.custom_sections || []) result.set(s.key, { ...(result.get(s.key) || {}), ...s });
     for (const s of group.statuses || []) {
       if (s.section && !result.has(s.section)) result.set(s.section, { key: s.section, label: s.section_label || s.section, emoji: s.section_emoji || '📋' });
     }
-    return [...result.values()];
+    // Workflow order; stages without a position keep their place at the end.
+    return [...result.values()]
+      .map((sec, i) => ({ sec, i }))
+      .sort((a, b) => (a.sec.position ?? 1e6 + a.i) - (b.sec.position ?? 1e6 + b.i))
+      .map(({ sec }) => sec);
   }, [group]);
+  const [sectionAfter, setSectionAfter] = useState('in_motion');
+  // New stage lands right after the chosen one (midway to the next stage).
+  const positionAfter = (afterKey: string) => {
+    const idx = sections.findIndex((x) => x.key === afterKey);
+    const cur = sections[idx]?.position ?? (idx + 1) * 10;
+    const next = sections[idx + 1]?.position ?? cur + 10;
+    return Math.round((cur + next) / 2);
+  };
+  const ownSections: StageInfo[] = group.custom_sections || [];
+  const saveSections = useMutation({
+    mutationFn: (next: StageInfo[]) => api.put(`/admin/status-groups/${group.id}`, { custom_sections: next }),
+    onSuccess: () => onChanged(),
+    onError: (err: any) => alert(err?.response?.data?.error || 'Failed to save stages'),
+  });
   const addSection = useMutation({
-    mutationFn: () => api.put(`/admin/status-groups/${group.id}`, { custom_sections: [...(group.custom_sections || []), { key: slugify(sectionName), label: sectionName.trim(), emoji: sectionEmoji.trim() || '📋' }] }),
+    mutationFn: () => api.put(`/admin/status-groups/${group.id}`, {
+      custom_sections: [...ownSections, {
+        key: slugify(sectionName),
+        label: sectionName.trim(),
+        emoji: sectionEmoji.trim() || '📋',
+        color: sectionColor,
+        position: positionAfter(sectionAfter),
+      }],
+    }),
     onSuccess: () => { setSection(slugify(sectionName)); setSectionName(''); onChanged(); },
-    onError: (err: any) => alert(err?.response?.data?.error || 'Failed to add section'),
+    onError: (err: any) => alert(err?.response?.data?.error || 'Failed to add stage'),
   });
   const [name, setName] = useState('');
   const [color, setColor] = useState('#6b7280');
@@ -983,14 +1005,23 @@ function StatusesCard({ group, onChanged }: { group: StatusGroup; onChanged: () 
       <form className="mb-3 flex flex-wrap gap-2" onSubmit={(e) => {
         e.preventDefault();
         const key = slugify(sectionName);
-        if (!key || sections.some((s) => s.key === key)) { alert('Enter a unique section name'); return; }
+        if (!key || sections.some((s) => s.key === key)) { alert('Enter a unique stage name'); return; }
         addSection.mutate();
       }}>
-        <input aria-label="New section name" value={sectionName} onChange={(e) => setSectionName(e.target.value)} placeholder="New section name" className="min-w-40 flex-1 rounded-lg border border-divider px-3 py-2 text-sm" />
-        <input aria-label="Section emoji" value={sectionEmoji} maxLength={16} onChange={(e) => setSectionEmoji(e.target.value)} className="w-16 rounded-lg border border-divider px-2 py-2 text-sm" />
-        <button disabled={!sectionName.trim() || addSection.isPending} className="rounded-lg border border-divider px-3 py-2 text-sm disabled:opacity-50">+ Add section</button>
+        <input aria-label="New stage name" value={sectionName} onChange={(e) => setSectionName(e.target.value)} placeholder="New stage name (e.g. Client review)" className="min-w-40 flex-1 rounded-lg border border-divider px-3 py-2 text-sm" />
+        <input aria-label="Stage emoji" value={sectionEmoji} maxLength={16} onChange={(e) => setSectionEmoji(e.target.value)} className="w-16 rounded-lg border border-divider px-2 py-2 text-sm" />
+        <input type="color" aria-label="Stage color" value={sectionColor} onChange={(e) => setSectionColor(e.target.value)} className="h-9 w-10 cursor-pointer rounded border border-divider" title="Stage color" />
+        <select aria-label="Place after" value={sectionAfter} onChange={(e) => setSectionAfter(e.target.value)} className="rounded-lg border border-divider px-2 py-2 text-sm" title="Place the new stage after">
+          {sections.map((sec) => <option key={sec.key} value={sec.key}>After {sec.label}</option>)}
+        </select>
+        <button disabled={!sectionName.trim() || addSection.isPending} className="rounded-lg border border-divider px-3 py-2 text-sm disabled:opacity-50">+ Add stage</button>
       </form>
-      <div className="mb-3 flex flex-wrap gap-2">{sections.filter((sec) => !statuses.some((s) => s.section === sec.key) && (group.effective_sections || group.custom_sections || []).some((s) => s.key === sec.key)).map((sec) => <span key={sec.key} className="rounded bg-muted px-2 py-1 text-xs">{sec.emoji} {sec.label} · 0 statuses</span>)}</div>
+      <div className="mb-3 flex flex-wrap gap-2">{sections.filter((sec) => !statuses.some((s) => s.section === sec.key) && ownSections.some((s) => s.key === sec.key)).map((sec) => (
+        <span key={sec.key} className="inline-flex items-center gap-1.5 rounded bg-muted px-2 py-1 text-xs">
+          <span className="h-2 w-2 rounded-full" style={{ background: sec.color || '#A0A0A0' }} />{sec.emoji} {sec.label} · 0 statuses — add one below
+          <button type="button" className="ml-1 text-foreground-dim hover:text-red-600" title="Remove this empty stage" onClick={() => saveSections.mutate(ownSections.filter((x) => x.key !== sec.key))}>×</button>
+        </span>
+      ))}</div>
 
       <form
         className="mb-3 space-y-2"
@@ -1005,7 +1036,7 @@ function StatusesCard({ group, onChanged }: { group: StatusGroup; onChanged: () 
             ))}
           </select>
           {isTaskWorkflow && (
-            <select value={section} onChange={(e) => setSection(e.target.value)} className="rounded-lg border border-divider px-2 py-2 text-sm" title="Picker section">
+            <select value={section} onChange={(e) => setSection(e.target.value)} className="rounded-lg border border-divider px-2 py-2 text-sm" title="Stage">
               {sections.map((s) => (
                 <option key={s.key} value={s.key}>{s.emoji} {s.label}</option>
               ))}
@@ -1033,13 +1064,48 @@ function StatusesCard({ group, onChanged }: { group: StatusGroup; onChanged: () 
             : 0;
           return (
           <Fragment key={s.id || s.key}>
-          {showHeader && (
+          {showHeader && (() => {
+            const inStage = statuses.filter((x) => (x.section || '') === (s.section || ''));
+            const stageOn = inStage.some((x) => !x.is_disabled);
+            const own = ownSections.find((x) => x.key === (s.section || ''));
+            return (
             <div className="flex items-center gap-1.5 px-1 pt-2 text-[11px] font-semibold uppercase tracking-wider text-foreground-dim">
+              {own ? (
+                <input
+                  type="color"
+                  value={own.color || '#A0A0A0'}
+                  onChange={(e) => saveSections.mutate(ownSections.map((x) => (x.key === own.key ? { ...x, color: e.target.value } : x)))}
+                  className="h-3.5 w-3.5 cursor-pointer rounded-full border-0 p-0"
+                  title="Stage color"
+                />
+              ) : (
+                <span className="h-2 w-2 rounded-full" style={{ background: secInfo?.color || '#A0A0A0' }} />
+              )}
               <span aria-hidden>{secInfo?.emoji || '📋'}</span>
               <span>{secInfo?.label || s.section_label || s.section || 'Other'}</span>
               <span className="font-normal normal-case tracking-normal">({sectionCount})</span>
+              {own && <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] normal-case tracking-normal">custom stage</span>}
+              {group.base_group_id && inStage.some((x) => x.is_inherited) && (
+                <button
+                  type="button"
+                  disabled={toggleStatus.isPending}
+                  onClick={async () => {
+                    for (const x of inStage) {
+                      if (!x.is_inherited) continue;
+                      if (Boolean(x.is_disabled) === stageOn) {
+                        await toggleStatus.mutateAsync({ key: x.replaces_key || x.key || x.id, enabled: !stageOn });
+                      }
+                    }
+                  }}
+                  className={`ml-auto rounded-md px-2 py-0.5 text-[10px] font-semibold normal-case tracking-normal ${stageOn ? 'bg-emerald-600 text-white' : 'border border-divider text-foreground-dim'}`}
+                  title={stageOn ? 'Stage is ON — click to turn every status in it OFF here' : 'Stage is OFF — click to turn its statuses back ON'}
+                >
+                  Stage {stageOn ? 'ON' : 'OFF'}
+                </button>
+              )}
             </div>
-          )}
+            );
+          })()}
           <div className={`rounded-lg border px-3 py-2 transition ${
             s.is_disabled
               ? 'border-dashed border-divider/60 bg-muted/20 opacity-70'

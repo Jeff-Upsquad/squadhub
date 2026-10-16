@@ -32,7 +32,7 @@ import DatePicker from './DatePicker';
 import RepeatPicker from './RepeatPicker';
 import { nextQuickDate, groupDesignFields, statusIsComplete } from './taskHelpers';
 import EmergencyConfirm from './EmergencyConfirm';
-import TaskStatusPicker from './TaskStatusPicker';
+import StageStatusRow from './StageStatusRow';
 import { useTaskWorkflowCatalog, findTaskStatusDef } from '../../../hooks/useTaskWorkflowCatalog';
 import ListPickerCombobox from './ListPickerCombobox';
 import LabelPicker from './LabelPicker';
@@ -2152,6 +2152,20 @@ export default function TaskDetailPanel({
                   data-compact={isMobile ? undefined : 'true'}
                   style={{ border: 'none', borderRadius: 0, marginBottom: 0 }}
                 >
+                {/* Stage + status — the full first row (catalog-driven tasks). */}
+                {isTaskType && (
+                  <StageStatusRow
+                    defs={taskCatalog}
+                    value={taskStatusCategory || null}
+                    originalStatus={(task?.metadata as any)?.original_status}
+                    canEdit={canEdit}
+                    groupName={catalogGroup?.name}
+                    icon={META_ICONS.Status}
+                    onChange={(key: TaskStatusKey) => {
+                      updateTask.mutate({ id: task.id, status: key } as any);
+                    }}
+                  />
+                )}
                 {/* Resource source — mirrored tasks link back to their page/section. */}
                 {(task.source_kind === 'course' || task.source_kind === 'sop' || task.source_kind === 'post' || task.source_kind === 'knowledge') && (
                   <div className="td-settings-row" data-half="false" style={{ gridColumn: '1 / -1', cursor: 'default' }}>
@@ -2204,7 +2218,8 @@ export default function TaskDetailPanel({
                   </span>
                 </div>
 
-                {/* Status */}
+                {/* Status — space-status task types (catalog tasks use the Stage row) */}
+                {!isTaskType && (
                 <div
                   className="td-settings-row"
                   data-half="true"
@@ -2214,29 +2229,6 @@ export default function TaskDetailPanel({
                 >
                   <span className="k">{META_ICONS.Status}Status</span>
                   <span className="v">
-                    {isTaskType ? (
-                      canEdit ? (
-                        <TaskStatusPicker
-                          value={taskStatusCategory || null}
-                          originalStatus={(task?.metadata as any)?.original_status}
-                          spaceId={resolvedSpaceId}
-                          folderId={resolvedFolderId}
-                          listId={resolvedListId}
-                          defs={taskCatalog}
-                          onChange={(key: TaskStatusKey) => {
-                            updateTask.mutate({ id: task.id, status: key } as any);
-                          }}
-                        />
-                      ) : (
-                        <span className="inline-flex items-center gap-1.5 text-xs text-[var(--sh-ink)]">
-                          <span
-                            className="h-2 w-2 rounded-full shrink-0"
-                            style={{ background: catalogDef?.color || 'var(--sh-ink-4)' }}
-                          />
-                          {catalogDef?.label || taskStatusCategory || 'No status'}
-                        </span>
-                      )
-                    ) : (
                       <SpaceStatusPicker
                         statuses={statuses}
                         current={status ?? null}
@@ -2247,9 +2239,9 @@ export default function TaskDetailPanel({
                           updateTask.mutate({ id: task.id, status: s.name } as any);
                         }}
                       />
-                    )}
                   </span>
                 </div>
+                )}
 
                 {/* Priority */}
                 <div

@@ -502,12 +502,17 @@ export default function MainLayout() {
   const [showNewDm, setShowNewDm] = useState(false);
   const [showChannelSettings, setShowChannelSettings] = useState(false);
   const [showCreateTaskModal, setShowCreateTaskModal] = useState(false);
+  const [createTaskStatus, setCreateTaskStatus] = useState<string | null>(null);
   const [resumingDraft, setResumingDraft] = useState<SavedDraft | null>(null);
   // Embedded views (e.g. the My Tasks section header) open the global create
   // modal via `window.dispatchEvent(new CustomEvent('sh:open-create-task'))`
   // since the modal state lives here, not in the view.
   useEffect(() => {
-    const open = () => setShowCreateTaskModal(true);
+    // Optional `detail.status` starts the task in that status (stage "+").
+    const open = (e: Event) => {
+      setCreateTaskStatus(((e as CustomEvent).detail?.status as string | undefined) || null);
+      setShowCreateTaskModal(true);
+    };
     window.addEventListener('sh:open-create-task', open);
     return () => window.removeEventListener('sh:open-create-task', open);
   }, []);
@@ -2134,8 +2139,9 @@ export default function MainLayout() {
       {/* Universal create task modal — opens from the global + button */}
       {showCreateTaskModal && (
         <GlobalCreateTaskModal
-          onClose={() => { setShowCreateTaskModal(false); setResumingDraft(null); }}
+          onClose={() => { setShowCreateTaskModal(false); setResumingDraft(null); setCreateTaskStatus(null); }}
           resumeDraft={resumingDraft}
+          defaultStatus={createTaskStatus}
           // Only pre-fill list/space when the user is actually viewing a
           // list-context page; otherwise (Home/Inbox/My Tasks/Docs/etc.) the
           // persisted activeListId/contextListId would leak in as a stale default.

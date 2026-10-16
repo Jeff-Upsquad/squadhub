@@ -7,45 +7,27 @@ import {
   type TaskStatusKey,
 } from '@squadhub/shared';
 import { useTaskWorkflowCatalog, findTaskStatusDef } from '../../../hooks/useTaskWorkflowCatalog';
+import { stagesFromDefs } from '../../../lib/stages';
 
-const GROUP_ORDER: TaskStatusGroup[] = [
-  'priority_urgency',
-  'in_motion',
-  'up_next',
-  'scheduled_queued',
-  'routines',
-  'blocked_paused',
-  'not_started',
-  'done',
-];
 
 // Pre-migration compat: legacy StatusCategory strings ('todo'/'active'/'done'/'closed')
 // map to their catalog equivalents so the button shows a friendly label.
 const LEGACY_TO_KEY: Record<string, TaskStatusKey> = {
   todo: 'open',
-  active: 'in_progress',
   done: 'closed',
   closed: 'closed',
 };
 
 type Grouped = { group: TaskStatusGroup; label: string; emoji: string; items: TaskStatusDef[] };
 
+// Stage order (workflow position), retired statuses dropped.
 function groupCatalog(items: TaskStatusDef[]): Grouped[] {
-  const byGroup = new Map<TaskStatusGroup, Grouped>();
-  for (const d of items) {
-    let g = byGroup.get(d.group);
-    if (!g) {
-      g = { group: d.group, label: d.groupLabel, emoji: d.groupEmoji, items: [] };
-      byGroup.set(d.group, g);
-    }
-    g.items.push(d);
-  }
-  // Known sections first (stable order), then any admin-added sections.
-  const ordered = GROUP_ORDER.map((g) => byGroup.get(g)).filter((x): x is Grouped => !!x);
-  for (const [key, g] of byGroup) {
-    if (!GROUP_ORDER.includes(key)) ordered.push(g);
-  }
-  return ordered;
+  return stagesFromDefs(items).map((st) => ({
+    group: st.key as TaskStatusGroup,
+    label: st.label,
+    emoji: st.emoji,
+    items: [...st.statuses, ...st.placeholders],
+  }));
 }
 
 export default function TaskStatusPicker({

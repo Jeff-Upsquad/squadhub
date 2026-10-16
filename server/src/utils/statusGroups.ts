@@ -6,6 +6,8 @@ import {
   STAGE_SYSTEM_GROUP_KEY,
   STAGE_DEFAULT_KEY,
   LEGACY_PLACEHOLDER_KEYS,
+  RETIRED_STATUS_MAP,
+  stageMetaFor,
 } from '@squadhub/shared';
 
 /**
@@ -166,7 +168,15 @@ export async function getGroupStatuses(
   const sections = await getGroupSections(group);
   return composeGroupStatuses(group, data || [], inherited, options).map((s: any) => {
     const section = sections.find((sec: any) => sec.key === s.section);
-    return section ? { ...s, section_label: section.label, section_emoji: section.emoji } : s;
+    const meta = stageMetaFor(s.section);
+    if (!section && !meta) return s;
+    return {
+      ...s,
+      section_label: section?.label || s.section_label || meta?.label,
+      section_emoji: section?.emoji || s.section_emoji || meta?.emoji,
+      section_color: section?.color || meta?.color || null,
+      section_position: section?.position ?? meta?.position ?? null,
+    };
   });
 }
 
@@ -175,7 +185,17 @@ export async function getGroupSections(group: any) {
     ? await supabaseAdmin.from('status_groups').select('custom_sections').eq('id', group.base_group_id).maybeSingle()
     : { data: null, error: null };
   if (error) throw new Error(error.message);
-  return [...(base?.custom_sections || []), ...(group.custom_sections || [])];
+  // A group's own section overrides the inherited one with the same key;
+  // stages then follow workflow order (position), keeping declaration order
+  // for ties / sections without one.
+  const merged = new Map<string, any>();
+  for (const sec of [...(base?.custom_sections || []), ...(group.custom_sections || [])]) {
+    if (sec?.key) merged.set(sec.key, { ...(merged.get(sec.key) || {}), ...sec });
+  }
+  return [...merged.values()]
+    .map((sec, i) => ({ sec, i }))
+    .sort((a, b) => (a.sec.position ?? 1e6 + a.i) - (b.sec.position ?? 1e6 + b.i))
+    .map(({ sec }) => sec);
 }
 
 /** Fetch an enabled group by key with ordered statuses (null when missing/disabled). */
@@ -472,6 +492,19 @@ export async function normalizeTaskStatusForList(
   try {
     const effective = await resolveEffectiveGroup({ listId: listId || null });
     const rows: any[] = effective?.statuses || [];
+
+    // Exact key on the list's workflow wins over any shorthand ('active' is
+    // the "Starting today" status, not a legacy category alias).
+    for (const s of rows) {
+      if (s.key && s.key === input) return s.key;
+    }
+    for (const s of rows) {
+      if (s.key && s.key.toLowerCase() === lower) return s.key;
+    }
+    // Retired statuses (stage redesign) land on their replacement when the
+    // workflow still has it.
+    const retired = RETIRED_STATUS_MAP[lower];
+    if (retired && rows.some((s: any) => s.key === retired)) return retired;
 
     // Legacy shorthands. Stage workflows have no 'open' / 'in_progress', so
     // map them onto NEW / the first Active stage / CLOSED instead.

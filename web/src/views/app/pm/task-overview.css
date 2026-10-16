@@ -303,3 +303,13 @@
   font: 600 12.5px 'Inter', sans-serif; cursor: pointer;
 }
 .tov-insp-secondary:hover { background: var(--tov-soft); color: var(--tov-ink); }
+
+/* Grouped by stage (design "Stages and Statuses" 2a–2c) */
+.tov-slim { margin-bottom: 0; padding: 13px 14px 13px 24px; border-radius: 22px; box-shadow: inset 0 0 0 1px var(--tov-hair); }
+.tov-slim .stg-slim-name { font-size: 15px; }
+.tov-group-source {
+  align-self: center; display: inline-flex; align-items: center; height: 24px; padding: 0 10px;
+  border-radius: 999px; background: var(--tov-soft); font-size: 11.5px; font-weight: 600; color: var(--tov-ink-2);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 320px;
+}
+.tov-empty-chips { padding: 12px 10px 2px; }

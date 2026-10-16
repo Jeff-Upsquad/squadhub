@@ -1,16 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { getTaskStatusDef, type SpaceStatus } from '@squadhub/shared';
+import { getTaskStatusDef, WORKSPACE_STAGES, type SpaceStatus } from '@squadhub/shared';
 
+// Stage order + labels: the workspace default stages, then retired ones.
 const SPACE_STATUS_GROUP_CONFIG: { key: string; label: string; emoji: string }[] = [
-  { key: 'priority_urgency', label: 'Priority & Urgency', emoji: '⚡' },
-  { key: 'in_motion', label: 'In Motion', emoji: '🏃' },
-  { key: 'up_next', label: 'Up Next', emoji: '🎯' },
-  { key: 'scheduled_queued', label: 'Scheduled / Queued', emoji: '📅' },
+  ...WORKSPACE_STAGES.map((st) => ({ key: st.key, label: st.label, emoji: st.emoji })),
+  { key: 'priority_urgency', label: 'Priority & urgency', emoji: '⚡' },
   { key: 'routines', label: 'Routines', emoji: '🔁' },
-  { key: 'blocked_paused', label: 'Blocked / Paused', emoji: '⏸️' },
-  { key: 'not_started', label: 'Not Started', emoji: '📥' },
-  { key: 'done', label: 'Closed', emoji: '✅' },
 ];
 
 type Item = {
@@ -108,7 +104,8 @@ export default function StatusPicker({
         else if (s.category === 'closed' || (s.category as string) === 'done') groupKey = 'done';
         else groupKey = 'in_motion';
       }
-      const groupCfg = SPACE_STATUS_GROUP_CONFIG.find((c) => c.key === groupKey) || {
+      const cfg = SPACE_STATUS_GROUP_CONFIG.find((c) => c.key === groupKey);
+      const groupCfg = (cfg && { ...cfg, label: s.groupLabel || cfg.label, emoji: s.groupEmoji || cfg.emoji }) || {
         key: groupKey,
         label: s.groupLabel || def?.groupLabel || (s.category === 'todo' ? 'Not Started' : s.category === 'closed' ? 'Closed' : 'In Motion'),
         emoji: s.groupEmoji || def?.groupEmoji || '📋',
