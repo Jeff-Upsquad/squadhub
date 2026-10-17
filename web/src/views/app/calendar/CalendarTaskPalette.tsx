@@ -1,3 +1,4 @@
+import TaskLocation from '../../../components/pm/TaskLocation';
 import { useMemo, useState } from 'react';
 import type { Task } from '@squadhub/shared';
 import { usePMStore } from '../../../stores/pmStore';
@@ -134,6 +135,7 @@ export default function CalendarTaskPalette({
                 <span className="cal-prow-pri" data-level={priorityLevel(t.priority)} aria-hidden="true" />
                 <div className="cal-prow-body">
                   <div className="cal-prow-title">{t.title}</div>
+                  <TaskLocation task={t} />
                   <div className="cal-prow-meta">
                     {pri && <span className="cal-prow-prilabel" data-level={priorityLevel(t.priority)}>{pri}</span>}
                     {t.work_date && (

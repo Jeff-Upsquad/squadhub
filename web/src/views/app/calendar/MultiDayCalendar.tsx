@@ -1,3 +1,4 @@
+import TaskLocation from '../../../components/pm/TaskLocation';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { getTaskStatusCategory } from '@squadhub/shared';
@@ -66,6 +67,9 @@ interface Plan {
   task?: {
     id: string;
     title: string;
+    list?: { id: string; name: string } | null;
+    folder?: { id: string; name: string } | null;
+    space?: { id: string; name: string } | null;
     priority?: string | null;
     status?: string | null;
     time_estimate?: number | null;
@@ -569,7 +573,7 @@ export default function MultiDayCalendar({ days, todayKey, onOpenTask, onOpenDay
                       title={`${isGroup ? `Grouped tasks under ${p.container?.name ?? 'Group'}` : (p.task?.title ?? 'Task')} · ${isGroup ? 'Group' : dateFieldLabel(p.date_field)} · drag onto the grid to give it a time`}
                     >
                       <span className="cal-chip-dot" />
-                      <span className="cal-chip-title">{isGroup ? `Grouped tasks under ${p.container?.name ?? 'Group'}` : (p.task?.title ?? 'Task')}</span>
+                      <span className="cal-chip-title">{isGroup ? `Grouped tasks under ${p.container?.name ?? 'Group'}` : (p.task?.title ?? 'Task')}<TaskLocation task={p.task} /></span>
                       <span className="cal-chip-flag">{isGroup ? 'Group' : dateFieldLabel(p.date_field)}</span>
                     </div>
                   );
@@ -757,6 +761,7 @@ export default function MultiDayCalendar({ days, todayKey, onOpenTask, onOpenDay
                         </button>
                       )}
                       <div className="cal-tt-block-title">{title}</div>
+                      <TaskLocation task={p.task} />
                       {renderDur >= 30 && <div className="cal-tt-block-time">{fmtTimeRange(renderStart, renderDur)}</div>}
                       {isWb && (p.task?.linked_tasks?.length ?? 0) > 0 && renderDur >= 45 && (
                         <div className="cal-tt-block-links" onMouseDown={(e) => e.stopPropagation()}>

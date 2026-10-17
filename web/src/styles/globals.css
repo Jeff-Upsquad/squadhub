@@ -12356,3 +12356,23 @@ button.sw-pri:hover, button.sw-chip:hover { filter: brightness(0.95); border-col
   .sh-tree-collapse,
   .sh-tree-collapse-inner > div > * { transition: none !important; animation: none !important; }
 }
+
+/* A quiet, single-line primary location below task titles in every view. */
+.task-location {
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+  margin-top: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 10.5px;
+  line-height: 1.5;
+  font-weight: 400;
+  letter-spacing: normal;
+  color: var(--sh-ink-4);
+  text-decoration: none;
+}
+.hm-task-text { flex: 1; min-width: 0; overflow: hidden; }
+.bv-card > .task-location { margin-bottom: 8px; }
+.dp-block .task-location, .cal-tt-block .task-location { color: inherit; opacity: .65; }

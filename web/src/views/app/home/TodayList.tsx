@@ -1,3 +1,4 @@
+import TaskLocation from '../../../components/pm/TaskLocation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { Task } from '@squadhub/shared';
@@ -841,6 +842,7 @@ function TodayRow({ task: t, onOpen, secondsToday = 0, liveSecs = 0, isInProgres
         aria-label={isDone ? 'Mark incomplete' : 'Mark complete'}
         onClick={onToggleDone}
       />
+      <div className="hm-task-text">
       <div className="t">
         {subtasks.length > 0 && (
           <button
@@ -870,6 +872,8 @@ function TodayRow({ task: t, onOpen, secondsToday = 0, liveSecs = 0, isInProgres
         <TaskRelationshipsButton task={t} />
         {isSubtask && parentTitle && <span className="hm-parent">↳ {parentTitle}</span>}
         {label && <span className="hm-tag">{label}</span>}
+      </div>
+      <TaskLocation task={t} />
       </div>
       {whenText && (
         <span className="hm-when" data-overdue={whenOverdue || undefined}>
@@ -1083,7 +1087,7 @@ function HomeSubtaskRow({ sub: s, onOpen }: { sub: Task; onOpen: (id: string) =>
             void gate.requestComplete(s, e);
           }}
         />
-        <span className="t">{s.title}</span>
+        <span className="hm-task-text"><span className="t">{s.title}</span><TaskLocation task={s} /></span>
         <GoalTaskFlag taskId={s.id} size={13} />
         <TaskRelationshipsButton task={s} />
         {when.text && (

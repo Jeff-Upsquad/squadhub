@@ -1,3 +1,4 @@
+import TaskLocation from '../../../components/pm/TaskLocation';
 import { useMemo, useState } from 'react';
 import type { SpaceStatus, Task, ListViewRow } from '@squadhub/shared';
 import api from '../../../services/api';
@@ -60,15 +61,7 @@ function TaskCard({ task, statuses, listName }: { task: Task; statuses: SpaceSta
       {/* Title */}
       <p className="bv-card-title mb-1.5">{task.title}</p>
 
-      {/* Project sub-line */}
-      {listName && (
-        <div className="mb-2.5 flex items-center gap-1 text-xs text-[color:var(--sh-ink-4)]">
-          <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
-          </svg>
-          {listName}
-        </div>
-      )}
+      <TaskLocation task={task} fallbackListName={listName} />
 
       {/* Bottom metadata row */}
       <div className="flex items-center gap-3">

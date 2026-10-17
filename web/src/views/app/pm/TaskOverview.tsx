@@ -1,3 +1,4 @@
+import TaskLocation from '../../../components/pm/TaskLocation';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import type { SpaceStatus, Task, TaskPriority, User } from '@squadhub/shared';
 import { usePMStore } from '../../../stores/pmStore';
@@ -400,7 +401,6 @@ export default function TaskOverview({
     const { parked } = placeOf(t);
     const work = t.work_date ? formatWhen(t.work_date) : null;
     return [
-      t.list?.name,
       showCol('workDate') && work && work.state !== 'none' ? `Work ${work.text.replace(/^(Today|Tomorrow|Overdue)/, (w) => w.toLowerCase())}` : null,
       parked ? parked.name.charAt(0) + parked.name.slice(1).toLowerCase() : null,
     ].filter(Boolean).join(' · ');
@@ -520,6 +520,7 @@ export default function TaskOverview({
             {c.tasks.map((t) => (
               <div key={t.id} className="tov-bcard" onClick={() => setActiveTask(t.id)}>
                 <span className="tov-row-title" data-done={isDone(t) || undefined}>{t.title}</span>
+                <TaskLocation task={t} />
                 <span className="tov-row-sub">{rowMeta(t)}</span>
                 {renderPills(t)}
               </div>

@@ -1,4 +1,5 @@
 'use client';
+import TaskLocation from '../components/pm/TaskLocation';
 
 /**
  * Phone My Tasks — the Partner app's TasksScreen.kt, not the desktop personal
@@ -150,6 +151,7 @@ function MobileTaskRow({ task, overdue }: { task: Task; overdue: boolean }) {
       />
       <span className="mmt-row-body">
         <b>{task.title}</b>
+        <TaskLocation task={task} />
       </span>
       {assignee && (
         <MAvatar name={assignee.display_name || assignee.email} url={assignee.avatar_url} size={22} />

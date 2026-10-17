@@ -1,3 +1,4 @@
+import TaskLocation from '../../../components/pm/TaskLocation';
 import { useMemo, useState } from 'react';
 import type { Task } from '@squadhub/shared';
 import { getTaskStatusCategory } from '@squadhub/shared';
@@ -90,7 +91,7 @@ export default function MonthGrid({ monthAnchor, todayKey, tasks, weekStartsOn, 
                     title={`${task.title}${source === 'due' ? ' · due this day' : ''}`}
                   >
                     <span className="cal-chip-dot" />
-                    <span className="cal-chip-title">{task.title}</span>
+                    <span className="cal-chip-title">{task.title}<TaskLocation task={task} /></span>
                   </div>
                 ))}
                 {overflow > 0 && (
