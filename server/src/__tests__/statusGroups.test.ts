@@ -9,12 +9,20 @@ vi.mock('../supabase', () => ({
     from: (table: string) => {
       const filters: ((row: any) => boolean)[] = [];
       let limitCount = Infinity;
-      const execute = async () => ({
+      let patch: any;
+      const execute = async () => {
+        if (patch) {
+          for (const r of store.tables[table] || []) {
+            if (filters.every((f) => f(r))) Object.assign(r, patch);
+          }
+        }
+        return ({
         data: (store.tables[table] || [])
           .filter((r) => filters.every((f) => f(r)))
           .slice(0, limitCount),
         error: null,
       });
+      };
       const query: any = {
         select: () => query,
         eq: (key: string, value: any) => {
@@ -38,12 +46,8 @@ vi.mock('../supabase', () => ({
           const res = await execute();
           return { data: res.data[0] || null, error: null };
         },
-        update: (patch: any) => {
-          for (const r of store.tables[table] || []) {
-            if (filters.every((f) => f(r))) {
-              Object.assign(r, patch);
-            }
-          }
+        update: (values: any) => {
+          patch = values;
           return query;
         },
         insert: (data: any) => {
@@ -261,6 +265,66 @@ describe('admin inheritance safeguards', () => {
   it('rejects duplicate inherited keys when adding a local status', async () => {
     const res = await callRoute('/:id/statuses', 'post', { id: 'linked' }, { name: 'Open' });
     expect(res.statusCode).toBe(409);
+  });
+
+  it('restores an archived status with the submitted settings and stable identity', async () => {
+    store.tables.status_group_statuses.push(row('archived-priority', 'default', 'HIGH PRIORITY', {
+      key: 'high_priority', is_archived: true, section: 'priority_urgency',
+    }));
+    const res = await callRoute('/:id/statuses', 'post', { id: 'default' }, {
+      name: 'High Priority', color: '#ef4444', category: 'todo', section: 'up_next',
+      description: 'Needs to start soon',
+    });
+    expect(res.statusCode).toBe(201);
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+      success: true, data: expect.objectContaining({
+        id: 'archived-priority', key: 'high_priority', is_archived: false,
+        name: 'High Priority', color: '#ef4444', category: 'todo', section: 'up_next',
+        description: 'Needs to start soon', is_system: true, is_default: false,
+      }),
+    }));
+    expect(store.tables.status_group_statuses.filter(s => s.key === 'high_priority')).toHaveLength(1);
+    expect(store.tables.status_group_statuses[0].name).toBe('Open');
+    expect((await getGroupStatuses('linked')).some(s => s.key === 'high_priority')).toBe(true);
+  });
+
+  it('preserves the key when restoring an archived status by its renamed label', async () => {
+    store.tables.status_group_statuses.push(row('old-key', 'default', 'Renamed status', { is_archived: true }));
+    const res = await callRoute('/:id/statuses', 'post', { id: 'default' }, { name: 'Renamed status' });
+    expect(res.statusCode).toBe(201);
+    expect(store.tables.status_group_statuses.find(s => s.id === 'old-key')).toMatchObject({ key: 'old-key', is_archived: false });
+  });
+
+  it('rejects an explicit key change when the name belongs to an archived row', async () => {
+    store.tables.status_group_statuses.push(row('old_key', 'default', 'Archived', { is_archived: true }));
+    const res = await callRoute('/:id/statuses', 'post', { id: 'default' }, { name: 'Archived', key: 'new_key' });
+    expect(res.statusCode).toBe(409);
+    expect(store.tables.status_group_statuses.find(s => s.id === 'old_key')).toMatchObject({ key: 'old_key', is_archived: true });
+  });
+
+  it('rejects a name and key that conflict with two different archived rows', async () => {
+    store.tables.status_group_statuses.push(
+      row('high_priority', 'default', 'Old label', { is_archived: true }),
+      row('other_key', 'default', 'High Priority', { is_archived: true }),
+    );
+    const res = await callRoute('/:id/statuses', 'post', { id: 'default' }, { name: 'High Priority' });
+    expect(res.statusCode).toBe(409);
+    expect(store.tables.status_group_statuses.filter(s => s.is_archived)).toHaveLength(2);
+  });
+
+  it('still creates a new status when no archived row matches', async () => {
+    const res = await callRoute('/:id/statuses', 'post', { id: 'default' }, { name: '  Ready for handoff  ', section: 'up_next' });
+    expect(res.statusCode).toBe(201);
+    expect(store.tables.status_group_statuses.find(s => s.key === 'ready_for_handoff')).toMatchObject({
+      name: 'Ready for handoff', section: 'up_next', is_archived: false,
+    });
+  });
+
+  it('rejects a duplicate disabled status instead of trying to insert it', async () => {
+    store.tables.status_groups.find(g => g.id === 'linked').disabled_status_keys = ['approval'];
+    const res = await callRoute('/:id/statuses', 'post', { id: 'linked' }, { name: 'Approval' });
+    expect(res.statusCode).toBe(409);
+    expect(store.tables.status_group_statuses.filter(s => s.key === 'approval')).toHaveLength(1);
   });
 
   it('keeps the canonical default enabled', async () => {

@@ -14,6 +14,8 @@ Deploy SquadHub to the Hostinger VPS running Docker Compose. The stack is: Caddy
 
 ## Automatic deploy (GitHub Actions)
 
+**Paused dependency (user instruction, 2026-10-17):** GitHub CI is disabled for this and future CMPD runs until the user asks to resume it. Auto-deploy therefore does not trigger; use `bash tools/deploy.sh` after local validation and PR merge.
+
 `.github/workflows/deploy.yml` runs `bash tools/deploy.sh` on a GitHub runner after **CI passes on `main`** — i.e. every merged PR deploys itself; nobody needs to pull or deploy from a Mac.
 
 - **Migrations gate:** before deploying it diffs the VPS's current commit against `main`. If new files appear under `supabase/migrations/`, the run fails without deploying. Apply the migration to production (see Pre-Deploy), then open Actions → **Deploy** → **Run workflow** and tick *migrations_applied*.

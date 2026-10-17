@@ -17,6 +17,8 @@ When the user invokes `CM`, `PD`, `CMPD`, or `CU` (case-insensitive, with or wit
 | **CMPD** | [cmpd.md](cmpd.md) | Complete code pipeline: branch → PR → merge → PD. Never publishes a desktop release. |
 | **CU** | [cu.md](cu.md) | Safely clean a merged worktree/branch and temporary files. |
 
+**GitHub CI is paused by user instruction (2026-10-17) for this and future CMPD runs.** Keep local validation; merge through a PR without waiting for GitHub checks, then deploy manually. Do not re-enable CI until the user asks. See [cmpd.md](cmpd.md) and [pd.md](pd.md).
+
 The critical boundary is deliberate: `CM`, `PD`, and `CMPD` can move source code, but only a tagged `desktop-app-v*` push or manual dispatch of `desktop-app-release.yml` may publish a desktop release. `main` only moves via PR merges — direct commits/pushes to `main` are not allowed in this pipeline. (Automated Greptile review is paused as of 2026-09-23; see [cmpd.md](cmpd.md) for how to restore it.)
 
 If a workflow exposes a recurring failure or a safer method, update its SOP. Never silently weaken its validation, branch-safety, or deployment checks.

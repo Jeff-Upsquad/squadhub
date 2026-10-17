@@ -4,7 +4,9 @@
 
 Sync an already merged `main` and deploy to production only when the merged change touched deployable code. PD never publishes a desktop app release. Code reaches `origin/main` exclusively through merged PRs; PD does not push feature work.
 
-> **Auto-deploy:** merged PRs now deploy themselves via `.github/workflows/deploy.yml` once CI passes on `main` (see [deploy.md](deploy.md#automatic-deploy-github-actions)). PD's job is then to confirm that run succeeded — check the **Deploy** workflow run for the merge commit — and only fall back to `bash tools/deploy.sh` below if it failed, was blocked by the migrations gate, or the secrets aren't configured.
+> **CI pause (user instruction, 2026-10-17):** GitHub CI is disabled for current and future CMPD runs until the user asks to resume it. Since auto-deploy depends on CI, use the manual deployment steps below after local validation and PR merge. Do not wait for or dispatch CI.
+
+> **Auto-deploy (when CI is enabled):** merged PRs now deploy themselves via `.github/workflows/deploy.yml` once CI passes on `main` (see [deploy.md](deploy.md#automatic-deploy-github-actions)). PD's job is then to confirm that run succeeded — check the **Deploy** workflow run for the merge commit — and only fall back to `bash tools/deploy.sh` below if it failed, was blocked by the migrations gate, or the secrets aren't configured.
 
 ## Steps
 

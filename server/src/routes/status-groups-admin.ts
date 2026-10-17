@@ -60,7 +60,7 @@ const groupUpdateSchema = z.object({
 });
 
 const statusCreateSchema = z.object({
-  name: z.string().min(1).max(100),
+  name: z.string().trim().min(1).max(100),
   color: z.string().max(16).optional(),
   category: z.enum(CATEGORIES).optional(),
   is_default: z.boolean().optional(),
@@ -729,7 +729,7 @@ router.post('/:id/statuses', async (req: Request, res: Response) => {
       res.status(404).json({ success: false, error: 'Status group not found' });
       return;
     }
-    const existing = await getGroupStatuses((req.params.id as string));
+    const existing = await getGroupStatuses(req.params.id as string, new Set(), { includeDisabled: true });
     const nextPos = existing.length
       ? Math.max(...existing.map((s: any) => s.position)) + 1
       : 0;
@@ -747,30 +747,50 @@ router.post('/:id/statuses', async (req: Request, res: Response) => {
     }
     const preset = isSystem ? SYSTEM_STATUS_PRESETS.find((p) => p.key === canonicalKey) : null;
 
-    const { data, error } = await supabaseAdmin
+    // Archived statuses are hidden from the effective catalog, but still own
+    // their unique name/key. Reuse their identity instead of inserting a duplicate.
+    const { data: localRows, error: localError } = await supabaseAdmin
       .from('status_group_statuses')
-      .insert({
-        group_id: (req.params.id as string),
-        key: canonicalKey,
-        name: body.name,
-        description: body.description ?? preset?.description ?? null,
-        color: body.color || preset?.color || '#6b7280',
-        category: body.category || preset?.category || 'todo',
-        is_default: group.base_group_id ? false : (body.is_default ?? existing.length === 0),
-        is_system: isSystem,
-        position: nextPos,
-        section: body.section || preset?.section || null,
-        section_label: body.section_label ?? preset?.section_label ?? null,
-        section_emoji: body.section_emoji ?? preset?.section_emoji ?? null,
-        is_placeholder: body.is_placeholder ?? false,
-      })
-      .select()
-      .single();
+      .select('id, key, name, is_archived')
+      .eq('group_id', req.params.id as string);
+    if (localError) throw new Error(localError.message);
+    const conflicts = (localRows || []).filter((s: any) =>
+      s.key === canonicalKey || s.name.toLowerCase() === body.name.toLowerCase());
+    if (conflicts.length > 1 || conflicts.some((s: any) => !s.is_archived)) {
+      res.status(409).json({ success: false, error: 'A status with this name or key already exists in the group' });
+      return;
+    }
+    const archived = conflicts[0];
+    if (archived && body.key && archived.key !== body.key) {
+      res.status(409).json({ success: false, error: 'An archived status with this name already exists with a different key' });
+      return;
+    }
+    const values = {
+      name: body.name,
+      description: body.description ?? preset?.description ?? null,
+      color: body.color || preset?.color || '#6b7280',
+      category: body.category || preset?.category || 'todo',
+      is_default: group.base_group_id ? false : (body.is_default ?? existing.length === 0),
+      is_system: isSystem,
+      position: nextPos,
+      section: body.section || preset?.section || null,
+      section_label: body.section_label ?? preset?.section_label ?? null,
+      section_emoji: body.section_emoji ?? preset?.section_emoji ?? null,
+      is_placeholder: body.is_placeholder ?? false,
+      is_archived: false,
+    };
+    const query = archived
+      ? supabaseAdmin.from('status_group_statuses').update(values)
+        .eq('group_id', req.params.id as string).eq('id', archived.id)
+      : supabaseAdmin.from('status_group_statuses').insert({
+        ...values, group_id: req.params.id as string, key: canonicalKey,
+      });
+    const { data, error } = await query.select().single();
     if (error) {
       const status = error.code === '23505' ? 409 : error.code === 'P0001' ? 400 : 500;
       res.status(status).json({
         success: false,
-        error: error.code === '23505' ? 'A status with this name already exists in the group' : error.message,
+        error: error.code === '23505' ? 'A status with this name or key already exists in the group' : error.message,
       });
       return;
     }
