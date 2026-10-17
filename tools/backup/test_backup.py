@@ -79,6 +79,24 @@ class AlertTests(unittest.TestCase):
             rows = json.loads((Path(root)/'pending-alerts.json').read_text())
             self.assertEqual(len(rows), 1)
             self.assertEqual(rows[0]['user_id'], 'self-user')
+            self.assertEqual(rows[0]['reference_id'], 'self-user')
+            self.assertEqual(rows[0]['reference_type'], 'announcement')
+
+    def test_retry_repairs_legacy_missing_inbox_reference(self):
+        from unittest.mock import MagicMock
+        with tempfile.TemporaryDirectory() as root:
+            job = self.fake_job(root)
+            job.queue_alert('Failed', 'Check backup', 'failure-1')
+            path = Path(root)/'pending-alerts.json'
+            rows = json.loads(path.read_text())
+            del rows[0]['reference_id']
+            rows[0]['reference_type'] = 'database_backup'
+            path.write_text(json.dumps(rows))
+            with patch('urllib.request.urlopen', return_value=MagicMock()) as send:
+                self.assertEqual(job.alerts(), 0)
+            notice = json.loads(send.call_args.args[0].data)
+            self.assertEqual(notice['reference_id'], 'self-user')
+            self.assertEqual(notice['reference_type'], 'announcement')
 
     def test_database_outage_keeps_alert_for_retry(self):
         with tempfile.TemporaryDirectory() as root:
