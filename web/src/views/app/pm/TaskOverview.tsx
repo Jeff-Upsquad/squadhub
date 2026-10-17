@@ -10,6 +10,7 @@ import { isTaskCompleted, isTaskUpcoming, type GroupBy } from '../../../lib/task
 import { stagesFromStatuses } from '../../../lib/stages';
 import {
   PRIORITY_LANES,
+  dedupeStatuses,
   findStatus,
   groupTasksByStatusDirectory,
   isPlaceholderStatus,
@@ -141,7 +142,7 @@ export default function TaskOverview({
   );
   const { data: taskTypes } = useTaskTypes({ includeIds: typeIds });
   const statusDirectory = useStatusDirectory();
-  const lookup = useMemo(() => [...statusDirectory, ...statusFallback], [statusDirectory, statusFallback]);
+  const lookup = useMemo(() => dedupeStatuses([...statusDirectory, ...statusFallback]), [statusDirectory, statusFallback]);
 
   // Start the stage-card layout in Stage view once, including when an older
   // overview saved Status/Priority. Subsequent choices still persist and sync.

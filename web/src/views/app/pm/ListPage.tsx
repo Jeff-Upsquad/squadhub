@@ -165,29 +165,42 @@ export default function ListPage({
 
   const statuses: SpaceStatus[] = useMemo(() => {
     if (catalogDefs && catalogDefs.length > 0) {
-      return catalogDefs.filter((d) => !d.is_legacy).map((d, idx) => ({
-        id: d.key,
-        space_id: effectiveSpaceId || '',
-        name: d.label,
-        color: d.color,
-        position: idx,
-        is_default: !!d.is_default,
-        category: d.category,
-        group: d.group,
-        groupLabel: d.groupLabel,
-        groupEmoji: d.groupEmoji,
-        description: d.description,
-        is_placeholder: d.is_placeholder,
-        groupColor: d.groupColor,
-        groupPosition: d.groupPosition,
-      }));
+      const seen = new Set<string>();
+      return catalogDefs
+        .filter((d) => !d.is_legacy)
+        .filter((d) => {
+          const idKey = (d.key || '').toLowerCase().trim();
+          const nameKey = (d.label || '').toLowerCase().trim();
+          if ((idKey && seen.has(idKey)) || (nameKey && seen.has(nameKey))) return false;
+          if (idKey) seen.add(idKey);
+          if (nameKey) seen.add(nameKey);
+          return true;
+        })
+        .map((d, idx) => ({
+          id: d.key,
+          space_id: effectiveSpaceId || '',
+          name: d.label,
+          color: d.color,
+          position: idx,
+          is_default: !!d.is_default,
+          category: d.category,
+          group: d.group,
+          groupLabel: d.groupLabel,
+          groupEmoji: d.groupEmoji,
+          description: d.description,
+          is_placeholder: d.is_placeholder,
+          groupColor: d.groupColor,
+          groupPosition: d.groupPosition,
+        }));
     }
     const rawStatuses: SpaceStatus[] = spaceData?.space_statuses || spaceData?.statuses || listData?.space_statuses || [];
     const seen = new Set<string>();
     return rawStatuses.filter((s) => {
-      const k = (s.id || s.name || '').toLowerCase().trim();
-      if (!k || seen.has(k)) return false;
-      seen.add(k);
+      const idKey = (s.id || '').toLowerCase().trim();
+      const nameKey = (s.name || '').toLowerCase().trim();
+      if ((idKey && seen.has(idKey)) || (nameKey && seen.has(nameKey))) return false;
+      if (idKey) seen.add(idKey);
+      if (nameKey) seen.add(nameKey);
       return true;
     });
   }, [catalogDefs, spaceData, listData, effectiveSpaceId]);
