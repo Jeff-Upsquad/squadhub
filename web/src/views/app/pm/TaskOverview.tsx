@@ -7,7 +7,8 @@ import { useUpdateTask } from '../../../hooks/useTasks';
 import { useTaskTypes } from '../../../hooks/useTaskTypes';
 import { useStatusDirectory } from '../../../hooks/useStatusDirectory';
 import { filterTasks, EMPTY_FILTER, type TaskFilterState } from '../../../lib/filters';
-import { isTaskCompleted, isTaskUpcoming, type GroupBy } from '../../../lib/taskGrouping';
+import { isTaskCompleted, isTaskUpcoming, buildFocusTodayGroup, isTaskFocused, type GroupBy } from '../../../lib/taskGrouping';
+import TaskGroupCard from './TaskGroupCard';
 import { stagesFromStatuses } from '../../../lib/stages';
 import {
   PRIORITY_LANES,
@@ -181,7 +182,6 @@ export default function TaskOverview({
     }),
     [columnStates, setScopeColumns, resetScopeColumns, hasColumnOverride],
   );
-  void columnControls;
   // Completion state comes from the server (isTaskCompleted) + the shared
   // fading map that TaskRow drives while its complete animation runs. The
   // previous local doneSnap/gone/removed slide-out is gone: rows are real
@@ -289,6 +289,9 @@ export default function TaskOverview({
     && (!q || t.title.toLowerCase().includes(q)));
   const doneCount = matching.filter(isDone).length;
   const visible = matching.filter((t) => !isDone(t) || showDone);
+
+  const openMatching = useMemo(() => matching.filter((t) => !isDone(t)), [matching, isDone]);
+  const focusGroup = useMemo(() => buildFocusTodayGroup(openMatching), [openMatching]);
 
   // ---- Grouping ---------------------------------------------------------
   const cards: Card[] = (() => {
@@ -506,6 +509,7 @@ export default function TaskOverview({
         canEdit
         listId={t.list?.id || (t as unknown as { list_id?: string }).list_id || ''}
         columns={visibleCols}
+        dimmed={!!focusGroup && isTaskFocused(t) && !isDone(t)}
       />
     </div>
   );
@@ -827,6 +831,22 @@ export default function TaskOverview({
         {/* Body */}
         <div className="tov-layout">
           <div className="tov-main">
+            {view === 'list' && focusGroup && (
+              <TaskGroupCard
+                groupKey="focus_today"
+                label={focusGroup.label}
+                dotColor="#f59e0b"
+                variant="focus"
+                tasks={focusGroup.tasks}
+                allStatuses={lookup}
+                columns={visibleCols}
+                columnControls={columnControls}
+                listId={null}
+                onStatusChange={handleStatusChange}
+                canEdit
+                showAddRow={false}
+              />
+            )}
             {view === 'list' && cards.map((c) => {
               if (c.slim) {
                 return (

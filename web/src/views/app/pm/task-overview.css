@@ -392,3 +392,8 @@
   background: transparent;
   min-height: 0;
 }
+
+.tov-main .lv-card--focus {
+  border-radius: 22px;
+  margin-bottom: 0;
+}
