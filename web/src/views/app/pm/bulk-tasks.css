@@ -1,0 +1,22 @@
+.group-task-select { flex: none; font-size: 12px; font-weight: 500; color: var(--sh-ink-3); border-radius: 6px; padding: 5px 8px; opacity: 0; transition: opacity .15s, background .15s; }
+.lv-card:hover .group-task-select, .tov-group:hover .group-task-select, .group-task-select:focus-visible, .group-task-select[data-selected], .lv-card:focus-within .group-task-select, .tov-group:focus-within .group-task-select { opacity: 1; }
+.group-task-select:hover, .group-task-select[data-selected] { background: var(--sh-hair-2); color: var(--sh-ink); }
+.tov-group-toggle { display: flex; flex: 1; min-width: 0; text-align: left; }
+.task-bulk-bar { color: white; max-width: calc(100% - 24px); flex-wrap: wrap; border-radius: 18px; }
+.task-bulk-bar button:disabled { opacity: .45; cursor: wait; }
+.bulk-details-dialog { margin: auto; padding: 24px; width: min(480px, calc(100vw - 24px)); max-height: calc(100vh - 40px); overflow: auto; border-radius: 16px; border: 1px solid var(--sh-hair-3); background: var(--surface); color: var(--sh-ink); box-shadow: 0 24px 80px #0005; }
+.bulk-details-dialog::backdrop { background: #0007; }
+.bulk-details-dialog h2 { font-size: 18px; font-weight: 600; }
+.bulk-details-dialog p { font-size: 13px; color: var(--sh-ink-3); margin: 8px 0 20px; }
+.bulk-details-dialog fieldset { border: 0; padding: 0; display: grid; gap: 16px; }
+.bulk-details-dialog label { display: grid; gap: 6px; font-size: 13px; }
+.bulk-details-dialog select, .bulk-details-dialog input, .bulk-details-dialog textarea, .bulk-details-dialog label > button { width: 100%; border: 1px solid var(--sh-hair-3); border-radius: 8px; padding: 10px; background: var(--surface-alt); color: var(--sh-ink); text-align: left; }
+.bulk-details-dialog textarea { min-height: 100px; }
+.bulk-details-dialog small { color: var(--sh-ink-3); }
+.bulk-dialog-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 24px; }
+.bulk-dialog-actions button, .bulk-result button { border: 1px solid var(--sh-hair-3); border-radius: 8px; padding: 8px 12px; }
+.bulk-dialog-actions button[type=submit] { background: var(--sh-ink); color: var(--surface); }
+.bulk-dialog-actions button:disabled { opacity: .45; }
+.bulk-result { padding: 12px 20px; font-size: 13px; background: var(--surface-alt); color: var(--sh-ink); max-height: 180px; overflow: auto; }
+.bulk-result ul { margin: 8px 0; }
+@media (hover: none) { .group-task-select { opacity: 1; } }

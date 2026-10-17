@@ -26,6 +26,8 @@ import { useColumnPrefs } from '../../../hooks/useColumnPrefs';
 import { visibleColumnIds, COLUMN_DEFS, gridTemplateFor, type ColumnControls } from '../../../lib/columns';
 import type { ListViewColumnId } from '@squadhub/shared';
 import TaskRow from './TaskRow';
+import GroupTaskSelection from './GroupTaskSelection';
+import BulkTaskActions from './BulkTaskActions';
 import TaskOverviewHeader from './TaskOverviewHeader';
 import { matchesOverviewTile, type OverviewTile } from '../../../lib/taskOverviewTiles';
 import './task-overview.css';
@@ -842,16 +844,19 @@ export default function TaskOverview({
               const openCount = c.subs.reduce((n, s) => n + s.tasks.filter((t) => !isDone(t)).length, 0);
               return (
                 <div key={c.key} className="tov-card tov-group">
-                  <button type="button" className="tov-group-head" onClick={() => setGroupCollapsed(collapseKey, open)}>
+                  <div className="tov-group-head">
+                  <button type="button" className="tov-group-toggle" aria-expanded={open} onClick={() => setGroupCollapsed(collapseKey, open)}>
                     <span className="tov-group-title">
                       <span className="tov-group-name">{c.name}</span>
                       <span className="tov-group-meta">{openCount} open</span>
                       {c.source && <span className="tov-group-source">{c.source}</span>}
                     </span>
-                    <span className="tov-chev" data-closed={!open || undefined}>
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6" /></svg>
-                    </span>
                   </button>
+                  <GroupTaskSelection ids={c.subs.flatMap((s) => s.tasks.map((t) => t.id))} />
+                    <button type="button" aria-label={`Toggle ${c.name}`} onClick={() => setGroupCollapsed(collapseKey, open)} className="tov-chev" data-closed={!open || undefined}>
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6" /></svg>
+                    </button>
+                  </div>
                   {open && (
                     <div className="tov-subs">
                       {c.subs.map((s) => {
@@ -866,6 +871,7 @@ export default function TaskOverview({
                                   <circle cx="8" cy="8" r="6" fill="none" stroke={s.color} strokeWidth="2.4" strokeLinecap="round" strokeDasharray={`${frac * RING} ${RING}`} style={{ transition: 'stroke-dasharray .4s' }} />
                                 </svg>
                                 <span className="tov-sub-name">{s.name}</span>
+                                <GroupTaskSelection ids={s.tasks.map((t) => t.id)} />
                                 <span className="tov-sub-progress">{d} of {s.tasks.length}</span>
                                 <span className="tov-sub-rule" />
                                 <button type="button" className="tov-sub-add" title="Add task" onClick={() => openCreate(group === 'stage' || group === 'status' ? s.key : undefined)}>
@@ -908,6 +914,7 @@ export default function TaskOverview({
           </div>
         </div>
       </div>
+      <BulkTaskActions tasks={tasks} statuses={lookup} scopeKey={scopeKey} />
       <FieldManagerPanel
         open={fieldsOpen}
         onClose={() => setFieldsOpen(false)}

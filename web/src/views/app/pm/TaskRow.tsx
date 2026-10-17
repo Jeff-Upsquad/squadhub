@@ -733,7 +733,7 @@ export default function TaskRow({
           e.dataTransfer.effectAllowed = 'move';
         } : undefined}
         onClick={(e) => {
-          if (e.metaKey || e.ctrlKey || e.shiftKey) {
+          if (canEdit && (selectedTasks.length > 0 || e.metaKey || e.ctrlKey || e.shiftKey)) {
             toggleTaskSelection(task.id);
             return;
           }
@@ -754,13 +754,14 @@ export default function TaskRow({
         {/* Checkbox — toggles done */}
         <button
           type="button"
-          onClick={handleGlyphClick}
+          onClick={selectedTasks.length > 0 && canEdit ? (e) => { e.stopPropagation(); toggleTaskSelection(task.id); } : handleGlyphClick}
           className="lv-glyph"
-          data-done={displayDone}
+          data-done={selectedTasks.length > 0 ? isSelected : displayDone}
+          aria-pressed={selectedTasks.length > 0 ? isSelected : undefined}
           data-celebrating={isFading}
           data-progress={!isDone && statusCategory === 'active'}
           disabled={!canEdit}
-          aria-label={isDone ? 'Mark incomplete' : 'Mark complete'}
+          aria-label={selectedTasks.length > 0 ? (isSelected ? 'Deselect task' : 'Select task') : isDone ? 'Mark incomplete' : 'Mark complete'}
         />
 
         {/* Title only — meta line (space · due · tags) removed; dedicated columns below */}

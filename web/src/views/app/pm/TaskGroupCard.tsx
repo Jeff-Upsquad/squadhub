@@ -6,6 +6,7 @@ import { useCreateTask } from '../../../hooks/useTasks';
 import { isTaskCompleted, isTaskFocused } from '../../../lib/taskGrouping';
 import { COLUMN_DEFS, DEFAULT_VISIBLE_IDS, gridTemplateFor, type ColumnControls } from '../../../lib/columns';
 import TaskRow from './TaskRow';
+import GroupTaskSelection from './GroupTaskSelection';
 
 const DEFAULT_VISIBLE_COLUMNS: ListViewColumnId[] = DEFAULT_VISIBLE_IDS;
 
@@ -169,6 +170,7 @@ export default function TaskGroupCard({
             </div>
           </div>
           <div className="lv-focus-meta">
+            {canEdit && <GroupTaskSelection ids={tasks.map((t) => t.id)} />}
             <span className="lv-focus-done">
               {completedCount} of {totalCount} done
             </span>
@@ -255,6 +257,7 @@ export default function TaskGroupCard({
                 }}
               />
             </span>}
+            {canEdit && <GroupTaskSelection ids={tasks.map((t) => t.id)} />}
             <span className="lv-fraction">
               {completedCount}/{totalCount}
             </span>
