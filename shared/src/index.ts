@@ -382,7 +382,8 @@ export type TaskStatusKey =
   | 'active' | 'in_progress' | 'in_code_review' | 'testing_qa' | 'ready_for_deploy' | 'time_tracked' | 'active_daily'
   | 'routines' | 'imp_routines'
   | 'blocked' | 'on_hold' | 'waiting_on_dependency' | 'follow_ups' | 'help' | 'unblocked'
-  | 'for_review' | 'closed' | 'cancelled';
+  | 'for_review' | 'closed' | 'cancelled'
+  | (string & {});
 
 export type TaskStatusGroup =
   | 'planning'
@@ -393,7 +394,8 @@ export type TaskStatusGroup =
   | 'routines'
   | 'blocked_paused'
   | 'not_started'
-  | 'done';
+  | 'done'
+  | (string & {});
 
 export interface TaskStatusDef {
   key: TaskStatusKey;

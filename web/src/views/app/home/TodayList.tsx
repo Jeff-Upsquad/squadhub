@@ -760,7 +760,6 @@ function TodayRow({ task: t, onOpen, secondsToday = 0, liveSecs = 0, isInProgres
   const whenText = when.text;
   const whenOverdue = when.overdue;
   const assignee = t.assignees?.[0];
-  const label = t.list?.name || t.space?.name || '';
   const isSubtask = !!t.parent_task_id;
   const parentTitle = t.parent_task?.title || null;
   const status = (t as any).status as string | undefined;
@@ -871,7 +870,6 @@ function TodayRow({ task: t, onOpen, secondsToday = 0, liveSecs = 0, isInProgres
         <GoalTaskFlag taskId={t.id} size={14} />
         <TaskRelationshipsButton task={t} />
         {isSubtask && parentTitle && <span className="hm-parent">↳ {parentTitle}</span>}
-        {label && <span className="hm-tag">{label}</span>}
       </div>
       <TaskLocation task={t} />
       </div>

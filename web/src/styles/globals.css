@@ -12376,3 +12376,26 @@ button.sw-pri:hover, button.sw-chip:hover { filter: brightness(0.95); border-col
 .hm-task-text { flex: 1; min-width: 0; overflow: hidden; }
 .bv-card > .task-location { margin-bottom: 8px; }
 .dp-block .task-location, .cal-tt-block .task-location { color: inherit; opacity: .65; }
+
+/* Show task location on hover or keyboard focus in home / today / dashboard task rows */
+.hm-task .task-location,
+.hm-subtask .task-location,
+.hmp-task .task-location {
+  display: none;
+}
+.hm-task:hover .task-location,
+.hm-task:focus-visible .task-location,
+.hm-subtask:hover .task-location,
+.hm-subtask:focus-visible .task-location,
+.hmp-task:hover .task-location,
+.hmp-task:focus-visible .task-location {
+  display: block;
+}
+@media (hover: none) {
+  .hm-task .task-location,
+  .hm-subtask .task-location,
+  .hmp-task .task-location {
+    display: block;
+  }
+}
+

@@ -103,7 +103,6 @@ export default function CalendarTaskPalette({
             const isFocused = !!t.focused_at;
             const isScheduled = scheduledIds.has(t.id);
             const overdue = !!t.due_date && planDateKey(new Date(t.due_date)) < todayStr;
-            const label = t.list?.name || t.space?.name || '';
             return (
               <div
                 key={t.id}
@@ -147,7 +146,6 @@ export default function CalendarTaskPalette({
                     {t.due_date && (
                       <span className="cal-prow-when" data-overdue={overdue || undefined}>Due {fmtShort(t.due_date)}</span>
                     )}
-                    {label && <span className="cal-prow-tag">{label}</span>}
                   </div>
                 </div>
                 <svg className="cal-prow-grip" width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
