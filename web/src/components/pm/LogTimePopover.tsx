@@ -79,6 +79,7 @@ export default function LogTimePopover({
   const [whenTouched, setWhenTouched] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [justLogged, setJustLogged] = useState<number | null>(null);
+  const [wasSplit, setWasSplit] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
 
@@ -240,14 +241,17 @@ export default function LogTimePopover({
     if (startAt.getTime() > endAt.getTime() && minutes > 0) { setError("End time cannot be before start time"); return; }
 
     try {
-      await createEntry.mutateAsync({
+      const requestedMins = minutes;
+      const entry = await createEntry.mutateAsync({
         taskId,
         startedAt: startAt.toISOString(),
-        durationSeconds: Math.round(minutes * 60),
+        durationSeconds: Math.round(requestedMins * 60),
         note: note.trim() || null,
         source: 'manual',
       });
-      setJustLogged(minutes);
+      const loggedMins = (entry?.duration_seconds ?? Math.round(requestedMins * 60)) / 60;
+      setWasSplit(loggedMins < requestedMins);
+      setJustLogged(loggedMins);
       setDuration('');
       setNote('');
       setWhenTouched(false);
@@ -258,7 +262,10 @@ export default function LogTimePopover({
       setEndDateValue(toDateInputValue(resetNow));
       setEndTimeValue(toTimeInputValue(resetNow));
       setError(null);
-      setTimeout(() => setJustLogged(null), 2200);
+      setTimeout(() => {
+        setJustLogged(null);
+        setWasSplit(false);
+      }, 2500);
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error;
       setError(msg || 'Could not log that time');
@@ -440,7 +447,7 @@ export default function LogTimePopover({
               {error
                 ? error
                 : justLogged != null
-                  ? `Added ${formatDuration(justLogged)} ✓`
+                  ? `Added ${formatDuration(justLogged)}${wasSplit ? ' (split with running timer)' : ''} ✓`
                   : 'Enter to save'}
             </span>
             <button

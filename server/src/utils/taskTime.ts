@@ -54,29 +54,40 @@ export interface LogTaskTimeResult {
  * Both the log path and the delete path ask this, so that a delete only unwinds
  * the day when the log actually fed it.
  */
-export async function overlapsWorkBlockRun(
+export async function getOverlappingWorkBlockRun(
   userId: string,
   startedAt: string,
   stoppedAt: string,
-): Promise<boolean> {
+): Promise<{ id: string; task_id: string; started_at: string; ended_at: string | null } | null> {
   const { data: activeRun } = await supabaseAdmin
     .from('work_block_runs')
-    .select('id')
+    .select('id, task_id, started_at, ended_at')
     .eq('user_id', userId)
     .is('ended_at', null)
     .lte('started_at', stoppedAt)
     .limit(1);
-  if (activeRun && activeRun.length) return true;
+  if (activeRun && activeRun.length) return activeRun[0] as any;
 
   const { data: closedRun } = await supabaseAdmin
     .from('work_block_runs')
-    .select('id')
+    .select('id, task_id, started_at, ended_at')
     .eq('user_id', userId)
     .not('ended_at', 'is', null)
     .lte('started_at', stoppedAt)
     .gte('ended_at', startedAt)
     .limit(1);
-  return !!(closedRun && closedRun.length);
+  if (closedRun && closedRun.length) return closedRun[0] as any;
+
+  return null;
+}
+
+export async function overlapsWorkBlockRun(
+  userId: string,
+  startedAt: string,
+  stoppedAt: string,
+): Promise<boolean> {
+  const run = await getOverlappingWorkBlockRun(userId, startedAt, stoppedAt);
+  return !!run;
 }
 
 export async function logTaskTimeEntry(params: LogTaskTimeParams): Promise<LogTaskTimeResult> {

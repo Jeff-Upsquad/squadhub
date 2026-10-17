@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import type { TaskTimeEntry } from '@squadhub/shared';
 import api from '../services/api';
 import { usePMStore } from '../stores/pmStore';
+import { flushTimerShares } from './useParallelTimers';
 
 export function useMyTimeEntries(enabled: boolean = true) {
   return useQuery<TaskTimeEntry[]>({
@@ -47,9 +48,20 @@ export function useCreateTaskTimeEntry() {
       note?: string | null;
       source?: 'timer' | 'manual';
     }) => {
+      let finalDuration = durationSeconds;
+      if (source === 'manual' && durationSeconds > 0) {
+        const startMs = new Date(startedAt).getTime();
+        const split = usePMStore
+          .getState()
+          .splitRunningTimersForManualEntry(taskId, startMs, durationSeconds);
+        if (split.shares.length > 0) {
+          await flushTimerShares(qc, split.shares);
+        }
+        finalDuration = split.effectiveManualDuration;
+      }
       const res = await api.post(`/pm/tasks/${taskId}/time-entries`, {
         started_at: startedAt,
-        duration_seconds: durationSeconds,
+        duration_seconds: finalDuration,
         note: note ?? null,
         source,
       });
@@ -57,6 +69,7 @@ export function useCreateTaskTimeEntry() {
     },
     onSuccess: (_data, vars) => {
       usePMStore.getState().setFocusBucket(vars.taskId, null);
+      qc.invalidateQueries({ queryKey: ['work-block'] });
       invalidateTimeQueries(qc, vars.taskId);
     },
   });
