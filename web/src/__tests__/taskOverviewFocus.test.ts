@@ -66,10 +66,14 @@ describe('taskOverviewFocus', () => {
     const openTasks = [tFocused, tNormal, tCompleted].filter((t) => !isTaskCompleted(t));
     const focusGroup = buildFocusTodayGroup(openTasks);
 
-    const isDimmed = (t: Task) => Boolean(focusGroup && isTaskFocused(t) && !isTaskCompleted(t));
+    const isDimmed = (t: Task, allowDim = true) => Boolean(allowDim && focusGroup && isTaskFocused(t) && !isTaskCompleted(t));
 
-    expect(isDimmed(tFocused)).toBe(true);
-    expect(isDimmed(tNormal)).toBe(false);
-    expect(isDimmed(tCompleted)).toBe(false);
+    // When rendered inside the Focus Today section (allowDim = false), it is never dimmed:
+    expect(isDimmed(tFocused, false)).toBe(false);
+
+    // When rendered in its original group below (allowDim = true), open focused task is dimmed:
+    expect(isDimmed(tFocused, true)).toBe(true);
+    expect(isDimmed(tNormal, true)).toBe(false);
+    expect(isDimmed(tCompleted, true)).toBe(false);
   });
 });

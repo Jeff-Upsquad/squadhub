@@ -8,7 +8,6 @@ import { useTaskTypes } from '../../../hooks/useTaskTypes';
 import { useStatusDirectory } from '../../../hooks/useStatusDirectory';
 import { filterTasks, EMPTY_FILTER, type TaskFilterState } from '../../../lib/filters';
 import { isTaskCompleted, isTaskUpcoming, buildFocusTodayGroup, isTaskFocused, type GroupBy } from '../../../lib/taskGrouping';
-import TaskGroupCard from './TaskGroupCard';
 import { stagesFromStatuses } from '../../../lib/stages';
 import {
   PRIORITY_LANES,
@@ -500,7 +499,7 @@ export default function TaskOverview({
 
   // List rows are the exact same editable TaskRow used by normal lists: every
   // visible field column renders inline and updates from this view itself.
-  const renderRow = (t: Task) => (
+  const renderRow = (t: Task, allowDim = true) => (
     <div key={t.id} className="tov-lvrow">
       <TaskRow
         task={t}
@@ -509,7 +508,7 @@ export default function TaskOverview({
         canEdit
         listId={t.list?.id || (t as unknown as { list_id?: string }).list_id || ''}
         columns={visibleCols}
-        dimmed={!!focusGroup && isTaskFocused(t) && !isDone(t)}
+        dimmed={allowDim && !!focusGroup && isTaskFocused(t) && !isDone(t)}
       />
     </div>
   );
@@ -831,22 +830,51 @@ export default function TaskOverview({
         {/* Body */}
         <div className="tov-layout">
           <div className="tov-main">
-            {view === 'list' && focusGroup && (
-              <TaskGroupCard
-                groupKey="focus_today"
-                label={focusGroup.label}
-                dotColor="#f59e0b"
-                variant="focus"
-                tasks={focusGroup.tasks}
-                allStatuses={lookup}
-                columns={visibleCols}
-                columnControls={columnControls}
-                listId={null}
-                onStatusChange={handleStatusChange}
-                canEdit
-                showAddRow={false}
-              />
-            )}
+            {view === 'list' && focusGroup && (() => {
+              const focusCollapseKey = `${scopeKey}:tov:focus_today`;
+              const focusOpen = !collapsedGroups[focusCollapseKey];
+              const focusOpenCount = focusGroup.tasks.filter((t) => !isDone(t)).length;
+              return (
+                <div key="focus_today" className="tov-card tov-group tov-focus-group">
+                  <div className="tov-group-head">
+                    <button
+                      type="button"
+                      className="tov-group-toggle"
+                      aria-expanded={focusOpen}
+                      onClick={() => setGroupCollapsed(focusCollapseKey, focusOpen)}
+                    >
+                      <span className="tov-group-title">
+                        <span className="tov-group-name flex items-center gap-2">
+                          <span className="text-[#f59e0b] leading-none text-[18px]" aria-hidden="true">★</span>
+                          <span>{focusGroup.label}</span>
+                        </span>
+                        <span className="tov-group-meta">{focusOpenCount} open</span>
+                      </span>
+                    </button>
+                    <GroupTaskSelection ids={focusGroup.tasks.map((t) => t.id)} />
+                    <button
+                      type="button"
+                      aria-label={`Toggle ${focusGroup.label}`}
+                      onClick={() => setGroupCollapsed(focusCollapseKey, focusOpen)}
+                      className="tov-chev"
+                      data-closed={!focusOpen || undefined}
+                    >
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="m6 9 6 6 6-6" />
+                      </svg>
+                    </button>
+                  </div>
+                  {focusOpen && (
+                    <div className="tov-subs">
+                      <div className="tov-sub">
+                        {renderColHeader()}
+                        {focusGroup.tasks.map((t) => renderRow(t, false))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
             {view === 'list' && cards.map((c) => {
               if (c.slim) {
                 return (
@@ -902,7 +930,7 @@ export default function TaskOverview({
                               </div>
                             )}
                             {renderColHeader()}
-                            {s.tasks.map(renderRow)}
+                            {s.tasks.map((t) => renderRow(t, true))}
                           </div>
                         );
                       })}
