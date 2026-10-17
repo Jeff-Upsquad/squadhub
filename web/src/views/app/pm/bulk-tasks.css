@@ -1,22 +1,408 @@
-.group-task-select { flex: none; font-size: 12px; font-weight: 500; color: var(--sh-ink-3); border-radius: 6px; padding: 5px 8px; opacity: 0; transition: opacity .15s, background .15s; }
-.lv-card:hover .group-task-select, .tov-group:hover .group-task-select, .group-task-select:focus-visible, .group-task-select[data-selected], .lv-card:focus-within .group-task-select, .tov-group:focus-within .group-task-select { opacity: 1; }
-.group-task-select:hover, .group-task-select[data-selected] { background: var(--sh-hair-2); color: var(--sh-ink); }
-.tov-group-toggle { display: flex; flex: 1; min-width: 0; text-align: left; }
-.task-bulk-bar { color: white; max-width: calc(100% - 24px); flex-wrap: wrap; border-radius: 18px; }
-.task-bulk-bar button:disabled { opacity: .45; cursor: wait; }
-.bulk-details-dialog { margin: auto; padding: 24px; width: min(480px, calc(100vw - 24px)); max-height: calc(100vh - 40px); overflow: auto; border-radius: 16px; border: 1px solid var(--sh-hair-3); background: var(--surface); color: var(--sh-ink); box-shadow: 0 24px 80px #0005; }
-.bulk-details-dialog::backdrop { background: #0007; }
-.bulk-details-dialog h2 { font-size: 18px; font-weight: 600; }
-.bulk-details-dialog p { font-size: 13px; color: var(--sh-ink-3); margin: 8px 0 20px; }
-.bulk-details-dialog fieldset { border: 0; padding: 0; display: grid; gap: 16px; }
-.bulk-details-dialog label { display: grid; gap: 6px; font-size: 13px; }
-.bulk-details-dialog select, .bulk-details-dialog input, .bulk-details-dialog textarea, .bulk-details-dialog label > button { width: 100%; border: 1px solid var(--sh-hair-3); border-radius: 8px; padding: 10px; background: var(--surface-alt); color: var(--sh-ink); text-align: left; }
-.bulk-details-dialog textarea { min-height: 100px; }
-.bulk-details-dialog small { color: var(--sh-ink-3); }
-.bulk-dialog-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 24px; }
-.bulk-dialog-actions button, .bulk-result button { border: 1px solid var(--sh-hair-3); border-radius: 8px; padding: 8px 12px; }
-.bulk-dialog-actions button[type=submit] { background: var(--sh-ink); color: var(--surface); }
-.bulk-dialog-actions button:disabled { opacity: .45; }
-.bulk-result { padding: 12px 20px; font-size: 13px; background: var(--surface-alt); color: var(--sh-ink); max-height: 180px; overflow: auto; }
-.bulk-result ul { margin: 8px 0; }
-@media (hover: none) { .group-task-select { opacity: 1; } }
+.group-task-select {
+  flex: none;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--sh-ink-3);
+  border-radius: 6px;
+  padding: 5px 8px;
+  opacity: 0;
+  transition: opacity .15s, background .15s;
+}
+
+.lv-card:hover .group-task-select,
+.tov-group:hover .group-task-select,
+.group-task-select:focus-visible,
+.group-task-select[data-selected],
+.lv-card:focus-within .group-task-select,
+.tov-group:focus-within .group-task-select {
+  opacity: 1;
+}
+
+.group-task-select:hover,
+.group-task-select[data-selected] {
+  background: var(--sh-hair-2);
+  color: var(--sh-ink);
+}
+
+.tov-group-toggle {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+}
+
+.task-bulk-bar {
+  color: white;
+  max-width: calc(100% - 24px);
+  flex-wrap: wrap;
+  border-radius: 18px;
+}
+
+.task-bulk-bar button:disabled {
+  opacity: .45;
+  cursor: wait;
+}
+
+/* Edit details modal dialog */
+.bulk-details-dialog {
+  margin: auto;
+  padding: 24px;
+  width: min(480px, calc(100vw - 24px));
+  max-height: calc(100vh - 40px);
+  overflow: auto;
+  border-radius: 16px;
+  border: 1px solid var(--sh-hair-3);
+  background: var(--surface);
+  color: var(--sh-ink);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.4);
+}
+
+.bulk-details-dialog::backdrop {
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(4px);
+}
+
+.bulk-details-dialog h2 {
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.bulk-details-dialog p {
+  font-size: 13px;
+  color: var(--sh-ink-3);
+  margin: 8px 0 20px;
+}
+
+.bulk-details-dialog fieldset {
+  border: 0;
+  padding: 0;
+  display: grid;
+  gap: 16px;
+}
+
+.bulk-details-dialog label {
+  display: grid;
+  gap: 6px;
+  font-size: 13px;
+}
+
+.bulk-details-dialog select,
+.bulk-details-dialog input,
+.bulk-details-dialog textarea,
+.bulk-details-dialog label > button {
+  width: 100%;
+  border: 1px solid var(--sh-hair-3);
+  border-radius: 8px;
+  padding: 10px;
+  background: var(--surface-alt);
+  color: var(--sh-ink);
+  text-align: left;
+}
+
+.bulk-details-dialog textarea {
+  min-height: 100px;
+}
+
+.bulk-details-dialog small {
+  color: var(--sh-ink-3);
+}
+
+.bulk-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 24px;
+}
+
+.bulk-dialog-actions button {
+  border: 1px solid var(--sh-hair-3);
+  border-radius: 8px;
+  padding: 8px 14px;
+  font-size: 13px;
+  cursor: pointer;
+  background: var(--surface-alt);
+  color: var(--sh-ink);
+}
+
+.bulk-dialog-actions button[type=submit] {
+  background: var(--sh-ink);
+  color: var(--surface);
+  font-weight: 500;
+}
+
+.bulk-dialog-actions button:disabled {
+  opacity: .45;
+  cursor: not-allowed;
+}
+
+/* Minimized bottom dock for multiple bulk jobs */
+.bulk-jobs-dock {
+  position: fixed;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1000;
+  width: min(520px, calc(100vw - 32px));
+  display: flex;
+  flex-direction: column-reverse;
+  gap: 8px;
+  pointer-events: none;
+}
+
+.bulk-job-card {
+  pointer-events: auto;
+  background: rgba(18, 18, 20, 0.94);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  padding: 10px 14px;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45);
+  color: #fff;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  animation: bulk-dock-slide-up 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes bulk-dock-slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.bulk-job-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 13px;
+}
+
+.bulk-job-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: 1;
+}
+
+.bulk-job-title {
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: rgba(255, 255, 255, 0.95);
+}
+
+.bulk-job-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.bulk-job-count {
+  font-size: 11.5px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.bulk-job-err-toggle {
+  background: rgba(239, 68, 68, 0.2);
+  border: 1px solid rgba(239, 68, 68, 0.45);
+  color: #fca5a5;
+  border-radius: 6px;
+  padding: 2px 7px;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  transition: background 0.12s;
+}
+
+.bulk-job-err-toggle:hover {
+  background: rgba(239, 68, 68, 0.3);
+}
+
+.bulk-chev {
+  font-size: 9px;
+  line-height: 1;
+}
+
+.bulk-job-dismiss {
+  background: transparent;
+  border: none;
+  color: rgba(255, 255, 255, 0.45);
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+  padding: 2px 5px;
+  border-radius: 4px;
+  transition: color 0.12s, background 0.12s;
+}
+
+.bulk-job-dismiss:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+/* Progress bar */
+.bulk-progress-track {
+  width: 100%;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+  overflow: hidden;
+  position: relative;
+}
+
+.bulk-progress-fill {
+  height: 100%;
+  border-radius: 999px;
+  transition: width 0.22s ease-out;
+  background: #3b82f6;
+}
+
+.bulk-progress-fill.running {
+  background: linear-gradient(90deg, #3b82f6, #60a5fa);
+  background-size: 24px 24px;
+  background-image: linear-gradient(
+    -45deg,
+    rgba(255, 255, 255, 0.25) 25%,
+    transparent 25%,
+    transparent 50%,
+    rgba(255, 255, 255, 0.25) 50%,
+    rgba(255, 255, 255, 0.25) 75%,
+    transparent 75%,
+    transparent
+  );
+  animation: bulk-progress-stripes 1s linear infinite;
+}
+
+@keyframes bulk-progress-stripes {
+  0% { background-position: 0 0; }
+  100% { background-position: 24px 0; }
+}
+
+.bulk-progress-fill.completed {
+  background: #10b981;
+}
+
+.bulk-progress-fill.has-failures {
+  background: linear-gradient(90deg, #f59e0b, #ef4444);
+}
+
+/* Spinner and icons */
+.bulk-icon {
+  flex-shrink: 0;
+}
+
+.bulk-spin {
+  animation: bulk-spin-anim 0.9s linear infinite;
+}
+
+@keyframes bulk-spin-anim {
+  100% { transform: rotate(360deg); }
+}
+
+/* Error Drawer */
+.bulk-job-error-drawer {
+  margin-top: 4px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  animation: bulk-drawer-fade 0.15s ease-out;
+}
+
+@keyframes bulk-drawer-fade {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.bulk-job-error-list {
+  max-height: 130px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-right: 4px;
+}
+
+.bulk-job-error-item {
+  font-size: 11.5px;
+  background: rgba(239, 68, 68, 0.12);
+  border-left: 3px solid #ef4444;
+  padding: 5px 8px;
+  border-radius: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.bulk-job-error-item .error-title {
+  font-weight: 500;
+  color: #fecaca;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.bulk-job-error-item .error-msg {
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 11px;
+}
+
+.bulk-job-error-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.bulk-job-retry-btn {
+  background: #3b82f6;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 11.5px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+
+.bulk-job-retry-btn:hover {
+  background: #2563eb;
+}
+
+.bulk-job-dismiss-btn {
+  background: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.8);
+  border: none;
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 11.5px;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+
+.bulk-job-dismiss-btn:hover {
+  background: rgba(255, 255, 255, 0.18);
+}
+
+@media (hover: none) {
+  .group-task-select {
+    opacity: 1;
+  }
+}
