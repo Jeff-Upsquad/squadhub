@@ -8,6 +8,8 @@ Run the complete source-code pipeline: branch, commit, open a PR, merge, then `P
 
 Desktop app releases (`desktop-app/` + `desktop-app-release.yml`) are never triggered by CMPD — they require an explicit tag or manual workflow dispatch.
 
+> **GitHub CI is PAUSED (user instruction, 2026-10-17).** For this and future CMPD runs, keep the CI workflow disabled and skip waiting for GitHub checks. Continue the local validation in `cm.md`, open a PR, address human review comments, then merge and deploy manually through `pd.md`. Do not re-enable CI unless the user asks. To resume later: `gh workflow enable ci.yml --repo Jeff-Upsquad/squadhub` and restore the GitHub-check gate here.
+
 ## Steps
 
 1. Read and execute [cm.md](cm.md), including `npx tsc --noEmit -p server/tsconfig.json` and `npm run check:shared-imports`. Work lands on a `feat/*`, `fix/*`, or `docs/*` branch — never on `main`.
@@ -20,7 +22,7 @@ Desktop app releases (`desktop-app/` + `desktop-app-release.yml`) are never trig
    ```
 
 3. _(Paused: Greptile review.)_ Skip waiting for an automated review. If a human leaves review comments on the PR, still address them before merging.
-4. Merge once checks are green:
+4. Merge after local validation passes and human review comments are addressed. While GitHub CI is paused, do not wait for its checks:
 
    ```bash
    gh pr merge --repo Jeff-Upsquad/squadhub <PR-number> --merge
