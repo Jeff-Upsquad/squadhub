@@ -40,13 +40,15 @@ and flag "release line missing — not released" in the completion comment.
 ## Status lifecycle
 
 ```
-ready_to_code ──claim──▶ in_progress ──success──▶ closed
+ready_to_code ──claim──▶ in_progress ──done──▶ for_review ──human closes──▶ closed
                             │  ▲
                             │  └─claim-reply── follow_ups ◀─ask── (doubt: question in comments)
                             │                     │
                             └──failure──▶ blocked │ + human replies in comments
                                                  (reply re-enters via /agent/awaiting-reply)
 ```
+
+The agent never sets `closed` — that's a human-only action.
 
 Tasks enter `ready_to_code` two ways: a human sets the status, or the task
 panel's **Build now** button (`POST /pm/tasks/:id/build-dispatch`) sets it and
@@ -73,6 +75,13 @@ runs; they are optional. A human un-blocks by setting the task back to
 3. **Claim ONE task** — the oldest (first in the list).
    `POST {base_url}/agent/tasks/{id}/claim`. A 409 means another executor won
    the race → stop. **Never process more than one task per run.**
+   **Hand off to a fresh session:** the poll shell never does task work
+   itself. Spawn a brand-new agent session (Agent tool, `general-purpose`)
+   with a self-contained prompt containing: the claimed task's JSON, the path
+   to this SOP, the path to `tools/agent/runtime.json`, and the repo-map
+   path. The new session — empty context, nothing carried over — executes
+   steps 4–9 and returns a short summary. The shell relays that summary as
+   its run report.
 4. **Resolve the repo.** Match the task's list/folder against
    `repo-map.json`: `list_id` first, then `list_name`, then `folder_name`,
    else `defaults.repo`. Note an unmapped-list fallback in the final comment.
@@ -116,10 +125,12 @@ runs; they are optional. A human un-blocks by setting the task back to
    marks as requiring confirmation. Instead of deleting worktrees/branches,
    list them in the completion comment for one-click cleanup.
 9. **Report.** Set final status and post a completion comment:
-   - Success → status `closed`, comment: PR link, what changed, deploy result,
-     release channel used (or why skipped), any deferred CU cleanup.
+   - Success → status `for_review` (NOT closed — the human reviews and
+     closes). Comment, in simple terms: what was done, the PR link if one
+     was merged, whether it's live now, and anything left to check.
    - Partial (code merged but deploy/release failed) → status `blocked`,
-     comment the exact failure and what already succeeded.
+     comment the exact failure and what already succeeded — still simply
+     worded.
    - Comment endpoint: `POST {base_url}/agent/tasks/{id}/comment`
      `{ "content": "..." }`. If comments are rejected (AGENT_USER_ID unset on
      the server), still set the status and log the report locally.
@@ -127,6 +138,19 @@ runs; they are optional. A human un-blocks by setting the task back to
 
 ## Hard rules
 
+- **Fresh session per task.** The poll/claim shell never does the task work
+  itself — after claiming, it hands the task to a brand-new agent session
+  (Agent tool, general-purpose, empty context) with a self-contained brief.
+  No state, history, or context leaks between tasks.
+- **Never close a task.** The agent's terminal status is `for_review`
+  ("waiting for review before closing"). A human reads the comment, checks
+  the work, and closes the task themselves. This applies to every outcome —
+  builds, answers, everything.
+- **Comments in simple terms.** Write task comments the way you'd explain it
+  to a non-developer: short sentences, no jargon, no file paths, no status
+  keys. Say what was done, what to check, and what (if anything) is left.
+  Example: "Done. The button now saves on the first click. Try it and close
+  this task if it looks right."
 - **One task per run.** No batching, no parallel claims. A claimed reply
   counts as the run's task.
 - **Replies outrank new tasks** — a human answered you; they're waiting.
@@ -167,5 +191,5 @@ runs; they are optional. A human un-blocks by setting the task back to
 ## Outputs
 
 - Merged PR (+ deploy / release when applicable) in the mapped repo.
-- SquadHub task: final status (`closed`/`blocked`) + a completion comment with
-  PR link and run report.
+- SquadHub task: status `for_review` (or `blocked`) + a simple-terms comment
+  with the outcome. A human reviews and closes.

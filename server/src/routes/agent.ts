@@ -28,17 +28,18 @@ import { logTaskActivity } from '../utils/taskActivity';
 
 const router = Router();
 
-// Statuses the agent may set via /status. Everything else in the catalog
-// (triage, priorities, routines) is human-owned. 'follow_ups' is the
-// waiting-for-a-human-reply state used by the ask-in-comments loop.
+// Statuses the agent may set via /status. 'follow_ups' is the
+// waiting-for-a-human-reply state used by the ask-in-comments loop;
+// 'for_review' is the agent's terminal state. 'closed' is deliberately
+// NOT here — the agent never completes a task; a human reviews and closes.
 const AGENT_STATUSES = [
   'in_progress',
   'in_code_review',
   'testing_qa',
   'ready_for_deploy',
   'blocked',
-  'closed',
   'follow_ups',
+  'for_review',
 ] as const;
 
 const statusSchema = z.object({
