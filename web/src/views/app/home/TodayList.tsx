@@ -825,7 +825,7 @@ function TodayRow({ task: t, onOpen, secondsToday = 0, liveSecs = 0, isInProgres
       data-done={displayDone}
       data-fading={isFading}
       data-subtask={isSubtask || undefined}
-      data-tracking={isTracking || undefined}
+      data-tracking={isTiming || undefined}
       onClick={() => onOpen(t.id)}
       onTransitionEnd={onRowTransitionEnd}
       role="button"
@@ -889,7 +889,7 @@ function TodayRow({ task: t, onOpen, secondsToday = 0, liveSecs = 0, isInProgres
             ? `Time logged ${totalText} · today`
             : `Time logged ${totalText} total`;
         return (
-          <span className="hm-tracked" data-live={isTracking || undefined} title={title}>
+          <span className="hm-tracked" data-live={isTiming || undefined} title={title}>
             {totalText}
           </span>
         );
