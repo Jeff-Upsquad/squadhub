@@ -71,3 +71,6 @@ graphify-out/
 
 # Supabase CLI temp
 supabase/.temp/
+
+# Build Agent executor-local settings (contains the agent API token)
+tools/agent/runtime.json

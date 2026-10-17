@@ -6,7 +6,7 @@ import { usePMStore } from '../../../stores/pmStore';
 import { sourceFromComment, useConvertToTaskStore } from '../../../stores/convertToTaskStore';
 import { useDeepLinkStore } from '../../../lib/deepLinks';
 import { isPlaceholderStatus } from '../../../lib/stageWorkflow';
-import { useTask, useUpdateTask, useDeleteTask, useTaskComments, useAddComment, useCreateTask, useTaskLists, useAddTaskToLists, useRemoveTaskFromList, useTaskActivity } from '../../../hooks/useTasks';
+import { useTask, useUpdateTask, useDeleteTask, useTaskComments, useAddComment, useCreateTask, useTaskLists, useAddTaskToLists, useRemoveTaskFromList, useTaskActivity, useDispatchBuild } from '../../../hooks/useTasks';
 import { useFocusTask } from '../../../hooks/useDayPlanner';
 import { isTaskFocused } from '../../../lib/taskGrouping';
 import { useWorkspaceStore } from '../../../stores/workspaceStore';
@@ -559,6 +559,21 @@ export default function TaskDetailPanel({
   const [logTimeAnchor, setLogTimeAnchor] = useState<DOMRect | null>(null);
   const [timerElapsed, setTimerElapsed] = useState(0);
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
+
+  // "Build now" — dispatches the task into the build-agent pipeline
+  // (workflows/agent-build.md). Flashes the bolt green for a few seconds so
+  // the click has visible feedback beyond the status flip to READY TO CODE.
+  const dispatchBuild = useDispatchBuild(effectiveTaskId, listId);
+  const [dispatchFlash, setDispatchFlash] = useState(false);
+  const handleDispatchBuild = () => {
+    if (!effectiveTaskId) return;
+    dispatchBuild.mutate(undefined, {
+      onSuccess: () => {
+        setDispatchFlash(true);
+        window.setTimeout(() => setDispatchFlash(false), 4000);
+      },
+    });
+  };
   const [movePickerOpen, setMovePickerOpen] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   // Desktop collapsibles — the Details card and each body section.
@@ -1390,6 +1405,21 @@ export default function TaskDetailPanel({
                 onToggle={(focused) => focusTask.mutate({ id: task.id, focused })}
               />
               <GoalTaskFlag taskId={task.id} size={19} className="td-m-hero-icon" />
+              {canEdit && !isDone && (
+                <button
+                  type="button"
+                  className="td-m-hero-icon"
+                  onClick={handleDispatchBuild}
+                  disabled={dispatchBuild.isPending}
+                  title="Build now — dispatch to the build agent"
+                  aria-label="Build now"
+                  style={dispatchFlash ? { color: 'var(--sh-success, #22c55e)' } : undefined}
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill={dispatchFlash ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+                  </svg>
+                </button>
+              )}
               <button
                 type="button"
                 className="td-m-hero-icon"
@@ -1596,6 +1626,21 @@ export default function TaskDetailPanel({
                 onToggle={(focused) => focusTask.mutate({ id: task.id, focused })}
               />
               <GoalTaskFlag taskId={task.id} size={16} className="td-nav-btn" />
+              {canEdit && !isDone && (
+                <button
+                  type="button"
+                  onClick={handleDispatchBuild}
+                  className="td-nav-btn"
+                  disabled={dispatchBuild.isPending}
+                  title={dispatchFlash ? 'Dispatched — the build agent will pick it up shortly' : 'Build now — dispatch to the build agent'}
+                  aria-label="Build now"
+                  style={dispatchFlash ? { color: 'var(--sh-success, #22c55e)' } : undefined}
+                >
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill={dispatchFlash ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+                  </svg>
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => setRelationshipsOpen(true)}

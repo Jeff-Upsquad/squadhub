@@ -514,6 +514,24 @@ export function useAddComment(taskId: string | null) {
   });
 }
 
+// "Build now" — dispatch the task into the build-agent pipeline
+// (POST /pm/tasks/:id/build-dispatch). Server moves it to ready_to_code and
+// stamps metadata.build_requested_at so the agent queue serves it first.
+export function useDispatchBuild(taskId: string | null, listId: string | null) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      const res = await api.post(`/pm/tasks/${taskId}/build-dispatch`);
+      return res.data.data;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['task', taskId] });
+      qc.invalidateQueries({ queryKey: ['task-activity', taskId] });
+      if (listId) qc.invalidateQueries({ queryKey: ['tasks', listId] });
+    },
+  });
+}
+
 // Helper: group tasks by status. For task_type='task' tasks, task.status holds
 // a TASK_STATUS_CATALOG key — resolve it to the legacy 4-bucket category so the
 // same board layout keeps working.

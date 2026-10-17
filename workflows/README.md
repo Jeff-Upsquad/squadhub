@@ -28,6 +28,7 @@ If a workflow exposes a recurring failure or a safer method, update its SOP. Nev
 | File | Purpose |
 |---|---|
 | [deploy.md](deploy.md) | VPS Docker deployment details (`tools/deploy.sh`) |
+| [agent-build.md](agent-build.md) | Build-agent pipeline: READY TO CODE task → implement → CMPD/CU → report back (executor-agnostic; Mac today, VPS later) |
 | [rollback.md](rollback.md) | Rolling back a bad deploy via timestamp tags |
 | [test-handoff.md](test-handoff.md) | Post-deploy plain-language handoff to the user |
 | [push.md](push.md) | Legacy direct-push SOP (retired — use CMPD) |

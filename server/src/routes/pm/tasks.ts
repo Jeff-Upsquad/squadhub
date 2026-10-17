@@ -3800,6 +3800,69 @@ router.patch('/tasks/:id/snooze', async (req: Request, res: Response) => {
   }
 });
 
+// POST /pm/tasks/:id/build-dispatch — "Build now" from the task panel.
+// Human-triggered entry into the build-agent pipeline (workflows/agent-build.md):
+// moves the task to ready_to_code (unless already there) and stamps
+// metadata.build_requested_at so the agent queue serves it first. The agent
+// executor still claims it through the token-authed /agent/* bridge.
+router.post('/tasks/:id/build-dispatch', async (req: Request, res: Response) => {
+  try {
+    const id = req.params.id as string;
+
+    const { data: task } = await supabaseAdmin
+      .from('tasks')
+      .select('id, status, list_id, metadata')
+      .eq('id', id)
+      .maybeSingle();
+    if (!task) {
+      res.status(404).json({ success: false, error: 'Task not found' });
+      return;
+    }
+    if (task.status === 'closed' || task.status === 'cancelled') {
+      res.status(400).json({ success: false, error: 'Reopen the task before dispatching a build' });
+      return;
+    }
+
+    const userLevel = await checkResourceAccess(req.userId!, 'list', task.list_id);
+    if (!userLevel || !meetsAccessLevel(userLevel, 'commenter')) {
+      res.status(403).json({ success: false, error: 'Commenter access required to dispatch a build' });
+      return;
+    }
+
+    const now = new Date().toISOString();
+    const metadata = {
+      ...((task.metadata as Record<string, unknown>) || {}),
+      build_requested_at: now,
+      build_requested_by: req.userId,
+    };
+    const patch: Record<string, unknown> = { metadata };
+    if (task.status !== 'ready_to_code') patch.status = 'ready_to_code';
+
+    const { data: updated, error } = await supabaseAdmin
+      .from('tasks')
+      .update(patch)
+      .eq('id', id)
+      .select('*')
+      .single();
+    if (error) {
+      res.status(500).json({ success: false, error: error.message });
+      return;
+    }
+
+    await logTaskActivity(id, req.userId!, [{
+      event_type: 'build_dispatched',
+      field: 'status',
+      old_value: task.status,
+      new_value: 'ready_to_code',
+    }]);
+
+    res.json({ success: true, data: updated });
+  } catch (err) {
+    console.error('Build dispatch error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
 // POST /pm/tasks/:id/review — mark a task reviewed for the caller, dropping it from
 // their New Tasks card. Idempotent (re-ticking is a no-op).
 router.post('/tasks/:id/review', async (req: Request, res: Response) => {
