@@ -31,10 +31,14 @@ export function useStatusDirectory(): SpaceStatus[] {
     const rank = (g: StatusGroup) => (g.key === 'task_workflow' ? 0 : g.base_group_id ? 1 : 2);
     const groups = [...(data || [])].sort((a, b) => rank(a) - rank(b));
     const byKey = new Map<string, SpaceStatus>();
+    const seenLabels = new Set<string>();
     for (const g of groups) {
       for (const row of (g.statuses || []) as StatusGroupStatus[]) {
         const def = statusGroupRowToTaskDef(row);
         if (!def.key || byKey.has(def.key)) continue;
+        const labelKey = (def.label || '').toLowerCase().trim();
+        if (labelKey && seenLabels.has(labelKey)) continue;
+        if (labelKey) seenLabels.add(labelKey);
         byKey.set(def.key, {
           id: def.key,
           space_id: '',

@@ -3851,9 +3851,11 @@ function SpaceStatusPicker({
     type Item = { status: SpaceStatus; description: string; groupKey: string; groupName: string; emoji: string };
     const seen = new Set<string>();
     const dedupedStatuses = statuses.filter((s) => {
-      const key = (s.id || s.name || '').toLowerCase().trim();
-      if (!key || seen.has(key)) return false;
-      seen.add(key);
+      const idKey = (s.id || '').toLowerCase().trim();
+      const nameKey = (s.name || '').toLowerCase().trim();
+      if ((idKey && seen.has(idKey)) || (nameKey && seen.has(nameKey))) return false;
+      if (idKey) seen.add(idKey);
+      if (nameKey) seen.add(nameKey);
       return true;
     });
 

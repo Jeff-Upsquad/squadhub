@@ -27,9 +27,17 @@ type StageFields = {
 
 function build<T extends StageFields>(items: T[], isLegacy: (t: T) => boolean): Stage<T>[] {
   const map = new Map<string, Stage<T>>();
+  const seen = new Set<string>();
   let order = 0;
   for (const it of items) {
     if (isLegacy(it)) continue;
+    const anyIt = it as unknown as { id?: string; key?: string; name?: string; label?: string };
+    const idKey = (anyIt.key || anyIt.id || '').toLowerCase().trim();
+    const nameKey = (anyIt.label || anyIt.name || '').toLowerCase().trim();
+    if ((idKey && seen.has(idKey)) || (nameKey && seen.has(nameKey))) continue;
+    if (idKey) seen.add(idKey);
+    if (nameKey) seen.add(nameKey);
+
     const key = it.group || 'not_started';
     let st = map.get(key);
     if (!st) {

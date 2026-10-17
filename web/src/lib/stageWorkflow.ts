@@ -158,13 +158,27 @@ export type DirectoryStatusGroup = { key: string; label: string; color: string; 
  * stage; groups follow section order, then workflow position, and tasks
  * inside follow the stage ordering (priority first).
  */
+export function dedupeStatuses(statuses: SpaceStatus[]): SpaceStatus[] {
+  const seen = new Set<string>();
+  const out: SpaceStatus[] = [];
+  for (const s of statuses) {
+    const idKey = (s.id || '').toLowerCase().trim();
+    const nameKey = (s.name || '').toLowerCase().trim();
+    if ((idKey && seen.has(idKey)) || (nameKey && seen.has(nameKey))) continue;
+    if (idKey) seen.add(idKey);
+    if (nameKey) seen.add(nameKey);
+    out.push(s);
+  }
+  return out;
+}
+
 export function groupTasksByStatusDirectory(
   tasks: Task[],
   directory: SpaceStatus[],
   fadingMap: ReadonlyMap<string, string>,
   fallbackStatuses: SpaceStatus[] = [],
 ): DirectoryStatusGroup[] {
-  const lookup = [...directory, ...fallbackStatuses];
+  const lookup = dedupeStatuses([...directory, ...fallbackStatuses]);
   const groups = new Map<string, DirectoryStatusGroup>();
   for (const t of tasks) {
     const raw = stageKeyOf(t, fadingMap);

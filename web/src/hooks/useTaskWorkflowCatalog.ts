@@ -50,10 +50,19 @@ export function useTaskWorkflowCatalog(options?: TaskWorkflowCatalogOptions) {
   if (!rows || rows.length === 0) {
     return { defs: TASK_STATUS_CATALOG, group, assignment, managed: false, isLoading };
   }
-  const defs: TaskStatusDef[] = [...rows]
-    .sort((a, b) => a.position - b.position)
-    .map(statusGroupRowToTaskDef)
-    .filter((d) => !!d.key);
+  const seenKeys = new Set<string>();
+  const seenLabels = new Set<string>();
+  const defs: TaskStatusDef[] = [];
+  for (const row of [...rows].sort((a, b) => a.position - b.position)) {
+    const def = statusGroupRowToTaskDef(row);
+    if (!def.key) continue;
+    const k = def.key.toLowerCase().trim();
+    const l = (def.label || '').toLowerCase().trim();
+    if ((k && seenKeys.has(k)) || (l && seenLabels.has(l))) continue;
+    if (k) seenKeys.add(k);
+    if (l) seenLabels.add(l);
+    defs.push(def);
+  }
   if (defs.length === 0) {
     return { defs: TASK_STATUS_CATALOG, group, assignment, managed: false, isLoading };
   }
