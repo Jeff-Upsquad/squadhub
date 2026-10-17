@@ -29,7 +29,7 @@ const WEB_URL = 'https://squadhub.in';
 // Poll cadence mirrors the web app (active every 20s, stats every 60s) so the
 // notch reflects whatever work/break/no-work session the user is running in
 // SquadHub, with a 1s local tick for the live clock between polls.
-const ACTIVE_POLL_MS = 20_000;
+const ACTIVE_POLL_MS = 10_000;
 const STATS_POLL_MS = 60_000;
 const MARK_SECONDS = 1800; // surface the notch at each 30-minute mark
 const AUTO_HIDE_MS = 8_000;
@@ -184,6 +184,7 @@ export default function Notch() {
     setSession(null);
     setStats(null);
     setActionError(null);
+    invoke('set_timer_title', { title: '' }).catch(() => {});
   }, [userId]);
 
   // ── resolve scope + hydrate auth ───────────────────────────────────────────
@@ -265,7 +266,7 @@ export default function Notch() {
   useEffect(() => {
     if (!session || !meta) {
       // No running session → clear the tray clock and hide the notch.
-      invoke('set_timer_title', { title: task?.status === 'running' ? `TASK ${formatClock(taskSeconds)}` : null }).catch(() => {});
+      invoke('set_timer_title', { title: task?.status === 'running' ? `TASK ${formatClock(taskSeconds)}` : '' }).catch(() => {});
       if (seenSessionRef.current !== null && !task) {
         seenSessionRef.current = null;
         dismiss();
