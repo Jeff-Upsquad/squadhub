@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import type { Channel, Folder, List, Space } from '@squadhub/shared';
+import type { Channel, Space } from '@squadhub/shared';
 import api from '../services/api';
 import { useSpaces } from './useSpaces';
 import { useWorkspaceStore } from '../stores/workspaceStore';
@@ -8,11 +8,6 @@ import { useWorkspaceMembers, type WorkspaceMember } from './useWorkspaceMembers
 import type { MessageSearchResult } from './useMessageSearch';
 
 const PER_CATEGORY_LIMIT = 8;
-
-type SpaceWithChildren = Space & {
-  folders?: (Folder & { lists?: List[] })[];
-  lists?: List[];
-};
 
 export type SearchSpace = { id: string; name: string };
 export type SearchFolder = { id: string; name: string; space_id: string; space_name: string | null };
@@ -72,64 +67,17 @@ export function useWorkspaceSearch(workspaceId: string | undefined, query: strin
   const channelsRaw = useWorkspaceStore((s) => s.channels);
   const { data: members = [] } = useWorkspaceMembers(workspaceId);
 
-  // Flatten folders + lists out of the spaces tree
-  const { allFolders, allLists } = useMemo(() => {
-    const f: SearchFolder[] = [];
-    const l: SearchList[] = [];
-    for (const space of (spaces as SpaceWithChildren[]) || []) {
-      for (const folder of space.folders || []) {
-        f.push({
-          id: folder.id,
-          name: folder.name,
-          space_id: space.id,
-          space_name: space.name,
-        });
-        for (const list of folder.lists || []) {
-          l.push({
-            id: list.id,
-            name: list.name,
-            folder_id: folder.id,
-            folder_name: folder.name,
-            space_id: space.id,
-            space_name: space.name,
-          });
-        }
-      }
-      for (const list of space.lists || []) {
-        l.push({
-          id: list.id,
-          name: list.name,
-          folder_id: null,
-          folder_name: null,
-          space_id: space.id,
-          space_name: space.name,
-        });
-      }
-    }
-    return { allFolders: f, allLists: l };
-  }, [spaces]);
-
-  const filteredSpaces: SearchSpace[] = useMemo(() => {
+  // Spaces are matched client-side for instant results while typing (the
+  // /pm/spaces cache is already loaded for the sidebar) and merged with the
+  // server-side matches below, so nothing the sidebar list filters out is
+  // missed. Folders and lists have no client-side cache — the sidebar loads
+  // them per space via /pm/spaces/:id — so they come from the server search.
+  const clientSpaces: SearchSpace[] = useMemo(() => {
     if (!q) return [];
-    return ((spaces as SpaceWithChildren[]) || [])
+    return ((spaces as Space[]) || [])
       .filter((s) => ciIncludes(s.name, lowerQ))
-      .slice(0, PER_CATEGORY_LIMIT)
       .map((s) => ({ id: s.id, name: s.name }));
   }, [spaces, lowerQ, q]);
-
-  const filteredFolders: SearchFolder[] = useMemo(() => {
-    if (!q) return [];
-    return allFolders
-      .filter((f) => ciIncludes(f.name, lowerQ))
-      .slice(0, PER_CATEGORY_LIMIT);
-  }, [allFolders, lowerQ, q]);
-
-  const filteredLists: SearchList[] = useMemo(() => {
-    if (!q) return [];
-    return allLists
-      .filter((l) => ciIncludes(l.name, lowerQ))
-      .slice(0, PER_CATEGORY_LIMIT);
-  }, [allLists, lowerQ, q]);
 
   const filteredChannels: SearchChannel[] = useMemo(() => {
     if (!q) return [];
@@ -149,7 +97,7 @@ export function useWorkspaceSearch(workspaceId: string | undefined, query: strin
       .slice(0, PER_CATEGORY_LIMIT);
   }, [members, lowerQ, q]);
 
-  const tasksQuery = useQuery<{ tasks: SearchTask[]; descriptions: SearchTask[] }>({
+  const pmSearchQuery = useQuery<{ tasks: SearchTask[]; descriptions: SearchTask[]; spaces?: SearchSpace[]; folders?: SearchFolder[]; lists?: SearchList[] }>({
     queryKey: ['pm-search', workspaceId, debouncedQ, 'descriptions'],
     queryFn: async () => {
       const res = await api.get('/pm/search', {
@@ -158,6 +106,9 @@ export function useWorkspaceSearch(workspaceId: string | undefined, query: strin
       return {
         tasks: (res.data?.data?.tasks || []) as SearchTask[],
         descriptions: (res.data?.data?.descriptions || []) as SearchTask[],
+        spaces: (res.data?.data?.spaces || []) as SearchSpace[],
+        folders: (res.data?.data?.folders || []) as SearchFolder[],
+        lists: (res.data?.data?.lists || []) as SearchList[],
       };
     },
     enabled: !!workspaceId && debouncedQ.length > 0,
@@ -179,15 +130,30 @@ export function useWorkspaceSearch(workspaceId: string | undefined, query: strin
     staleTime: 30_000,
   });
 
+  // Instant client matches first, then server matches fill any gaps (deduped
+  // by id) — the server covers spaces the sidebar list itself filters out.
+  const mergedSpaces: SearchSpace[] = useMemo(() => {
+    if (!q) return [];
+    const seen = new Set<string>();
+    const merged: SearchSpace[] = [];
+    for (const s of [...clientSpaces, ...(pmSearchQuery.data?.spaces ?? [])]) {
+      if (seen.has(s.id)) continue;
+      seen.add(s.id);
+      merged.push(s);
+      if (merged.length >= PER_CATEGORY_LIMIT) break;
+    }
+    return merged;
+  }, [clientSpaces, pmSearchQuery.data, q]);
+
   return {
-    spaces: filteredSpaces,
-    folders: filteredFolders,
-    lists: filteredLists,
-    tasks: tasksQuery.data?.tasks ?? [],
-    descriptions: tasksQuery.data?.descriptions ?? [],
+    spaces: mergedSpaces,
+    folders: pmSearchQuery.data?.folders ?? [],
+    lists: pmSearchQuery.data?.lists ?? [],
+    tasks: pmSearchQuery.data?.tasks ?? [],
+    descriptions: pmSearchQuery.data?.descriptions ?? [],
     channels: filteredChannels,
     members: filteredMembers,
     messages: messagesQuery.data ?? [],
-    isLoading: tasksQuery.isFetching || messagesQuery.isFetching,
+    isLoading: pmSearchQuery.isFetching || messagesQuery.isFetching,
   };
 }
