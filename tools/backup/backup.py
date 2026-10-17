@@ -247,7 +247,8 @@ class Backup:
         pending = json.loads(path.read_text()) if path.exists() else []
         if not any(n['metadata']['dedupe_key'] == dedupe_key for n in pending):
             pending.append({'id': str(uuid.uuid4()), 'user_id': self.c['ALERT_USER_ID'],
-                            'type': 'task_updated', 'reference_type': 'database_backup',
+                            'type': 'task_updated', 'reference_type': 'announcement',
+                            'reference_id': self.c['ALERT_USER_ID'],
                             'created_at': dt.datetime.now(UTC).isoformat(),
                             'title': title, 'body': body,
                             'metadata': {'dedupe_key': dedupe_key, 'source': 'database_backup'}})
@@ -258,6 +259,10 @@ class Backup:
         pending = json.loads(path.read_text()) if path.exists() else []
         left = []
         for notice in pending:
+            # Repair notifications queued by the initial installer before the
+            # required inbox reference was included. Only this job owns queue.
+            notice.setdefault('reference_id', self.c['ALERT_USER_ID'])
+            notice['reference_type'] = 'announcement'
             try:
                 key = self.app['SUPABASE_SERVICE_ROLE_KEY']
                 req = urllib.request.Request(self.app['SUPABASE_URL'] + '/rest/v1/notifications?on_conflict=id',
@@ -408,6 +413,9 @@ def main():
                     raise RuntimeError('Test alert has not reached the inbox')
                 log('alert_test_delivered')
         except Exception as exc:
+            if args.command != 'backup':
+                log('failure', command=args.command, error_type=type(exc).__name__)
+                raise SystemExit(1)
             # Retain the last successful manifest; record/alert this failure.
             path = backup.root / 'status.json'
             state = json.loads(path.read_text()) if path.exists() else {}
