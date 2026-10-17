@@ -143,6 +143,7 @@ import meetingEventsRoutes from './routes/meetings_events';
 import huddlesRoutes from './routes/huddles';
 import featureTipsRoutes from './routes/feature-tips';
 import adminFeatureTipsRoutes from './routes/admin/feature-tips';
+import agentRoutes from './routes/agent';
 import { startCheckInCron } from './cron/checkin-cron';
 import { startTimesheetCron } from './cron/timesheet-cron';
 import { startTimerCron } from './cron/timer-cron';
@@ -202,6 +203,8 @@ app.use('/pm', pmListRoutes);
 app.use('/pm', pmWhiteboardRoutes);
 app.use('/pm', pmViewRoutes);
 app.use('/pm', pmTaskRoutes);
+// Build Agent bridge — machine-to-machine, static token auth (routes/agent.ts)
+app.use('/agent', agentRoutes);
 app.use('/pm', pmLabelsRoutes);
 app.use('/pm', pmDayPlansRoutes);
 app.use('/pm', pmWorkBlocksRoutes);

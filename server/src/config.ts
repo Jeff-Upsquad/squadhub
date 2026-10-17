@@ -103,6 +103,15 @@ export const config = {
   zoomClientId: process.env.ZOOM_CLIENT_ID || '',
   zoomClientSecret: process.env.ZOOM_CLIENT_SECRET || '',
 
+  // Build Agent bridge API (/agent/*). A static bearer token for the external
+  // build executor (ZCode automation today, VPS runner later) plus the UUID of
+  // a dedicated "Build Agent" user row used to attribute comments/activity.
+  // When agentApiToken is unset every /agent endpoint returns 503, so dev
+  // boxes without wiring are closed by default. Generate a token with:
+  //   openssl rand -hex 32
+  agentApiToken: process.env.AGENT_API_TOKEN || '',
+  agentUserId: process.env.AGENT_USER_ID || '',
+
   // Huddles (in-app calls) run on LiveKit. All three must be present for the
   // feature to switch on; otherwise /huddles/config reports disabled and the
   // start button stays hidden. LIVEKIT_URL is the client-facing wss:// URL
