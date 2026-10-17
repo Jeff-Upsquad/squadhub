@@ -52,7 +52,7 @@ def restore_test(config, run_id=None):
         # into this isolated database container.
         client = ['docker', 'exec', '-i', name]
         def sql(statement):
-            return job.run(client + ['psql', '-h', '127.0.0.1', '-U', 'postgres', '-XqAt', '-v', 'ON_ERROR_STOP=1'], stdin=statement.encode()).decode().strip()
+            return job.run(client + ['psql', '-h', '127.0.0.1', '-U', 'supabase_admin', '-d', 'postgres', '-XqAt', '-v', 'ON_ERROR_STOP=1'], stdin=statement.encode()).decode().strip()
         try:
             job.run(['docker', 'run', '-d', '--name', name, '--network', 'none', '--memory', '768m',
                      '--cpus', '1', '--tmpfs', '/var/lib/postgresql/data:rw,size=768m',
@@ -61,7 +61,7 @@ def restore_test(config, run_id=None):
             # The image briefly starts a Unix-socket-only init server. Wait
             # for the final TCP listener, never that temporary init process.
             for attempt in range(60):
-                check = subprocess.run(['docker', 'exec', name, 'pg_isready', '-h', '127.0.0.1', '-U', 'postgres'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                check = subprocess.run(['docker', 'exec', name, 'pg_isready', '-h', '127.0.0.1', '-U', 'supabase_admin', '-d', 'postgres'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                 if check.returncode == 0:
                     break
                 time.sleep(2)
@@ -74,7 +74,7 @@ def restore_test(config, run_id=None):
                 literal = "'" + role['name'].replace("'", "''") + "'"
                 sql(f'DO $$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname={literal}) THEN CREATE ROLE {ident} NOLOGIN; END IF; END $$;')
             job.run(['docker', 'cp', str(folder / 'database.dump'), name + ':/tmp/database.dump'])
-            job.run(client + ['pg_restore', '-U', 'postgres', '--no-owner', '--clean', '--if-exists', '--exit-on-error', '-d', 'postgres', '/tmp/database.dump'])
+            job.run(client + ['pg_restore', '-U', 'supabase_admin', '--no-owner', '--clean', '--if-exists', '--exit-on-error', '-d', 'postgres', '/tmp/database.dump'])
             # The restored DB is offline: cron/network extensions cannot contact
             # WhatsApp, webhooks, customer endpoints, or any production service.
             for table in inventory['tables']:
