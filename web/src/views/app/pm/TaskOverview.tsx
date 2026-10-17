@@ -6,7 +6,7 @@ import { useUpdateTask } from '../../../hooks/useTasks';
 import { useTaskTypes } from '../../../hooks/useTaskTypes';
 import { useStatusDirectory } from '../../../hooks/useStatusDirectory';
 import { filterTasks, EMPTY_FILTER, type TaskFilterState } from '../../../lib/filters';
-import { isTaskCompleted, type GroupBy } from '../../../lib/taskGrouping';
+import { isTaskCompleted, isTaskUpcoming, type GroupBy } from '../../../lib/taskGrouping';
 import { stagesFromStatuses } from '../../../lib/stages';
 import {
   PRIORITY_LANES,
@@ -107,7 +107,7 @@ export default function TaskOverview({
   title: string;
   /** Every task in scope (subtasks included; only top-level rows render). */
   tasks: Task[];
-  lists: { id: string; name: string; folderId?: string | null }[];
+  lists: { id: string; name: string; folderId?: string | null; is_private?: boolean; is_locked?: boolean }[];
   listFilter: string;
   onListFilter: (id: string) => void;
   /** Space pages: folder chips narrow the list chips + tasks below. */
@@ -154,7 +154,7 @@ export default function TaskOverview({
   const [query, setQuery] = useState('');
   const [tile, setTile] = useState<OverviewTile>('all');
   const [view, setView] = useState<ViewMode>('list');
-  const [menu, setMenu] = useState<'group' | 'filter' | 'fields' | null>(null);
+  const [menu, setMenu] = useState<'group' | 'filter' | 'fields' | 'emptyLists' | null>(null);
   const [showDone, setShowDone] = useState(false);
   const [fieldsOpen, setFieldsOpen] = useState(false);
   // Field (column) visibility, same system as normal lists. Scope is per
@@ -230,6 +230,53 @@ export default function TaskOverview({
     () => scoped.filter((t) => listFilter === 'all' || t.list?.id === listFilter),
     [scoped, listFilter],
   );
+
+  const isLoaded = !loading || tasks.length > 0;
+
+  // Live per-list counts:
+  // - count: open tasks in this list (excluding completed and subtasks)
+  // - upcoming: open tasks whose work date or due date is in the future
+  // - current: open tasks due today or earlier, or with no date (count - upcoming)
+  // Lists with no open tasks (count === 0), OR whose open tasks are ALL upcoming
+  // (current === 0), are grouped together under one dropdown.
+  const enrichedLists = useMemo(() => {
+    return visibleLists.map((list) => {
+      const listOpen = top.filter((t) => t.list?.id === list.id && !isTaskCompleted(t));
+      const count = listOpen.length;
+      const upcoming = listOpen.filter((t) => isTaskUpcoming(t, tz)).length;
+      const current = Math.max(0, count - upcoming);
+      return {
+        list,
+        count,
+        upcoming,
+        current,
+      };
+    });
+  }, [visibleLists, top, tz]);
+
+  const withTasks = useMemo(
+    () => (isLoaded ? enrichedLists.filter((e) => e.current > 0) : enrichedLists),
+    [enrichedLists, isLoaded],
+  );
+
+  const emptyLists = useMemo(() => {
+    if (!isLoaded) return [];
+    // Lists holding snoozed work float to the top of the dropdown so upcoming
+    // items are found first; relative order is otherwise preserved.
+    const all = enrichedLists.filter((e) => e.current === 0);
+    return [...all.filter((e) => e.upcoming > 0), ...all.filter((e) => e.upcoming === 0)];
+  }, [enrichedLists, isLoaded]);
+
+  const activeIsEmpty = listFilter !== 'all' && emptyLists.some((e) => e.list.id === listFilter);
+  const activeEmpty = activeIsEmpty ? emptyLists.find((e) => e.list.id === listFilter) : null;
+  const scopedOpenCount = useMemo(() => scoped.filter((t) => !isTaskCompleted(t)).length, [scoped]);
+
+  // If the filtered list disappears (e.g. switching folders), fall back to All.
+  useEffect(() => {
+    if (visibleLists.length > 0 && listFilter !== 'all' && !visibleLists.some((l) => l.id === listFilter)) {
+      onListFilter('all');
+    }
+  }, [visibleLists, listFilter, onListFilter]);
   const q = query.trim().toLowerCase();
   const matching = pool.filter((t) =>
     matchesOverviewTile(t, tile, tz)
@@ -549,12 +596,145 @@ export default function TaskOverview({
           {/* List chips + Group / Filter / view switch */}
           <div className="tov-toolbar">
             {visibleLists.length > 1 && <div className="tov-chips tov-list-chips">
-              {[{ id: 'all', name: 'All lists', count: scoped.length }, ...visibleLists.map((l) => ({ id: l.id, name: l.name, count: top.filter((t) => t.list?.id === l.id).length }))].map((l) => (
-                <button key={l.id} type="button" className="tov-chip" data-on={listFilter === l.id || undefined} onClick={() => onListFilter(l.id)}>
-                  <span>{l.name}</span>
-                  <span className="tov-chip-count">{l.count}</span>
+              <button
+                type="button"
+                className="tov-chip"
+                data-on={listFilter === 'all' || undefined}
+                onClick={() => onListFilter('all')}
+              >
+                <span>All lists</span>
+                <span className="tov-chip-count">{scopedOpenCount}</span>
+              </button>
+              {withTasks.map(({ list, count }) => (
+                <button
+                  key={list.id}
+                  type="button"
+                  className="tov-chip"
+                  data-on={listFilter === list.id || undefined}
+                  onClick={() => onListFilter(listFilter === list.id ? 'all' : list.id)}
+                  title={list.name}
+                >
+                  <span className="max-w-[160px] truncate">{list.name}</span>
+                  {list.is_private && !list.is_locked && <PrivateLock />}
+                  {list.is_locked && <AdminLock />}
+                  <span className="tov-chip-count">{count}</span>
                 </button>
               ))}
+              {(emptyLists.length > 0 || activeIsEmpty) && (
+                <div className="tov-menu-root" data-tov-menu>
+                  <button
+                    type="button"
+                    className="tov-chip tov-chip-empty"
+                    data-on={activeIsEmpty || undefined}
+                    aria-expanded={menu === 'emptyLists'}
+                    aria-haspopup="menu"
+                    title={activeEmpty ? activeEmpty.list.name : 'Lists with no open tasks'}
+                    onClick={() => setMenu(menu === 'emptyLists' ? null : 'emptyLists')}
+                  >
+                    {activeEmpty ? (
+                      <>
+                        <span className="max-w-[160px] truncate">{activeEmpty.list.name}</span>
+                        {activeEmpty.list.is_private && !activeEmpty.list.is_locked && <PrivateLock />}
+                        {activeEmpty.list.is_locked && <AdminLock />}
+                        <span
+                          role="button"
+                          tabIndex={0}
+                          aria-label="Clear list filter"
+                          className="tov-chip-clear"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onListFilter('all');
+                            setMenu(null);
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              onListFilter('all');
+                              setMenu(null);
+                            }
+                          }}
+                        >
+                          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round">
+                            <path d="M18 6L6 18M6 6l12 12" />
+                          </svg>
+                        </span>
+                      </>
+                    ) : (
+                      <>
+                        <span>No open tasks</span>
+                        <span className="tov-chip-count">{emptyLists.length}</span>
+                        <svg
+                          width="10"
+                          height="10"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2.2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          style={{ transition: 'transform .15s', transform: menu === 'emptyLists' ? 'rotate(180deg)' : 'none' }}
+                        >
+                          <path d="m6 9 6 6 6-6" />
+                        </svg>
+                      </>
+                    )}
+                  </button>
+
+                  {menu === 'emptyLists' && (
+                    <div
+                      className="tov-menu tov-empty-menu"
+                      role="menu"
+                      aria-label="Lists with no open tasks"
+                      style={{ minWidth: 220, maxHeight: 280, overflowY: 'auto' }}
+                    >
+                      <span className="tov-menu-label">Lists with no open tasks</span>
+                      {emptyLists.map(({ list, upcoming }) => {
+                        const isSelected = listFilter === list.id;
+                        return (
+                          <button
+                            key={list.id}
+                            type="button"
+                            role="menuitem"
+                            className="tov-menu-item"
+                            onClick={() => {
+                              onListFilter(isSelected ? 'all' : list.id);
+                              setMenu(null);
+                            }}
+                          >
+                            <div className="flex items-center gap-1.5 flex-1 min-w-0 mr-2">
+                              {list.is_private && !list.is_locked && <PrivateLock />}
+                              {list.is_locked && <AdminLock />}
+                              <span className="truncate">{list.name}</span>
+                            </div>
+                            {upcoming > 0 && (
+                              <span
+                                className="tov-upcoming-badge"
+                                title={`${upcoming} upcoming task${upcoming === 1 ? '' : 's'}`}
+                              >
+                                {upcoming > 99 ? '99+' : upcoming}
+                              </span>
+                            )}
+                            <svg
+                              width="12"
+                              height="12"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="2.4"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              style={{ opacity: isSelected ? 1 : 0 }}
+                            >
+                              <path d="m5 12 5 5 9-10" />
+                            </svg>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>}
             <div className="tov-toolbar-row">
               <div className="tov-views" role="group" aria-label="Task view">
@@ -736,5 +916,21 @@ export default function TaskOverview({
         hasOverride={hasColumnOverride}
       />
     </div>
+  );
+}
+
+function PrivateLock() {
+  return (
+    <svg className="h-3 w-3 shrink-0 text-[var(--tov-ink-4)]" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+    </svg>
+  );
+}
+
+function AdminLock() {
+  return (
+    <svg className="h-3 w-3 shrink-0 text-amber-500" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
+      <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
+    </svg>
   );
 }

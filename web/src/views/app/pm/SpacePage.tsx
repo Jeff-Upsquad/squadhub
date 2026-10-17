@@ -106,7 +106,13 @@ export default function SpacePage({ spacePageId: propSpacePageId }: { spacePageI
       <TaskOverview
         title={space?.name || 'Space'}
         tasks={allTasks}
-        lists={allLists.map((l) => ({ id: l.id, name: l.name, folderId: l.folder?.id ?? null }))}
+        lists={allLists.map((l) => ({
+          id: l.id,
+          name: l.name,
+          folderId: l.folder?.id ?? null,
+          is_private: l.is_private,
+          is_locked: l.is_locked,
+        }))}
         listFilter={listFilter}
         onListFilter={setListFilter}
         folders={(space?.folders ?? []).map((f) => ({ id: f.id, name: f.name }))}

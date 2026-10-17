@@ -183,7 +183,13 @@ export default function ListPage({
       }));
     }
     const rawStatuses: SpaceStatus[] = spaceData?.space_statuses || spaceData?.statuses || listData?.space_statuses || [];
-    return rawStatuses;
+    const seen = new Set<string>();
+    return rawStatuses.filter((s) => {
+      const k = (s.id || s.name || '').toLowerCase().trim();
+      if (!k || seen.has(k)) return false;
+      seen.add(k);
+      return true;
+    });
   }, [catalogDefs, spaceData, listData, effectiveSpaceId]);
 
   // Resolved stage metadata covers all task lists.

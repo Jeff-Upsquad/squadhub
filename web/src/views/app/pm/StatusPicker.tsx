@@ -89,7 +89,15 @@ export default function StatusPicker({
   const { grouped, flatList } = useMemo(() => {
     const q = search.trim().toLowerCase();
 
-    const items: Item[] = displayStatuses.map((s) => {
+    const seen = new Set<string>();
+    const dedupedStatuses = displayStatuses.filter((s) => {
+      const key = (s.id || s.name || '').toLowerCase().trim();
+      if (!key || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+
+    const items: Item[] = dedupedStatuses.map((s) => {
       const slug = toSlug(s.name);
       // Prefer the stable key (s.id is the catalog key when built from the
       // managed task_workflow catalog) over the renamable name — e.g. row

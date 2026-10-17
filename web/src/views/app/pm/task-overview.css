@@ -102,6 +102,21 @@
 .tov-chip[data-on] { background: var(--tov-ink); color: var(--tov-card); border-color: var(--tov-ink); }
 .tov-folders-lbl { font: 600 11px 'Inter', sans-serif; letter-spacing: .04em; text-transform: uppercase; color: var(--tov-ink-3); margin-right: 4px; }
 .tov-chip-count { font-variant-numeric: tabular-nums; opacity: .55; }
+.tov-list-chips .tov-menu { top: calc(100% + 4px); z-index: 40; }
+.tov-chip-empty { border-style: dashed; color: var(--tov-ink-3); }
+.tov-chip-empty:hover { color: var(--tov-ink); }
+.tov-chip-empty[data-on] { border-style: solid; color: var(--tov-card); }
+.tov-chip-clear {
+  display: inline-flex; align-items: center; justify-content: center; width: 14px; height: 14px;
+  border-radius: 999px; margin-left: 1px; opacity: .75; transition: opacity .12s, background-color .12s; cursor: pointer;
+}
+.tov-chip-clear:hover { opacity: 1; background-color: rgba(127, 127, 127, .25); }
+.tov-upcoming-badge {
+  display: inline-flex; align-items: center; justify-content: center; min-width: 17px; height: 17px;
+  border-radius: 999px; padding: 0 4.5px; background: rgba(14, 165, 233, .14); color: #0284c7;
+  font-size: 10.5px; font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1; flex-shrink: 0;
+}
+.dark .tov-upcoming-badge { background: rgba(14, 165, 233, .22); color: #38bdf8; }
 .tov-menu-root { position: relative; }
 .tov-ctl {
   height: 32px; padding: 0 12px; border-radius: 999px; border: 1px solid var(--tov-hair); background: var(--tov-card);
