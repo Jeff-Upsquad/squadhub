@@ -8,6 +8,7 @@ import {
   fetchSpace,
   fetchAssignableUsers,
   fetchTaskTypes,
+  fetchEffectiveStatusGroup,
   createTask,
   setTaskFocus,
   uploadTaskAttachment,
@@ -16,6 +17,7 @@ import {
   updateTaskStatus,
   logTaskTime,
   type AssignableUser,
+  type EffectiveStatusGroupRow,
   type ListLite,
   type SpaceStatus,
   type TaskPriority,
@@ -98,20 +100,56 @@ function initials(name: string | null | undefined, email?: string): string {
   return src.slice(0, 2).toUpperCase();
 }
 
-// ── task-type statuses (for task_type.key = 'task') ──────────────────────────
-// Full client copy of the shared TASK_STATUS_CATALOG (labels, colors,
-// descriptions + picker sections). Mirrors web TaskStatusPicker so the
-// desktop quick-add status dropdown renders the same grouped, searchable
-// design. Other task types use their space's space_statuses (names) instead.
+// ── stage + status catalog (mirrors @squadhub/shared + web TaskStatusPicker) ─
 type StatusGroup =
-  | 'priority_urgency'
   | 'in_motion'
   | 'up_next'
   | 'scheduled_queued'
-  | 'routines'
+  | 'planning'
   | 'blocked_paused'
   | 'not_started'
-  | 'done';
+  | 'done'
+  | 'priority_urgency'
+  | 'routines'
+  | (string & {});
+
+interface StageMeta {
+  key: string;
+  label: string;
+  emoji: string;
+  color: string;
+  position: number;
+}
+
+const WORKSPACE_STAGES: StageMeta[] = [
+  { key: 'in_motion', label: 'In progress', emoji: '🏃', color: '#39C66B', position: 10 },
+  { key: 'up_next', label: 'Up next', emoji: '🎯', color: '#3b8ee6', position: 20 },
+  { key: 'scheduled_queued', label: 'Scheduled / queued', emoji: '📅', color: '#2ea3b8', position: 30 },
+  { key: 'planning', label: 'Planning', emoji: '🧭', color: '#8b6fd6', position: 40 },
+  { key: 'blocked_paused', label: 'Blocked / paused', emoji: '⏸️', color: '#FFB340', position: 50 },
+  { key: 'not_started', label: 'Not started', emoji: '📥', color: '#A0A0A0', position: 60 },
+  { key: 'done', label: 'Closed', emoji: '✅', color: '#7c3aed', position: 70 },
+];
+
+const LEGACY_STAGES: StageMeta[] = [
+  { key: 'priority_urgency', label: 'Priority & urgency', emoji: '⚡', color: '#e11d48', position: 25 },
+  { key: 'routines', label: 'Routines', emoji: '🔁', color: '#7c3aed', position: 55 },
+];
+
+function stageMetaFor(key: string | null | undefined): StageMeta | null {
+  if (!key) return null;
+  return WORKSPACE_STAGES.find((s) => s.key === key) || LEGACY_STAGES.find((s) => s.key === key) || null;
+}
+
+const ST = (key: string) => {
+  const m = stageMetaFor(key)!;
+  return {
+    group: key as StatusGroup,
+    groupLabel: m.label,
+    groupEmoji: m.emoji,
+    groupPosition: m.position,
+  };
+};
 
 interface CatalogStatus {
   key: string;
@@ -120,70 +158,67 @@ interface CatalogStatus {
   group: StatusGroup;
   groupLabel: string;
   groupEmoji: string;
+  groupPosition?: number | null;
   color: string;
+  is_default?: boolean;
+  is_placeholder?: boolean;
 }
 
 const TASK_STATUS_CATALOG: CatalogStatus[] = [
-  { key: 'focus_now', label: 'FOCUS NOW', description: 'Requires your undivided attention right now.', group: 'priority_urgency', groupLabel: 'Priority & Urgency', groupEmoji: '⚡', color: '#e11d48' },
-  { key: 'emergency', label: 'EMERGENCY', description: 'Critical; drop everything.', group: 'priority_urgency', groupLabel: 'Priority & Urgency', groupEmoji: '⚡', color: '#b91c1c' },
-  { key: 'urgent', label: 'URGENT', description: 'Needs immediate action.', group: 'priority_urgency', groupLabel: 'Priority & Urgency', groupEmoji: '⚡', color: '#ef4444' },
-  { key: 'over_due', label: 'OVER DUE', description: 'Deadline has already passed.', group: 'priority_urgency', groupLabel: 'Priority & Urgency', groupEmoji: '⚡', color: '#dc2626' },
-  { key: 'high_priority', label: 'HIGH PRIORITY', description: 'Very important; needs attention soon.', group: 'priority_urgency', groupLabel: 'Priority & Urgency', groupEmoji: '⚡', color: '#f97316' },
-  { key: 'priority', label: 'PRIORITY', description: 'Important; above normal.', group: 'priority_urgency', groupLabel: 'Priority & Urgency', groupEmoji: '⚡', color: '#fb923c' },
-  { key: 'active', label: 'ACTIVE', description: 'Currently being worked on.', group: 'in_motion', groupLabel: 'In Motion', groupEmoji: '🏃', color: '#22c55e' },
-  { key: 'in_progress', label: 'IN PROGRESS', description: 'Work has started and is ongoing.', group: 'in_motion', groupLabel: 'In Motion', groupEmoji: '🏃', color: '#16a34a' },
-  { key: 'in_code_review', label: 'IN CODE REVIEW', description: 'PR submitted; awaiting review and approval.', group: 'in_motion', groupLabel: 'In Motion', groupEmoji: '🏃', color: '#8b5cf6' },
-  { key: 'testing_qa', label: 'TESTING / QA', description: 'Under validation on staging / test environment.', group: 'in_motion', groupLabel: 'In Motion', groupEmoji: '🏃', color: '#eab308' },
-  { key: 'ready_for_deploy', label: 'READY FOR DEPLOY', description: 'Approved and ready for production release.', group: 'in_motion', groupLabel: 'In Motion', groupEmoji: '🏃', color: '#0d9488' },
-  { key: 'time_tracked', label: 'TIME TRACKED', description: 'Timer is running / hours being logged against it.', group: 'in_motion', groupLabel: 'In Motion', groupEmoji: '🏃', color: '#0d9488' },
-  { key: 'active_daily', label: 'ACTIVE DAILY', description: 'Touched every day until resolved.', group: 'in_motion', groupLabel: 'In Motion', groupEmoji: '🏃', color: '#14b8a6' },
-  { key: 'planning', label: 'PLANNING', description: 'Architecture, RFC, spike, or scoping phase.', group: 'up_next', groupLabel: 'Up Next', groupEmoji: '🎯', color: '#a855f7' },
-  { key: 'ready_to_code', label: 'READY TO CODE', description: 'Groomed, estimated, and ready to start coding.', group: 'up_next', groupLabel: 'Up Next', groupEmoji: '🎯', color: '#22c55e' },
-  { key: 'front_burner', label: 'FRONT BURNER', description: 'Moving up the queue; active sprint priority.', group: 'scheduled_queued', groupLabel: 'Scheduled / Queued', groupEmoji: '📅', color: '#f59e0b' },
-  { key: 'scheduled', label: 'SCHEDULED', description: 'Has a specific date/time set.', group: 'scheduled_queued', groupLabel: 'Scheduled / Queued', groupEmoji: '📅', color: '#60a5fa' },
-  { key: 'today', label: 'TODAY', description: 'Must be addressed today.', group: 'scheduled_queued', groupLabel: 'Scheduled / Queued', groupEmoji: '📅', color: '#f97316' },
-  { key: 'tomorrow', label: 'TOMORROW', description: 'Planned for the next day.', group: 'scheduled_queued', groupLabel: 'Scheduled / Queued', groupEmoji: '📅', color: '#06b6d4' },
-  { key: 'this_week', label: 'THIS WEEK', description: 'To be handled sometime this week.', group: 'scheduled_queued', groupLabel: 'Scheduled / Queued', groupEmoji: '📅', color: '#22d3ee' },
-  { key: 'back_burner', label: 'BACK BURNER', description: 'Low priority; get to it eventually.', group: 'scheduled_queued', groupLabel: 'Scheduled / Queued', groupEmoji: '📅', color: '#a8a29e' },
-  { key: 'reminder', label: 'REMINDER', description: 'A nudge to do or check something later.', group: 'scheduled_queued', groupLabel: 'Scheduled / Queued', groupEmoji: '📅', color: '#93c5fd' },
-  { key: 'up_next', label: 'UP NEXT', description: 'Next in line after current work wraps up.', group: 'scheduled_queued', groupLabel: 'Scheduled / Queued', groupEmoji: '📅', color: '#38bdf8' },
-  { key: 'routines', label: 'ROUTINES', description: 'Regular recurring task.', group: 'routines', groupLabel: 'Routines', groupEmoji: '🔁', color: '#a855f7' },
-  { key: 'imp_routines', label: 'IMP ROUTINES', description: 'Important recurring task that cannot be missed.', group: 'routines', groupLabel: 'Routines', groupEmoji: '🔁', color: '#7c3aed' },
-  { key: 'waiting_on_dependency', label: 'WAITING ON – DEPENDENCY', description: 'Blocked until something/someone else moves.', group: 'blocked_paused', groupLabel: 'Blocked / Paused', groupEmoji: '⏸️', color: '#6b7280' },
-  { key: 'blocked', label: 'BLOCKED', description: 'Halted by build failure, environment issue, or critical bug.', group: 'blocked_paused', groupLabel: 'Blocked / Paused', groupEmoji: '⏸️', color: '#ef4444' },
-  { key: 'on_hold', label: 'ON HOLD', description: 'Intentionally paused for now.', group: 'blocked_paused', groupLabel: 'Blocked / Paused', groupEmoji: '⏸️', color: '#78716c' },
-  { key: 'follow_ups', label: 'FOLLOW UPS', description: 'Awaiting a reply; check back periodically.', group: 'blocked_paused', groupLabel: 'Blocked / Paused', groupEmoji: '⏸️', color: '#4b5563' },
-  { key: 'help', label: 'HELP', description: 'Stuck; needs input or assistance from someone.', group: 'blocked_paused', groupLabel: 'Blocked / Paused', groupEmoji: '⏸️', color: '#a16207' },
-  { key: 'unblocked', label: 'UNBLOCKED', description: 'Was blocked, now free to resume.', group: 'blocked_paused', groupLabel: 'Blocked / Paused', groupEmoji: '⏸️', color: '#84cc16' },
-  { key: 'open', label: 'OPEN', description: 'Newly created task, not yet triaged or planned.', group: 'not_started', groupLabel: 'Not Started', groupEmoji: '📥', color: '#9ca3af' },
-  { key: 'empty', label: 'EMPTY', description: 'Placeholder task with no details filled in yet.', group: 'not_started', groupLabel: 'Not Started', groupEmoji: '📥', color: '#d1d5db' },
-  { key: 'closed', label: 'CLOSED', description: 'Completed and archived.', group: 'done', groupLabel: 'Closed', groupEmoji: '✅', color: '#10b981' },
-  { key: 'cancelled', label: 'CANCELLED', description: 'No longer needed; closed without completing.', group: 'done', groupLabel: 'Closed', groupEmoji: '✅', color: '#6b7280' },
+  // In progress
+  { key: 'time_tracked', label: 'Time tracked', description: 'Timer is running / hours being logged against it.', ...ST('in_motion'), color: '#0d9488' },
+  { key: 'front_burner', label: 'Front burner', description: 'Actively working on this task daily. Will complete asap.', ...ST('in_motion'), color: '#39C66B' },
+  { key: 'back_burner', label: 'Back burner', description: 'Working on this task on regular intervals. Will complete eventually.', ...ST('in_motion'), color: '#a8a29e' },
+  // Up next
+  { key: 'active', label: 'Starting today', description: 'Currently being worked on.', ...ST('up_next'), color: '#3b8ee6' },
+  { key: 'tomorrow', label: 'Tomorrow', description: 'Planned for the next day.', ...ST('up_next'), color: '#06b6d4' },
+  // Scheduled / queued
+  { key: 'this_week', label: 'This week', description: 'To be handled sometime this week.', ...ST('scheduled_queued'), color: '#22d3ee' },
+  { key: 'scheduled', label: 'Scheduled', description: 'Has a specific date/time set.', ...ST('scheduled_queued'), color: '#60a5fa' },
+  { key: 'follow_ups', label: 'Follow ups', description: 'Awaiting a reply; check back periodically.', ...ST('scheduled_queued'), color: '#4b5563' },
+  // Planning
+  { key: 'planning', label: 'Plan', description: 'Being scoped and planned.', ...ST('planning'), color: '#8b6fd6' },
+  { key: 'need_discussion', label: 'Need discussion', description: 'Needs a conversation before work can start.', ...ST('planning'), color: '#a78bfa' },
+  // Blocked / paused
+  { key: 'on_hold', label: 'On hold', description: 'Intentionally paused for now.', ...ST('blocked_paused'), color: '#78716c' },
+  { key: 'waiting_on_dependency', label: 'Waiting on dependency', description: 'Blocked until something/someone else moves.', ...ST('blocked_paused'), color: '#6b7280' },
+  { key: 'help', label: 'Help', description: 'Stuck; needs input or assistance from someone.', ...ST('blocked_paused'), color: '#a16207' },
+  { key: 'blocked', label: 'Blocked', description: 'Halted by build failure, environment issue, or critical bug.', ...ST('blocked_paused'), color: '#ef4444' },
+  { key: 'unblocked', label: 'Unblocked', description: 'Was blocked, now free to resume.', ...ST('blocked_paused'), color: '#84cc16', is_placeholder: true },
+  // Not started
+  { key: 'open', label: 'Open', description: 'Newly created task, not yet triaged or planned.', ...ST('not_started'), color: '#9ca3af', is_default: true },
+  // Closed
+  { key: 'for_review', label: 'For review', description: 'Waiting for review before closing.', ...ST('done'), color: '#8b5cf6' },
+  { key: 'closed', label: 'Closed', description: 'Completed and archived.', ...ST('done'), color: '#10b981' },
+  { key: 'cancelled', label: 'Cancelled', description: 'No longer needed; closed without completing.', ...ST('done'), color: '#6b7280' },
 ];
 
-const STATUS_GROUP_ORDER: StatusGroup[] = [
-  'priority_urgency',
-  'in_motion',
-  'up_next',
-  'scheduled_queued',
-  'routines',
-  'blocked_paused',
-  'not_started',
-  'done',
-];
+const STATUS_GROUP_ORDER: StatusGroup[] = WORKSPACE_STAGES.map((s) => s.key);
 
 const TASK_STATUS_BY_KEY: Record<string, CatalogStatus> = TASK_STATUS_CATALOG.reduce(
   (m, d) => { m[d.key] = d; return m; },
   {} as Record<string, CatalogStatus>,
 );
 
-// Legacy StatusCategory strings map to their catalog equivalents so the pill
-// still shows a friendly label for old values (mirrors web TaskStatusPicker).
+// Legacy / retired status strings map to their current catalog equivalents.
 const LEGACY_STATUS_TO_KEY: Record<string, string> = {
   todo: 'open',
-  active: 'in_progress',
   done: 'closed',
   closed: 'closed',
+  focus_now: 'open',
+  emergency: 'open',
+  urgent: 'open',
+  over_due: 'open',
+  high_priority: 'open',
+  priority: 'open',
+  empty: 'open',
+  in_progress: 'front_burner',
+  active_daily: 'front_burner',
+  up_next: 'tomorrow',
+  today: 'active',
+  reminder: 'scheduled',
+  routines: 'back_burner',
+  imp_routines: 'back_burner',
 };
 
 function toStatusSlug(name: string): string {
@@ -194,24 +229,90 @@ function toStatusSlug(name: string): string {
     .replace(/\s+/g, '_');
 }
 
-function catalogDefForSpaceStatus(name: string): CatalogStatus | null {
-  const slug = toStatusSlug(name);
-  return TASK_STATUS_BY_KEY[slug] || TASK_STATUS_BY_KEY[name.toLowerCase()] || null;
+function rowToCatalogStatus(r: EffectiveStatusGroupRow): CatalogStatus {
+  const effectiveKey = r.key || toStatusSlug(r.name);
+  let effectiveGroup = (r.section || '') as StatusGroup;
+  if (!effectiveGroup) {
+    if (r.category === 'todo') effectiveGroup = 'not_started';
+    else if (r.category === 'closed' || r.category === 'done') effectiveGroup = 'done';
+    else effectiveGroup = 'in_motion';
+  }
+  const meta = stageMetaFor(effectiveGroup);
+  return {
+    key: effectiveKey,
+    label: r.name,
+    description: r.description || '',
+    group: effectiveGroup,
+    groupLabel: r.section_label || meta?.label || effectiveGroup,
+    groupEmoji: r.section_emoji || meta?.emoji || '📋',
+    groupPosition: r.section_position ?? meta?.position ?? null,
+    color: r.color,
+    is_default: r.is_default,
+    is_placeholder: !!r.is_placeholder,
+  };
 }
 
-function groupCatalogStatuses(query: string): { group: StatusGroup; label: string; emoji: string; items: CatalogStatus[] }[] {
+function rowsToCatalogStatuses(rows: EffectiveStatusGroupRow[]): CatalogStatus[] {
+  const seenKeys = new Set<string>();
+  const seenLabels = new Set<string>();
+  const defs: CatalogStatus[] = [];
+  for (const row of [...rows].sort((a, b) => a.position - b.position)) {
+    const def = rowToCatalogStatus(row);
+    if (!def.key) continue;
+    const k = def.key.toLowerCase().trim();
+    const l = (def.label || '').toLowerCase().trim();
+    if ((k && seenKeys.has(k)) || (l && seenLabels.has(l))) continue;
+    if (k) seenKeys.add(k);
+    if (l) seenLabels.add(l);
+    defs.push(def);
+  }
+  return defs.length > 0 ? defs : TASK_STATUS_CATALOG;
+}
+
+function catalogDefForSpaceStatus(name: string, catalog: CatalogStatus[]): CatalogStatus | null {
+  const slug = toStatusSlug(name);
+  const lower = name.toLowerCase();
+  return (
+    catalog.find((d) => d.key === slug || d.key.toLowerCase() === lower || d.label.toLowerCase() === lower) ||
+    TASK_STATUS_BY_KEY[slug] ||
+    TASK_STATUS_BY_KEY[lower] ||
+    null
+  );
+}
+
+function groupCatalogStatuses(
+  catalog: CatalogStatus[],
+  query: string,
+): { group: StatusGroup; label: string; emoji: string; position: number; items: CatalogStatus[] }[] {
   const q = query.trim().toLowerCase();
   const matched = !q
-    ? TASK_STATUS_CATALOG
-    : TASK_STATUS_CATALOG.filter(
-        (d) => d.label.toLowerCase().includes(q) || d.description.toLowerCase().includes(q),
+    ? catalog
+    : catalog.filter(
+        (d) =>
+          d.label.toLowerCase().includes(q) ||
+          d.description.toLowerCase().includes(q) ||
+          d.groupLabel.toLowerCase().includes(q),
       );
-  const out: { group: StatusGroup; label: string; emoji: string; items: CatalogStatus[] }[] = [];
-  for (const g of STATUS_GROUP_ORDER) {
-    const items = matched.filter((d) => d.group === g);
-    if (items.length) out.push({ group: g, label: items[0].groupLabel, emoji: items[0].groupEmoji, items });
+  const map = new Map<string, { group: StatusGroup; label: string; emoji: string; position: number; items: CatalogStatus[] }>();
+  let order = 0;
+  for (const d of matched) {
+    const key = d.group || 'not_started';
+    let entry = map.get(key);
+    if (!entry) {
+      const meta = stageMetaFor(key);
+      entry = {
+        group: key,
+        label: d.groupLabel || meta?.label || key,
+        emoji: d.groupEmoji || meta?.emoji || '📋',
+        position: d.groupPosition ?? meta?.position ?? 1000 + order,
+        items: [],
+      };
+      map.set(key, entry);
+      order += 1;
+    }
+    entry.items.push(d);
   }
-  return out;
+  return [...map.values()].sort((a, b) => a.position - b.position);
 }
 
 type GroupedSpaceStatus = {
@@ -220,10 +321,10 @@ type GroupedSpaceStatus = {
   items: { status: SpaceStatus; description: string }[];
 };
 
-function groupSpaceStatuses(statuses: SpaceStatus[], query: string): GroupedSpaceStatus[] {
+function groupSpaceStatuses(statuses: SpaceStatus[], catalog: CatalogStatus[], query: string): GroupedSpaceStatus[] {
   const q = query.trim().toLowerCase();
   const enriched = statuses.map((s) => {
-    const def = catalogDefForSpaceStatus(s.name);
+    const def = catalogDefForSpaceStatus(s.name, catalog);
     let groupKey: string;
     let groupName: string;
     let emoji: string;
@@ -233,7 +334,7 @@ function groupSpaceStatuses(statuses: SpaceStatus[], query: string): GroupedSpac
       emoji = def.groupEmoji;
     } else if (s.category === 'todo') {
       groupKey = 'not_started';
-      groupName = 'Not Started';
+      groupName = 'Not started';
       emoji = '📥';
     } else if (s.category === 'closed' || s.category === 'done') {
       groupKey = 'done';
@@ -241,7 +342,7 @@ function groupSpaceStatuses(statuses: SpaceStatus[], query: string): GroupedSpac
       emoji = '✅';
     } else {
       groupKey = 'in_motion';
-      groupName = 'In Motion';
+      groupName = 'In progress';
       emoji = '🏃';
     }
     return { status: s, description: def?.description || '', groupKey, groupName, emoji };
@@ -472,6 +573,8 @@ export default function QuickAdd() {
   const [typeHi, setTypeHi] = useState(0);
   const [statusSearch, setStatusSearch] = useState('');
   const [statusHi, setStatusHi] = useState(0);
+  const [catalogStatuses, setCatalogStatuses] = useState<CatalogStatus[]>(TASK_STATUS_CATALOG);
+  const [statusGroupName, setStatusGroupName] = useState<string | null>(null);
   const [spaceStatuses, setSpaceStatuses] = useState<SpaceStatus[]>([]);
   const [status, setStatus] = useState('open');
   // Mark the task being created as completed on add.
@@ -580,6 +683,7 @@ export default function QuickAdd() {
     setTaskTypeId(null);
     setTypeSearch('');
     setTypeHi(0);
+    setStatus(catalogStatuses.find((c) => c.is_default)?.key || 'open');
     setStatusSearch('');
     setStatusHi(0);
     if (defaultListRef.current) setSelectedList(defaultListRef.current);
@@ -703,11 +807,13 @@ export default function QuickAdd() {
     };
   }, []);
 
-  // Resolve the selected list's space and load its statuses for non-`task` types.
+  // Resolve the selected list's effective status group + space statuses.
   useEffect(() => {
     const list = selectedList;
     if (!list) {
       setSpaceStatuses([]);
+      setCatalogStatuses(TASK_STATUS_CATALOG);
+      setStatusGroupName(null);
       return;
     }
     let alive = true;
@@ -722,11 +828,26 @@ export default function QuickAdd() {
             spaceId = lists.find((l) => l.id === list.id)?.spaceId;
           }
         }
-        if (!spaceId || !alive) return;
-        const space = await fetchSpace(spaceId);
-        if (alive) setSpaceStatuses(space.space_statuses || []);
+        if (!alive) return;
+        const [effective, space] = await Promise.all([
+          fetchEffectiveStatusGroup({ spaceId: spaceId || null, listId: list.id }).catch(() => null),
+          spaceId ? fetchSpace(spaceId).catch(() => null) : Promise.resolve(null),
+        ]);
+        if (!alive) return;
+        if (effective?.statuses?.length) {
+          setCatalogStatuses(rowsToCatalogStatuses(effective.statuses));
+          setStatusGroupName(effective.group?.name || null);
+        } else {
+          setCatalogStatuses(TASK_STATUS_CATALOG);
+          setStatusGroupName(null);
+        }
+        setSpaceStatuses(space?.space_statuses || []);
       } catch {
-        if (alive) setSpaceStatuses([]);
+        if (alive) {
+          setCatalogStatuses(TASK_STATUS_CATALOG);
+          setStatusGroupName(null);
+          setSpaceStatuses([]);
+        }
       }
     })();
     return () => {
@@ -734,20 +855,16 @@ export default function QuickAdd() {
     };
   }, [selectedList]);
 
-  // Keep status valid when the type or the space's statuses change (web parity:
-  // `task` types use the catalog, everything else uses space-status names).
+  // All tasks follow the workspace stage workflow from Notion (web parity).
   useEffect(() => {
-    const t = taskTypes?.find((x) => x.id === taskTypeId);
-    if (!t) return;
-    if (t.key === 'task') {
-      if (!TASK_STATUS_CATALOG.some((c) => c.key === status)) setStatus('open');
-    } else {
-      if (spaceStatuses.length === 0) return; // statuses still loading
-      if (!spaceStatuses.some((s) => s.name === status)) {
-        setStatus(spaceStatuses.find((s) => s.is_default)?.name ?? spaceStatuses[0].name);
-      }
+    const pickable = (k: string | undefined) => !!k && catalogStatuses.some((c) => c.key === k);
+    if (!pickable(status)) {
+      const mapped = LEGACY_STATUS_TO_KEY[status];
+      const defaultKey = catalogStatuses.find((c) => c.is_default)?.key || 'open';
+      const next = pickable(mapped) ? mapped : defaultKey;
+      if (next !== status) setStatus(next);
     }
-  }, [taskTypes, taskTypeId, spaceStatuses, status]);
+  }, [catalogStatuses, status]);
 
 
 
@@ -1147,23 +1264,13 @@ export default function QuickAdd() {
 
   // ── task type + status (derived) ──────────────────────────────────────────
   const currentType = taskTypes?.find((t) => t.id === taskTypeId) ?? null;
-  const isTaskCatalogType = !currentType || currentType.key === 'task';
+  const isTaskCatalogType = true;
   const typeGroups = groupTaskTypes(taskTypes || [], typeSearch);
   const typeFlat = typeGroups.flatMap((g) => g.items);
   const pickType = (id: string) => {
     setTaskTypeId(id);
-    const t = taskTypes?.find((x) => x.id === id);
-    if (t) {
-      if (t.key === 'task') {
-        setStatus((cur) => (TASK_STATUS_CATALOG.some((c) => c.key === cur) ? cur : 'open'));
-      } else if (spaceStatuses.length) {
-        setStatus((cur) =>
-          spaceStatuses.some((s) => s.name === cur)
-            ? cur
-            : (spaceStatuses.find((s) => s.is_default)?.name ?? spaceStatuses[0].name),
-        );
-      }
-    }
+    const defaultKey = catalogStatuses.find((c) => c.is_default)?.key || 'open';
+    setStatus((cur) => (catalogStatuses.some((c) => c.key === cur) ? cur : defaultKey));
     setOpenMenu(null);
   };
   const onTypeKeyDown = (e: React.KeyboardEvent) => {
@@ -1181,16 +1288,20 @@ export default function QuickAdd() {
     }
   };
   const statusDef = isTaskCatalogType
-    ? (TASK_STATUS_BY_KEY[status] || (LEGACY_STATUS_TO_KEY[status] ? TASK_STATUS_BY_KEY[LEGACY_STATUS_TO_KEY[status]] : undefined))
+    ? (catalogStatuses.find((c) => c.key === status)
+      || TASK_STATUS_BY_KEY[status]
+      || (LEGACY_STATUS_TO_KEY[status]
+        ? (catalogStatuses.find((c) => c.key === LEGACY_STATUS_TO_KEY[status]) || TASK_STATUS_BY_KEY[LEGACY_STATUS_TO_KEY[status]])
+        : undefined))
     : spaceStatuses.find((s) => s.name === status);
-  const spaceStatusDef = !isTaskCatalogType && typeof status === 'string' ? catalogDefForSpaceStatus(status) : null;
+  const spaceStatusDef = !isTaskCatalogType && typeof status === 'string' ? catalogDefForSpaceStatus(status, catalogStatuses) : null;
   const statusLabel = isTaskCatalogType ? (statusDef as { label: string } | undefined)?.label ?? status : status;
   const statusColor = ((statusDef as { color: string } | undefined)?.color ?? spaceStatusDef?.color ?? '#6b7280');
 
   // ── status menu (web parity: searchable, grouped, described) ──────────────
-  const catalogGroups = groupCatalogStatuses(statusSearch);
+  const catalogGroups = groupCatalogStatuses(catalogStatuses, statusSearch);
   const catalogFlat = catalogGroups.flatMap((g) => g.items);
-  const spaceGroups = groupSpaceStatuses(spaceStatuses, statusSearch);
+  const spaceGroups = groupSpaceStatuses(spaceStatuses, catalogStatuses, statusSearch);
   const spaceFlat = spaceGroups.flatMap((g) => g.items);
   const statusFlatCount = isTaskCatalogType ? catalogFlat.length : spaceFlat.length;
   const pickStatus = (value: string) => {
@@ -1892,7 +2003,7 @@ export default function QuickAdd() {
             <input
               className="qa-status-search-input"
               autoFocus
-              placeholder="Search statuses (e.g. Focus, In Progress)…"
+              placeholder="Search statuses (e.g. Front burner, Starting today)…"
               value={statusSearch}
               onChange={(e) => {
                 setStatusSearch(e.target.value);
@@ -1912,7 +2023,9 @@ export default function QuickAdd() {
             )}
           </div>
           <div className="qa-menu-hint">
-            {isTaskCatalogType ? 'Task workflow statuses' : `Space statuses · ${currentType?.name || ''}`}
+            {isTaskCatalogType
+              ? (statusGroupName ? `Stage workflow · ${statusGroupName}` : 'Task workflow statuses')
+              : `Space statuses · ${currentType?.name || ''}`}
           </div>
           <div className="qa-menu-scroll qa-status-scroll">
             {isTaskCatalogType ? (

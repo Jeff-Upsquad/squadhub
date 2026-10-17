@@ -1,10 +1,10 @@
 {
-  "version": "0.1.28",
-  "notes": "See every running task timer in the notch and stop each one there; Quick Add shows the full location path, image uploads with progress, a time-logged chip and a new 3D Add button.",
-  "pub_date": "2026-10-16T01:31:32Z",
+  "version": "0.1.29",
+  "notes": "Quick Add now uses the unified 7-stage, 19-status workflow and fetches effective status groups directly from the server.",
+  "pub_date": "2026-10-17T06:09:49Z",
   "platforms": {
     "darwin-aarch64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUQ003TTR4K1pKdy81UU9hZnhmc1lPdU11bjZrb2VTVWFZdXI0MFV0MkJHMXdyaEhCaXpURXVBak1lZzlBeUdJMkQvRUExV20yaUkyajA5YTZDT1c0L2UzV3VweGFGL1EwPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkyMTE0Mjc1CWZpbGU6U3F1YWRIdWIgQ29tcGFuaW9uLmFwcC50YXIuZ3oKdnJQWnRrRzVZN0VOaVlJNkpaVm42VFpqTGF0TkZzWHQ5TFE0WlFvRG4rNVQ3SXFWbHNoTzM4b0RIcHAzYTQ0TkVKV3d5aWdhdzVMZmt3eWtvbktMREE9PQo=",
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUQ003TTR4K1pKdzVQbkc4dmZLN04yNjM3Zk90eFpFMFdlR3lEUVBZcG5WbmZjYm1vR3N3VWlGMnBEWkRMZzJ2YTNpR1RTK1kvU3p2ZmcvQVU0dktLa1NFd2gvUUxMMmd3PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkyMjE3MzQzCWZpbGU6U3F1YWRIdWIgQ29tcGFuaW9uLmFwcC50YXIuZ3oKQ0lpKyswWDg4SlZFQ2thZ2J5WWVTV096UkYxbEtZWVNtUEttdUZ4eTZxVWpKTlc4b0VnUkpDKzJZbzJzSy9KbUZ3a3RVWnl5SlZXenhuT3pRakovQnc9PQo=",
       "url": "https://squadhub.in/downloads/SquadHub.app.tar.gz"
     }
   }
