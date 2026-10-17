@@ -316,7 +316,7 @@ function DashboardTaskRowInner({
       data-done={displayDone}
       data-fading={isFadingOut}
       data-subtask={isSubtask || undefined}
-      data-tracking={isTracking || undefined}
+      data-tracking={isTiming || undefined}
       onClick={onOpen}
       onTransitionEnd={onRowTransitionEnd}
       role="button"
