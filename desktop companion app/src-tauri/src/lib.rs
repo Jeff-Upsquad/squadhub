@@ -185,12 +185,20 @@ fn quick_add_show(app: tauri::AppHandle) {
 }
 
 /// JS-invokable: set the menu-bar tray title to the live timer clock (e.g.
-/// "● 1:23:45"), or clear it (None) when no timer is running — the icon stays.
+/// "WORK 1:23:45"), or clear it ("" or None) when no timer is running — the icon stays.
+///
+/// NOTE: tray-icon 0.23 on macOS has a known issue in `set_title_inner`:
+/// it only calls `button.setTitle(...)` when `title` is `Some(...)`.
+/// If `None` is passed, `set_title_inner` has no `else` branch and does nothing,
+/// leaving the previous title frozen in the menu bar. We always pass `Some(&text)`
+/// where `text` defaults to `""` so macOS explicitly sets the button title to empty
+/// and updates dimensions.
 #[tauri::command]
 fn set_timer_title(app: tauri::AppHandle, title: Option<String>) {
     #[cfg(desktop)]
     if let Some(tray) = app.tray_by_id("sh-tray") {
-        let _ = tray.set_title(title.as_deref());
+        let text = title.unwrap_or_default();
+        let _ = tray.set_title(Some(&text));
     }
 }
 

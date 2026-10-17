@@ -1,10 +1,10 @@
 {
-  "version": "0.1.29",
-  "notes": "Quick Add now uses the unified 7-stage, 19-status workflow and fetches effective status groups directly from the server.",
-  "pub_date": "2026-10-17T06:09:49Z",
+  "version": "0.1.30",
+  "notes": "Fix menu-bar tray title lingering when no active timer is running.",
+  "pub_date": "2026-10-17T19:34:59Z",
   "platforms": {
     "darwin-aarch64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUQ003TTR4K1pKdzVQbkc4dmZLN04yNjM3Zk90eFpFMFdlR3lEUVBZcG5WbmZjYm1vR3N3VWlGMnBEWkRMZzJ2YTNpR1RTK1kvU3p2ZmcvQVU0dktLa1NFd2gvUUxMMmd3PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkyMjE3MzQzCWZpbGU6U3F1YWRIdWIgQ29tcGFuaW9uLmFwcC50YXIuZ3oKQ0lpKyswWDg4SlZFQ2thZ2J5WWVTV096UkYxbEtZWVNtUEttdUZ4eTZxVWpKTlc4b0VnUkpDKzJZbzJzSy9KbUZ3a3RVWnl5SlZXenhuT3pRakovQnc9PQo=",
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUQ003TTR4K1pKdzV0aFcrTzNwZzZqREE5S2htVnNFVjRMUjJtcU1mTnEyQ3c5bmYxcmZIN21ab29ORWNZTTlEV080K1dNeHkwZTV0eTNLUVBxOFZaYUJQZHBZZ1VtOVFNPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkyMjY1NjgzCWZpbGU6U3F1YWRIdWIgQ29tcGFuaW9uLmFwcC50YXIuZ3oKemtYajYrbjBLeGE1RzYveXJxRkM4NGxiRjJmOHc5Z2RHUHU5SzllMlNPajJac2hhMXNuSnhON0h2NmFxWWJabVhFSlFsZTdKbTFxdm9TRUZWV0t4RHc9PQo=",
       "url": "https://squadhub.in/downloads/SquadHub.app.tar.gz"
     }
   }
