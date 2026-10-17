@@ -9255,8 +9255,8 @@ ol.sqc-list {
 .hm-home .hm-sub-count { font-family: 'Inter', sans-serif; font-size: 10.5px; font-weight: 600; color: color-mix(in srgb, var(--sh-ink) 55%, transparent); background: color-mix(in srgb, var(--sh-ink) 7%, transparent); border-radius: 999px; padding: 1px 7px; white-space: nowrap; flex: none; font-variant-numeric: tabular-nums; }
 .hm-home .hm-subtask-list { display: flex; flex-direction: column; gap: 1px; padding: 1px 10px 6px 40px; }
 .hm-home .hm-subtask { display: flex; align-items: center; gap: 10px; padding: 5px 8px; border-radius: 7px; cursor: pointer; }
-.hm-home .hm-subtask:hover { background: var(--sh-hair-3); }
-.hm-home .hm-subtask .t { flex: 1; min-width: 0; font-size: 12.5px; font-weight: 450; color: color-mix(in srgb, var(--sh-ink) 75%, transparent); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hm-home .hm-subtask .t { flex: 1; min-width: 0; font-size: 12.5px; font-weight: 450; color: color-mix(in srgb, var(--sh-ink) 75%, transparent); display: flex; align-items: center; gap: 8px; overflow: hidden; }
+.hm-home .hm-subtask .t .title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .hm-home .hm-subtask[data-done="true"] .t { color: var(--sh-ink-4); text-decoration: line-through; }
 .hm-home .hm-subtask .checkbox { width: 14px; height: 14px; border-radius: 4px; }
 .hm-home .hm-subtask .hm-when { font-size: 10.5px; }
@@ -12377,11 +12377,21 @@ button.sw-pri:hover, button.sw-chip:hover { filter: brightness(0.95); border-col
 .bv-card > .task-location { margin-bottom: 8px; }
 .dp-block .task-location, .cal-tt-block .task-location { color: inherit; opacity: .65; }
 
-/* Show task location on hover or keyboard focus in home / today / dashboard task rows */
+/* In home / today / dashboard task rows, display location inline on hover/focus without vertical expansion */
 .hm-task .task-location,
 .hm-subtask .task-location,
 .hmp-task .task-location {
   display: none;
+  align-items: center;
+  flex: none;
+  max-width: 240px;
+  margin-top: 0;
+  font-size: 11px;
+  line-height: 1;
+  color: var(--sh-ink-4);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .hm-task:hover .task-location,
 .hm-task:focus-visible .task-location,
@@ -12389,13 +12399,21 @@ button.sw-pri:hover, button.sw-chip:hover { filter: brightness(0.95); border-col
 .hm-subtask:focus-visible .task-location,
 .hmp-task:hover .task-location,
 .hmp-task:focus-visible .task-location {
-  display: block;
+  display: inline-flex;
+}
+.hm-task .task-location::before,
+.hm-subtask .task-location::before,
+.hmp-task .task-location::before {
+  content: '·';
+  margin-right: 6px;
+  opacity: 0.6;
+  font-weight: 700;
 }
 @media (hover: none) {
   .hm-task .task-location,
   .hm-subtask .task-location,
   .hmp-task .task-location {
-    display: block;
+    display: none;
   }
 }
 
