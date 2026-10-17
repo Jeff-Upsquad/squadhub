@@ -3849,7 +3849,15 @@ function SpaceStatusPicker({
     const q = search.trim().toLowerCase();
 
     type Item = { status: SpaceStatus; description: string; groupKey: string; groupName: string; emoji: string };
-    const items: Item[] = statuses.map((s) => {
+    const seen = new Set<string>();
+    const dedupedStatuses = statuses.filter((s) => {
+      const key = (s.id || s.name || '').toLowerCase().trim();
+      if (!key || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+
+    const items: Item[] = dedupedStatuses.map((s) => {
       const slug = (s.name || '')
         .toLowerCase()
         .replace(/[^a-z0-9_\s]/g, '')

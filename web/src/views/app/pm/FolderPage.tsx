@@ -99,7 +99,12 @@ export default function FolderPage({ folderId: propFolderId }: { folderId?: stri
       <TaskOverview
         title={folder?.name || 'Folder'}
         tasks={allTasks}
-        lists={lists.map((l) => ({ id: l.id, name: l.name }))}
+        lists={lists.map((l) => ({
+          id: l.id,
+          name: l.name,
+          is_private: l.is_private,
+          is_locked: l.is_locked,
+        }))}
         listFilter={listFilter}
         onListFilter={setListFilter}
         scopeKey={`folder:${activeFolderId}`}
