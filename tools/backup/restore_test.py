@@ -74,7 +74,7 @@ def restore_test(config, run_id=None):
                 literal = "'" + role['name'].replace("'", "''") + "'"
                 sql(f'DO $$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname={literal}) THEN CREATE ROLE {ident} NOLOGIN; END IF; END $$;')
             job.run(['docker', 'cp', str(folder / 'database.dump'), name + ':/tmp/database.dump'])
-            job.run(client + ['pg_restore', '-U', 'supabase_admin', '--no-owner', '--clean', '--if-exists', '--exit-on-error', '-d', 'postgres', '/tmp/database.dump'])
+            job.run(client + ['pg_restore', '-h', '127.0.0.1', '-U', 'supabase_admin', '--no-owner', '--clean', '--if-exists', '--exit-on-error', '-d', 'postgres', '/tmp/database.dump'])
             # The restored DB is offline: cron/network extensions cannot contact
             # WhatsApp, webhooks, customer endpoints, or any production service.
             for table in inventory['tables']:
