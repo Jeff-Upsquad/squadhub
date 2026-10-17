@@ -342,8 +342,8 @@ function DashboardTaskRowInner({
             <GoalTaskFlag taskId={task.id} size={14} />
             <TaskRelationshipsButton task={task} />
           </span>
+          <TaskLocation task={task} />
         </div>
-        <TaskLocation task={task} />
         <div className="meta">
           {isSubtask && parentTitle && <span>From: {parentTitle}</span>}
           <span className="when" data-overdue={isOverdue || undefined}>{whenText}</span>

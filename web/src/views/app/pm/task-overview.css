@@ -393,7 +393,11 @@
   min-height: 0;
 }
 
-.tov-main .lv-card--focus {
-  border-radius: 22px;
-  margin-bottom: 0;
+.tov-focus-group {
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  box-shadow: 0 4px 20px -8px rgba(245, 158, 11, 0.25);
+}
+.dark .tov-focus-group {
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  box-shadow: 0 4px 20px -8px rgba(245, 158, 11, 0.2);
 }
