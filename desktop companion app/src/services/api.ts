@@ -170,6 +170,41 @@ export function fetchTaskTypes(): Promise<TaskType[]> {
   return apiJson<TaskType[]>('/pm/task-types');
 }
 
+export interface EffectiveStatusGroupRow {
+  id: string;
+  group_id: string;
+  key: string | null;
+  name: string;
+  description: string | null;
+  color: string;
+  position: number;
+  is_default: boolean;
+  is_placeholder?: boolean;
+  category: string;
+  section: string | null;
+  section_label: string | null;
+  section_emoji: string | null;
+  section_color?: string | null;
+  section_position?: number | null;
+}
+
+export interface EffectiveStatusGroupResponse {
+  group: { id: string; key: string; name: string } | null;
+  statuses: EffectiveStatusGroupRow[];
+}
+
+/** GET /pm/status-groups/effective — resolves effective status group for a list/space. */
+export function fetchEffectiveStatusGroup(params?: {
+  spaceId?: string | null;
+  listId?: string | null;
+}): Promise<EffectiveStatusGroupResponse> {
+  const qs = new URLSearchParams();
+  if (params?.spaceId) qs.set('space_id', params.spaceId);
+  if (params?.listId) qs.set('list_id', params.listId);
+  const suffix = qs.toString();
+  return apiJson<EffectiveStatusGroupResponse>(`/pm/status-groups/effective${suffix ? `?${suffix}` : ''}`);
+}
+
 export interface CreateTaskPayload {
   list_id: string;
   title: string;
