@@ -26,7 +26,9 @@ async function isAdminInWorkspace(userId: string, workspaceId: string): Promise<
 }
 
 // GET /pm/search?workspace_id=xxx&q=...&limit=25
-// Workspace-wide task title and optional description search, scoped to lists the user can access.
+// Workspace-wide search: task titles, optional descriptions, and container
+// names (spaces/folders/lists) for palette navigation — all scoped to what the
+// user can access.
 router.get('/search', async (req: Request, res: Response) => {
   try {
     const workspaceId = req.query.workspace_id as string;
@@ -40,7 +42,7 @@ router.get('/search', async (req: Request, res: Response) => {
     }
 
     if (q.length < 1) {
-      res.json({ success: true, data: { tasks: [], descriptions: [] } });
+      res.json({ success: true, data: { tasks: [], descriptions: [], spaces: [], folders: [], lists: [] } });
       return;
     }
 
@@ -50,14 +52,14 @@ router.get('/search', async (req: Request, res: Response) => {
     // 1. All non-deleted spaces in this workspace
     const { data: workspaceSpaces, error: spacesErr } = await supabaseAdmin
       .from('spaces')
-      .select('id, name, created_by')
+      .select('id, name, created_by, kind, status, position')
       .eq('workspace_id', workspaceId)
       .is('deleted_at', null);
     logStep('spaces', spacesErr);
 
     const workspaceSpaceIds = (workspaceSpaces || []).map((s: any) => s.id);
     if (workspaceSpaceIds.length === 0) {
-      res.json({ success: true, data: { tasks: [], descriptions: [] } });
+      res.json({ success: true, data: { tasks: [], descriptions: [], spaces: [], folders: [], lists: [] } });
       return;
     }
 
@@ -65,9 +67,14 @@ router.get('/search', async (req: Request, res: Response) => {
     const admin = await isAdminInWorkspace(userId, workspaceId);
 
     let accessibleListIds: string[] = [];
+    // Access sets shared by the task search below and the container-name search
+    // (spaces/folders/lists) further down.
+    const accessibleSpaceIds = new Set<string>();
+    const accessibleFolderIds = new Set<string>();
 
     if (admin) {
       // Admins see everything in the workspace
+      for (const id of workspaceSpaceIds) accessibleSpaceIds.add(id);
       const { data: allLists, error: allListsErr } = await supabaseAdmin
         .from('lists')
         .select('id')
@@ -98,12 +105,12 @@ router.get('/search', async (req: Request, res: Response) => {
       logStep('memFolder', memFolderRes.error);
       logStep('memList', memListRes.error);
 
-      const accessibleSpaceIds = new Set<string>([
-        ...(memSpaceRes.data || []).map((m: any) => m.resource_id),
-        ...(workspaceSpaces || [])
-          .filter((s: any) => s.created_by === userId)
-          .map((s: any) => s.id),
-      ]);
+      for (const id of (memSpaceRes.data || []).map((m: any) => m.resource_id)) {
+        accessibleSpaceIds.add(id);
+      }
+      for (const s of (workspaceSpaces || [])) {
+        if (s.created_by === userId) accessibleSpaceIds.add(s.id);
+      }
 
       // Lists in accessible spaces (space-level inheritance) — scoped to this workspace
       let listsViaSpace: any[] = [];
@@ -119,7 +126,6 @@ router.get('/search', async (req: Request, res: Response) => {
 
       // Folders the user has direct access to (creator or member), scoped to workspace
       const folderMemIds = (memFolderRes.data || []).map((m: any) => m.resource_id);
-      const accessibleFolderIds = new Set<string>();
       if (folderMemIds.length > 0) {
         const r = await supabaseAdmin
           .from('folders')
@@ -193,14 +199,103 @@ router.get('/search', async (req: Request, res: Response) => {
       accessibleListIds = Array.from(idSet);
     }
 
+    // 3. Container-name search (spaces / folders / lists) so the global palette
+    // can jump to areas, folders and lists by name. Runs even when the user has
+    // no accessible lists — a share-only partner can still find the folder that
+    // was shared with them.
+    const safeQ = q.replace(/[\\%_]/g, (m) => `\\${m}`);
+    const workspaceSpaceNameById = new Map<string, string>((workspaceSpaces || []).map((s: any) => [s.id as string, s.name as string]));
+
+    // Spaces mirror GET /pm/spaces listing rules: personal/workspace kinds are
+    // hidden, and non-admins only see active spaces they're a member of or
+    // created. Names are matched client-side of the query here (in JS) since
+    // step 1 already fetched every space row in the workspace.
+    const lowerQ = q.toLowerCase();
+    const spaceMatches = (workspaceSpaces || [])
+      .filter(
+        (s: any) =>
+          s.kind !== 'personal' &&
+          s.kind !== 'workspace' &&
+          (admin || (s.status === 'active' && accessibleSpaceIds.has(s.id))) &&
+          String(s.name || '').toLowerCase().includes(lowerQ),
+      )
+      .sort((a: any, b: any) => (a.position ?? 0) - (b.position ?? 0))
+      .slice(0, limit)
+      .map((s: any) => ({ id: s.id, name: s.name }));
+
+    // Folders: name match within the workspace, then an access filter (folder
+    // lives in an accessible space, or the folder itself is directly
+    // accessible). The access filter runs after the query, so fetch with a wide
+    // cap to keep the filter from eating the whole result set.
+    const { data: folderRows, error: folderSearchErr } = await supabaseAdmin
+      .from('folders')
+      .select('id, name, space_id')
+      .in('space_id', workspaceSpaceIds)
+      .is('deleted_at', null)
+      .ilike('name', `%${safeQ}%`)
+      .order('position')
+      .limit(200);
+    logStep('container folders', folderSearchErr);
+    const folderMatches = ((folderRows || []) as any[])
+      .filter((f) => admin || accessibleSpaceIds.has(f.space_id) || accessibleFolderIds.has(f.id))
+      .slice(0, limit)
+      .map((f) => ({
+        id: f.id,
+        name: f.name,
+        space_id: f.space_id,
+        space_name: workspaceSpaceNameById.get(f.space_id) ?? null,
+      }));
+
+    // Lists: name match among the lists the user can already access.
+    let listMatches: {
+      id: string;
+      name: string;
+      folder_id: string | null;
+      folder_name: string | null;
+      space_id: string;
+      space_name: string | null;
+    }[] = [];
+    if (accessibleListIds.length > 0) {
+      const { data: listRows, error: listSearchErr } = await supabaseAdmin
+        .from('lists')
+        .select('id, name, folder_id, space_id')
+        .in('id', accessibleListIds)
+        .is('deleted_at', null)
+        .ilike('name', `%${safeQ}%`)
+        .order('position')
+        .limit(limit);
+      logStep('container lists', listSearchErr);
+      const rows = (listRows || []) as any[];
+      const folderIdsNeeded = Array.from(
+        new Set(rows.map((l) => l.folder_id).filter((id): id is string => !!id)),
+      );
+      const folderNameById: Record<string, string> = {};
+      if (folderIdsNeeded.length > 0) {
+        const { data: folderInfos } = await supabaseAdmin
+          .from('folders')
+          .select('id, name')
+          .in('id', folderIdsNeeded);
+        for (const f of (folderInfos || []) as any[]) {
+          folderNameById[f.id] = f.name;
+        }
+      }
+      listMatches = rows.map((l) => ({
+        id: l.id,
+        name: l.name,
+        folder_id: l.folder_id ?? null,
+        folder_name: l.folder_id ? folderNameById[l.folder_id] ?? null : null,
+        space_id: l.space_id,
+        space_name: workspaceSpaceNameById.get(l.space_id) ?? null,
+      }));
+    }
+
     if (accessibleListIds.length === 0) {
-      res.json({ success: true, data: { tasks: [], descriptions: [] } });
+      res.json({ success: true, data: { tasks: [], descriptions: [], spaces: spaceMatches, folders: folderMatches, lists: [] } });
       return;
     }
 
-    // 3. Search each field independently so title matches cannot crowd out
+    // 4. Search each task field independently so title matches cannot crowd out
     // description matches. Both queries use the same accessible-list scope.
-    const safeQ = q.replace(/[\\%_]/g, (m) => `\\${m}`);
     // NOTE: prod tasks table has no updated_at column (see fix 775ca948), so
     // select + order by created_at only. Selecting a missing column makes
     // PostgREST return 500, which empties tasks/descriptions in the global
@@ -237,7 +332,7 @@ router.get('/search', async (req: Request, res: Response) => {
     const matches = titleResult.data || [];
     const descriptionMatches = descriptionResult.data || [];
 
-    // 4. Enrich with list/folder/space names for breadcrumbs
+    // 5. Enrich with list/folder/space names for breadcrumbs
     const matchedListIds = Array.from(new Set([...matches, ...descriptionMatches].map((t: any) => t.list_id)));
     let listInfoById: Record<
       string,
@@ -337,7 +432,16 @@ router.get('/search', async (req: Request, res: Response) => {
       };
     };
 
-    res.json({ success: true, data: { tasks: matches.map(enrich), descriptions: descriptionMatches.map(enrich) } });
+    res.json({
+      success: true,
+      data: {
+        tasks: matches.map(enrich),
+        descriptions: descriptionMatches.map(enrich),
+        spaces: spaceMatches,
+        folders: folderMatches,
+        lists: listMatches,
+      },
+    });
   } catch (err) {
     console.error('GET /pm/search error:', err);
     res.status(500).json({ success: false, error: 'Internal server error' });

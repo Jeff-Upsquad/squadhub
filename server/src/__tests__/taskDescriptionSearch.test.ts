@@ -82,12 +82,75 @@ describe('task description search', () => {
   it('does not return descriptions when no lists are accessible', async () => {
     store.tables.resource_memberships = [];
     const data = await search('&include_descriptions=true');
-    expect(data).toEqual({ tasks: [], descriptions: [] });
+    expect(data).toEqual({ tasks: [], descriptions: [], spaces: [], folders: [], lists: [] });
   });
   it('treats wildcard characters as literal search text', async () => {
     store.tables.tasks.push({ id: 'literal', title: 'Literal', description: '100%_complete', list_id: 'visible' });
     const response = await fetch(`${base}/search?workspace_id=workspace&q=${encodeURIComponent('%_')}&include_descriptions=true`);
     const data = (await response.json() as any).data;
     expect(data.descriptions.map((t: any) => t.id)).toEqual(['literal']);
+  });
+});
+
+describe('container name search', () => {
+  // Spaces/folders/lists named to match the helper's q=needle. 'elsewhere' is a
+  // different workspace, so its 'hidden' folder must never surface.
+  const containerSetup = () => {
+    store.tables.spaces = [
+      { id: 'space', name: 'Needle development', workspace_id: 'workspace', created_by: 'other', kind: 'regular', status: 'active', position: 0 },
+      { id: 'personal', name: 'My private needle space', workspace_id: 'workspace', created_by: 'me', kind: 'personal', status: 'active', position: 1 },
+      { id: 'other-space', name: 'Client area', workspace_id: 'workspace', created_by: 'other', kind: 'regular', status: 'active', position: 2 },
+    ];
+    store.tables.folders = [
+      { id: 'folder', name: 'Needle folder', space_id: 'space', deleted_at: null, position: 0 },
+      { id: 'direct', name: 'Shared needle', space_id: 'other-space', deleted_at: null, position: 1 },
+      { id: 'hidden', name: 'Hidden needle', space_id: 'elsewhere', deleted_at: null, position: 2 },
+    ];
+    store.tables.lists = [
+      { id: 'visible', name: 'Web needle list', space_id: 'space', deleted_at: null, position: 0 },
+      { id: 'private', name: 'Private backlog', space_id: 'space', deleted_at: null, position: 1 },
+    ];
+    store.tables.resource_memberships = [
+      { resource_type: 'space', resource_id: 'space', user_id: 'me' },
+      { resource_type: 'list', resource_id: 'visible', user_id: 'me' },
+      { resource_type: 'folder', resource_id: 'direct', user_id: 'me' },
+    ];
+  };
+
+  it('matches spaces, folders and lists by name with access scoping and breadcrumbs', async () => {
+    containerSetup();
+    const data = await search('&include_descriptions=true');
+    // Non-admin 'me': personal space hidden by kind; folders via space access
+    // ('folder') or direct share ('direct'); list matches scoped to access.
+    expect(data.spaces).toEqual([{ id: 'space', name: 'Needle development' }]);
+    expect(data.folders).toEqual([
+      { id: 'folder', name: 'Needle folder', space_id: 'space', space_name: 'Needle development' },
+      { id: 'direct', name: 'Shared needle', space_id: 'other-space', space_name: 'Client area' },
+    ]);
+    expect(data.lists).toEqual([
+      { id: 'visible', name: 'Web needle list', folder_id: null, folder_name: null, space_id: 'space', space_name: 'Needle development' },
+    ]);
+    // Task search keeps working alongside the container results.
+    expect(data.tasks.map((t: any) => t.id)).toEqual(['title', 'both']);
+  });
+
+  it('still returns containers when the user has no accessible lists', async () => {
+    containerSetup();
+    store.tables.resource_memberships = [{ resource_type: 'folder', resource_id: 'direct', user_id: 'me' }];
+    const data = await search('&include_descriptions=true');
+    expect(data.tasks).toEqual([]);
+    expect(data.lists).toEqual([]);
+    // No space access at all — only the directly shared folder is findable.
+    expect(data.folders.map((f: any) => f.id)).toEqual(['direct']);
+  });
+
+  it('shows admins every folder and list in the workspace', async () => {
+    containerSetup();
+    store.tables.workspace_members = [{ user_id: 'me', workspace_id: 'workspace', role: 'admin' }];
+    const data = await search('&include_descriptions=true');
+    // 'hidden' lives in another workspace, so even admins don't see it.
+    expect(data.folders.map((f: any) => f.id)).toEqual(['folder', 'direct']);
+    // Both workspace lists are accessible to an admin; only the name matches.
+    expect(data.lists.map((l: any) => l.id)).toEqual(['visible']);
   });
 });
