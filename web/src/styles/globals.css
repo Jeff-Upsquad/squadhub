@@ -2955,14 +2955,6 @@ button.tbn-title:hover { text-decoration: underline; text-underline-offset: 2px;
   .td-checkbox:active,
   .td-checkbox-lg:active { scale: none; }
 }
-.lv-glyph[data-progress="true"] {
-  border-color: var(--sh-ink);
-}
-.lv-glyph[data-progress="true"]::after {
-  content: '';
-  width: 6px; height: 6px; border-radius: 50%;
-  background: var(--sh-ink);
-}
 
 .lv-content {
   min-width: 0;
