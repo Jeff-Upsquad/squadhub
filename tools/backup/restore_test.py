@@ -51,8 +51,8 @@ def restore_test(config, run_id=None):
         # password command-line arguments. No credentials from the real app go
         # into this isolated database container.
         client = ['docker', 'exec', '-i', name]
-        def sql(statement):
-            return job.run(client + ['psql', '-h', '127.0.0.1', '-U', 'supabase_admin', '-d', 'postgres', '-XqAt', '-v', 'ON_ERROR_STOP=1'], stdin=statement.encode()).decode().strip()
+        def sql(statement, database='sqh_restore'):
+            return job.run(client + ['psql', '-h', '127.0.0.1', '-U', 'supabase_admin', '-d', database, '-XqAt', '-v', 'ON_ERROR_STOP=1'], stdin=statement.encode()).decode().strip()
         try:
             job.run(['docker', 'run', '-d', '--name', name, '--network', 'none', '--memory', '768m',
                      '--cpus', '1', '--tmpfs', '/var/lib/postgresql/data:rw,size=768m',
@@ -68,13 +68,17 @@ def restore_test(config, run_id=None):
             else:
                 raise RuntimeError('Disposable restore database did not become ready')
             # Roles/ACL dependencies are needed even though ownership is mapped
-            # to postgres. All restored roles stay NOLOGIN in this test.
+            # to the isolated administrator. Missing roles are created NOLOGIN.
             for role in inventory['roles']:
                 ident = '"' + role['name'].replace('"', '""') + '"'
                 literal = "'" + role['name'].replace("'", "''") + "'"
-                sql(f'DO $$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname={literal}) THEN CREATE ROLE {ident} NOLOGIN; END IF; END $$;')
+                sql(f'DO $$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname={literal}) THEN CREATE ROLE {ident} NOLOGIN; END IF; END $$;', 'postgres')
+            # The image's bootstrap database includes extensions absent from
+            # production. Restore into template0 so their objects cannot clash
+            # with standalone functions contained in the source dump.
+            sql('CREATE DATABASE sqh_restore TEMPLATE template0;', 'postgres')
             job.run(['docker', 'cp', str(folder / 'database.dump'), name + ':/tmp/database.dump'])
-            job.run(client + ['pg_restore', '-h', '127.0.0.1', '-U', 'supabase_admin', '--no-owner', '--clean', '--if-exists', '--exit-on-error', '-d', 'postgres', '/tmp/database.dump'])
+            job.run(client + ['pg_restore', '-h', '127.0.0.1', '-U', 'supabase_admin', '--no-owner', '--clean', '--if-exists', '--exit-on-error', '-d', 'sqh_restore', '/tmp/database.dump'])
             # The restored DB is offline: cron/network extensions cannot contact
             # WhatsApp, webhooks, customer endpoints, or any production service.
             for table in inventory['tables']:
