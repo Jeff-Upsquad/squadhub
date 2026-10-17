@@ -29,7 +29,8 @@ import { logTaskActivity } from '../utils/taskActivity';
 const router = Router();
 
 // Statuses the agent may set via /status. Everything else in the catalog
-// (triage, priorities, routines) is human-owned.
+// (triage, priorities, routines) is human-owned. 'follow_ups' is the
+// waiting-for-a-human-reply state used by the ask-in-comments loop.
 const AGENT_STATUSES = [
   'in_progress',
   'in_code_review',
@@ -37,11 +38,16 @@ const AGENT_STATUSES = [
   'ready_for_deploy',
   'blocked',
   'closed',
+  'follow_ups',
 ] as const;
 
 const statusSchema = z.object({
   status: z.enum(AGENT_STATUSES),
   note: z.string().max(2000).optional(),
+  // true → stamp metadata.agent_awaiting_since (marking "I asked a question in
+  // comments, waiting for the human"); false/omitted with status follow_ups
+  // clears it. The awaiting-reply queue only surfaces tasks with the stamp.
+  awaiting_reply: z.boolean().optional(),
 });
 
 const commentSchema = z.object({
@@ -70,6 +76,14 @@ function requireAgentToken(req: Request, res: Response, next: NextFunction): voi
 
 router.use(requireAgentToken);
 
+interface AgentTaskAttachment {
+  id: string;
+  file_name: string;
+  mime_type: string;
+  file_size: number | null;
+  url: string;
+}
+
 interface AgentTaskPayload {
   id: string;
   title: string;
@@ -81,10 +95,13 @@ interface AgentTaskPayload {
   list: { id: string; name: string } | null;
   folder: { id: string; name: string } | null;
   space: { id: string; name: string } | null;
+  // Part of the brief: the executor downloads and inspects these (public R2
+  // URLs, same ones the app uses) when deciding what to do with the task.
+  attachments: AgentTaskAttachment[];
 }
 
-// Resolve list/folder/space names for a set of list_ids in one round trip.
-// Done as a separate query (not an embed) to avoid FK-ambiguity with the
+// Resolve list/folder/space names and attachments for a set of tasks in bulk.
+// Done as separate queries (not embeds) to avoid FK-ambiguity with the
 // task_list_links junction, mirroring how pm/tasks.ts resolves paths.
 async function hydrateListPaths(
   tasks: Array<Record<string, any>>,
@@ -100,6 +117,21 @@ async function hydrateListPaths(
     for (const l of lists || []) listById.set(l.id, l);
   }
 
+  const taskIds = tasks.map((t) => t.id);
+  const attachmentsByTask = new Map<string, AgentTaskAttachment[]>();
+  if (taskIds.length) {
+    const { data: attachments } = await supabaseAdmin
+      .from('task_attachments')
+      .select('id, task_id, file_name, mime_type, file_size, file_url')
+      .in('task_id', taskIds)
+      .order('uploaded_at', { ascending: true });
+    for (const a of attachments || []) {
+      const list = attachmentsByTask.get(a.task_id) || [];
+      list.push({ id: a.id, file_name: a.file_name, mime_type: a.mime_type, file_size: a.file_size, url: a.file_url });
+      attachmentsByTask.set(a.task_id, list);
+    }
+  }
+
   return tasks.map((t) => {
     const list = listById.get(t.list_id);
     return {
@@ -113,6 +145,7 @@ async function hydrateListPaths(
       list: list ? { id: list.id, name: list.name } : null,
       folder: list?.folders ? { id: list.folders.id, name: list.folders.name } : null,
       space: list?.spaces ? { id: list.spaces.id, name: list.spaces.name } : null,
+      attachments: attachmentsByTask.get(t.id) || [],
     };
   });
 }
@@ -219,6 +252,146 @@ router.post('/tasks/:id/claim', async (req: Request, res: Response) => {
   }
 });
 
+// For each task id, find the bot's last comment (the open question) and the
+// latest human comment after it (the reply), if any. Requires agentUserId.
+async function latestExchanges(
+  taskIds: string[],
+): Promise<Map<string, { question: string | null; reply: { content: string; created_at: string } | null }>> {
+  const out = new Map<string, { question: string | null; reply: { content: string; created_at: string } | null }>();
+  if (!config.agentUserId || !taskIds.length) {
+    for (const id of taskIds) out.set(id, { question: null, reply: null });
+    return out;
+  }
+
+  const { data: comments } = await supabaseAdmin
+    .from('task_comments')
+    .select('task_id, user_id, content, created_at')
+    .in('task_id', taskIds)
+    .order('created_at', { ascending: true });
+
+  const byTask = new Map<string, any[]>();
+  for (const c of comments || []) {
+    const list = byTask.get(c.task_id) || [];
+    list.push(c);
+    byTask.set(c.task_id, list);
+  }
+
+  for (const id of taskIds) {
+    const list = byTask.get(id) || [];
+    let question: string | null = null;
+    let questionAt: string | null = null;
+    for (const c of list) {
+      if (c.user_id === config.agentUserId) {
+        question = c.content;
+        questionAt = c.created_at;
+      }
+    }
+    let reply: { content: string; created_at: string } | null = null;
+    if (questionAt) {
+      for (const c of list) {
+        if (c.user_id !== config.agentUserId && c.created_at > questionAt) {
+          reply = { content: c.content, created_at: c.created_at };
+        }
+      }
+    }
+    out.set(id, { question, reply });
+  }
+  return out;
+}
+
+// GET /agent/awaiting-reply — tasks the agent parked in follow_ups with a
+// pending question, where a human has since replied in comments. Replies
+// outrank new work: the SOP serves this queue before ready-tasks.
+router.get('/awaiting-reply', async (req: Request, res: Response) => {
+  try {
+    const limit = Math.min(parseInt(req.query.limit as string, 10) || 25, 100);
+    const { data, error } = await supabaseAdmin
+      .from('tasks')
+      .select('*')
+      .eq('status', 'follow_ups')
+      .not('metadata->agent_awaiting_since', 'is', null)
+      .is('recurrence', null)
+      .is('parent_task_id', null)
+      .order('created_at', { ascending: true })
+      .limit(limit);
+
+    if (error) {
+      res.status(500).json({ success: false, error: error.message });
+      return;
+    }
+
+    const rows = data || [];
+    const exchanges = await latestExchanges(rows.map((t: any) => t.id));
+    const withReplies = rows.filter((t: any) => exchanges.get(t.id)?.reply);
+    const hydrated = await hydrateListPaths(withReplies);
+
+    res.json({
+      success: true,
+      data: hydrated.map((t, i) => ({
+        ...t,
+        question: exchanges.get(withReplies[i].id)?.question,
+        reply: exchanges.get(withReplies[i].id)?.reply,
+      })),
+    });
+  } catch (err) {
+    console.error('Agent awaiting-reply error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// POST /agent/tasks/:id/claim-reply — the reply-side lock. Atomically moves
+// follow_ups → in_progress and clears the awaiting stamp; a second executor
+// gets 409. Returns the task with the question + the human reply.
+router.post('/tasks/:id/claim-reply', async (req: Request, res: Response) => {
+  try {
+    const taskId = req.params.id as string;
+
+    const { data: task } = await supabaseAdmin
+      .from('tasks')
+      .select('*')
+      .eq('id', taskId)
+      .maybeSingle();
+    if (!task) {
+      res.status(404).json({ success: false, error: 'Task not found' });
+      return;
+    }
+    if (task.status !== 'follow_ups' || !task.metadata?.agent_awaiting_since) {
+      res.status(409).json({ success: false, error: 'Task is not awaiting a reply' });
+      return;
+    }
+
+    const { data: updated, error } = await supabaseAdmin
+      .from('tasks')
+      .update({
+        status: 'in_progress',
+        metadata: { ...((task.metadata as Record<string, unknown>) || {}), agent_awaiting_since: null },
+      })
+      .eq('id', taskId)
+      .eq('status', 'follow_ups')
+      .select('id')
+      .maybeSingle();
+
+    if (error) {
+      res.status(500).json({ success: false, error: error.message });
+      return;
+    }
+    if (!updated) {
+      res.status(409).json({ success: false, error: 'Task is not awaiting a reply (already claimed)' });
+      return;
+    }
+
+    await logAgentActivity(taskId, 'follow_ups', 'in_progress', 'reply received, re-claimed');
+
+    const [exchange] = [...(await latestExchanges([taskId])).values()];
+    const [hydrated] = await hydrateListPaths([{ ...task, status: 'in_progress' }]);
+
+    res.json({ success: true, data: { ...hydrated, question: exchange?.question, reply: exchange?.reply } });
+  } catch (err) {
+    console.error('Agent claim-reply error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
 // POST /agent/tasks/:id/status — lifecycle write. 'closed' fires the same
 // DB completion trigger a human status change does (notify_task_completed).
 router.post('/tasks/:id/status', async (req: Request, res: Response) => {
@@ -228,11 +401,11 @@ router.post('/tasks/:id/status', async (req: Request, res: Response) => {
       res.status(400).json({ success: false, error: parsed.error.errors[0].message });
       return;
     }
-    const { status, note } = parsed.data;
+    const { status, note, awaiting_reply } = parsed.data;
 
     const { data: existing } = await supabaseAdmin
       .from('tasks')
-      .select('id, status')
+      .select('id, status, metadata')
       .eq('id', req.params.id as string)
       .maybeSingle();
     if (!existing) {
@@ -240,9 +413,22 @@ router.post('/tasks/:id/status', async (req: Request, res: Response) => {
       return;
     }
 
+    const patch: Record<string, unknown> = { status };
+    if (awaiting_reply === true || (status === 'follow_ups' && awaiting_reply !== false)) {
+      patch.metadata = {
+        ...((existing.metadata as Record<string, unknown>) || {}),
+        agent_awaiting_since: new Date().toISOString(),
+      };
+    } else if (awaiting_reply === false && existing.metadata?.agent_awaiting_since) {
+      patch.metadata = {
+        ...((existing.metadata as Record<string, unknown>) || {}),
+        agent_awaiting_since: null,
+      };
+    }
+
     const { error } = await supabaseAdmin
       .from('tasks')
-      .update({ status })
+      .update(patch)
       .eq('id', req.params.id as string);
 
     if (error) {

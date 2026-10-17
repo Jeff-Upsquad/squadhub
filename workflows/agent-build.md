@@ -19,7 +19,7 @@ the dev Mac (today) or a headless runner on the VPS (later). Only
 | Server base URL + agent token | `tools/agent/runtime.json` (gitignored; per machine) |
 | List/folder → repo mapping | `tools/agent/repo-map.json` (committed) |
 | Task queue | `GET /agent/ready-tasks` on the SquadHub server |
-| Task content | title + description of the claimed task |
+| Task content | title + description + attachments (task_attachments via the agent payload) |
 
 ## Task description convention
 
@@ -41,8 +41,11 @@ and flag "release line missing — not released" in the completion comment.
 
 ```
 ready_to_code ──claim──▶ in_progress ──success──▶ closed
-                            │
-                            └──failure──▶ blocked   (comment explains why)
+                            │  ▲
+                            │  └─claim-reply── follow_ups ◀─ask── (doubt: question in comments)
+                            │                     │
+                            └──failure──▶ blocked │ + human replies in comments
+                                                 (reply re-enters via /agent/awaiting-reply)
 ```
 
 Tasks enter `ready_to_code` two ways: a human sets the status, or the task
@@ -60,9 +63,13 @@ runs; they are optional. A human un-blocks by setting the task back to
 1. **Load runtime config.** Read `tools/agent/runtime.json` (relative to this
    repo). Missing file or missing `base_url`/`agent_api_token` → log why and
    stop silently (do not create tasks, do not retry).
-2. **Poll the queue.** `GET {base_url}/agent/ready-tasks` with
-   `Authorization: Bearer {token}`. Unreachable server or 5xx → stop silently
-   (the dev server may just be down). Empty list → done, nothing to do.
+2. **Poll the queues — replies first.** `GET {base_url}/agent/awaiting-reply`
+   (tasks you parked with a question that the human has answered in comments).
+   Non-empty → claim the first via `POST /agent/tasks/{id}/claim-reply`; the
+   returned `reply` is authoritative direction — resume the run with it as
+   part of the brief. Otherwise `GET {base_url}/agent/ready-tasks`. Unreachable
+   server or 5xx → stop silently (the dev server may just be down). Both empty
+   → done, nothing to do.
 3. **Claim ONE task** — the oldest (first in the list).
    `POST {base_url}/agent/tasks/{id}/claim`. A 409 means another executor won
    the race → stop. **Never process more than one task per run.**
@@ -71,10 +78,29 @@ runs; they are optional. A human un-blocks by setting the task back to
    else `defaults.repo`. Note an unmapped-list fallback in the final comment.
    If the mapped `path` doesn't exist locally → set status `blocked`, comment
    "repo path missing on this executor: {path}", stop.
-5. **Read the brief.** Re-read the task title + description in full. If the
-   description is too vague to determine done (no repro for a bug, no scope
-   for a feature) → status `blocked`, comment what's missing, stop. Do not
-   guess-build.
+5. **Read the brief — title + description + attachments.** All three are the
+   brief; decide what to do from them together.
+   - **Attachments:** download each (`attachments[].url`, public R2) into
+     `.tmp/agent/<task-id>/` and inspect by type — text/code/JSON read
+     directly, images viewed, PDFs/spreadsheets opened with the matching
+     tooling. Attachments often carry the repro screenshot, spec, or design
+     that makes a vague title actionable.
+   - **Triage:**
+     - *Actionable build brief* (bug repro, feature scope, or attachments that
+       define the work) → continue to step 6.
+     - *Question / research ask* (no code change implied — e.g. "which are the
+       default stages") → answer it from the repo, docs, and schema. Post the
+       answer as the task comment, set status `closed`. No branch, no PR.
+     - *Doubt — ambiguous but nearly actionable* (two plausible scopes, a
+       decision only the owner can make, missing but likely-known context) →
+       **ask in the comments**: post the specific question(s) as a comment
+       (number them, keep to what unblocks you), then set status `follow_ups`
+       with `awaiting_reply: true`. Stop. The human's comment reply re-enters
+       the queue via `/agent/awaiting-reply`; on the next run their reply is
+       authoritative — act on it, don't re-litigate.
+     - *Neither* (no scope or definition of done after reading everything, and
+       no useful question to ask) → status `blocked`, comment exactly what's
+       missing, stop. Do not guess-build.
 6. **Implement** in the mapped repo, following that repo's own conventions
    (AGENTS.md / CLAUDE.md, existing patterns). Run its local validation
    (typecheck / lint / build / tests) exactly as CMPD requires.
@@ -101,7 +127,11 @@ runs; they are optional. A human un-blocks by setting the task back to
 
 ## Hard rules
 
-- **One task per run.** No batching, no parallel claims.
+- **One task per run.** No batching, no parallel claims. A claimed reply
+  counts as the run's task.
+- **Replies outrank new tasks** — a human answered you; they're waiting.
+- **Ask at most once per task** — if the reply is still ambiguous after one
+  round, `blocked` with an explanation instead of looping questions.
 - **main moves only via PR merge** (CMPD) — same as human runs.
 - **Never publish desktop app releases** (`desktop-app-v*` tags /
   `desktop-app-release.yml` are human-only), regardless of task wording.
