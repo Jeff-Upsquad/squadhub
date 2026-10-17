@@ -11,7 +11,7 @@ import { PARTNER_USER_TYPES } from '@squadhub/shared';
 import { spawnRoutineInstance } from '../../services/routineSpawner';
 import { validateWorkRange } from '../../utils/taskWorkRange';
 import { todayIST } from '../../utils/ist';
-import { logTaskTimeEntry, ensureAssigneeOnTimeLogged, addDailyWorkSeconds, overlapsWorkBlockRun, consolidateContiguousEntries } from '../../utils/taskTime';
+import { logTaskTimeEntry, ensureAssigneeOnTimeLogged, addDailyWorkSeconds, overlapsWorkBlockRun, getOverlappingWorkBlockRun, consolidateContiguousEntries } from '../../utils/taskTime';
 import { getExcludedTaskIds } from '../../utils/taskViewReporting';
 import { logTaskActivity, type TaskActivityEvent } from '../../utils/taskActivity';
 import { getUserSkillLevel, checkLoggedTimeChange, isUserAdmin } from '../../utils/skills';
@@ -1252,7 +1252,8 @@ router.post('/tasks/:id/time-entries', async (req: Request, res: Response) => {
     const stoppedAt = new Date(
       new Date(started_at).getTime() + Math.max(0, duration_seconds) * 1000,
     ).toISOString();
-    const withinBlock = await overlapsWorkBlockRun(req.userId!, started_at, stoppedAt);
+    const overlappingWbRun = await getOverlappingWorkBlockRun(req.userId!, started_at, stoppedAt);
+    const withinBlock = !!overlappingWbRun;
 
     const result = await logTaskTimeEntry({
       taskId,
@@ -1260,6 +1261,7 @@ router.post('/tasks/:id/time-entries', async (req: Request, res: Response) => {
       startedAt: started_at,
       durationSeconds: duration_seconds,
       source: source ?? 'timer',
+      workBlockRunId: overlappingWbRun?.id ?? null,
       note: note ?? null,
       skipDailySummary: withinBlock,
     });
@@ -1267,6 +1269,60 @@ router.post('/tasks/:id/time-entries', async (req: Request, res: Response) => {
       res.status(result.error === 'Task not found' ? 404 : 500)
         .json({ success: false, error: result.error });
       return;
+    }
+
+    if (overlappingWbRun && taskId !== overlappingWbRun.task_id) {
+      // Record this task under the work block run so it shows in "Activity during this run"
+      // and nested under the work block in the Time Sheet.
+      await supabaseAdmin.from('work_block_task_times').insert({
+        run_id: overlappingWbRun.id,
+        task_id: taskId,
+        started_at: started_at,
+        ended_at: stoppedAt,
+        duration_seconds: duration_seconds,
+      });
+
+      // If there are other open task timers running inside this work block (e.g. Task A),
+      // split their open interval if it overlaps with this manual entry
+      const { data: openWbTimes } = await supabaseAdmin
+        .from('work_block_task_times')
+        .select('id, task_id, started_at')
+        .eq('run_id', overlappingWbRun.id)
+        .neq('task_id', taskId)
+        .is('ended_at', null);
+
+      if (openWbTimes && openWbTimes.length > 0) {
+        const manualStartMs = new Date(started_at).getTime();
+        const manualEndMs = new Date(stoppedAt).getTime();
+        for (const openRow of openWbTimes as any[]) {
+          const openStartMs = new Date(openRow.started_at).getTime();
+          const overlapStart = Math.max(openStartMs, manualStartMs);
+          const overlapEnd = Math.min(Date.now(), manualEndMs);
+          if (overlapEnd > overlapStart) {
+            const overlapSec = Math.round((overlapEnd - overlapStart) / 1000);
+            const splitShare = Math.max(1, Math.round(overlapSec / 2));
+            const beforeSec = overlapStart > openStartMs ? Math.round((overlapStart - openStartMs) / 1000) : 0;
+            const closedDuration = beforeSec + splitShare;
+            // Close the open row at overlapEnd with the split duration
+            await supabaseAdmin
+              .from('work_block_task_times')
+              .update({
+                ended_at: new Date(overlapEnd).toISOString(),
+                duration_seconds: closedDuration,
+              })
+              .eq('id', openRow.id);
+            // Open a new row for that running task from overlapEnd forward
+            await supabaseAdmin
+              .from('work_block_task_times')
+              .insert({
+                run_id: overlappingWbRun.id,
+                task_id: openRow.task_id,
+                started_at: new Date(overlapEnd).toISOString(),
+                ended_at: null,
+              });
+          }
+        }
+      }
     }
 
     res.json({ success: true, data: result.entry });
@@ -1351,7 +1407,7 @@ router.delete('/tasks/:id/time-entries/:entryId', async (req: Request, res: Resp
 
     const { data: entry } = await supabaseAdmin
       .from('task_time_entries')
-      .select('id, task_id, user_id, workspace_id, started_at, duration_seconds, source')
+      .select('id, task_id, user_id, workspace_id, started_at, duration_seconds, source, work_block_run_id')
       .eq('id', entryId)
       .eq('task_id', taskId)
       .maybeSingle();
@@ -1381,6 +1437,15 @@ router.delete('/tasks/:id/time-entries/:entryId', async (req: Request, res: Resp
     if (delErr) {
       res.status(500).json({ success: false, error: delErr.message });
       return;
+    }
+
+    if ((entry as any).work_block_run_id) {
+      await supabaseAdmin
+        .from('work_block_task_times')
+        .delete()
+        .eq('run_id', (entry as any).work_block_run_id)
+        .eq('task_id', taskId)
+        .eq('started_at', (entry as any).started_at);
     }
 
     // Unwind the aggregates the entry fed. tasks.time_tracked is a plain cache;

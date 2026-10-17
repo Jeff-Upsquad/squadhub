@@ -77,6 +77,12 @@ export interface TimerShare {
   seconds: number;
 }
 
+export interface ManualSplitResult {
+  effectiveManualDuration: number;
+  shares: TimerShare[];
+  overlapSec: number;
+}
+
 export interface PendingTimeSyncItem {
   id: string;
   taskId: string;
@@ -274,6 +280,7 @@ interface PMState {
   startParallelTimer: (taskId: string, taskTitle: string, listId: string, baseTracked: number) => { shares: TimerShare[] } | null;
   adoptCompanionTimer: (taskId: string, taskTitle: string, listId: string, baseTracked: number, startedAt: number) => { shares: TimerShare[] } | null;
   stopParallelTimer: (taskId: string) => { stopped: TimerState; shares: TimerShare[] } | null;
+  splitRunningTimersForManualEntry: (manualTaskId: string, manualStartMs: number, manualDurationSec: number) => ManualSplitResult;
   setPendingTimerStart: (pending: PendingTimerStart | null) => void;
   enqueueTimeShares: (shares: TimerShare[]) => void;
   removePendingTimeSyncItem: (id: string) => void;
@@ -642,6 +649,65 @@ export const usePMStore = create<PMState>()(
         });
         broadcastTimerState(remaining, nextSegment);
         return { stopped, shares };
+      },
+      splitRunningTimersForManualEntry: (manualTaskId, manualStartMs, manualDurationSec) => {
+        const { timers, timerSegmentStart } = get();
+        if (!timers.length || timerSegmentStart === null || manualDurationSec <= 0) {
+          return { effectiveManualDuration: manualDurationSec, shares: [], overlapSec: 0 };
+        }
+
+        const now = Date.now();
+        const manualEndMs = manualStartMs + manualDurationSec * 1000;
+        const segmentStart = timerSegmentStart;
+
+        // Overlap with the unclosed running segment [segmentStart, now]
+        const overlapStart = Math.max(segmentStart, manualStartMs);
+        const overlapEnd = Math.min(now, manualEndMs);
+
+        if (overlapEnd <= overlapStart) {
+          return { effectiveManualDuration: manualDurationSec, shares: [], overlapSec: 0 };
+        }
+
+        const overlapMs = overlapEnd - overlapStart;
+        const overlapSec = Math.round(overlapMs / 1000);
+        if (overlapSec < 1) {
+          return { effectiveManualDuration: manualDurationSec, shares: [], overlapSec: 0 };
+        }
+
+        // Running timers + the manual task = total concurrent tasks during overlap
+        const isManualInTimers = timers.some((t) => t.taskId === manualTaskId);
+        const numConcurrent = timers.length + (isManualInTimers ? 0 : 1);
+        const perTaskOverlapShare = Math.max(1, Math.round(overlapSec / numConcurrent));
+
+        const shares: TimerShare[] = [];
+
+        // 1. Portion before overlap (if any): only the running timers were active
+        if (overlapStart > segmentStart) {
+          const beforeSec = Math.round((overlapStart - segmentStart) / 1000);
+          if (beforeSec >= 1) {
+            const perTimerBefore = Math.max(1, Math.round(beforeSec / timers.length));
+            for (const t of timers) {
+              shares.push({ taskId: t.taskId, listId: t.listId, startedAt: segmentStart, seconds: perTimerBefore });
+            }
+          }
+        }
+
+        // 2. Portion during overlap: running timers get their split share
+        for (const t of timers) {
+          shares.push({ taskId: t.taskId, listId: t.listId, startedAt: overlapStart, seconds: perTaskOverlapShare });
+        }
+
+        // 3. Portion after overlap: advances timerSegmentStart to overlapEnd
+        const nextSegmentStart = overlapEnd;
+        set({ timerSegmentStart: nextSegmentStart });
+        broadcastTimerState(timers, nextSegmentStart);
+
+        // 4. Calculate effective duration for the manual entry:
+        // (non-overlapping portion) + (split share of overlap)
+        const nonOverlapSec = Math.max(0, manualDurationSec - overlapSec);
+        const effectiveManualDuration = nonOverlapSec + perTaskOverlapShare;
+
+        return { effectiveManualDuration, shares, overlapSec };
       },
       setPendingTimerStart: (pending) => set({ pendingTimerStart: pending }),
       enqueueTimeShares: (shares) => {
