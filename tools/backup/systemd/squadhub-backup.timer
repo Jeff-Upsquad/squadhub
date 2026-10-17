@@ -1,0 +1,11 @@
+[Unit]
+Description=Back up the shared Supabase database every six hours
+
+[Timer]
+OnCalendar=*-*-* 00,06,12,18:15:00 UTC
+Persistent=true
+RandomizedDelaySec=120
+Unit=squadhub-backup.service
+
+[Install]
+WantedBy=timers.target

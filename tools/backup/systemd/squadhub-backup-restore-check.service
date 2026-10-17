@@ -1,0 +1,12 @@
+[Unit]
+Description=Verify the latest encrypted backup with an isolated full restore
+After=network-online.target docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+User=root
+UMask=0077
+ExecStart=/usr/bin/python3 /opt/squadhub-backup/restore_test.py
+TimeoutStartSec=45min
+Nice=10
