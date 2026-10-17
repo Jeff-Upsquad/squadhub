@@ -88,6 +88,18 @@ class AlertTests(unittest.TestCase):
                 self.assertEqual(job.alerts(), 1)
             self.assertEqual(len(json.loads((Path(root)/'pending-alerts.json').read_text())), 1)
 
+    def test_database_outage_sends_fallback_push_only_once(self):
+        from unittest.mock import Mock
+        with tempfile.TemporaryDirectory() as root:
+            job = self.fake_job(root)
+            job.queue_alert('Failed', 'Check backup', 'failure-1')
+            (Path(root)/'push-subscriptions.json').write_text('[]')
+            job.run = Mock(return_value=b'{"delivered":1}')
+            with patch('urllib.request.urlopen', side_effect=OSError('offline')):
+                job.alerts(); job.alerts()
+            job.run.assert_called_once()
+            self.assertEqual(len(json.loads((Path(root)/'pending-alerts.json').read_text())), 1)
+
     def test_successful_delivery_clears_queue(self):
         from unittest.mock import MagicMock
         with tempfile.TemporaryDirectory() as root:

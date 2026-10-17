@@ -47,7 +47,7 @@ systemctl status squadhub-backup.service
 journalctl -u squadhub-backup.service --since today
 ```
 
-The supplied schedule runs every six hours, with a fifteen-minute freshness
+The supplied schedule runs daily at 03:00 IST (21:30 UTC), with a fifteen-minute freshness
 watchdog and weekly isolated full restore check. Times are configured explicitly
 in UTC. `Persistent=true` catches a missed job after a reboot. A non-blocking
 process lock prevents overlapping backups. Private errors stay on the VPS and
@@ -58,8 +58,11 @@ error. Systemd caps total execution time.
 `logical_data_bytes` estimates the uncompressed database-to-VPS transfer. Use
 that figure plus metadata overhead and ordinary application traffic against the
 Free plan's egress allowance. Compressing the dump on the VPS saves R2 storage
-but does not reduce the preceding Supabase download. Adjust the timer and
-`STALE_HOURS` together if six-hour backups do not fit the traffic budget.
+but does not reduce the preceding Supabase download. The initial export measured 81.3 MB of logical data: six-hour backups would
+use about 9.8 GB/month before catalog overhead or application traffic. The user
+selected daily backups (about 2.5 GB/month before overhead), with a 30-hour
+freshness threshold. Verify total app + backup traffic before moving to Free.
+Adjust the timer and `STALE_HOURS` together when changing frequency.
 
 ## Encryption, verification and retention
 
@@ -70,7 +73,8 @@ must pass before the new snapshot is marked successful or retention runs. R2
 may be a public application bucket: only authenticated ciphertext and minimal
 operational manifests go there; plaintext data and secrets never do.
 
-Retain all successful snapshots for seven days, then one per UTC day through
+Retain daily snapshots for 30 days. Additional successful manual snapshots are
+also retained for seven days, then one per UTC day through
 30 days. Never prune the latest verified snapshot. Retention only touches this
 job's `backups/supabase/<project-ref>/` namespace; it cannot remove uploads or the
 separate CRM cleanup archive. Keep the two latest verified encrypted copies
