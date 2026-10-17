@@ -760,7 +760,6 @@ export default function TaskRow({
           data-done={selectedTasks.length > 0 ? isSelected : displayDone}
           aria-pressed={selectedTasks.length > 0 ? isSelected : undefined}
           data-celebrating={isFading}
-          data-progress={!isDone && statusCategory === 'active'}
           disabled={!canEdit}
           aria-label={selectedTasks.length > 0 ? (isSelected ? 'Deselect task' : 'Select task') : isDone ? 'Mark incomplete' : 'Mark complete'}
         />
