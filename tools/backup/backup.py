@@ -139,6 +139,7 @@ class Backup:
 
     def docker_client(self, env, command, *args, mounts=(), interactive=False):
         cmd = ['docker', 'run', '--rm', '--user', '0:0', '--network', 'host']
+        cmd += ['-v', f'{self.c["PGSSLROOTCERT"]}:{self.c["PGSSLROOTCERT"]}:ro']
         if interactive:
             cmd.append('-i')
         for source, dest in mounts:
