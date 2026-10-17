@@ -2286,8 +2286,15 @@ router.delete('/tasks/:id/relationships/:targetTaskId', async (req: Request, res
   }
 });
 
+// In-flight task creations keyed by `${userId}:${listId}:${normalizedTitle}` to deduplicate
+// concurrent requests (e.g. rapid keypresses, double-clicks, or event bubbling).
+const inFlightTaskCreations = new Map<string, Promise<any>>();
+
 // POST /pm/tasks — requires member access on the list
 router.post('/tasks', async (req: Request, res: Response) => {
+  let inflightKey: string | null = null;
+  let resolveInflight: any = null;
+  let rejectInflight: any = null;
   try {
     const body = createSchema.parse(req.body);
     validateWorkRange(body.work_date, body.metadata?.work_end_date);
@@ -2303,6 +2310,44 @@ router.post('/tasks', async (req: Request, res: Response) => {
       res.status(403).json({ success: false, error: 'This list is locked' });
       return;
     }
+
+    // Concurrent deduplication: if an identical create request is already in-flight, await it
+    inflightKey = `${req.userId!}:${body.list_id}:${body.title.trim().toLowerCase()}`;
+    const existingInflight = inFlightTaskCreations.get(inflightKey);
+    if (existingInflight) {
+      try {
+        const existingResult = await existingInflight;
+        res.status(200).json({ success: true, data: existingResult, deduplicated: true });
+        return;
+      } catch {
+        // Fall through to normal creation if the in-flight one failed
+      }
+    }
+
+    // Recent duplicate check: if the exact same task was just created within 5 seconds, return it
+    const fiveSecondsAgo = new Date(Date.now() - 5000).toISOString();
+    const { data: recentDuplicate } = await supabaseAdmin
+      .from('tasks')
+      .select('*')
+      .eq('created_by', req.userId!)
+      .eq('list_id', body.list_id)
+      .eq('title', body.title.trim())
+      .gte('created_at', fiveSecondsAgo)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (recentDuplicate) {
+      const [hydratedTask] = await hydrateAssignees([recentDuplicate]);
+      res.status(200).json({ success: true, data: hydratedTask, deduplicated: true });
+      return;
+    }
+
+    const taskPromise = new Promise((resolve, reject) => {
+      resolveInflight = resolve;
+      rejectInflight = reject;
+    });
+    inFlightTaskCreations.set(inflightKey, taskPromise);
 
     // If the list is under a client-tagged folder, assign a per-client
     // sequential display_number. Non-client tasks get null.
@@ -2488,14 +2533,20 @@ router.post('/tasks', async (req: Request, res: Response) => {
     }
 
     const [hydratedTask] = await hydrateAssignees([task]);
+    if (resolveInflight) resolveInflight(hydratedTask);
     res.status(201).json({ success: true, data: hydratedTask });
   } catch (err) {
+    if (rejectInflight) rejectInflight(err);
     if (err instanceof z.ZodError) {
       res.status(400).json({ success: false, error: err.errors[0].message });
       return;
     }
     console.error('Create task error:', err);
     res.status(500).json({ success: false, error: 'Internal server error' });
+  } finally {
+    if (inflightKey) {
+      inFlightTaskCreations.delete(inflightKey);
+    }
   }
 });
 

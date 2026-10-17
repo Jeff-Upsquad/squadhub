@@ -485,6 +485,8 @@ export default function QuickAdd() {
   // Once the task is created we keep its id so a retry (e.g. after an attachment
   // upload fails) re-uses it instead of creating a duplicate task.
   const createdTaskRef = useRef<{ id: string } | null>(null);
+  const taskPromiseRef = useRef<Promise<{ id: string }> | null>(null);
+  const submittingRef = useRef(false);
   // Bumped by reset() so an upload that finishes after the panel was reopened
   // for a new task doesn't close or error the fresh form.
   const formGenRef = useRef(0);
@@ -558,6 +560,8 @@ export default function QuickAdd() {
     setUploadState({});
     formGenRef.current += 1;
     createdTaskRef.current = null;
+    taskPromiseRef.current = null;
+    submittingRef.current = false;
     dragDepthRef.current = 0;
     draggingRef.current = false;
     setDragOver(false);
@@ -783,9 +787,11 @@ export default function QuickAdd() {
 
   const submit = async () => {
     const trimmed = title.trim();
-    if (!trimmed || phase === 'saving') return;
+    if (!trimmed || phase === 'saving' || submittingRef.current) return;
+    submittingRef.current = true;
 
     if (!useAuthStore.getState().accessToken) {
+      submittingRef.current = false;
       setPhase('error');
       setError('Sign in below to add tasks.');
       return;
@@ -795,6 +801,7 @@ export default function QuickAdd() {
     const estimateMinutes = estimateInput.trim() ? parseDuration(estimateInput) : null;
     if ((loggedInput.trim() && (!loggedMinutes || loggedMinutes < 0))
       || (estimateInput.trim() && (!estimateMinutes || estimateMinutes < 0))) {
+      submittingRef.current = false;
       setPhase('error');
       setError('Enter a positive duration, such as 1h 20m or 1 hour 20 minutes.');
       return;
@@ -809,6 +816,7 @@ export default function QuickAdd() {
         }
         list = cachedPersonal;
       } catch {
+        submittingRef.current = false;
         setPhase('error');
         setError('Could not resolve your list. Try again.');
         return;
@@ -822,20 +830,23 @@ export default function QuickAdd() {
       // failed last time) so we never create a duplicate.
       let task = createdTaskRef.current;
       if (!task) {
-        task = await createTask({
-          list_id: list.id,
-          title: trimmed,
-          description: description.trim() || undefined,
-          status: status || undefined,
-          priority: priority === 'none' ? undefined : priority,
-          work_date: workDate || undefined,
-          start_date: startDate || undefined,
-          due_date: dueDate || undefined,
-          task_type_id: taskTypeId || undefined,
-          assignee_ids: assigneeIds.length ? assigneeIds : undefined,
-          time_estimate: estimateMinutes ?? undefined,
-          start_timer: startTimerOnCreate,
-        });
+        if (!taskPromiseRef.current) {
+          taskPromiseRef.current = createTask({
+            list_id: list.id,
+            title: trimmed,
+            description: description.trim() || undefined,
+            status: status || undefined,
+            priority: priority === 'none' ? undefined : priority,
+            work_date: workDate || undefined,
+            start_date: startDate || undefined,
+            due_date: dueDate || undefined,
+            task_type_id: taskTypeId || undefined,
+            assignee_ids: assigneeIds.length ? assigneeIds : undefined,
+            time_estimate: estimateMinutes ?? undefined,
+            start_timer: startTimerOnCreate,
+          });
+        }
+        task = await taskPromiseRef.current;
         createdTaskRef.current = task;
         if (focused) {
           try {
@@ -908,6 +919,8 @@ export default function QuickAdd() {
         hideAnimated();
       }, 550);
     } catch (e) {
+      submittingRef.current = false;
+      if (!createdTaskRef.current) taskPromiseRef.current = null;
       // A stale cached id (e.g. list deleted) — clear so the next try re-resolves.
       if (!selectedList) cachedPersonal = null;
       pickCache = null;
@@ -922,6 +935,7 @@ export default function QuickAdd() {
     // when focus isn't inside a field; here we only handle ⌘/Ctrl+Enter submit.
     if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
       e.preventDefault();
+      e.stopPropagation();
       void submit();
     }
   };
@@ -944,8 +958,9 @@ export default function QuickAdd() {
   }, []);
 
   const onTitleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.metaKey && !e.ctrlKey) {
+    if (e.key === 'Enter') {
       e.preventDefault();
+      e.stopPropagation();
       void submit();
     }
   };
@@ -1561,7 +1576,7 @@ export default function QuickAdd() {
                   className={`qa-add-circle${phase === 'done' ? ' done' : ''}${phase === 'saving' ? ' saving' : ''}`}
                   onPointerDown={() => setPressKey((k) => k + 1)}
                   onClick={() => void submit()}
-                  disabled={!title.trim() || phase === 'saving'}
+                  disabled={!title.trim() || phase === 'saving' || submittingRef.current}
                   title="Add task (Enter)"
                 >
                   {pressKey > 0 && <span key={pressKey} className="qa-add-ripple" aria-hidden />}
@@ -1622,6 +1637,7 @@ export default function QuickAdd() {
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') {
                         e.preventDefault();
+                        e.stopPropagation();
                         void submit();
                       }
                     }}

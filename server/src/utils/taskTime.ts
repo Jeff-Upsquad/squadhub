@@ -171,6 +171,29 @@ export async function logTaskTimeEntry(params: LogTaskTimeParams): Promise<LogTa
     }
   }
 
+  // Concurrent/duplicate protection for manual time entries: if an identical entry
+  // was logged within +/- 4 seconds on this task by this user, reuse it without double-bumping.
+  if (!entryRecord && source === 'manual' && durationSeconds > 0) {
+    const windowStart = new Date(new Date(entryStartedAt).getTime() - 4000).toISOString();
+    const windowStop = new Date(new Date(entryStartedAt).getTime() + 4000).toISOString();
+    const { data: existingManual } = await supabaseAdmin
+      .from('task_time_entries')
+      .select('*')
+      .eq('task_id', taskId)
+      .eq('user_id', userId)
+      .eq('source', 'manual')
+      .eq('duration_seconds', durationSeconds)
+      .gte('started_at', windowStart)
+      .lte('started_at', windowStop)
+      .limit(1)
+      .maybeSingle();
+
+    if (existingManual) {
+      entryRecord = existingManual;
+      effectiveDelta = 0;
+    }
+  }
+
   if (!entryRecord) {
     const { data: entry, error: insertErr } = await supabaseAdmin
       .from('task_time_entries')
