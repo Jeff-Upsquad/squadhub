@@ -248,6 +248,7 @@ class Backup:
         if not any(n['metadata']['dedupe_key'] == dedupe_key for n in pending):
             pending.append({'id': str(uuid.uuid4()), 'user_id': self.c['ALERT_USER_ID'],
                             'type': 'task_updated', 'reference_type': 'database_backup',
+                            'created_at': dt.datetime.now(UTC).isoformat(),
                             'title': title, 'body': body,
                             'metadata': {'dedupe_key': dedupe_key, 'source': 'database_backup'}})
             atomic_json(path, pending)
@@ -272,12 +273,22 @@ class Backup:
         # Cache only the selected user's subscriptions in the root-only state dir.
         if left:
             cache = self.root / 'push-subscriptions.json'
-            if cache.exists():
+            sent_file = self.root / 'push-alerted.json'
+            sent = set(json.loads(sent_file.read_text())) if sent_file.exists() else set()
+            notice = left[-1]
+            if cache.exists() and notice['id'] not in sent:
                 script = """let s='';process.stdin.on('data',b=>s+=b);process.stdin.on('end',async()=>{try{
                 const x=JSON.parse(s),w=require('web-push');w.setVapidDetails(process.env.WEB_PUSH_VAPID_SUBJECT||'mailto:support@squadhub.in',process.env.WEB_PUSH_VAPID_PUBLIC_KEY,process.env.WEB_PUSH_VAPID_PRIVATE_KEY);
-                await Promise.all(x.subscriptions.map(sub=>w.sendNotification({endpoint:sub.endpoint,keys:{p256dh:sub.p256dh,auth:sub.auth}},JSON.stringify({title:x.notice.title,body:x.notice.body,tag:x.notice.id,url:'/?open_inbox='+x.notice.id})).catch(()=>{})))}catch{} });"""
-                self.run(['docker', 'exec', '-i', 'squadhub-server', 'node', '-e', script],
-                         stdin=json.dumps({'subscriptions': json.loads(cache.read_text()), 'notice': left[-1]}).encode())
+                const r=await Promise.all(x.subscriptions.map(sub=>w.sendNotification({endpoint:sub.endpoint,keys:{p256dh:sub.p256dh,auth:sub.auth}},JSON.stringify({title:x.notice.title,body:x.notice.body,tag:x.notice.id,url:'/?open_inbox='+x.notice.id})).then(()=>1).catch(()=>0)));
+                process.stdout.write(JSON.stringify({delivered:r.reduce((a,b)=>a+b,0)}))}catch{process.stdout.write('{"delivered":0}')} });"""
+                try:
+                    result = self.run(['docker', 'exec', '-i', 'squadhub-server', 'node', '-e', script],
+                            stdin=json.dumps({'subscriptions': json.loads(cache.read_text()), 'notice': notice}).encode())
+                    if json.loads(result)['delivered']:
+                        sent.add(notice['id'])
+                        atomic_json(sent_file, sorted(sent)[-1000:])
+                except Exception:
+                    pass  # Keep the inbox alert queued; do not create another failure.
         return len(left)
 
     def cache_push(self):
@@ -362,7 +373,7 @@ class Backup:
             age = dt.datetime.now(UTC) - dt.datetime.fromisoformat(latest['created_at'])
         else:
             age = dt.timedelta(days=365)
-        max_age = float(self.c.get('STALE_HOURS', '8'))
+        max_age = float(self.c.get('STALE_HOURS', '30'))
         if age > dt.timedelta(hours=max_age):
             day = dt.datetime.now(UTC).strftime('%Y-%m-%d')
             self.queue_alert('Database backup needs attention',

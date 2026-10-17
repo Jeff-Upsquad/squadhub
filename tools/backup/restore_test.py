@@ -52,14 +52,16 @@ def restore_test(config, run_id=None):
         # into this isolated database container.
         client = ['docker', 'exec', '-i', name]
         def sql(statement):
-            return job.run(client + ['psql', '-U', 'postgres', '-XqAt', '-v', 'ON_ERROR_STOP=1'], stdin=statement.encode()).decode().strip()
+            return job.run(client + ['psql', '-h', '127.0.0.1', '-U', 'postgres', '-XqAt', '-v', 'ON_ERROR_STOP=1'], stdin=statement.encode()).decode().strip()
         try:
             job.run(['docker', 'run', '-d', '--name', name, '--network', 'none', '--memory', '768m',
                      '--cpus', '1', '--tmpfs', '/var/lib/postgresql/data:rw,size=768m',
                      '--env-file', '/dev/stdin', job.image],
                     stdin=('POSTGRES_PASSWORD=' + password + '\nPOSTGRES_HOST_AUTH_METHOD=trust\n').encode())
+            # The image briefly starts a Unix-socket-only init server. Wait
+            # for the final TCP listener, never that temporary init process.
             for attempt in range(60):
-                check = subprocess.run(['docker', 'exec', name, 'pg_isready', '-U', 'postgres'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                check = subprocess.run(['docker', 'exec', name, 'pg_isready', '-h', '127.0.0.1', '-U', 'postgres'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                 if check.returncode == 0:
                     break
                 time.sleep(2)
