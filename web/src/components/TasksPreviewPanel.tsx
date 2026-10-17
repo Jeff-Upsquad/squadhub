@@ -1,3 +1,4 @@
+import TaskLocation from './pm/TaskLocation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useQuery } from '@tanstack/react-query';
@@ -116,6 +117,7 @@ function PreviewRow({ task, listId, onOpen, onGateOpenChange }: {
       </span>
       <span className={`min-w-0 flex-1 truncate text-[13px] ${done ? 'text-[var(--sh-ink-4)] line-through' : 'text-[var(--sh-ink)]'}`}>
         {task.title}
+        <TaskLocation task={task} />
       </span>
       {pri && (
         <span className="flex shrink-0 items-center gap-1 text-[11px] font-medium text-[var(--sh-ink-3)]">

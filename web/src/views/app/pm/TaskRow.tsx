@@ -1,3 +1,4 @@
+import TaskLocation from '../../../components/pm/TaskLocation';
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import type { Task, SpaceStatus, TaskPriority, TaskChecklist } from '@squadhub/shared';
@@ -763,7 +764,7 @@ export default function TaskRow({
           aria-label={isDone ? 'Mark incomplete' : 'Mark complete'}
         />
 
-        {/* Title only — meta line (space · due · tags) removed; dedicated columns below */}
+        {/* Task title and primary location */}
         <div className="min-w-0">
           {/* Parent task reference — shown only for subtasks rendered at the top
               level (depth 0); nested subtask rows already sit under their parent
@@ -956,6 +957,7 @@ export default function TaskRow({
               </span>
             )}
           </div>
+          <TaskLocation task={task} />
         </div>
 
         {/* Field columns — order + visibility controlled per view (Fields menu) */}

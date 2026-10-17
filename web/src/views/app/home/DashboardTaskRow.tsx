@@ -1,3 +1,4 @@
+import TaskLocation from '../../../components/pm/TaskLocation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { Task } from '@squadhub/shared';
@@ -70,7 +71,6 @@ export default function DashboardTaskRow({ task, onOpen: openOverride, completeI
   const dateDisplay = formatTaskDates(task);
   const whenText = dateDisplay.text;
   const isOverdue = dateDisplay.overdue;
-  const taskPath = [task.space?.name, task.folder?.name, task.list?.name].filter(Boolean).join(' › ');
 
   const onOpen = () => {
     if (openOverride) {
@@ -136,7 +136,6 @@ export default function DashboardTaskRow({ task, onOpen: openOverride, completeI
         parentTitle={parentTitle}
         whenText={whenText}
         isOverdue={isOverdue}
-        taskPath={taskPath}
         onOpen={onOpen}
         onToggleDone={onToggleDone}
         completeInResource={completeInResource}
@@ -193,7 +192,6 @@ function DashboardTaskRowInner({
   parentTitle,
   whenText,
   isOverdue,
-  taskPath,
   onOpen,
   onToggleDone,
   completeInResource,
@@ -211,7 +209,6 @@ function DashboardTaskRowInner({
   parentTitle: string | null;
   whenText: string;
   isOverdue: boolean;
-  taskPath: string;
   onOpen: () => void;
   onToggleDone: (e: React.MouseEvent) => void;
   completeInResource: boolean;
@@ -346,6 +343,7 @@ function DashboardTaskRowInner({
             <TaskRelationshipsButton task={task} />
           </span>
         </div>
+        <TaskLocation task={task} />
         <div className="meta">
           {isSubtask && parentTitle && <span>From: {parentTitle}</span>}
           <span className="when" data-overdue={isOverdue || undefined}>{whenText}</span>
@@ -361,7 +359,7 @@ function DashboardTaskRowInner({
           {priorityLabel && (
             <span className="pri" data-urgent={task.priority === 'urgent' || undefined}>{priorityLabel}</span>
           )}
-          {taskPath && <span className="path" title={taskPath}>{taskPath}</span>}
+
         </div>
       </div>
       <button

@@ -1,3 +1,4 @@
+import TaskLocation from '../../../components/pm/TaskLocation';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { getTaskStatusCategory } from '@squadhub/shared';
@@ -822,7 +823,7 @@ export default function DayCalendar({ date, today, onDateChange, keyboard = fals
                   }}
                   title={chipTitle}
                 >
-                  <span className="t">{isGroup ? `Grouped tasks under ${p.container?.name ?? 'Group'}` : (p.task?.title ?? 'Task')}</span>
+                  <span className="t">{isGroup ? `Grouped tasks under ${p.container?.name ?? 'Group'}` : (p.task?.title ?? 'Task')}<TaskLocation task={p.task} /></span>
                   <span className="f">{isGroup ? 'Group' : dateFieldLabel(p.date_field)}</span>
                 </div>
               );
@@ -1075,6 +1076,7 @@ export default function DayCalendar({ date, today, onDateChange, keyboard = fals
                   )}
                   {blockTitle}
                 </div>
+                <TaskLocation task={p.task} />
                 <div className="b-meta">
                   <span className="b-time">{fmtTimeRange(renderStart, renderDur)}</span>
                   {renderDur >= 30 && <span className="b-dur">{fmtDur(renderDur)}</span>}
@@ -1151,6 +1153,7 @@ export default function DayCalendar({ date, today, onDateChange, keyboard = fals
             >
               <div className="dp-block-body">
                 <div className="b-title">{blockTitle}</div>
+                <TaskLocation task={p.task} />
                 <div className="b-meta">
                   <span className="b-time">{fmtTimeRange(p.start_minute, p.duration_minutes)}</span>
                 </div>
@@ -1250,7 +1253,7 @@ interface Positioned {
   task_id: string;
   start_minute: number;
   duration_minutes: number;
-  task?: { id: string; title: string; status?: string | null; priority?: string | null; task_type_key?: string | null; task_type_color?: string | null; linked_tasks?: LinkedTaskRef[]; recurrence?: unknown | null; recurring_parent_id?: string | null } | undefined;
+  task?: { list?: { id: string; name: string } | null; folder?: { id: string; name: string } | null; space?: { id: string; name: string } | null; id: string; title: string; status?: string | null; priority?: string | null; task_type_key?: string | null; task_type_color?: string | null; linked_tasks?: LinkedTaskRef[]; recurrence?: unknown | null; recurring_parent_id?: string | null } | undefined;
   col: number;
   cols: number;
   virtual?: boolean;
@@ -1315,6 +1318,9 @@ function positionBlocks(plans: any[]): Positioned[] {
         ? {
             id: p.task.id,
             title: p.task.title,
+            list: p.task.list,
+            folder: p.task.folder,
+            space: p.task.space,
             status: p.task.status,
             priority: p.task.priority ?? null,
             task_type_key: p.task.task_type_key ?? null,

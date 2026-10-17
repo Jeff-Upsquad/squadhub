@@ -1,4 +1,5 @@
 'use client';
+import TaskLocation from '../../../components/pm/TaskLocation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useMyTasks } from '../../../hooks/useTasks';
 import { usePMStore } from '../../../stores/pmStore';
@@ -286,6 +287,7 @@ export default function CalendarRailPreview({
                               onClick={() => openTask(task.id)}
                             >
                               {task.title}
+                              <TaskLocation task={task} />
                             </button>
                           ))
                         )}
@@ -308,10 +310,7 @@ export default function CalendarRailPreview({
                 onClick={() => openTask(t.id)}
                 className="flex w-full items-center gap-2.5 border-b border-[var(--sh-hair-3)] px-5 py-3 text-left transition hover:bg-[var(--sh-hair-3)]"
               >
-                <span className="min-w-0 flex-1 truncate text-[13px] text-[var(--sh-ink)]">{t.title}</span>
-                <span className="shrink-0 text-[11px] text-[var(--sh-ink-4)]">
-                  {(t.list as any)?.name || (t.space as any)?.name || ''}
-                </span>
+                <span className="min-w-0 flex-1 truncate text-[13px] text-[var(--sh-ink)]">{t.title}<TaskLocation task={t} /></span>
               </button>
             ))
           )}

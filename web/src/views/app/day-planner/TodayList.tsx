@@ -1,3 +1,4 @@
+import TaskLocation from '../../../components/pm/TaskLocation';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Task } from '@squadhub/shared';
 import { usePMStore } from '../../../stores/pmStore';
@@ -317,6 +318,7 @@ export default function TodayList() {
         </div>
 
         <div className="dp-card-title">{t.title}</div>
+        <TaskLocation task={t} />
 
         {hasChips && (
           <div className="dp-card-chips">

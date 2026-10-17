@@ -1,3 +1,4 @@
+import TaskLocation from '../../../components/pm/TaskLocation';
 import { useEffect, useMemo, useState } from 'react';
 import type { ListViewRow, SpaceStatus, Task, TaskBucket, TaskPriority } from '@squadhub/shared';
 import { TASK_BUCKETS, taskBucketOf } from '@squadhub/shared';
@@ -126,6 +127,8 @@ function StageCard({
       )}
 
       <p className="bv-card-title" style={{ margin: '8px 0 10px' }}>{task.title}</p>
+
+      <TaskLocation task={task} />
 
       <div className="sw-card-meta">
         {!done && (

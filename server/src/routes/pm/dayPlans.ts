@@ -1,4 +1,5 @@
 import { Router, Request, Response } from 'express';
+import { hydrateLists } from './tasks';
 import { z } from 'zod';
 import { supabaseAdmin } from '../../supabase';
 import { requireAuth } from '../../middleware/auth';
@@ -107,19 +108,11 @@ async function hydrate(plans: any[]): Promise<any[]> {
   // Flatten task_types join → `task_type_key` / `task_type_color` so day-planner
   // blocks can identify work blocks without an extra round-trip.
   const taskMap = new Map<string, any>(
-    (tasks || []).map((t: any) => [
+    (await hydrateLists(tasks || [])).map((t: any) => [
       t.id,
       { ...t, task_type_key: t.task_types?.key ?? null, task_type_color: t.task_types?.color ?? null },
     ]),
   );
-
-  const listIds = Array.from(
-    new Set((tasks || []).map((t: any) => t.list_id).filter(Boolean)),
-  );
-  const { data: lists } = listIds.length
-    ? await supabaseAdmin.from('lists').select('id, name').in('id', listIds)
-    : { data: [] as any[] };
-  const listMap = new Map<string, any>((lists || []).map((l: any) => [l.id, l]));
 
   // Linked tasks for time/break blocks so the calendar can render them inside
   // the block without an extra round-trip per block.
@@ -157,11 +150,10 @@ async function hydrate(plans: any[]): Promise<any[]> {
 
   return plans.map((p) => {
     const t = taskMap.get(p.task_id);
-    const l = t?.list_id ? listMap.get(t.list_id) : null;
     return {
       ...p,
       task: t
-        ? { ...t, list: l ? { id: l.id, name: l.name } : null, linked_tasks: linksByBlock.get(p.task_id) ?? [] }
+        ? { ...t, linked_tasks: linksByBlock.get(p.task_id) ?? [] }
         : null,
     };
   });

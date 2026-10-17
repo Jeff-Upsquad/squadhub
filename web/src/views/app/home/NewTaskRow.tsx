@@ -1,3 +1,4 @@
+import TaskLocation from '../../../components/pm/TaskLocation';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useQueryClient } from '@tanstack/react-query';
@@ -387,7 +388,7 @@ export default function NewTaskRow({
               </button>
             )}
             <button type="button" className="nt-title" title={`Open "${t.title}"`} onClick={() => setActiveTask(task.id)}>{t.title}</button>
-            {breadcrumb && <div className="nt-breadcrumb" title={breadcrumb}>{breadcrumb}</div>}
+            <TaskLocation task={task} />
             {(isTiming || trackedText) && (
               <div className="nt-timetrack">
                 {isTiming && (

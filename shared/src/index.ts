@@ -1500,7 +1500,7 @@ export interface TaskDayPlan {
   container?: { type: 'list' | 'folder' | 'space'; id: string; name: string };
   member_count?: number;
   // Joined task summary so the calendar block can render without a second fetch.
-  task?: Pick<Task, 'id' | 'title' | 'priority' | 'status_id' | 'time_estimate' | 'list_id'> & {
+  task?: Pick<Task, 'id' | 'title' | 'priority' | 'status_id' | 'time_estimate' | 'list_id' | 'space' | 'folder'> & {
     // TEXT status (catalog key like 'closed' or legacy 'done'/'todo'). Used to
     // grey out blocks for completed tasks. Not on the base Task type today.
     status?: string | null;
