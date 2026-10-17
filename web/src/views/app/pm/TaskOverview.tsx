@@ -224,6 +224,7 @@ export default function TaskOverview({
   );
   const hasDirectLists = lists.some((l) => !l.folderId);
   const top = useMemo(() => tasks.filter((t) => !t.parent_task_id), [tasks]);
+  const topOpen = useMemo(() => top.filter((t) => !isTaskCompleted(t)), [top]);
   // Tasks in the selected folder (or every task when no folder is picked).
   const scoped = useMemo(() => {
     if (folderFilter === 'all') return top;
@@ -245,7 +246,7 @@ export default function TaskOverview({
   // (current === 0), are grouped together under one dropdown.
   const enrichedLists = useMemo(() => {
     return visibleLists.map((list) => {
-      const listOpen = top.filter((t) => t.list?.id === list.id && !isTaskCompleted(t));
+      const listOpen = topOpen.filter((t) => t.list?.id === list.id);
       const count = listOpen.length;
       const upcoming = listOpen.filter((t) => isTaskUpcoming(t, tz)).length;
       const current = Math.max(0, count - upcoming);
@@ -256,7 +257,7 @@ export default function TaskOverview({
         current,
       };
     });
-  }, [visibleLists, top, tz]);
+  }, [visibleLists, topOpen, tz]);
 
   const withTasks = useMemo(
     () => (isLoaded ? enrichedLists.filter((e) => e.current > 0) : enrichedLists),
@@ -575,17 +576,17 @@ export default function TaskOverview({
             <div className="tov-chips tov-folders">
               <span className="tov-folders-lbl">Folders</span>
               {[
-                { id: 'all', name: 'All folders', count: top.length },
+                { id: 'all', name: 'All folders', count: topOpen.length },
                 ...folders.map((f) => {
                   const ids = new Set(lists.filter((l) => l.folderId === f.id).map((l) => l.id));
-                  return { id: f.id, name: f.name, count: top.filter((t) => !!t.list?.id && ids.has(t.list.id)).length };
+                  return { id: f.id, name: f.name, count: topOpen.filter((t) => !!t.list?.id && ids.has(t.list.id)).length };
                 }),
                 ...(hasDirectLists ? [{
                   id: NO_FOLDER_KEY,
                   name: 'No folder',
                   count: (() => {
                     const ids = new Set(lists.filter((l) => !l.folderId).map((l) => l.id));
-                    return top.filter((t) => !!t.list?.id && ids.has(t.list.id)).length;
+                    return topOpen.filter((t) => !!t.list?.id && ids.has(t.list.id)).length;
                   })(),
                 }] : []),
               ].map((f) => (
