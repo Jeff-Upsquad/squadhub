@@ -63,18 +63,39 @@ export const CONTENT_ROLES = [
 
   },
   {
-    slug: 'videographer-photographer', serviceSlug: 'videographer_photographer', formType: 'videographer_photographer',
-    id: 'ca148001-5800-4800-8800-000000000004', name: 'Videographer / Photographer', pipeline: 'Videographers and Photographers',
-    description: 'Brand, product, event and location photography and video production.',
+    slug: 'videographer', serviceSlug: 'videographer', formType: 'videographer',
+    id: 'ca148001-5800-4800-8800-000000000004', name: 'Videographer', pipeline: 'Videographers',
+    description: 'Brand films, product videos, event coverage and commercial video production.',
     detailKey: 'equipment_and_travel', detailLabel: 'Equipment, production setup and travel',
     detailHint: 'List camera, audio, lighting and crew capabilities, your shooting locations and travel availability.',
-    categories: ['Product photography', 'Brand films', 'Events', 'Portraits', 'Food photography', 'Real estate', 'Interviews', 'Social video shoots'],
-    skills: ['Camera operation', 'Lighting', 'Composition', 'Audio recording', 'Shot planning', 'On-set direction', 'Photo retouching', 'Production coordination'],
-    tools: ['Adobe Lightroom', 'Adobe Photoshop', 'DaVinci Resolve', 'Adobe Premiere Pro', 'Capture One', 'Frame.io'],
-    aiTools: ['Adobe Firefly', 'Photoshop Generative Fill', 'Topaz Photo AI', 'Runway'],
-    objectives: ['Product launch', 'Brand storytelling', 'Event coverage', 'Content library', 'Social content'],
+    categories: ['Brand films', 'Product videos', 'Events', 'Interviews', 'Social video shoots', 'Commercials', 'Documentaries', 'Music videos'],
+    skills: ['Camera operation', 'Lighting', 'Composition', 'Audio recording', 'Shot planning', 'On-set direction', 'Color grading', 'Production coordination'],
+    tools: ['DaVinci Resolve', 'Adobe Premiere Pro', 'Final Cut Pro', 'Frame.io', 'After Effects'],
+    aiTools: ['Runway', 'Topaz Video AI', 'Adobe Firefly', 'Kling'],
+    objectives: ['Brand storytelling', 'Product launch', 'Event coverage', 'Social content', 'Content library'],
     briefHint: 'Describe shoot location, dates, number of sessions, shot list, crew/equipment needs and final deliverables.',
-    scopeLabel: 'Shoot types',
+    scopeLabel: 'Video shoot types',
+    briefFields: [
+      { key: 'shoot_location', label: 'Shoot location and travel requirements', required: true },
+      { key: 'shoot_dates', label: 'Shoot dates and number of sessions', required: true },
+      { key: 'deliverables', label: 'Shot list and final deliverables', required: true },
+      { key: 'usage_rights', label: 'Intended usage and asset rights', required: false },
+    ],
+
+  },
+  {
+    slug: 'photographer', serviceSlug: 'photographer', formType: 'photographer',
+    id: 'ca148001-5800-4800-8800-000000000006', name: 'Photographer', pipeline: 'Photographers',
+    description: 'Brand, product, event, portrait and commercial photography.',
+    detailKey: 'equipment_and_travel', detailLabel: 'Equipment, production setup and travel',
+    detailHint: 'List camera, lenses, lighting and studio capabilities, your shooting locations and travel availability.',
+    categories: ['Product photography', 'Portraits', 'Events', 'Food photography', 'Real estate', 'Fashion photography', 'Editorial', 'Architecture'],
+    skills: ['Camera operation', 'Studio lighting', 'Natural lighting', 'Composition', 'Photo retouching', 'Color correction', 'On-set direction', 'Location scouting'],
+    tools: ['Adobe Lightroom', 'Adobe Photoshop', 'Capture One'],
+    aiTools: ['Adobe Firefly', 'Photoshop Generative Fill', 'Topaz Photo AI', 'Midjourney'],
+    objectives: ['Product launch', 'Brand visuals', 'Event coverage', 'Content library', 'Editorial'],
+    briefHint: 'Describe shoot location, dates, number of sessions, shot list, equipment/studio needs and final deliverables.',
+    scopeLabel: 'Photography types',
     briefFields: [
       { key: 'shoot_location', label: 'Shoot location and travel requirements', required: true },
       { key: 'shoot_dates', label: 'Shoot dates and number of sessions', required: true },
@@ -111,7 +132,11 @@ export type ContentServiceSlug = ContentRole['serviceSlug'];
 
 export const TALENT_CATEGORY_OPTIONS = [
   { value: 'creative', label: 'Designer / Editor', slugs: ['designer', 'video-editor', 'designer-editor'] },
-  ...CONTENT_ROLES.map((r) => ({ value: r.formType, label: r.name, slugs: [r.slug] })),
+  ...CONTENT_ROLES.map((r) => ({
+    value: r.formType,
+    label: r.name,
+    slugs: r.slug === 'videographer' ? ['videographer', 'videographer-photographer'] : [r.slug],
+  })),
   { value: 'ads_specialist', label: 'Ads Specialist', slugs: ['ads-specialist'] },
   { value: 'accountant', label: 'Accountant', slugs: ['accountant'] },
   { value: 'sales', label: 'Sales', slugs: ['sales'] },
@@ -119,6 +144,15 @@ export const TALENT_CATEGORY_OPTIONS = [
 
 export const PORTFOLIO_FORM_TYPES: readonly string[] = ['creative', 'ads_specialist', ...CONTENT_ROLES.map((r) => r.formType)];
 export const MIN_PORTFOLIO_ITEMS: Record<string, number> = {
-  designer: 10, 'video-editor': 10,
-  ...Object.fromEntries(CONTENT_ROLES.map((r) => [r.slug, 3])),
+  designer: 10,
+  'video-editor': 10,
+  videographer: 10,
+  photographer: 10,
+  'videographer-photographer': 10,
+  ...Object.fromEntries(
+    CONTENT_ROLES.map((r) => [
+      r.slug,
+      r.slug === 'videographer' || r.slug === 'photographer' ? 10 : 3,
+    ]),
+  ),
 };
