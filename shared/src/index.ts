@@ -1,6 +1,6 @@
 export * from './taskTimerBridge';
 import type { CompanionTaskTimer, CompanionTimerSnapshot, CompanionTimerCommand, CompanionTimerReply } from './taskTimerBridge';
-import { CONTENT_ROLES } from './contentRoles';
+import { SPECIALIST_ROLES } from './contentRoles';
 import type { SquadBotHomeApp } from '@squad-bots/core/types';
 // ============================================================
 // SquadHub Shared Types
@@ -2517,11 +2517,12 @@ export interface PartnerClientAssignment {
 // ---- Clients Mini-App ----
 export type SubscriptionPlan = 'Starter' | 'Basic' | 'Plus' | 'Pro' | 'Personal';
 export type SubscriptionTier = 'Junior' | 'Pro' | 'Top Talents';
-export type SubscriptionSlug = 'designer' | 'video_editor' | 'designer_video_editor' | 'accountant' | 'ads_specialist' | 'creative_director' | 'copy_content_writer' | 'social_media_manager' | 'videographer_photographer' | 'ai_video_image_creator';
+export type SubscriptionSlug = typeof SPECIALIST_ROLES[number]['serviceSlug'] | 'designer' | 'video_editor' | 'designer_video_editor' | 'accountant' | 'ads_specialist' | 'videographer_photographer';
 
 /** Card `service_type` label → subscription slug. Single source for every
  *  server route and the admin card editor. */
 export const SERVICE_TYPE_TO_SLUG: Record<string, SubscriptionSlug> = {
+  ...Object.fromEntries(SPECIALIST_ROLES.map((r) => [r.pipeline, r.serviceSlug])),
   Designers: 'designer',
   Editors: 'video_editor',
   'Designer plus Editor': 'designer_video_editor',
@@ -2532,6 +2533,7 @@ export const SERVICE_TYPE_TO_SLUG: Record<string, SubscriptionSlug> = {
   'Social Media Managers': 'social_media_manager',
   'Videographers and Photographers': 'videographer_photographer',
   'AI Video and Image Creators': 'ai_video_image_creator',
+
 };
 
 /** Subscription slug → card `service_type` label (inverse of the above). */
@@ -2969,7 +2971,7 @@ export type BrandSource = 'shared_form' | 'landing_page_form';
 
 // Service-type slug stored on the brand. Lets the brief form rehydrate
 // Step 1 roles on autofill without a label<->slug reverse map.
-export type BrandServiceType = 'designer' | 'video_editor' | 'designer_video_editor' | 'accountant' | 'ads_specialist' | 'creative_director' | 'copy_content_writer' | 'social_media_manager' | 'videographer_photographer' | 'ai_video_image_creator';
+export type BrandServiceType = typeof SPECIALIST_ROLES[number]['serviceSlug'] | 'designer' | 'video_editor' | 'designer_video_editor' | 'accountant' | 'ads_specialist' | 'videographer_photographer';
 
 export interface ClientSubmissionBrand {
   id: string;
@@ -3165,7 +3167,7 @@ export const ADDITIONAL_REQUIREMENT_CATALOG: Record<string, AdditionalRequiremen
   designer_video_editor: AR_DESIGNER,
   ads_specialist: AR_ADS_SPECIALIST,
   // Content Squad roles: catalogs come straight from the synced role file.
-  ...Object.fromEntries(CONTENT_ROLES.map((r) => [r.serviceSlug, [
+  ...Object.fromEntries(SPECIALIST_ROLES.map((r) => [r.serviceSlug, [
     { key: 'categories', label: 'Categories', options: [...r.categories] },
     { key: 'skills', label: 'Skill sets', options: [...r.skills] },
     { key: 'tools', label: 'Tools', options: [...r.tools] },

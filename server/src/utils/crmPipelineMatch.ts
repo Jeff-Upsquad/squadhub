@@ -1,3 +1,5 @@
+import { SPECIALIST_ROLES } from '@squadhub/shared';
+
 /**
  * Match a card's service line to a Squad CRM pipeline.
  *
@@ -76,6 +78,11 @@ function sameService(a: string, b: string): boolean {
  * a new specialist brief to a different role's commercial owner. */
 export function contentServiceKey(label: string | null | undefined): string | null {
   const s = (label ?? '').toLowerCase();
+  const normalized = s.replace(/[_/–—-]+/g, ' ').replace(/\s+/g, ' ').trim();
+  for (const role of SPECIALIST_ROLES) {
+    const names = [role.pipeline, role.name, role.serviceSlug, role.slug].map((name) => name.toLowerCase().replace(/[_/–—-]+/g, ' ').replace(/\s+/g, ' ').trim());
+    if (names.some((name) => normalized === name || normalized.startsWith(name + ' ') || normalized.endsWith(' ' + name))) return role.serviceSlug;
+  }
   if (/\bai\b/.test(s) && /video|image|creator/.test(s)) return 'ai_creator';
   if (/creative/.test(s) && /director/.test(s)) return 'creative_director';
   if (/writer|copywriting/.test(s)) return 'writer';

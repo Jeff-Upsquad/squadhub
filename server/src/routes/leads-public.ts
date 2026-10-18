@@ -1,6 +1,6 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
-import { CONTENT_ROLES, SERVICE_TYPE_TO_SLUG, SLUG_TO_SERVICE_TYPE, isValidStoredPhone, normalizeStoredPhone, sanitizeAdditionalRequirements } from '@squadhub/shared';
+import { SPECIALIST_ROLES, SERVICE_TYPE_TO_SLUG, SLUG_TO_SERVICE_TYPE, isValidStoredPhone, normalizeStoredPhone, sanitizeAdditionalRequirements } from '@squadhub/shared';
 import { supabaseAdmin } from '../supabase';
 import { ensureHubContact } from '../utils/leadLookup';
 import { resolveCrmCardAssigneesFromSubmission } from '../utils/cardCrmAssignees';
@@ -312,7 +312,7 @@ const submissionSchema = z.object({
   // two cards. The "Designer + Editor" combo box is its own distinct slug
   // (`designer_video_editor`) meaning one hybrid person, not two specialists.
   service_types: z
-    .array(z.enum(['designer', 'video_editor', 'designer_video_editor', 'accountant', 'ads_specialist', 'creative_director', 'copy_content_writer', 'social_media_manager', 'videographer_photographer', 'ai_video_image_creator']))
+    .array(z.enum(['designer', 'video_editor', 'designer_video_editor', 'accountant', 'ads_specialist', 'videographer_photographer', ...SPECIALIST_ROLES.map((r) => r.serviceSlug)]))
     .min(1)
     .max(10)
     .refine((arr) => new Set(arr).size === arr.length, {
@@ -347,7 +347,7 @@ const submissionSchema = z.object({
   // forward; legacy rows retain their existing value.
   role_requirements: z
     .record(
-      z.enum(['designer', 'video_editor', 'designer_video_editor', 'accountant', 'ads_specialist', 'creative_director', 'copy_content_writer', 'social_media_manager', 'videographer_photographer', 'ai_video_image_creator']),
+      z.enum(['designer', 'video_editor', 'designer_video_editor', 'accountant', 'ads_specialist', 'videographer_photographer', ...SPECIALIST_ROLES.map((r) => r.serviceSlug)]),
       z.object({
         note: z.string().trim().max(2000).optional(),
         hours: z.string().trim().max(200).optional(),
@@ -399,7 +399,7 @@ const submissionSchema = z.object({
   card_type: z.enum(['subscription', 'assignment']).optional().default('subscription'),
 }).superRefine((val, ctx) => {
     for (const service of val.service_types) {
-      const role = CONTENT_ROLES.find((r) => r.serviceSlug === service);
+      const role = SPECIALIST_ROLES.find((r) => r.serviceSlug === service);
       if (!role) continue;
       const requirement = val.role_requirements?.[service];
       for (const field of role.briefFields) {
