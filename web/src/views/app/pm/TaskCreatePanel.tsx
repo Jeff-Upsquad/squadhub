@@ -336,6 +336,22 @@ export default function TaskCreatePanel({
     return null;
   }, [pickable, selectedListId, spaceData]);
 
+  const containerDefaultTaskTypeId = useMemo(() => {
+    if (pickable && spaceData && selectedListId) {
+      const direct = (spaceData.lists || []).find((l) => l.id === selectedListId);
+      if (direct?.default_task_type_id) return direct.default_task_type_id;
+      for (const f of spaceData.folders || []) {
+        const inFolder = (f.lists || []).find((l) => l.id === selectedListId);
+        if (inFolder) {
+          if (inFolder.default_task_type_id) return inFolder.default_task_type_id;
+          if (f.default_task_type_id) return f.default_task_type_id;
+        }
+      }
+      if (spaceData.default_task_type_id) return spaceData.default_task_type_id;
+    }
+    return null;
+  }, [pickable, selectedListId, spaceData]);
+
   // Derived effective values — switch between prop-fed (fixed mode) and state-fed (picker mode)
   const effectiveListId = pickable ? selectedListId : (listId ?? null);
   const needsListForAssignee = pickable && !effectiveListId;
@@ -535,17 +551,23 @@ export default function TaskCreatePanel({
     </button>
   );
 
-  // Default task type, once the list of types is available.
+  // Default task type, once the list of types is available or when container default changes.
   useEffect(() => {
     if (!taskTypes || !taskTypes.length) return;
     if (isDesignTask && designType) {
       if (draft.task_type_id !== designType.id) setDraft((d) => ({ ...d, task_type_id: designType.id }));
       return;
     }
+    if (containerDefaultTaskTypeId && taskTypes.some((t) => t.id === containerDefaultTaskTypeId)) {
+      if (draft.task_type_id !== containerDefaultTaskTypeId) {
+        setDraft((d) => ({ ...d, task_type_id: containerDefaultTaskTypeId }));
+      }
+      return;
+    }
     if (draft.task_type_id) return;
     const def = taskTypes.find((t) => t.is_default) || taskTypes[0];
     if (def) setDraft((d) => ({ ...d, task_type_id: def.id }));
-  }, [taskTypes, draft.task_type_id, isDesignTask, designType]);
+  }, [taskTypes, containerDefaultTaskTypeId, isDesignTask, designType]);
 
   // Slide-in mount animation, matches TaskDetailPanel
   useEffect(() => {

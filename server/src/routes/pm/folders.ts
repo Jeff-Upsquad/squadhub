@@ -46,6 +46,7 @@ const createSchema = z.object({
   folder_type: z.enum(['folder', 'client']).optional(),
   status_group_id: z.string().uuid().optional(),
   task_type_group_id: z.string().uuid().optional(),
+  default_task_type_id: z.string().uuid().nullable().optional(),
 });
 
 // GET /pm/folders?space_id=xxx
@@ -372,6 +373,10 @@ router.post('/folders', requirePermission('can_create_folders'), async (req: Req
       position: count || 0,
     };
 
+    if (body.default_task_type_id !== undefined) {
+      insertPayload.default_task_type_id = body.default_task_type_id || null;
+    }
+
     if (profile) {
       insertPayload.profile_id = profile.id;
       insertPayload.profile_version = profile.version;
@@ -579,6 +584,7 @@ router.put('/folders/:id', async (req: Request, res: Response) => {
     if (req.body.space_id !== undefined) updates.space_id = req.body.space_id;
     if (typeof req.body.group_tasks === 'boolean') updates.group_tasks = req.body.group_tasks;
     if (Array.isArray(req.body.auto_assignee_ids)) updates.auto_assignee_ids = req.body.auto_assignee_ids;
+    if (req.body.default_task_type_id !== undefined) updates.default_task_type_id = req.body.default_task_type_id || null;
 
     // If moving to a new space, validate destination access + lock, then
     // cascade the space_id change to this folder's child lists so the

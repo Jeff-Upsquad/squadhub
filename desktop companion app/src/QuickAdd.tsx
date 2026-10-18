@@ -32,11 +32,11 @@ import { PanelIcon } from './PanelIcon';
 
 // Cached across summons of the (persistent) quickadd window so we only resolve
 // the personal list / list tree once per app run.
-let cachedPersonal: { id: string; name: string; spaceId: string } | null = null;
+let cachedPersonal: { id: string; name: string; spaceId: string; defaultTaskTypeId?: string | null } | null = null;
 
 type Phase = 'idle' | 'saving' | 'done' | 'error';
 type MenuKey = 'list' | 'assignee' | 'priority' | 'date' | 'rangedate' | 'labels' | 'logged' | 'estimate' | 'type' | 'status' | null;
-type SelectedList = { id: string; name: string; spaceId?: string };
+type SelectedList = { id: string; name: string; spaceId?: string; defaultTaskTypeId?: string | null };
 
 // A file the user has dropped onto the panel, queued to upload once the task
 // itself is created. `previewUrl` is an object URL for images (revoked on
@@ -488,7 +488,7 @@ function MiniCalendar({ value, onPick }: { value: string | null; onPick: (s: str
 }
 
 // ── pickable-list tree (cached briefly so new lists show up) ──────────────────
-type PickableList = { id: string; name: string; spaceName: string; folderName: string | null; spaceId: string };
+type PickableList = { id: string; name: string; spaceName: string; folderName: string | null; spaceId: string; defaultTaskTypeId?: string | null };
 let pickCache: PickableList[] | null = null;
 let pickCacheAt = 0;
 const PICK_CACHE_TTL_MS = 30_000;
@@ -509,11 +509,23 @@ async function fetchPickableLists(): Promise<PickableList[]> {
   const out: PickableList[] = [];
   for (const full of details) {
     if (!full) continue;
-    const add = (l: ListLite, folderName: string | null) => {
-      if (canPick(l)) out.push({ id: l.id, name: l.name, spaceName: full.name, folderName, spaceId: full.id });
+    const add = (l: ListLite, folderName: string | null, folderDefaultType?: string | null) => {
+      if (canPick(l)) {
+        const effectiveType = l.default_task_type_id || folderDefaultType || full.default_task_type_id || null;
+        out.push({
+          id: l.id,
+          name: l.name,
+          spaceName: full.name,
+          folderName,
+          spaceId: full.id,
+          defaultTaskTypeId: effectiveType,
+        });
+      }
     };
-    for (const l of full.lists || []) add(l, null);
-    for (const f of full.folders || []) for (const l of f.lists || []) add(l, f.name);
+    for (const l of full.lists || []) add(l, null, null);
+    for (const f of full.folders || []) {
+      for (const l of f.lists || []) add(l, f.name, f.default_task_type_id);
+    }
   }
   return out;
 }
@@ -695,7 +707,12 @@ export default function QuickAdd() {
     try {
       if (!cachedPersonal) {
         const p = await fetchPersonalList();
-        cachedPersonal = { id: p.list.id, name: 'My Tasks', spaceId: p.space.id };
+        cachedPersonal = {
+          id: p.list.id,
+          name: 'My Tasks',
+          spaceId: p.space.id,
+          defaultTaskTypeId: (p.list as any).default_task_type_id || (p.space as any).default_task_type_id || null,
+        };
       }
       defaultListRef.current = cachedPersonal;
       setSelectedList((prev) => prev ?? cachedPersonal);
@@ -790,7 +807,7 @@ export default function QuickAdd() {
     };
   }, [selectedList?.id]);
 
-  // Load task types once per app run; type starts empty (user picks it).
+  // Load task types once per app run.
   useEffect(() => {
     let alive = true;
     fetchTaskTypes()
@@ -806,6 +823,37 @@ export default function QuickAdd() {
       alive = false;
     };
   }, []);
+
+  // Auto-fill task type when a location is selected (or when task types load).
+  // Priority: list default -> folder default -> space default -> global default task type.
+  useEffect(() => {
+    if (!selectedList || !taskTypes || taskTypes.length === 0) return;
+    let alive = true;
+    (async () => {
+      let targetTypeId: string | null | undefined = selectedList.defaultTaskTypeId;
+      if (targetTypeId === undefined) {
+        const lists = await loadPickableLists();
+        const found = lists.find((l) => l.id === selectedList.id);
+        targetTypeId = found?.defaultTaskTypeId;
+      }
+      if (!targetTypeId) {
+        const sid = selectedList.spaceId || (cachedPersonal && selectedList.id === cachedPersonal.id ? cachedPersonal.spaceId : null);
+        if (sid) {
+          const sp = await fetchSpace(sid).catch(() => null);
+          targetTypeId = sp?.default_task_type_id || null;
+        }
+      }
+      if (!alive) return;
+      const validTypeId = targetTypeId && taskTypes.some((t) => t.id === targetTypeId) ? targetTypeId : null;
+      const fallbackTypeId = validTypeId || taskTypes.find((t) => t.is_default)?.id || taskTypes[0]?.id || null;
+      if (fallbackTypeId) {
+        setTaskTypeId(fallbackTypeId);
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [selectedList?.id, taskTypes]);
 
   // Resolve the selected list's effective status group + space statuses.
   useEffect(() => {
@@ -1097,6 +1145,9 @@ export default function QuickAdd() {
     });
   const pickList = (l: SelectedList) => {
     setSelectedList(l);
+    if (l.defaultTaskTypeId && taskTypes?.some((t) => t.id === l.defaultTaskTypeId)) {
+      setTaskTypeId(l.defaultTaskTypeId);
+    }
     setOpenMenu(null);
   };
   const toggleAssignee = (id: string) =>
@@ -1229,10 +1280,23 @@ export default function QuickAdd() {
   // The row scrolls horizontally, so every recent location is reachable.
   const personalId = cachedPersonal?.id;
   const chips: SelectedList[] = [];
-  if (defaultListRef.current) chips.push({ id: defaultListRef.current.id, name: 'My Tasks' });
+  if (defaultListRef.current) {
+    chips.push({
+      id: defaultListRef.current.id,
+      name: 'My Tasks',
+      spaceId: defaultListRef.current.spaceId,
+      defaultTaskTypeId: defaultListRef.current.defaultTaskTypeId,
+    });
+  }
   for (const r of recents) {
     if (r.id === personalId) continue;
-    chips.push(r);
+    const match = pickCache?.find((p) => p.id === r.id);
+    chips.push({
+      id: r.id,
+      name: r.name,
+      spaceId: match?.spaceId,
+      defaultTaskTypeId: match?.defaultTaskTypeId,
+    });
   }
   if (selectedList && !chips.some((c) => c.id === selectedList.id)) {
     chips.splice(1, 0, selectedList);
@@ -2294,7 +2358,7 @@ function ListPicker({ onPick }: { onPick: (l: SelectedList) => void }) {
         {!err && !lists && <div className="qa-menu-empty">Loading lists…</div>}
         {!err && lists && matches.length === 0 && <div className="qa-menu-empty">No lists found</div>}
         {matches.map((l) => (
-          <button key={l.id} type="button" className="qa-opt" onClick={() => onPick({ id: l.id, name: l.name, spaceId: l.spaceId })}>
+          <button key={l.id} type="button" className="qa-opt" onClick={() => onPick({ id: l.id, name: l.name, spaceId: l.spaceId, defaultTaskTypeId: l.defaultTaskTypeId })}>
             <span className="qa-opt-main">{l.name}</span>
             <span className="qa-opt-sub">{l.folderName ? `${l.spaceName} / ${l.folderName}` : l.spaceName}</span>
           </button>

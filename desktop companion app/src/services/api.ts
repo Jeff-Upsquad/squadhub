@@ -70,12 +70,14 @@ export interface ListLite {
   name: string;
   is_locked?: boolean;
   my_access_level?: AccessLevel;
+  default_task_type_id?: string | null;
 }
 
 export interface FolderLite {
   id: string;
   name: string;
   lists?: ListLite[];
+  default_task_type_id?: string | null;
 }
 
 export interface SpaceStatus {
@@ -94,6 +96,7 @@ export interface SpaceLite {
   color?: string | null;
   lists?: ListLite[];
   folders?: FolderLite[];
+  default_task_type_id?: string | null;
   /** Present on GET /pm/spaces/:id (space_statuses join). */
   space_statuses?: SpaceStatus[];
 }
@@ -104,8 +107,8 @@ export interface WorkspaceLite {
 }
 
 export interface PersonalListResponse {
-  space: { id: string; name: string };
-  list: { id: string; name: string };
+  space: { id: string; name: string; default_task_type_id?: string | null };
+  list: { id: string; name: string; default_task_type_id?: string | null };
 }
 
 /** GET /pm/personal — get-or-create the user's private personal space + list. */

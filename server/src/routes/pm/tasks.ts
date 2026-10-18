@@ -2422,19 +2422,26 @@ router.post('/tasks', async (req: Request, res: Response) => {
     let listAutoIds: string[] = [];
     let folderAutoIds: string[] = [];
     let spaceAutoIds: string[] = [];
+    let listDefaultTypeId: string | null = null;
+    let folderDefaultTypeId: string | null = null;
+    let spaceDefaultTypeId: string | null = null;
+
     const { data: parentList } = await supabaseAdmin
       .from('lists')
-      .select('folder_id, space_id, auto_assignee_ids')
+      .select('folder_id, space_id, auto_assignee_ids, default_task_type_id')
       .eq('id', body.list_id)
       .single();
     listAutoIds = (parentList?.auto_assignee_ids as string[] | null) || [];
+    listDefaultTypeId = (parentList as any)?.default_task_type_id || null;
+
     if (parentList?.folder_id) {
       const { data: parentFolder } = await supabaseAdmin
         .from('folders')
-        .select('client_id, auto_assignee_ids')
+        .select('client_id, auto_assignee_ids, default_task_type_id')
         .eq('id', parentList.folder_id)
         .single();
       folderAutoIds = (parentFolder?.auto_assignee_ids as string[] | null) || [];
+      folderDefaultTypeId = (parentFolder as any)?.default_task_type_id || null;
       if (parentFolder?.client_id) {
         const { data: n, error: nErr } = await supabaseAdmin.rpc(
           'increment_client_task_counter',
@@ -2450,10 +2457,11 @@ router.post('/tasks', async (req: Request, res: Response) => {
     if (parentList?.space_id) {
       const { data: parentSpace } = await supabaseAdmin
         .from('spaces')
-        .select('auto_assignee_ids')
+        .select('auto_assignee_ids, default_task_type_id')
         .eq('id', parentList.space_id)
         .single();
       spaceAutoIds = (parentSpace?.auto_assignee_ids as string[] | null) || [];
+      spaceDefaultTypeId = (parentSpace as any)?.default_task_type_id || null;
     }
     // Nearest-wins down the tree, then merge with the creator's manual picks.
     const inheritedAutoIds = listAutoIds.length ? listAutoIds
@@ -2463,8 +2471,10 @@ router.post('/tasks', async (req: Request, res: Response) => {
       new Set([...(body.assignee_ids || []), ...inheritedAutoIds]),
     );
 
-    // Resolve task_type_id + key: use supplied value or fall back to the default type
-    let resolvedTypeId: string | null = body.task_type_id ?? null;
+    const containerDefaultTypeId = listDefaultTypeId || folderDefaultTypeId || spaceDefaultTypeId || null;
+
+    // Resolve task_type_id + key: use supplied value, container default (list -> folder -> space), or fall back to global default type
+    let resolvedTypeId: string | null = body.task_type_id ?? containerDefaultTypeId ?? null;
     let resolvedTypeKey: string | null = null;
     if (resolvedTypeId) {
       const { data: t } = await supabaseAdmin
@@ -2472,8 +2482,13 @@ router.post('/tasks', async (req: Request, res: Response) => {
         .select('id, key')
         .eq('id', resolvedTypeId)
         .maybeSingle();
-      resolvedTypeKey = (t as any)?.key ?? null;
-    } else {
+      if (t) {
+        resolvedTypeKey = (t as any)?.key ?? null;
+      } else {
+        resolvedTypeId = null;
+      }
+    }
+    if (!resolvedTypeId) {
       const { data: defaultType } = await supabaseAdmin
         .from('task_types')
         .select('id, key')
