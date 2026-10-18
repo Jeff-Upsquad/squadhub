@@ -4076,6 +4076,16 @@ button.tbn-title:hover { text-decoration: underline; text-underline-offset: 2px;
 .lv-card .lv-cell--assignee { justify-content: center !important; }
 .lv-card .lv-cell--date { justify-content: center !important; }
 
+/* Two-line rows (title + location breadcrumb): pin the checkbox, field
+   cells and ⋯ button to the title line so every element shares one
+   alignment axis; the breadcrumb hangs below the title instead of pulling
+   the chips to the row's vertical center (which left the title cluster
+   and the right chips on visibly different lines). */
+.lv-row--loc { align-items: start; }
+.lv-row--loc .lv-glyph { margin-top: 1px; }      /* 16px glyph vs ~18px title line */
+.lv-row--loc .lv-cell { height: auto; }          /* undo the card cell's 100% stretch */
+.lv-row--loc .lv-cell--more { margin-top: -3px; } /* 24px button vs ~18px title line */
+
 /* Comment columns — count badge + latest-comment snippet (ellipsis). */
 .lv-comment-count {
   display: inline-flex;
