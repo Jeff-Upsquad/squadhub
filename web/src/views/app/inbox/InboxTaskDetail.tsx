@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useTask, useTaskComments, useAddComment, useUpdateTask } from '../../../hooks/useTasks';
+import { notifMatchesTask } from '../../../hooks/useClearTaskNotifications';
 import api from '../../../services/api';
 import ThreadComposer from './ThreadComposer';
 import { linkifyText } from '../../../lib/linkify';
@@ -35,12 +36,10 @@ function formatTime(iso: string) {
 
 export default function InboxTaskDetail({
   taskId,
-  notificationId,
   onOpen,
   onStay,
 }: {
   taskId: string;
-  notificationId?: string;
   onOpen: () => void;
   onStay?: () => void;
 }) {
@@ -55,17 +54,21 @@ export default function InboxTaskDetail({
 
   // Commenting on a task notification is a deliberate action that counts as
   // reading it, so its unread state should clear instead of leaving the bell
-  // badge nagging. Tasks have no read-conversation endpoint (unlike DMs), so
-  // mark just this notification read. Mere preview must NOT mark read — the
+  // badge nagging. Engaging with the task reads the whole conversation — one
+  // comment clears every unread notification for this task, matching how
+  // ChatPanel clears a conversation. Mere preview must NOT mark read — the
   // inbox auto-selects the first unread item, so that would empty the list on
   // open; only this explicit comment triggers it.
-  const markNotificationRead = () => {
-    if (!notificationId) return;
-    queryClient.setQueryData<Notification[]>(['notifications', 'list'], (old) =>
-      (old || []).map((n) => (n.id === notificationId ? { ...n, is_read: true } : n)),
-    );
+  const markTaskNotificationsRead = () => {
     api
-      .patch(`/notifications/${notificationId}/read`)
+      .post('/notifications/read-conversation', { task_id: taskId })
+      .then(() => {
+        queryClient.setQueryData<Notification[]>(['notifications', 'list'], (old) =>
+          (old || []).map((n) =>
+            !n.is_read && notifMatchesTask(n, taskId) ? { ...n, is_read: true } : n,
+          ),
+        );
+      })
       .catch(() => {
         /* non-critical — the inbox can still be cleared manually */
       })
@@ -77,12 +80,13 @@ export default function InboxTaskDetail({
 
   const handleSend = () => {
     if (!text.trim()) return;
-    // Pin the inbox selection so commenting (which marks the notification
-    // read) keeps this task on screen instead of advancing to the next one.
+    // Pin the inbox selection so commenting (which marks the task's
+    // notifications read) keeps this task on screen instead of advancing to
+    // the next one.
     onStay?.();
     addComment.mutate(
       { content: text.trim(), mentions },
-      { onSuccess: () => { setText(''); setMentions([]); markNotificationRead(); } },
+      { onSuccess: () => { setText(''); setMentions([]); markTaskNotificationsRead(); } },
     );
   };
 

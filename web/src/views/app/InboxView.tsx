@@ -693,7 +693,7 @@ function renderDetail(n: Notification, onOpen: (jump?: ChatJump) => void, onStay
     );
   }
   if (n.reference_type === 'task' && n.metadata?.task_id) {
-    return <InboxTaskDetail taskId={n.metadata.task_id as string} notificationId={n.id} onOpen={onOpen} onStay={onStay} />;
+    return <InboxTaskDetail taskId={n.metadata.task_id as string} onOpen={onOpen} onStay={onStay} />;
   }
   if (n.reference_type === 'message' && (n.metadata?.message_id || n.reference_id)) {
     return (

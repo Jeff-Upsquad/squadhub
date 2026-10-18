@@ -94,21 +94,25 @@ router.patch('/:id/read', async (req: Request, res: Response) => {
 
 // POST /notifications/read-conversation
 // Clears a conversation's unread notifications once the user opens it — viewing
-// the messages there counts as reading them. Pass dm_conversation_id for a DM or
-// channel_id for a channel; matches on the notification's metadata, so it covers
-// dm_received, message_mention, reaction_added, etc. for that conversation
-// (including thread replies, which carry the same conversation id).
+// the messages there counts as reading them. Pass dm_conversation_id for a DM,
+// channel_id for a channel, or task_id for a task whose detail panel is open;
+// matches on the notification's metadata, so it covers dm_received,
+// message_mention, reaction_added, etc. for that conversation (including thread
+// replies, which carry the same conversation id) and every task_* notification
+// for that task (assigned, updated, completed, commented — they all carry
+// metadata.task_id).
 router.post('/read-conversation', async (req: Request, res: Response) => {
   try {
     const dmId = (req.body?.dm_conversation_id as string) || null;
     const channelId = (req.body?.channel_id as string) || null;
-    if (!dmId && !channelId) {
-      res.status(400).json({ success: false, error: 'dm_conversation_id or channel_id required' });
+    const taskId = (req.body?.task_id as string) || null;
+    if (!dmId && !channelId && !taskId) {
+      res.status(400).json({ success: false, error: 'dm_conversation_id, channel_id or task_id required' });
       return;
     }
 
-    const metaKey = dmId ? 'dm_conversation_id' : 'channel_id';
-    const metaVal = (dmId || channelId) as string;
+    const metaKey = dmId ? 'dm_conversation_id' : channelId ? 'channel_id' : 'task_id';
+    const metaVal = (dmId || channelId || taskId) as string;
 
     const { data, error } = await supabaseAdmin
       .from('notifications')
