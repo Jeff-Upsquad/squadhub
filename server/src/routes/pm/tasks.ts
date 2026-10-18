@@ -3409,10 +3409,25 @@ router.delete('/tasks/:id', async (req: Request, res: Response) => {
     }
 
     if ((doomed as any)?.parent_task_id) {
-      await logTaskActivity((doomed as any).parent_task_id, req.userId!, [{
+      await logTaskActivity((doomed as any)?.parent_task_id, req.userId!, [{
         event_type: 'subtask_removed',
-        old_value: { id, title: (doomed as any).title ?? null },
+        old_value: { id, title: (doomed as any)?.title ?? null },
       }]);
+    }
+
+    // Remove any notifications this task generated (task_* triggers stamp
+    // reference_type='task', reference_id=id). Otherwise participants keep a
+    // dead inbox entry and unread badge pointing at a task that no longer
+    // exists. Best-effort; the inbox/unread polls pick up the removal on
+    // their next tick.
+    try {
+      await supabaseAdmin
+        .from('notifications')
+        .delete()
+        .eq('reference_type', 'task')
+        .eq('reference_id', id);
+    } catch (e) {
+      console.error('Notification cleanup failed for deleted task', id, e);
     }
 
     res.json({ success: true, message: 'Task deleted' });

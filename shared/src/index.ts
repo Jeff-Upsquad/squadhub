@@ -1775,6 +1775,7 @@ export type NotificationType =
   | 'dm_received'
   | 'task_assigned'
   | 'task_updated'
+  | 'task_completed'
   | 'task_commented'
   | 'task_due_soon'
   | 'mention'

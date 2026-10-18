@@ -5,6 +5,7 @@ export const BROWSER_NOTIF_STORAGE_KEY = 'squadhub-browser-notifications-enabled
 const TYPE_LABELS: Record<string, string> = {
   task_assigned: 'Task Assigned',
   task_updated: 'Task Updated',
+  task_completed: 'Task Completed',
   task_commented: 'New Comment',
   task_due_soon: 'Due Soon',
   mention: 'Mention',

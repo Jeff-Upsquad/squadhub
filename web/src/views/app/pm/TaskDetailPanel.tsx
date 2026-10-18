@@ -7,6 +7,7 @@ import { sourceFromComment, useConvertToTaskStore } from '../../../stores/conver
 import { useDeepLinkStore } from '../../../lib/deepLinks';
 import { isPlaceholderStatus } from '../../../lib/stageWorkflow';
 import { useTask, useUpdateTask, useDeleteTask, useTaskComments, useAddComment, useCreateTask, useTaskLists, useAddTaskToLists, useRemoveTaskFromList, useTaskActivity, useDispatchBuild } from '../../../hooks/useTasks';
+import { useClearTaskNotifications } from '../../../hooks/useClearTaskNotifications';
 import { useFocusTask } from '../../../hooks/useDayPlanner';
 import { isTaskFocused } from '../../../lib/taskGrouping';
 import { useWorkspaceStore } from '../../../stores/workspaceStore';
@@ -70,6 +71,11 @@ import { formatDuration } from '../../../lib/timeDuration';
 import AddEntrySplitButton from './AddEntrySplitButton';
 import TaskDetailMoreMenu from './TaskDetailMoreMenu';
 import TaskRelationshipsModal from '../../../components/pm/TaskRelationshipsModal';
+
+// Build-agent ⚡ "Build now" button — PAUSED (user instruction, 2026-10-18).
+// Flip to true to re-show it in both panel headers. The server-side agent
+// API and SOP stay in place but dormant while this is false.
+const BUILD_AGENT_UI_ENABLED = false;
 
 function formatTracked(seconds: number | null | undefined): string {
   if (!seconds) return '';
@@ -405,6 +411,10 @@ export default function TaskDetailPanel({
   const focusTask = useFocusTask();
   // effectiveTaskId — primary uses the global activeTaskId; peek uses the override.
   const effectiveTaskId = taskIdOverride ?? activeTaskId;
+  // Opening a task's panel counts as reading its notifications (the task
+  // equivalent of ChatPanel clearing a conversation it has on screen). The
+  // hover peek is a preview, not a deliberate open, so it stays excluded.
+  useClearTaskNotifications(isPeek ? null : effectiveTaskId);
   // Close routes: peek closes peekTaskId, primary closes activeTaskId. Opening
   // a subtask from inside a peek opens it into the peek slot (replacing the
   // current peek task) — that matches the user's mental model of "this side
@@ -1405,7 +1415,7 @@ export default function TaskDetailPanel({
                 onToggle={(focused) => focusTask.mutate({ id: task.id, focused })}
               />
               <GoalTaskFlag taskId={task.id} size={19} className="td-m-hero-icon" />
-              {canEdit && !isDone && (
+              {BUILD_AGENT_UI_ENABLED && canEdit && !isDone && (
                 <button
                   type="button"
                   className="td-m-hero-icon"
@@ -1626,7 +1636,7 @@ export default function TaskDetailPanel({
                 onToggle={(focused) => focusTask.mutate({ id: task.id, focused })}
               />
               <GoalTaskFlag taskId={task.id} size={16} className="td-nav-btn" />
-              {canEdit && !isDone && (
+              {BUILD_AGENT_UI_ENABLED && canEdit && !isDone && (
                 <button
                   type="button"
                   onClick={handleDispatchBuild}
