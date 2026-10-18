@@ -383,8 +383,10 @@ contentType === 'list' && (
   return (
     // min-h-0 is load-bearing: without it this flex child's automatic minimum
     // is its content height, so the .lv-canvas scroll area below gets clipped.
-    <div className={`relative flex min-h-0 flex-1 flex-col${embedded ? ' lv-embedded' : ''}${useOverviewHeader ? ' tov-list-page' : ''}`}
->
+    // tov-list-scroll: with the overview header, the page itself is the one
+    // scroll container — header and rows scroll together (Space/Folder
+    // overview parity) instead of the header staying pinned above the list.
+    <div className={`relative flex min-h-0 flex-1 flex-col${embedded ? ' lv-embedded' : ''}${useOverviewHeader ? ' tov-list-page tov-list-scroll' : ''}`}>
       {isMobile && !embedded && (
         <div className="mtk-phone-head">
           <h1>{listData?.name || 'List'}</h1>
@@ -569,8 +571,11 @@ contentType === 'list' && (
         />
       )}
 
-      {/* Content area + task detail panel */}
-      <div className="flex flex-1 overflow-hidden">
+      {/* Content area + task detail panel.
+          With the overview header the page scrolls as one, so this row must
+          not clip — the list grows to its natural height and the page-level
+          scroll carries it. Board/whiteboard keep their own contained scroll. */}
+      <div className={`flex flex-1${useOverviewHeader ? '' : ' overflow-hidden'}`}>
         {contentType === 'list' ? (
           <ListView
             listId={activeListId}

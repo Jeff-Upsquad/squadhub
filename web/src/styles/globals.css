@@ -3996,9 +3996,9 @@ button.tbn-title:hover { text-decoration: underline; text-underline-offset: 2px;
      legacy 5-col rule below by specificity; !important would block it. */
   grid-template-columns: 22px minmax(0,1fr) 84px 64px 100px 90px 24px;
   gap: 0 !important;
-  padding: 0 14px !important;
+  padding: 5px 14px !important;
   margin: 0 !important;
-  min-height: 32px;
+  min-height: 40px;
   border-top: 1px solid var(--sh-hair-3) !important;
 }
 .lv-card .lv-row:first-child { border-top: none; }
@@ -12365,6 +12365,9 @@ button.sw-pri:hover, button.sw-chip:hover { filter: brightness(0.95); border-col
   color: var(--sh-ink-4);
   text-decoration: none;
 }
+/* List rows pair the location under the title — a hair more separation so
+   the two lines don't read as one cramped block. */
+.lv-row .task-location { margin-top: 3px; }
 .hm-task-text { flex: 1; min-width: 0; overflow: hidden; }
 .bv-card > .task-location { margin-bottom: 8px; }
 .dp-block .task-location, .cal-tt-block .task-location { color: inherit; opacity: .65; }
