@@ -339,7 +339,7 @@ function ListItem({ list, isManager = false, myAccess, dnd }: { list: List; isMa
         <>
         <div className="fixed inset-0 z-40 bg-black/30" onClick={() => setShowSettings(false)} />
         <div className="sh-float fixed inset-y-0 right-0 left-auto z-50 flex h-full w-[360px] shrink-0 flex-col border-l border-[var(--sh-hair)] bg-[var(--surface)] shadow-lg" onClick={(e) => e.stopPropagation()}>
-          <SettingsSlider type="list" id={list.id} name={list.name} spaceId={list.space_id} folderId={list.folder_id} groupTasks={list.group_tasks} autoAssigneeIds={list.auto_assignee_ids} myAccess={myAccess} onClose={() => setShowSettings(false)} />
+          <SettingsSlider type="list" id={list.id} name={list.name} spaceId={list.space_id} folderId={list.folder_id} groupTasks={list.group_tasks} autoAssigneeIds={list.auto_assignee_ids} defaultTaskTypeId={list.default_task_type_id} myAccess={myAccess} onClose={() => setShowSettings(false)} />
         </div>
         </>
       ), document.body)}
@@ -486,7 +486,7 @@ function FolderItem({ folder, spaceId, canAdd, canDelete, isManager, myAccess }:
         <>
         <div className="fixed inset-0 z-40 bg-black/30" onClick={() => setShowSettings(false)} />
         <div className="sh-float fixed inset-y-0 right-0 left-auto z-50 flex h-full w-[360px] shrink-0 flex-col border-l border-[var(--sh-hair)] bg-[var(--surface)] shadow-lg" onClick={(e) => e.stopPropagation()}>
-          <SettingsSlider type="folder" id={folder.id} name={folder.name} spaceId={spaceId} groupTasks={folder.group_tasks} autoAssigneeIds={folder.auto_assignee_ids} myAccess={myAccess} onClose={() => setShowSettings(false)} />
+          <SettingsSlider type="folder" id={folder.id} name={folder.name} spaceId={spaceId} groupTasks={folder.group_tasks} autoAssigneeIds={folder.auto_assignee_ids} defaultTaskTypeId={folder.default_task_type_id} myAccess={myAccess} onClose={() => setShowSettings(false)} />
         </div>
         </>
       ), document.body)}
@@ -574,7 +574,7 @@ function ClientItem({ folder, childSpaces, spaceId, canAddLists, canAddSpaces, c
         <>
         <div className="fixed inset-0 z-40 bg-black/30" onClick={() => setShowSettings(false)} />
         <div className="sh-float fixed inset-y-0 right-0 left-auto z-50 flex h-full w-[360px] shrink-0 flex-col border-l border-[var(--sh-hair)] bg-[var(--surface)] shadow-lg" onClick={(e) => e.stopPropagation()}>
-          <SettingsSlider type="folder" id={folder.id} name={folder.name} spaceId={spaceId} groupTasks={folder.group_tasks} autoAssigneeIds={folder.auto_assignee_ids} myAccess={myAccess} onClose={() => setShowSettings(false)} />
+          <SettingsSlider type="folder" id={folder.id} name={folder.name} spaceId={spaceId} groupTasks={folder.group_tasks} autoAssigneeIds={folder.auto_assignee_ids} defaultTaskTypeId={folder.default_task_type_id} myAccess={myAccess} onClose={() => setShowSettings(false)} />
         </div>
         </>
       ), document.body)}
@@ -777,7 +777,7 @@ function SpaceItem({ spaceId, initial }: { spaceId: string; initial?: Space }) {
         <>
         <div className="fixed inset-0 z-40 bg-black/30" onClick={() => setShowSettings(false)} />
         <div className="sh-float fixed inset-y-0 right-0 left-auto z-50 flex h-full w-[360px] shrink-0 flex-col border-l border-[var(--sh-hair)] bg-[var(--surface)] shadow-lg" onClick={(e) => e.stopPropagation()}>
-          <SettingsSlider type="space" id={spaceId} name={space.name} description={space.description} groupTasks={space.group_tasks} autoAssigneeIds={space.auto_assignee_ids} myAccess={myAccess} onClose={() => setShowSettings(false)} />
+          <SettingsSlider type="space" id={spaceId} name={space.name} description={space.description} groupTasks={space.group_tasks} autoAssigneeIds={space.auto_assignee_ids} defaultTaskTypeId={space.default_task_type_id} myAccess={myAccess} onClose={() => setShowSettings(false)} />
         </div>
         </>
       ), document.body)}

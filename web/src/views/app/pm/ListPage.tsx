@@ -631,6 +631,7 @@ contentType === 'list' && (
             spaceId={activeSpaceId}
             groupTasks={listData?.group_tasks}
             autoAssigneeIds={listData?.auto_assignee_ids}
+            defaultTaskTypeId={listData?.default_task_type_id}
             myAccess={myAccess}
             onClose={() => setShowSettings(false)}
             onDeleted={() => {

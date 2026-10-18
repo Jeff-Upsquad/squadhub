@@ -587,6 +587,8 @@ export interface Space {
   group_tasks?: boolean;
   /** Members auto-added to any task created under this space (nearest-wins down the tree). */
   auto_assignee_ids?: string[];
+  /** Default task type automatically selected for tasks created under this space. */
+  default_task_type_id?: string | null;
   my_access_level?: AccessLevel;
   // Joined
   statuses?: SpaceStatus[];
@@ -965,6 +967,8 @@ export interface Folder {
   group_tasks?: boolean;
   /** Members auto-added to any task created under this folder (nearest-wins down the tree). */
   auto_assignee_ids?: string[];
+  /** Default task type automatically selected for tasks created under this folder. */
+  default_task_type_id?: string | null;
   // Joined
   lists?: List[];
   profile?: CustomProfile;
@@ -992,6 +996,8 @@ export interface List {
   group_tasks?: boolean;
   /** Members auto-added to any task created under this list. */
   auto_assignee_ids?: string[];
+  /** Default task type automatically selected for tasks created under this list. */
+  default_task_type_id?: string | null;
   // Joined
   task_count?: number;
   profile?: CustomProfile;

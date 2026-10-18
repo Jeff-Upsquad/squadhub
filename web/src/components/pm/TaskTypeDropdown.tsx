@@ -452,6 +452,9 @@ export interface TaskTypeDropdownProps {
   filterKeys?: string[];
   align?: 'left' | 'right';
   width?: number;
+  allowClear?: boolean;
+  clearLabel?: string;
+  onClear?: () => void;
 }
 
 export default function TaskTypeDropdown({
@@ -467,6 +470,9 @@ export default function TaskTypeDropdown({
   filterKeys,
   align = 'left',
   width = 330,
+  allowClear = false,
+  clearLabel = 'None (Default / Inherit)',
+  onClear,
 }: TaskTypeDropdownProps) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
@@ -729,6 +735,38 @@ export default function TaskTypeDropdown({
 
             {/* List */}
             <div className="overflow-y-auto flex-1 py-1 divide-y divide-[var(--sh-hair)]/40 scrollbar-thin">
+              {allowClear && !search && (
+                <div className="px-1 py-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onClear?.();
+                      setOpen(false);
+                    }}
+                    className={`group w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-left transition-colors ${
+                      !activeType
+                        ? 'bg-[#2962FF]/10 text-[var(--sh-ink)]'
+                        : 'hover:bg-[var(--sh-hair-3)] text-[var(--sh-ink)]'
+                    }`}
+                  >
+                    <div className="w-5 h-5 rounded-md flex items-center justify-center shrink-0 border border-dashed border-[var(--sh-hair)] text-[var(--sh-ink-4)]">
+                      <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <span className="text-[12.5px] font-medium text-[var(--sh-ink-3)] leading-snug">
+                        {clearLabel}
+                      </span>
+                    </div>
+                    {!activeType && (
+                      <svg className="w-4 h-4 text-[#2962FF] shrink-0" viewBox="0 0 20 20" fill="currentColor">
+                        <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                      </svg>
+                    )}
+                  </button>
+                </div>
+              )}
               {grouped.length === 0 ? (
                 <div className="px-4 py-8 text-center">
                   <div className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-[var(--surface-alt)] text-[var(--sh-ink-4)] mb-2">

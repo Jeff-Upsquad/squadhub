@@ -37,6 +37,7 @@ const createSchema = z.object({
   description: z.string().optional(),
   status_group_id: z.string().uuid().optional(),
   task_type_group_id: z.string().uuid().optional(),
+  default_task_type_id: z.string().uuid().nullable().optional(),
 });
 
 // GET /pm/spaces?workspace_id=xxx — list spaces the user has access to
@@ -315,6 +316,7 @@ router.post('/spaces', requirePermission('can_create_spaces'), async (req: Reque
         color: body.color || '#7c3aed',
         icon: body.icon || 'folder',
         description: body.description || null,
+        default_task_type_id: body.default_task_type_id || null,
         is_private: true,
         created_by: req.userId!,
         position: count || 0,
@@ -468,6 +470,7 @@ router.put('/spaces/:id', async (req: Request, res: Response) => {
     if (req.body.description !== undefined) updates.description = req.body.description;
     if (typeof req.body.group_tasks === 'boolean') updates.group_tasks = req.body.group_tasks;
     if (Array.isArray(req.body.auto_assignee_ids)) updates.auto_assignee_ids = req.body.auto_assignee_ids;
+    if (req.body.default_task_type_id !== undefined) updates.default_task_type_id = req.body.default_task_type_id || null;
 
     const { data, error } = await supabaseAdmin
       .from('spaces')

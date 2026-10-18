@@ -18,6 +18,8 @@ import { useIsAdmin } from '../hooks/usePermissions';
 import { canAtLeast } from '../lib/access';
 import ManageMembersModal from '../views/app/pm/ManageMembersModal';
 import MoveModal from '../views/app/pm/MoveModal';
+import TaskTypeDropdown, { TaskTypeGlyph } from './pm/TaskTypeDropdown';
+import { useTaskTypes } from '../hooks/useTaskTypes';
 import type { ResourceType, AccessLevel, ResourceMembership, User } from '@squadhub/shared';
 
 type SettingsSliderProps = {
@@ -29,6 +31,7 @@ type SettingsSliderProps = {
   folderId?: string | null;
   groupTasks?: boolean;
   autoAssigneeIds?: string[];
+  defaultTaskTypeId?: string | null;
   myAccess?: AccessLevel | null;
   onClose: () => void;
   onDeleted?: () => void;
@@ -48,7 +51,7 @@ const ACCESS_ITEM_LABELS: Record<AccessLevel, string> = {
   viewer: 'Viewer',
 };
 
-export default function SettingsSlider({ type, id, name, description, spaceId, folderId, groupTasks, autoAssigneeIds, myAccess, onClose, onDeleted }: SettingsSliderProps) {
+export default function SettingsSlider({ type, id, name, description, spaceId, folderId, groupTasks, autoAssigneeIds, defaultTaskTypeId, myAccess, onClose, onDeleted }: SettingsSliderProps) {
   const qc = useQueryClient();
   const workspaceId = useWorkspaceStore((s) => s.currentWorkspace?.id);
   const currentUserId = useAuthStore((s) => s.user?.id);
@@ -97,7 +100,11 @@ export default function SettingsSlider({ type, id, name, description, spaceId, f
       } else if (type === 'space') {
         qc.invalidateQueries({ queryKey: ['spaces', workspaceId] });
         qc.invalidateQueries({ queryKey: ['space', id] });
+      } else if (type === 'folder') {
+        qc.invalidateQueries({ queryKey: ['folder', id] });
+        qc.invalidateQueries({ queryKey: ['space', spaceId] });
       } else {
+        qc.invalidateQueries({ queryKey: ['list', id] });
         qc.invalidateQueries({ queryKey: ['space', spaceId] });
       }
     },
@@ -129,6 +136,15 @@ export default function SettingsSlider({ type, id, name, description, spaceId, f
     const prev = autoAssignIds;
     setAutoAssignIds(ids);
     updateMutation.mutate({ auto_assignee_ids: ids }, { onError: () => setAutoAssignIds(prev) });
+  };
+
+  // "Default task type" — auto-selected for tasks created in this container.
+  const [selectedTaskTypeId, setSelectedTaskTypeId] = useState<string | null>(defaultTaskTypeId || null);
+  useEffect(() => { setSelectedTaskTypeId(defaultTaskTypeId || null); }, [defaultTaskTypeId]);
+  const updateDefaultTaskType = (typeId: string | null) => {
+    const prev = selectedTaskTypeId;
+    setSelectedTaskTypeId(typeId);
+    updateMutation.mutate({ default_task_type_id: typeId }, { onError: () => setSelectedTaskTypeId(prev) });
   };
 
   const deleteMutation = useMutation({
@@ -244,6 +260,11 @@ export default function SettingsSlider({ type, id, name, description, spaceId, f
         {/* Auto-assign — members added to every task created under this container */}
         {supportsGroupTasks && canManage && (type === 'list' || type === 'folder' || type === 'space') && (
           <AutoAssignRow type={type} id={id} value={autoAssignIds} onChange={updateAutoAssign} />
+        )}
+
+        {/* Default task type — auto-selected for tasks created in this container */}
+        {supportsGroupTasks && canManage && (type === 'list' || type === 'folder' || type === 'space') && (
+          <DefaultTaskTypeRow type={type} value={selectedTaskTypeId} onChange={updateDefaultTaskType} />
         )}
 
         {/* Move — lists and folders only */}
@@ -520,6 +541,60 @@ function AutoAssignRow({
           />,
           document.body,
         )}
+    </div>
+  );
+}
+
+function DefaultTaskTypeRow({
+  type,
+  value,
+  onChange,
+}: {
+  type: 'list' | 'folder' | 'space';
+  value: string | null;
+  onChange: (taskTypeId: string | null) => void;
+}) {
+  const { data: taskTypes = [] } = useTaskTypes();
+  const current = value ? taskTypes.find((t) => t.id === value) || null : null;
+  const typeName = type === 'space' ? 'area' : type;
+
+  return (
+    <div>
+      <TaskTypeDropdown
+        taskTypes={taskTypes}
+        value={value}
+        allowClear
+        clearLabel="None (Inherit / Default)"
+        onClear={() => onChange(null)}
+        onChange={(t) => onChange(t.id)}
+        trigger={
+          <button
+            type="button"
+            className="flex w-full items-center justify-between gap-3 rounded-md border border-[#CAD5E2] bg-white px-3 py-2 text-left text-xs font-medium text-[#0F172B] transition hover:bg-[#F1F5F9]"
+          >
+            <span className="flex flex-col">
+              <span>Default task type</span>
+              <span className="mt-0.5 text-[10px] font-normal text-[#999999]">
+                Auto-select for new tasks created in this {typeName}
+              </span>
+            </span>
+            {current ? (
+              <span
+                className="flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-medium shrink-0"
+                style={{
+                  backgroundColor: `color-mix(in srgb, ${current.color || '#3b82f6'} 16%, transparent)`,
+                  color: current.color || '#3b82f6',
+                }}
+              >
+                <TaskTypeGlyph icon={current.icon} color={current.color} size={12} />
+                <span className="truncate max-w-[110px]">{current.name}</span>
+              </span>
+            ) : (
+              <span className="shrink-0 text-[#999999]">None</span>
+            )}
+          </button>
+        }
+      />
     </div>
   );
 }
