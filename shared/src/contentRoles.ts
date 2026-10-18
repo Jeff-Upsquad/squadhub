@@ -149,10 +149,11 @@ export const MIN_PORTFOLIO_ITEMS: Record<string, number> = {
   videographer: 10,
   photographer: 10,
   'videographer-photographer': 10,
+  'ai-video-image-creator': 10,
   ...Object.fromEntries(
     CONTENT_ROLES.map((r) => [
       r.slug,
-      r.slug === 'videographer' || r.slug === 'photographer' ? 10 : 3,
+      r.slug === 'videographer' || r.slug === 'photographer' || r.slug === 'ai-video-image-creator' ? 10 : 3,
     ]),
   ),
 };
