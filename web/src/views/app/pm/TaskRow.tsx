@@ -181,6 +181,9 @@ export default function TaskRow({
   const tags = ((task as any).tags || []) as { id: string; name: string; color?: string | null }[];
   const visibleTags = tags.slice(0, 2);
   const overflowTags = tags.length - visibleTags.length;
+  // Two-line rows (title + location breadcrumb) align their cells to the
+  // title line (see .lv-row--loc in globals.css) — drives the class below.
+  const hasLocation = !!(task.space?.name || task.folder?.name || task.list?.name);
 
   const recordCompletion = useRecordWorkBlockCompletion();
   const { data: activeGroupRun } = useActiveGroupRun();
@@ -741,7 +744,7 @@ export default function TaskRow({
           setActiveTask(task.id);
         }}
         onTransitionEnd={handleRowTransitionEnd}
-        className="lv-row"
+        className={`lv-row${hasLocation ? ' lv-row--loc' : ''}`}
         data-active={isActive}
         data-selected={isSelected}
         data-done={displayDone}
