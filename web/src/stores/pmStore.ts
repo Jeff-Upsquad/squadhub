@@ -13,8 +13,8 @@ export type TodayListView = 'list' | 'calendar';
 export type CalendarMode = 'month' | 'week' | '5day' | '4day' | 'day';
 // "Later today" triage buckets for the Home Focus list. A starred task can be
 // moved into Evening (after 3 PM) or Night (after 7 PM). Per-instance
-// assignments live in `focusBuckets` and fall back to the main Focus list at
-// local midnight (see rolloverFocusBuckets); a recurring task's section is
+// assignments live in `focusBuckets`. Evening/Night assignments reset at
+// local midnight, but explicit main Focus placements persist; a recurring task's section is
 // instead remembered per recurrence template in `recurringFocusBuckets`, so
 // every freshly spawned copy reappears in the same section.
 export type FocusBucket = 'evening' | 'night' | 'focus';
@@ -221,8 +221,8 @@ interface PMState {
   // spawned copy of a recurring task reappears in the same section.
   recurringFocusBuckets: Record<string, FocusBucket>;
   // Local date (todayKey) the per-instance focusBuckets were last rolled over.
-  // When it goes stale, rolloverFocusBuckets clears focusBuckets back to the
-  // main Focus list (recurringFocusBuckets is left untouched).
+  // When it goes stale, rolloverFocusBuckets clears Evening/Night assignments.
+  // Explicit main Focus placements and recurringFocusBuckets stay untouched.
   focusBucketsRolloverDate: string;
   // Tasks the user explicitly hid from Home's In progress section via
   // "Remove from focus list". A running timer always overrides the dismissal,
@@ -869,9 +869,10 @@ export const usePMStore = create<PMState>()(
         });
         triggerSave();
       },
-      // Roll the per-instance Evening/Night buckets back to the main Focus list
-      // once the local day flips: non-recurring tasks lose their section, while
-      // recurring tasks keep theirs via recurringFocusBuckets. A no-op until the
+      // Clear per-instance Evening/Night buckets once the local day flips.
+      // Keep explicit Focus placements so previously worked tasks do not return
+      // to In progress overnight. Recurring sections remain in their templates.
+      // A no-op until the
       // stored date is stale, so the mount call + once-a-minute tick fire it
       // exactly once when midnight passes, even with the app left open.
       rolloverFocusBuckets: () => {
@@ -880,7 +881,10 @@ export const usePMStore = create<PMState>()(
         set((state) => {
           if (state.focusBucketsRolloverDate === today) return state;
           changed = true;
-          return { focusBuckets: {}, focusBucketsRolloverDate: today };
+          const focusBuckets = Object.fromEntries(
+            Object.entries(state.focusBuckets).filter(([, bucket]) => bucket === 'focus'),
+          );
+          return { focusBuckets, focusBucketsRolloverDate: today };
         });
         if (changed) triggerSave();
       },
