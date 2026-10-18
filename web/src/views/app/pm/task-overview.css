@@ -369,6 +369,15 @@
 .tov-list-page {
   background: var(--tov-page);
 }
+/* Unified scroll: the page (header + list) scrolls as one section, so the
+   overview header scrolls away with the rows. The list canvas stops being
+   its own scroll container — otherwise two nested scrollbars would fight. */
+.tov-list-page.tov-list-scroll {
+  overflow-y: auto;
+}
+.tov-list-page.tov-list-scroll .lv-canvas {
+  overflow: visible;
+}
 .tov-list-page .lv-canvas {
   background: transparent;
 }
