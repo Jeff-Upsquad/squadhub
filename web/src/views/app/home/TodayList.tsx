@@ -324,7 +324,7 @@ export default function TodayList() {
   }, []);
 
   // Roll the Evening / Night buckets back to the main Focus list at local
-  // midnight. Non-recurring tasks fall back; recurring tasks keep their section
+  // midnight. Explicit main Focus placements stay put; recurring tasks keep their section
   // (remembered per template in recurringFocusBuckets, so the next spawned copy
   // reappears there). rolloverFocusBuckets no-ops until the day flips, so the
   // mount call + once-a-minute tick fire it exactly once when midnight passes,
