@@ -64,7 +64,7 @@ export const CONTENT_ROLES = [
   },
   {
     slug: 'videographer', serviceSlug: 'videographer', formType: 'videographer',
-    id: 'ca148001-5800-4800-8800-000000000004', name: 'Videographer', pipeline: 'Videographers',
+    id: 'ca148001-5800-4800-8800-000000000004', name: 'Videographer', pipeline: 'Videographers and Photographers',
     description: 'Brand films, product videos, event coverage and commercial video production.',
     detailKey: 'equipment_and_travel', detailLabel: 'Equipment, production setup and travel',
     detailHint: 'List camera, audio, lighting and crew capabilities, your shooting locations and travel availability.',
@@ -85,7 +85,7 @@ export const CONTENT_ROLES = [
   },
   {
     slug: 'photographer', serviceSlug: 'photographer', formType: 'photographer',
-    id: 'ca148001-5800-4800-8800-000000000006', name: 'Photographer', pipeline: 'Photographers',
+    id: 'ca148001-5800-4800-8800-000000000006', name: 'Photographer', pipeline: 'Videographers and Photographers',
     description: 'Brand, product, event, portrait and commercial photography.',
     detailKey: 'equipment_and_travel', detailLabel: 'Equipment, production setup and travel',
     detailHint: 'List camera, lenses, lighting and studio capabilities, your shooting locations and travel availability.',
