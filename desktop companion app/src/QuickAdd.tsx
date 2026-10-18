@@ -579,6 +579,7 @@ export default function QuickAdd() {
   const [selectedLabels, setSelectedLabels] = useState<TaskTag[]>([]);
   // Task type + status (status value is a catalog key for `task` types,
   // a space-status name for every other type — mirrors the web panel).
+  const [pickableLists, setPickableLists] = useState<PickableList[]>(pickCache || []);
   const [taskTypes, setTaskTypes] = useState<TaskType[] | null>(null);
   const [taskTypeId, setTaskTypeId] = useState<string | null>(null);
   const [typeSearch, setTypeSearch] = useState('');
@@ -660,6 +661,38 @@ export default function QuickAdd() {
     });
   };
 
+  const resolveEffectiveTaskType = async (
+    list: SelectedList | null,
+    types: TaskType[] | null,
+    knownPickable?: PickableList[],
+  ): Promise<string | null> => {
+    if (!types || types.length === 0) return null;
+    if (!list) {
+      return types.find((t) => t.is_default)?.id || types[0]?.id || null;
+    }
+    let targetTypeId: string | null | undefined = list.defaultTaskTypeId;
+    if (targetTypeId === undefined) {
+      const lists =
+        knownPickable && knownPickable.length > 0
+          ? knownPickable
+          : pickCache || (await loadPickableLists().catch(() => []));
+      if (lists.length > 0) {
+        setPickableLists(lists);
+      }
+      const found = lists.find((l) => l.id === list.id);
+      targetTypeId = found?.defaultTaskTypeId;
+    }
+    if (!targetTypeId) {
+      const sid = list.spaceId || (cachedPersonal && list.id === cachedPersonal.id ? cachedPersonal.spaceId : null);
+      if (sid) {
+        const sp = await fetchSpace(sid).catch(() => null);
+        targetTypeId = sp?.default_task_type_id || null;
+      }
+    }
+    const valid = targetTypeId && types.some((t) => t.id === targetTypeId) ? targetTypeId : null;
+    return valid || types.find((t) => t.is_default)?.id || types[0]?.id || null;
+  };
+
   const reset = () => {
     setTitle('');
     setDescription('');
@@ -691,14 +724,20 @@ export default function QuickAdd() {
     setLoginError('');
     // Assignee starts empty — the circle next to the pill self-assigns.
     setAssigneeIds([]);
-    // Type starts empty too — never carry over the previous pick.
-    setTaskTypeId(null);
     setTypeSearch('');
     setTypeHi(0);
     setStatus(catalogStatuses.find((c) => c.is_default)?.key || 'open');
     setStatusSearch('');
     setStatusHi(0);
+    const target = defaultListRef.current || selectedList;
     if (defaultListRef.current) setSelectedList(defaultListRef.current);
+    if (taskTypes && taskTypes.length > 0) {
+      void resolveEffectiveTaskType(target, taskTypes, pickableLists).then((tid) => {
+        if (tid) setTaskTypeId(tid);
+      });
+    } else {
+      setTaskTypeId(null);
+    }
     void getRecentLists().then(setRecents);
     setTimeout(() => inputRef.current?.focus(), 0);
   };
@@ -726,6 +765,7 @@ export default function QuickAdd() {
     // store file (auth.json) so we have the latest tokens / userId.
     useAuthStore.getState().hydrate();
     void resolvePersonal();
+    void loadPickableLists().then(setPickableLists);
     reset();
 
     // Rust emits this on EVERY summon (hotkey or tray). It's the authoritative
@@ -736,6 +776,7 @@ export default function QuickAdd() {
       cancelPendingHide();
       useAuthStore.getState().hydrate();
       void resolvePersonal();
+      void loadPickableLists().then(setPickableLists);
       reset();
       playEnter();
     });
@@ -745,6 +786,7 @@ export default function QuickAdd() {
         cancelPendingHide();
         useAuthStore.getState().hydrate();
         void resolvePersonal();
+        void loadPickableLists().then(setPickableLists);
         reset();
         playEnter();
       } else {
@@ -814,7 +856,9 @@ export default function QuickAdd() {
       .then((types) => {
         if (!alive) return;
         setTaskTypes(types);
-        setTaskTypeId((cur) => (cur && types.some((t) => t.id === cur) ? cur : null));
+        void resolveEffectiveTaskType(selectedList, types, pickableLists).then((tid) => {
+          if (alive && tid) setTaskTypeId(tid);
+        });
       })
       .catch(() => {
         if (alive) setTaskTypes([]);
@@ -824,36 +868,18 @@ export default function QuickAdd() {
     };
   }, []);
 
-  // Auto-fill task type when a location is selected (or when task types load).
+  // Auto-fill task type when a location is selected (or when task types / pickable lists load).
   // Priority: list default -> folder default -> space default -> global default task type.
   useEffect(() => {
-    if (!selectedList || !taskTypes || taskTypes.length === 0) return;
+    if (!taskTypes || taskTypes.length === 0) return;
     let alive = true;
-    (async () => {
-      let targetTypeId: string | null | undefined = selectedList.defaultTaskTypeId;
-      if (targetTypeId === undefined) {
-        const lists = await loadPickableLists();
-        const found = lists.find((l) => l.id === selectedList.id);
-        targetTypeId = found?.defaultTaskTypeId;
-      }
-      if (!targetTypeId) {
-        const sid = selectedList.spaceId || (cachedPersonal && selectedList.id === cachedPersonal.id ? cachedPersonal.spaceId : null);
-        if (sid) {
-          const sp = await fetchSpace(sid).catch(() => null);
-          targetTypeId = sp?.default_task_type_id || null;
-        }
-      }
-      if (!alive) return;
-      const validTypeId = targetTypeId && taskTypes.some((t) => t.id === targetTypeId) ? targetTypeId : null;
-      const fallbackTypeId = validTypeId || taskTypes.find((t) => t.is_default)?.id || taskTypes[0]?.id || null;
-      if (fallbackTypeId) {
-        setTaskTypeId(fallbackTypeId);
-      }
-    })();
+    void resolveEffectiveTaskType(selectedList, taskTypes, pickableLists).then((tid) => {
+      if (alive && tid) setTaskTypeId(tid);
+    });
     return () => {
       alive = false;
     };
-  }, [selectedList?.id, taskTypes]);
+  }, [selectedList?.id, taskTypes, pickableLists]);
 
   // Resolve the selected list's effective status group + space statuses.
   useEffect(() => {
@@ -1145,10 +1171,12 @@ export default function QuickAdd() {
     });
   const pickList = (l: SelectedList) => {
     setSelectedList(l);
-    if (l.defaultTaskTypeId && taskTypes?.some((t) => t.id === l.defaultTaskTypeId)) {
-      setTaskTypeId(l.defaultTaskTypeId);
-    }
     setOpenMenu(null);
+    if (taskTypes && taskTypes.length > 0) {
+      void resolveEffectiveTaskType(l, taskTypes, pickableLists).then((tid) => {
+        if (tid) setTaskTypeId(tid);
+      });
+    }
   };
   const toggleAssignee = (id: string) =>
     setAssigneeIds((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]));
@@ -1288,9 +1316,10 @@ export default function QuickAdd() {
       defaultTaskTypeId: defaultListRef.current.defaultTaskTypeId,
     });
   }
+  const listsLookup = pickableLists.length > 0 ? pickableLists : pickCache;
   for (const r of recents) {
     if (r.id === personalId) continue;
-    const match = pickCache?.find((p) => p.id === r.id);
+    const match = listsLookup?.find((p) => p.id === r.id);
     chips.push({
       id: r.id,
       name: r.name,
@@ -1826,7 +1855,7 @@ export default function QuickAdd() {
             </div>
 
       {/* Inline menus (one at a time; they push content down so nothing clips) */}
-      {openMenu === 'list' && <ListPicker onPick={pickList} />}
+      {openMenu === 'list' && <ListPicker onPick={pickList} cachedLists={pickableLists} />}
 
       {(openMenu === 'logged' || openMenu === 'estimate') && (
         <div className="qa-menu qa-duration-menu">
@@ -2315,9 +2344,9 @@ export default function QuickAdd() {
 }
 
 // ── list picker (search across all spaces/folders the user can post to) ───────
-function ListPicker({ onPick }: { onPick: (l: SelectedList) => void }) {
+function ListPicker({ onPick, cachedLists }: { onPick: (l: SelectedList) => void; cachedLists?: PickableList[] }) {
   const [query, setQuery] = useState('');
-  const [lists, setLists] = useState<PickableList[] | null>(pickCache);
+  const [lists, setLists] = useState<PickableList[] | null>((cachedLists && cachedLists.length > 0) ? cachedLists : pickCache);
   const [err, setErr] = useState('');
 
   useEffect(() => {
