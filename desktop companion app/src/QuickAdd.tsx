@@ -16,6 +16,10 @@ import {
   fetchLabelsForList,
   attachTaskLabel,
   updateTaskStatus,
+  fetchGoals,
+  linkTaskToGoal,
+  type GoalLite,
+  type GoalProjectLite,
   logTaskTime,
   type AssignableUser,
   type EffectiveStatusGroupRow,
@@ -36,7 +40,7 @@ import { PanelIcon } from './PanelIcon';
 let cachedPersonal: { id: string; name: string; spaceId: string; defaultTaskTypeId?: string | null } | null = null;
 
 type Phase = 'idle' | 'saving' | 'done' | 'error';
-type MenuKey = 'list' | 'assignee' | 'priority' | 'date' | 'rangedate' | 'labels' | 'logged' | 'estimate' | 'type' | 'status' | null;
+type MenuKey = 'list' | 'assignee' | 'priority' | 'date' | 'rangedate' | 'labels' | 'goal' | 'logged' | 'estimate' | 'type' | 'status' | null;
 type SelectedList = { id: string; name: string; spaceId?: string; defaultTaskTypeId?: string | null };
 
 // A file the user has dropped onto the panel, queued to upload once the task
@@ -578,6 +582,11 @@ export default function QuickAdd() {
   const [labelGroups, setLabelGroups] = useState<LabelPickerGroup[]>([]);
   const [labelQuery, setLabelQuery] = useState('');
   const [selectedLabels, setSelectedLabels] = useState<TaskTag[]>([]);
+  // Goals — picked before the task exists, linked after create (web parity).
+  const [goalProjects, setGoalProjects] = useState<GoalProjectLite[]>([]);
+  const [goals, setGoals] = useState<GoalLite[] | null>(null);
+  const [goalQuery, setGoalQuery] = useState('');
+  const [selectedGoalIds, setSelectedGoalIds] = useState<string[]>([]);
   // Task type + status (status value is a catalog key for `task` types,
   // a space-status name for every other type — mirrors the web panel).
   const [pickableLists, setPickableLists] = useState<PickableList[]>(pickCache || []);
@@ -716,6 +725,8 @@ export default function QuickAdd() {
     setDragOver(false);
     setSelectedLabels([]);
     setLabelQuery('');
+    setSelectedGoalIds([]);
+    setGoalQuery('');
     setCompleteOnCreate(false);
     setStartTimerOnCreate(false);
     setLoggedInput('');
@@ -977,6 +988,9 @@ export default function QuickAdd() {
       cur.some((t) => t.id === tag.id) ? cur.filter((t) => t.id !== tag.id) : [...cur, tag],
     );
 
+  const toggleGoal = (id: string) =>
+    setSelectedGoalIds((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]));
+
   useEffect(() => {
     if (!hasReminderIntent(title)) return;
     const reminderType = taskTypes?.find(t => t.key === 'reminders');
@@ -1066,6 +1080,14 @@ export default function QuickAdd() {
             await attachTaskLabel(task.id, tag.id);
           } catch {
             /* label attach is best-effort; task already exists */
+          }
+        }
+        // Goals picked before the task exists are linked now (web parity).
+        for (const goalId of selectedGoalIds) {
+          try {
+            await linkTaskToGoal(goalId, task.id);
+          } catch {
+            /* goal link is best-effort; task already exists */
           }
         }
         if (completeOnCreate) {
@@ -1176,6 +1198,18 @@ export default function QuickAdd() {
       if (key === 'type') {
         setTypeSearch('');
         setTypeHi(0);
+      }
+      if (key === 'goal') {
+        setGoalQuery('');
+        // Lazy-load: goals aren't needed until the picker is first opened.
+        if (goals === null) {
+          fetchGoals()
+            .then((d) => {
+              setGoals(d.goals || []);
+              setGoalProjects(d.projects || []);
+            })
+            .catch(() => setGoals([]));
+        }
       }
       if (key === 'status') {
         setStatusSearch('');
@@ -1364,6 +1398,24 @@ export default function QuickAdd() {
   const labelCount = selectedLabels.length;
   const labelButtonText =
     labelCount === 0 ? 'Labels' : labelCount === 1 ? selectedLabels[0].name : `${labelCount} labels`;
+
+  // ── goal picker (derived) ──────────────────────────────────────────────────
+  const selectedGoalsList = (goals || []).filter((g) => selectedGoalIds.includes(g.id));
+  const goalCount = selectedGoalsList.length;
+  const goalButtonText =
+    goalCount === 0 ? 'Goal' : goalCount === 1 ? selectedGoalsList[0].name : `${goalCount} goals`;
+  const gq = goalQuery.trim().toLowerCase();
+  const goalProjectById = new Map(goalProjects.map((p) => [p.id, p]));
+  const filteredGoals = (goals || []).filter(
+    (g) => !gq || g.name.toLowerCase().includes(gq) || (goalProjectById.get(g.project_id)?.name || '').toLowerCase().includes(gq),
+  );
+  const goalGroupsByProject = filteredGoals.reduce<Map<string, GoalLite[]>>((map, g) => {
+    const key = goalProjectById.get(g.project_id)?.name || 'Goals';
+    const hit = map.get(key);
+    if (hit) hit.push(g);
+    else map.set(key, [g]);
+    return map;
+  }, new Map());
 
   // Tray badge: queued-but-not-yet-uploaded attachments + in-flight/failed jobs.
   const activeBgJobs = bgJobs.filter((j) => j.active || j.files.length > 0);
@@ -1786,6 +1838,16 @@ export default function QuickAdd() {
                       <circle cx="7.5" cy="7.5" r="1" fill="currentColor" />
                     </svg>
                     <span className="qa-pill-label">{labelButtonText}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    className={`qa-pill${goalCount ? ' active' : ' muted'}`}
+                    onClick={() => toggleMenu('goal')}
+                    title={goals && goals.length ? 'Add this task to a goal' : 'No goals yet — create one in Goals first'}
+                  >
+                    <span className="qa-dot" style={{ background: goalCount ? (goalProjectById.get(selectedGoalsList[0]?.project_id)?.color || '#7c5cff') : '#6b7280' }} />
+                    <span className="qa-pill-label">{goalButtonText}</span>
                   </button>
 
 
@@ -2271,6 +2333,61 @@ export default function QuickAdd() {
               </div>
             ))}
           </div>
+        </div>
+      )}
+
+      {openMenu === 'goal' && (
+        <div className="qa-menu">
+          <input
+            className="qa-search"
+            autoFocus
+            placeholder="Search goals…"
+            value={goalQuery}
+            onChange={(e) => setGoalQuery(e.target.value)}
+          />
+          <div className="qa-menu-scroll">
+            {goals === null && <div className="qa-menu-empty">Loading goals…</div>}
+            {goals !== null && goals.length === 0 && (
+              <div className="qa-menu-empty">No goals yet — create one in Goals first</div>
+            )}
+            {goals !== null && goals.length > 0 && filteredGoals.length === 0 && (
+              <div className="qa-menu-empty">No goals match</div>
+            )}
+            {[...goalGroupsByProject.entries()].map(([projectName, projectGoals]) => (
+              <div key={projectName}>
+                <div className="qa-grouphead">{projectName}</div>
+                {projectGoals.map((g) => {
+                  const on = selectedGoalIds.includes(g.id);
+                  const color = goalProjectById.get(g.project_id)?.color || '#7c5cff';
+                  return (
+                    <button key={g.id} type="button" className="qa-opt-row" onClick={() => toggleGoal(g.id)}>
+                      <span className="qa-dot" style={{ background: color }} />
+                      <span className="qa-opt-main">{g.name}</span>
+                      <span className="qa-opt-sub">
+                        {g.completed_count}/{g.task_count} done · {Math.round(g.progress || 0)}%
+                      </span>
+                      {on && <span className="qa-check">✓</span>}
+                    </button>
+                  );
+                })}
+              </div>
+            ))}
+          </div>
+          {goalCount > 0 && (
+            <div className="qa-menu-foot">
+              <span>{goalCount} goal{goalCount !== 1 ? 's' : ''} selected</span>
+              <button
+                type="button"
+                className="qa-linkbtn"
+                onClick={() => {
+                  setSelectedGoalIds([]);
+                  setOpenMenu(null);
+                }}
+              >
+                Clear
+              </button>
+            </div>
+          )}
         </div>
       )}
 
