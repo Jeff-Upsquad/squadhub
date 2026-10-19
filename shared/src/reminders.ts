@@ -3,6 +3,13 @@ import { parse } from 'chrono-node';
 export const REMINDER_TYPE_KEY = 'reminders';
 export const hasReminderIntent = (title: string) => /\bremind\s+me\b/i.test(title);
 
+// Normalize spaced, slash, and hyphen time separators before Chrono parses them.
+// Require a meridiem so ordinary pairs of numbers are not treated as times.
+const normalizeReminderTime = (text: string) => text.replace(
+  /\b(0?[1-9]|1[0-2])(?:[ \t]*[/-][ \t]*|[ \t]+)([0-5]\d)(?=[ \t]*[ap]\.?m\.?\b)/gi,
+  '$1:$2',
+);
+
 /** Parse only reminder commands: ordinary task titles keep their date words. */
 export function parseReminderTitle(title: string, now = new Date(), timezoneOffset = -now.getTimezoneOffset(), force = false) {
   const intent = hasReminderIntent(title) || force;
@@ -11,11 +18,11 @@ export function parseReminderTitle(title: string, now = new Date(), timezoneOffs
   // In "Friday report Remind Me tomorrow at 5pm", Friday belongs to the
   // task name. Only the command's suffix is a schedule in that form.
   let prefix = command ? title.slice(0, command.index) : '';
-  let withoutCommand = command ? title.slice(command.index + command[0].length) : title;
+  let withoutCommand = normalizeReminderTime(command ? title.slice(command.index + command[0].length) : title);
   const reference = { instant: now, timezone: timezoneOffset };
   let results = parse(withoutCommand, reference, { forwardDate: true });
   if (results.length === 0 && prefix.trim()) {
-    const combined = `${prefix} ${withoutCommand}`;
+    const combined = normalizeReminderTime(`${prefix} ${withoutCommand}`);
     const fallback = parse(combined, reference, { forwardDate: true });
     if (fallback.length === 1 && fallback[0].start.isCertain('hour') && !fallback[0].end) {
       withoutCommand = combined;

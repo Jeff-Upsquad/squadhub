@@ -14,6 +14,19 @@ describe('reminder title parsing', () => {
     ['Review Remind Me at 5pm UTC', 'Review', '2026-10-19T17:00:00.000Z'],
     ['Friday report Remind Me tomorrow at 5pm', 'Friday report', '2026-10-20T11:30:00.000Z'],
     ['Send proposal tomorrow at 5pm Remind Me', 'Send proposal', '2026-10-20T11:30:00.000Z'],
+    ['Remind me today 11 17 am', '', '2026-10-19T05:47:00.000Z'],
+    ['Remind me to call Jeff today 11 17 am', 'call Jeff', '2026-10-19T05:47:00.000Z'],
+    ['Call Jeff Remind Me today at 11 17 PM', 'Call Jeff', '2026-10-19T17:47:00.000Z'],
+    ['Call Jeff today 11 17 am Remind Me', 'Call Jeff', '2026-10-19T05:47:00.000Z'],
+    ['Remind me tomorrow at 12 05 a.m.', '', '2026-10-19T18:35:00.000Z'],
+    ['Remind me today at 11   17am', '', '2026-10-19T05:47:00.000Z'],
+    ['Remind me today 11/17 am', '', '2026-10-19T05:47:00.000Z'],
+    ['Remind me today 11-17 am', '', '2026-10-19T05:47:00.000Z'],
+    ['Call Jeff Remind Me today at 11/17 PM', 'Call Jeff', '2026-10-19T17:47:00.000Z'],
+    ['Call Jeff today 11-17am Remind Me', 'Call Jeff', '2026-10-19T05:47:00.000Z'],
+    ['Remind me tomorrow at 12 / 05 a.m.', '', '2026-10-19T18:35:00.000Z'],
+    ['Remind me today at 11 - 17am', '', '2026-10-19T05:47:00.000Z'],
+    ['Remind me 11/17 at 10am', '', '2026-11-17T04:30:00.000Z'],
   ])('cleans %s and extracts its date/time', (input, title, due) => {
     const result = parseReminderTitle(input, now, 330);
     expect(result.title).toBe(title); expect(result.dueDate).toBe(due);
@@ -21,6 +34,7 @@ describe('reminder title parsing', () => {
   it('keeps ordinary task titles unchanged', () => {
     expect(parseReminderTitle('Friday release at 5pm', now, 330)).toMatchObject({ intent: false, title: 'Friday release at 5pm', dueDate: null });
     expect(hasReminderIntent('Build reminder features')).toBe(false);
+    expect(parseReminderTitle('Release today 11 17 am', now, 330)).toMatchObject({ intent: false, title: 'Release today 11 17 am', dueDate: null });
   });
   it('requires an explicit time rather than silently choosing noon', () => {
     expect(parseReminderTitle('Call Sam Remind Me tomorrow', now, 330).dueDate).toBeNull();
@@ -30,6 +44,7 @@ describe('reminder title parsing', () => {
   it('does not guess between multiple times or a date range', () => {
     expect(parseReminderTitle('Call Remind Me tomorrow at 5pm and Friday at 9am', now, 330).dueDate).toBeNull();
     expect(parseReminderTitle('Call Remind Me from 3pm to 5pm', now, 330).dueDate).toBeNull();
+    expect(parseReminderTitle('Call Remind Me today 11 17 am and tomorrow 10 30 am', now, 330).dueDate).toBeNull();
   });
   it('uses the caller timezone even when it is still yesterday there', () => {
     expect(parseReminderTitle('Call Remind Me tomorrow at 10am', new Date('2026-10-19T02:00:00Z'), -420).dueDate).toBe('2026-10-19T17:00:00.000Z');
@@ -52,6 +67,13 @@ describe('authoritative reminder task normalization', () => {
     const draft: any = { title: 'Call Jeff tomorrow at 5pm', task_type_id: 'reminder-type' };
     await prepareTaskReminder(draft, undefined, 330);
     expect(draft.title).toBe('Call Jeff'); expect(draft.due_date).toBe('2026-10-20T11:30:00.000Z');
+  });
+  it.each(['11 17 am', '11/17 am', '11-17 am'])('saves %s with the full time', async (time) => {
+    const draft: any = { title: `Call Jeff today ${time}`, task_type_id: 'reminder-type' };
+    await prepareTaskReminder(draft, undefined, 330);
+    expect(draft.title).toBe('Call Jeff');
+    expect(draft.due_date).toBe('2026-10-19T05:47:00.000Z');
+    expect(draft.description).toContain(`Call Jeff today ${time}`);
   });
   it('honors a date explicitly selected in the picker', async () => {
     const draft: any = { title: 'Call Jeff Remind Me tomorrow at 5pm', due_date: '2026-10-21T10:00:00Z' };
