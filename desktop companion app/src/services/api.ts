@@ -21,6 +21,7 @@ export async function apiFetch(
       'Content-Type': 'application/json',
       // Task-creation tracking (tasks.created_via) — identifies the menu-bar companion.
       'X-Client-Source': 'companion',
+      'X-Timezone-Offset': String(-new Date().getTimezoneOffset()),
       ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
       ...(init.headers || {}),
     },

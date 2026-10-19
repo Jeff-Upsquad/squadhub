@@ -1,7 +1,8 @@
+import { prepareTaskReminder, ReminderValidationError } from '../../services/taskReminders';
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import type { User, TaskRecurrence, TaskTag, TaskListPath } from '@squadhub/shared';
-import { taskRecurrenceOccursOn, getTaskStatusCategory, isWaitingOrUnblockedStatus } from '@squadhub/shared';
+import { parseReminderTitle, taskRecurrenceOccursOn, getTaskStatusCategory, isWaitingOrUnblockedStatus } from '@squadhub/shared';
 import { supabaseAdmin } from '../../supabase';
 import { requireAuth } from '../../middleware/auth';
 import { requireUserType } from '../../middleware/userType';
@@ -1672,7 +1673,7 @@ router.get('/tasks/:id', async (req: Request, res: Response) => {
 
     const { data: task, error } = await supabaseAdmin
       .from('tasks')
-      .select('*')
+      .select('*, task_types(key)')
       .eq('id', id)
       .single();
 
@@ -1729,6 +1730,7 @@ router.get('/tasks/:id', async (req: Request, res: Response) => {
       success: true,
       data: {
         ...hydratedTask,
+        task_type_key: (task as any).task_types?.key || null,
         subtasks: hydratedSubtasks,
         comment_count: commentCount,
         creator,
@@ -2355,6 +2357,71 @@ router.delete('/tasks/:id/relationships/:targetTaskId', async (req: Request, res
 // concurrent requests (e.g. rapid keypresses, double-clicks, or event bubbling).
 const inFlightTaskCreations = new Map<string, Promise<any>>();
 
+// Native clients share the same natural-language parser as web and companion.
+router.post('/reminders/preview', async (req: Request, res: Response) => {
+  const input = z.object({ title: z.string().max(500), force: z.boolean().optional(), timezone_offset: z.number().min(-840).max(840).optional() }).safeParse(req.body);
+  if (!input.success) { res.status(400).json({ success: false, error: 'Invalid reminder title' }); return; }
+  try {
+    const parsed = parseReminderTitle(input.data.title, new Date(), input.data.timezone_offset ?? 330, input.data.force);
+    const { data, error } = await supabaseAdmin.from('task_types').select('id').eq('key', 'reminders').maybeSingle();
+    if (error) throw error;
+    res.json({ success: true, data: { intent: parsed.intent, title: parsed.title, due_date: parsed.dueDate, task_type_id: data?.id || null } });
+  } catch (err) { res.status(500).json({ success: false, error: 'Could not parse reminder' }); }
+});
+
+// Reminder actions require both a notification addressed to this user and current task access.
+router.post('/tasks/:id/reminder-action', async (req: Request, res: Response) => {
+  try {
+    const { notification_id, action, minutes } = z.object({
+      notification_id: z.string().uuid(), action: z.enum(['snooze', 'complete']),
+      minutes: z.number().int().refine(n => [5, 10, 15, 30, 60, 1440].includes(n)).optional(),
+    }).parse(req.body);
+    const { data: notification, error: notificationError } = await supabaseAdmin.from('notifications').select('*')
+      .eq('id', notification_id).eq('user_id', req.userId!).eq('type', 'task_reminder').eq('reference_id', req.params.id).maybeSingle();
+    if (notificationError) throw notificationError;
+    if (!notification) { res.status(404).json({ success: false, error: 'Reminder not found' }); return; }
+    const { data: task, error: taskError } = await supabaseAdmin.from('tasks').select('*, task_types(key)').eq('id', req.params.id).maybeSingle();
+    if (taskError) throw taskError;
+    if (!task) { res.status(404).json({ success: false, error: 'Task not found' }); return; }
+    const level = await checkResourceAccess(req.userId!, 'list', task.list_id);
+    if (!level || !meetsAccessLevel(level, 'member') || (!await isWorkspaceAdmin(req.userId!) && await isResourceLocked('list', task.list_id))) {
+      res.status(403).json({ success: false, error: 'Member access to an unlocked list required' }); return;
+    }
+    if (task.task_types?.key !== 'reminders' || await isTaskStatusDone(task.list_id, task.status)
+      || Date.parse(task.due_date) !== Date.parse(notification.metadata?.due_at)) {
+      res.status(409).json({ success: false, error: 'This reminder has already changed. Open the task to see its current state.' }); return;
+    }
+    const changes: Record<string, unknown> = { last_modified_by: req.userId! };
+    if (action === 'complete') {
+      const doneNames = await getSpaceDoneStatusNames(task.list_id);
+      const counts = await countOpenCompletionItems(task.id, st => !!st && (doneNames.has(st) || ['done','closed'].includes(getTaskStatusCategory(st) || '')));
+      if (counts.open_subtasks || counts.open_checklist_items) {
+        res.status(409).json({ success: false, error: 'Finish this task’s subtasks and checklist items first.', ...counts }); return;
+      }
+      changes.status = await normalizeTaskStatusForList(task.list_id, 'done');
+      if (!changes.status) throw new Error('No completion status for this list');
+    } else {
+      changes.due_date = new Date(Date.now() + (minutes || 10) * 60_000).toISOString();
+    }
+    const { data, error } = await supabaseAdmin.from('tasks').update(changes).eq('id', task.id).eq('due_date', task.due_date).eq('status', task.status).select().maybeSingle();
+    if (error) throw error;
+    if (!data) { res.status(409).json({ success: false, error: 'Reminder changed on another device. Open the task to continue.' }); return; }
+    const { data: read, error: readError } = await supabaseAdmin.from('notifications').update({ is_read: true }).eq('type', 'task_reminder')
+      .eq('reference_id', task.id).eq('metadata->>due_at', notification.metadata.due_at).select('id, user_id');
+    if (readError) throw readError;
+    for (const row of read || []) req.app.get('io')?.to(`chat_user:${row.user_id}`).emit('notifications_read', { kind: 'ids', ids: [row.id] });
+    await logTaskActivity(task.id, req.userId!, [{ event_type: 'field_change', field: action === 'complete' ? 'status' : 'due_date', old_value: action === 'complete' ? task.status : task.due_date, new_value: action === 'complete' ? data.status : data.due_date }]);
+    if (action === 'complete') await Promise.allSettled([
+      recordWorkBlockCompletionIfActive(req.userId!, task.id), recordGroupRunCompletionIfActive(req.userId!, task.id),
+    ]);
+    res.json({ success: true, data });
+  } catch (err) {
+    if (err instanceof z.ZodError) { res.status(400).json({ success: false, error: err.errors[0].message }); return; }
+    console.error('Reminder action failed:', err);
+    res.status(500).json({ success: false, error: 'Could not update reminder' });
+  }
+});
+
 // POST /pm/tasks — requires member access on the list
 router.post('/tasks', async (req: Request, res: Response) => {
   let inflightKey: string | null = null;
@@ -2376,8 +2443,10 @@ router.post('/tasks', async (req: Request, res: Response) => {
       return;
     }
 
+    await prepareTaskReminder(body, undefined, (Number.isFinite(Number(req.headers['x-timezone-offset'])) ? Number(req.headers['x-timezone-offset']) : 330));
+
     // Concurrent deduplication: if an identical create request is already in-flight, await it
-    inflightKey = `${req.userId!}:${body.list_id}:${body.title.trim().toLowerCase()}`;
+    inflightKey = `${req.userId!}:${body.list_id}:${body.title.trim().toLowerCase()}:${body.due_date || ''}:${body.task_type_id || ''}`;
     const existingInflight = inFlightTaskCreations.get(inflightKey);
     if (existingInflight) {
       try {
@@ -2391,7 +2460,7 @@ router.post('/tasks', async (req: Request, res: Response) => {
 
     // Recent duplicate check: if the exact same task was just created within 5 seconds, return it
     const fiveSecondsAgo = new Date(Date.now() - 5000).toISOString();
-    const { data: recentDuplicate } = await supabaseAdmin
+    let duplicateQuery = supabaseAdmin
       .from('tasks')
       .select('*')
       .eq('created_by', req.userId!)
@@ -2399,8 +2468,9 @@ router.post('/tasks', async (req: Request, res: Response) => {
       .eq('title', body.title.trim())
       .gte('created_at', fiveSecondsAgo)
       .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
+      .limit(1);
+    duplicateQuery = body.due_date ? duplicateQuery.eq('due_date', body.due_date) : duplicateQuery.is('due_date', null);
+    const { data: recentDuplicate } = await duplicateQuery.maybeSingle();
 
     if (recentDuplicate) {
       const [hydratedTask] = await hydrateAssignees([recentDuplicate]);
@@ -2412,6 +2482,7 @@ router.post('/tasks', async (req: Request, res: Response) => {
       resolveInflight = resolve;
       rejectInflight = reject;
     });
+    void taskPromise.catch(() => {}); // The owner returns errors over HTTP even when no duplicate request is waiting.
     inFlightTaskCreations.set(inflightKey, taskPromise);
 
     // If the list is under a client-tagged folder, assign a per-client
@@ -2498,6 +2569,11 @@ router.post('/tasks', async (req: Request, res: Response) => {
       resolvedTypeKey = (defaultType as any)?.key ?? null;
     }
 
+    if (resolvedTypeKey === 'reminders') {
+      body.task_type_id = resolvedTypeId;
+      await prepareTaskReminder(body, undefined, (Number.isFinite(Number(req.headers['x-timezone-offset'])) ? Number(req.headers['x-timezone-offset']) : 330));
+    }
+
     // Status must come from the list's effective group (list > folder >
     // space > template > default). Normalize casing variants ('OPEN' -> 'open')
     // so a second bucket can never be created again.
@@ -2511,7 +2587,7 @@ router.post('/tasks', async (req: Request, res: Response) => {
       resolvedStatus = normalized;
     } else {
       // Catalog-driven task type uses the group's default; legacy types still use 'todo'.
-      resolvedStatus = resolvedTypeKey === 'task' || (await getListStageInfo(body.list_id)).stage
+      resolvedStatus = resolvedTypeKey === 'task' || resolvedTypeKey === 'reminders' || (await getListStageInfo(body.list_id)).stage
         ? await defaultTaskStatusForList(body.list_id)
         : 'todo';
     }
@@ -2617,6 +2693,10 @@ router.post('/tasks', async (req: Request, res: Response) => {
     res.status(201).json({ success: true, data: hydratedTask });
   } catch (err) {
     if (rejectInflight) rejectInflight(err);
+    if (err instanceof ReminderValidationError) {
+      res.status(422).json({ success: false, code: err.code, error: err.message, suggested_date: err.suggestedDate });
+      return;
+    }
     if (err instanceof z.ZodError) {
       res.status(400).json({ success: false, error: err.errors[0].message });
       return;
@@ -2687,6 +2767,8 @@ router.put('/tasks/:id', async (req: Request, res: Response) => {
       body.work_date !== undefined ? body.work_date : prior?.work_date,
       body.metadata !== undefined ? body.metadata.work_end_date : prior?.metadata?.work_end_date,
     );
+
+    await prepareTaskReminder(body, prior || undefined, (Number.isFinite(Number(req.headers['x-timezone-offset'])) ? Number(req.headers['x-timezone-offset']) : 330));
 
     const priorEstimate: number | null = (prior as any)?.time_estimate ?? null;
     const estimateListId: string | null = (prior as any)?.list_id ?? null;
@@ -2790,6 +2872,12 @@ router.put('/tasks/:id', async (req: Request, res: Response) => {
     if (error) {
       res.status(500).json({ success: false, error: error.message });
       return;
+    }
+
+    if (body.due_date !== undefined || body.task_type_id !== undefined || body.status !== undefined) {
+      const { data: retired } = await supabaseAdmin.from('notifications').select('id, user_id')
+        .eq('type', 'task_reminder').eq('reference_id', id).eq('is_read', true);
+      for (const row of retired || []) req.app.get('io')?.to(`chat_user:${row.user_id}`).emit('notifications_read', { kind: 'ids', ids: [row.id] });
     }
 
     // Auto-record completion if task moved into a done/closed state
@@ -3023,6 +3111,10 @@ router.put('/tasks/:id', async (req: Request, res: Response) => {
     const [hydratedTask] = await hydrateAssignees([data]);
     res.json({ success: true, data: hydratedTask });
   } catch (err) {
+    if (err instanceof ReminderValidationError) {
+      res.status(422).json({ success: false, code: err.code, error: err.message, suggested_date: err.suggestedDate });
+      return;
+    }
     if (err instanceof z.ZodError) {
       res.status(400).json({ success: false, error: err.errors[0].message });
       return;

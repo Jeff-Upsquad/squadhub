@@ -22,6 +22,7 @@ export type Notification = {
     | 'task_completed'
     | 'task_commented'
     | 'task_due_soon'
+    | 'task_reminder'
     | 'mention'
     | 'message_mention'
     | 'thread_reply'
@@ -133,6 +134,7 @@ function ctxLine(n: Notification): string {
     case 'task_completed': return 'Task done';
     case 'task_commented': return 'Task comment';
     case 'task_due_soon': return 'Due soon';
+    case 'task_reminder': return 'Reminder';
     case 'reaction_added': return 'Reaction';
     case 'lms_assigned': return 'Learning';
     case 'lms_updated': return 'Learning';
@@ -693,7 +695,7 @@ function renderDetail(n: Notification, onOpen: (jump?: ChatJump) => void, onStay
     );
   }
   if (n.reference_type === 'task' && n.metadata?.task_id) {
-    return <InboxTaskDetail taskId={n.metadata.task_id as string} onOpen={onOpen} onStay={onStay} />;
+    return <InboxTaskDetail taskId={n.metadata.task_id as string} onOpen={onOpen} onStay={onStay} reminderNotification={n.type === 'task_reminder' ? n as any : undefined} />;
   }
   if (n.reference_type === 'message' && (n.metadata?.message_id || n.reference_id)) {
     return (

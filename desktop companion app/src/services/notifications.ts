@@ -29,6 +29,7 @@ function getNotificationSubtitle(type: string): string {
     task_updated: 'Task Updated',
     task_commented: 'New Comment',
     task_due_soon: 'Due Soon',
+    task_reminder: 'Reminder',
     mention: 'Mention',
     message_mention: 'Mention',
     thread_reply: 'Thread Reply',

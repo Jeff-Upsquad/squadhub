@@ -25,6 +25,7 @@ api.interceptors.request.use((config) => {
     config.headers.Authorization = `Bearer ${token}`;
   }
   config.headers['X-Client-Source'] = getClientSource();
+  config.headers['X-Timezone-Offset'] = String(-new Date().getTimezoneOffset());
   return config;
 });
 
@@ -93,6 +94,13 @@ api.interceptors.response.use(
     const original = error.config as RetriableConfig | undefined;
     const status = error.response?.status;
 
+    if (status === 422 && original && (error.response?.data as any)?.code === 'REMINDER_SCHEDULE_REQUIRED') {
+      const { requestReminderSchedule } = await import('../components/pm/ReminderScheduleDialog');
+      const due = await requestReminderSchedule((error.response?.data as any)?.suggested_date);
+      if (!due) return Promise.reject(new axios.CanceledError('Reminder creation cancelled'));
+      const body = typeof original.data === 'string' ? JSON.parse(original.data) : original.data;
+      return api.request({ ...original, data: { ...body, due_date: due } });
+    }
     if (status !== 401 || !original) {
       return Promise.reject(error);
     }

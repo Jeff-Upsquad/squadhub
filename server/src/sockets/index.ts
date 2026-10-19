@@ -1,3 +1,4 @@
+import { sendChatPush } from '../push/chat';
 import { Server as HttpServer } from 'http';
 import { Server, Socket } from 'socket.io';
 import { config } from '../config';
@@ -256,11 +257,19 @@ export function setupSocketIO(httpServer: HttpServer) {
     // service worker suppresses its own duplicate when that device already has
     // a focused SquadHub window.
     sendWebPush(notification as any).catch((e) => console.error('[socket] web push error:', e));
+    if ((notification as any).type === 'task_reminder') {
+      const n = notification as any;
+      for (const appVariant of ['team', 'clients'] as const) {
+        void sendChatPush(n.user_id, { title: n.title, body: n.body || 'Reminder due now', appVariant,
+          data: { type: n.type, reference_type: 'task', reference_id: n.reference_id, task_id: n.reference_id, notification_id: n.id, ...n.metadata } });
+      }
+    }
   };
 
   const POLL_INTERVAL_MS = 2_000;
   const MAX_BACKOFF_MS = 30_000;
   let lastPollTime = new Date().toISOString();
+  let lastPollId: string | null = null;
   let pollCount = 0;
   // When Supabase goes unreachable a poll doesn't fail — it stalls for the full
   // 10s connect timeout. At a 2s tick that means five more polls launch behind
@@ -306,8 +315,11 @@ export function setupSocketIO(httpServer: HttpServer) {
       const { data: newNotifications, error } = await supabaseAdmin
         .from('notifications')
         .select('*')
-        .gt('created_at', lastPollTime)
+        .or(lastPollId
+          ? `created_at.gt.${lastPollTime},and(created_at.eq.${lastPollTime},id.gt.${lastPollId})`
+          : `created_at.gt.${lastPollTime}`)
         .order('created_at', { ascending: true })
+        .order('id', { ascending: true })
         .limit(50);
 
       if (error) {
@@ -328,6 +340,7 @@ export function setupSocketIO(httpServer: HttpServer) {
 
       if (newNotifications && newNotifications.length > 0) {
         lastPollTime = newNotifications[newNotifications.length - 1].created_at;
+        lastPollId = newNotifications[newNotifications.length - 1].id;
         for (const notification of newNotifications) deliver(notification);
       }
     } catch (e) {

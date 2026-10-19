@@ -2441,3 +2441,9 @@ body.notch-window {
 .qa-add-ripple { position: absolute; left: 50%; top: 50%; width: 112px; height: 112px; margin: -56px 0 0 -56px; border-radius: 50%; background: radial-gradient(circle, rgba(99, 102, 241, 0.35) 0%, rgba(99, 102, 241, 0) 70%); pointer-events: none; animation: qa-ripple 0.55s ease-out forwards; }
 @keyframes qa-ripple { from { transform: scale(0.2); opacity: 1; } to { transform: scale(1.6); opacity: 0; } }
 @keyframes qa-plus-spin { to { transform: rotate(360deg); } }
+
+.companion-reminder { padding: 28px; color: #f4f4f5; animation: reminder-enter .25s ease-out; }
+.companion-reminder h2 { margin: 22px 0; font-size: 24px; }
+.companion-reminder button, .companion-reminder select { padding: 9px 14px; border: 1px solid #555; border-radius: 8px; background: #26282d; color: #fff; cursor: pointer; }
+.companion-reminder button:disabled { opacity: .5; }
+@keyframes reminder-enter { from { opacity: 0; transform: translateY(-40px); } to { opacity: 1; transform: translateY(0); } }

@@ -22,6 +22,7 @@ const ACTION_LABEL: Record<Notification['type'], string> = {
   task_updated: 'Updated a task',
   task_completed: 'Completed a task',
   task_commented: 'Commented on a task',
+  task_reminder: 'Reminder',
   task_due_soon: 'Task due soon',
   mention: 'Mentioned you in a comment',
   message_mention: 'Mentioned you in a message',

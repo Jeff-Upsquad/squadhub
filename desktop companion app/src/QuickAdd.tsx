@@ -1,3 +1,4 @@
+import { hasReminderIntent, parseReminderTitle } from '../../shared/src/reminders';
 import { useEffect, useRef, useState } from 'react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { useAuthStore } from './stores/authStore';
@@ -976,9 +977,22 @@ export default function QuickAdd() {
       cur.some((t) => t.id === tag.id) ? cur.filter((t) => t.id !== tag.id) : [...cur, tag],
     );
 
+  useEffect(() => {
+    if (!hasReminderIntent(title)) return;
+    const reminderType = taskTypes?.find(t => t.key === 'reminders');
+    if (reminderType) setTaskTypeId(reminderType.id);
+    const parsed = parseReminderTitle(title);
+    if (parsed.dueDate) setDueDate(parsed.dueDate);
+  }, [title, taskTypes]);
+
   const submit = async () => {
     const trimmed = title.trim();
     if (!trimmed || phase === 'saving' || submittingRef.current) return;
+    if ((hasReminderIntent(title) || taskTypes?.find(t => t.id === taskTypeId)?.key === 'reminders') && (!dueDate || !dueDate.includes('T') || Date.parse(dueDate) <= Date.now())) {
+      setPhase('error'); setError('Choose a future reminder date and time below the title.');
+      document.getElementById('qa-reminder-time')?.focus();
+      return;
+    }
     submittingRef.current = true;
 
     if (!useAuthStore.getState().accessToken) {
@@ -1559,6 +1573,11 @@ export default function QuickAdd() {
                   autoFocus
                   disabled={phase === 'saving'}
                 />
+                {(hasReminderIntent(title) || currentType?.key === 'reminders') && <label style={{ display: 'block', margin: '10px 0', fontSize: 13 }}>
+                  Remind me at <input id="qa-reminder-time" aria-label="Reminder date and time" type="datetime-local" value={dueDate && dueDate.includes('T') ? new Date(Date.parse(dueDate) - new Date(dueDate).getTimezoneOffset() * 60000).toISOString().slice(0, 16) : ''}
+                    onChange={e => setDueDate(e.target.value ? new Date(e.target.value).toISOString() : null)} />
+                  <small style={{ display: 'block', opacity: .7 }}>{hasReminderIntent(title) ? `Saved title: ${parseReminderTitle(title).title}` : 'Saved as the due date'}</small>
+                </label>}
                 <textarea
                   className="qa-textarea"
                   placeholder="Add a description…"

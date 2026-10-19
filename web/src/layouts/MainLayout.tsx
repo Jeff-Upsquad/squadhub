@@ -1,3 +1,4 @@
+import { useReminderAlerts } from '../components/ReminderAlerts';
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import api from '../services/api';
@@ -405,6 +406,7 @@ export default function MainLayout() {
   // Drive the notification badge's red/pulse states from changes in the count.
   const { alert: inboxAlert, pulse: inboxPulse } = useNotificationFreshness(unreadData);
   useBrowserNotifications(currentWorkspace?.id);
+  useReminderAlerts(currentWorkspace?.id);
   // Schedule in-app toasts for upcoming work-block windows today.
   useWorkBlockNotifier();
   const [sidebarOpen, setSidebarOpen] = useState(true);
