@@ -12,6 +12,8 @@ describe('reminder title parsing', () => {
     ['Send invoice remind me on Friday at 10am', 'Send invoice', '2026-10-23T04:30:00.000Z'],
     ['Remind Me to call Alex on 25 October 2026 at 14:00', 'call Alex', '2026-10-25T08:30:00.000Z'],
     ['Review Remind Me at 5pm UTC', 'Review', '2026-10-19T17:00:00.000Z'],
+    ['Friday report Remind Me tomorrow at 5pm', 'Friday report', '2026-10-20T11:30:00.000Z'],
+    ['Send proposal tomorrow at 5pm Remind Me', 'Send proposal', '2026-10-20T11:30:00.000Z'],
   ])('cleans %s and extracts its date/time', (input, title, due) => {
     const result = parseReminderTitle(input, now, 330);
     expect(result.title).toBe(title); expect(result.dueDate).toBe(due);
@@ -23,6 +25,7 @@ describe('reminder title parsing', () => {
   it('requires an explicit time rather than silently choosing noon', () => {
     expect(parseReminderTitle('Call Sam Remind Me tomorrow', now, 330).dueDate).toBeNull();
     expect(parseReminderTitle('Call Sam Remind Me', now, 330).dueDate).toBeNull();
+    expect(parseReminderTitle('Friday report Remind Me', now, 330)).toMatchObject({ title: 'Friday report', dueDate: null });
   });
   it('does not guess between multiple times or a date range', () => {
     expect(parseReminderTitle('Call Remind Me tomorrow at 5pm and Friday at 9am', now, 330).dueDate).toBeNull();
