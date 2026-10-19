@@ -1,10 +1,10 @@
 {
-  "version": "0.1.31",
-  "notes": "Reminder tasks with natural-language scheduling, slide-down alerts, snooze and completion actions. Quick Add respects container default task types.",
-  "pub_date": "2026-10-19T05:38:30Z",
+  "version": "0.1.32",
+  "notes": "Quick Add gains a Goal picker: search your goals, attach the new task to one or more of them, and it shows up on the goal's list instantly.",
+  "pub_date": "2026-10-19T20:28:30Z",
   "platforms": {
     "darwin-aarch64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUQ003TTR4K1pKd3hLSW1xcXNaQUYwQ3p2bUlnTjl5WUkxaG5ER2J4V1Rwb1BuRHdrL25yTitTbUszSDVLbTUyYk8yQWJ6UFdxM2hwZy9EL3IxZkxSNUxQMUV4Z3VzMGd3PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkyMzg4Mjg5CWZpbGU6U3F1YWRIdWIgQ29tcGFuaW9uLmFwcC50YXIuZ3oKcE8zUHcwQnFIZUJuT2NoV1VsRU0ycDNBOW81UTF5NE1LZXcxWXhXMlVtUWtvQ0dLVUNhSmQ5K1lhNzNLczZsS0s2SlhMSXQzTG9kUnBQaTlnNTkzRHc9PQo=",
+      "signature": "ZFc1MGNuVnpkR1ZrSUdOdmJXMWxiblE2SUhOcFoyNWhkSFZ5WlNCbWNtOXRJSFJoZFhKcElITmxZM0psZENCclpYa0tVbFZVUTAwM1RUUjRLMXBLZHpOSlIyTXlWMk0zWVRocGNIUllLMlZYUXl0MlVXVnRNbEJoTlZkeVpubEliVEEyZVZCcWVXdE9XR2M0VlhBME1tVm5kRVJ5TlZSMk5ISnZjMmREU2s1RU5uRm5LMDlzTTA0d2VsTmpMekJoV0RkQk5VRnZQUXAwY25WemRHVmtJR052YlcxbGJuUTZJSFJwYldWemRHRnRjRG94TnpreU5EUXhOekF6Q1dacGJHVTZVM0YxWVdSSWRXSWdRMjl0Y0dGdWFXOXVMbUZ3Y0M1MFlYSXVaM29LT1M5bFQwRnRMMUJCTjNoWk9EQXhOSE5LUkRsd1JYQTNVRlJrTlRScFlsTlNLMGREUWtkRWJVbEZVa0ZsUjFsUEsyMXpPRGw1T0VveVUwOXBORzFqV0c1YWVVbERWbE4xVmpKaGVXSnJSbk5hYms5cVFVRTlQUW89",
       "url": "https://squadhub.in/downloads/SquadHub.app.tar.gz"
     }
   }
