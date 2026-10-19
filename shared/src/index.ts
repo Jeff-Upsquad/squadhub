@@ -344,7 +344,7 @@ export interface ResourceMembership {
 }
 
 // ---- Project Management ----
-export type TaskPriority = 'emergency' | 'urgent' | 'high' | 'normal' | 'low' | 'none';
+export type TaskPriority = 'emergency' | 'top' | 'urgent' | 'high' | 'normal' | 'low' | 'none';
 // Client platform that created a task. Mirrors the server allowlist in
 // server/src/utils/clientSource.ts and the tasks.created_via CHECK.
 export type TaskClientSource =
@@ -866,11 +866,12 @@ export function taskBucketOf(status: { group?: string | null; section?: string |
 /** Priority rank, lower = more important. Shared by every sort. */
 export const TASK_PRIORITY_RANK: Record<string, number> = {
   emergency: 0,
-  urgent: 1,
-  high: 2,
-  normal: 3,
-  low: 4,
-  none: 5,
+  top: 1,
+  urgent: 2,
+  high: 3,
+  normal: 4,
+  low: 5,
+  none: 6,
 };
 
 /** "When will I do it" — derived from tasks.work_date, never stored. */

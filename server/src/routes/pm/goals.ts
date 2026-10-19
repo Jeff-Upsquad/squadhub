@@ -485,7 +485,7 @@ const goalInput = z.object({
   name: z.string().trim().min(1, 'Give your goal a name').max(500),
   description: z.string().max(20000).default(''),
   status: z.enum(['planned', 'in_progress', 'on_hold']).default('planned'),
-  priority: z.enum(['emergency', 'urgent', 'high', 'normal', 'low', 'none']).default('normal'),
+  priority: z.enum(['emergency', 'top', 'urgent', 'high', 'normal', 'low', 'none']).default('normal'),
   assignee_ids: z.array(uuid).max(50).default([]),
   labels: z.array(z.string().trim().min(1).max(60)).max(20).default([]),
   work_start_date: day.nullable().default(null),

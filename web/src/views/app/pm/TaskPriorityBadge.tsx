@@ -1,8 +1,9 @@
 import type { TaskPriority } from '@squadhub/shared';
 
 const config: Record<TaskPriority, { label: string; badgeColor: string; flagColor: string; icon: string }> = {
-  emergency: { label: 'EMERGENCY', badgeColor: '#b91c1c', flagColor: '#b91c1c', icon: '!!!!' },
-  urgent:    { label: 'Urgent',    badgeColor: '#ef4444', flagColor: '#ef4444', icon: '!!!' },
+  emergency: { label: 'EMERGENCY',   badgeColor: '#b91c1c', flagColor: '#b91c1c', icon: '!!!!' },
+  top:       { label: 'Top Priority', badgeColor: '#f59e0b', flagColor: '#f59e0b', icon: '\u2605' },
+  urgent:    { label: 'Urgent',      badgeColor: '#ef4444', flagColor: '#ef4444', icon: '!!!' },
   high:      { label: 'High',      badgeColor: '#f97316', flagColor: '#f97316', icon: '!!' },
   normal:    { label: 'Normal',    badgeColor: '#3b82f6', flagColor: '#3b82f6', icon: '!' },
   low:       { label: 'Low',       badgeColor: '#6b7280', flagColor: '#22c55e', icon: '\u2193' },
@@ -18,6 +19,14 @@ function FlagIcon({ color }: { color: string }) {
   );
 }
 
+function StarIcon({ color }: { color: string }) {
+  return (
+    <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill={color} stroke={color} strokeWidth="1.5" strokeLinejoin="round">
+      <path d="M12 2.5l2.95 6.26 6.55.83-4.83 4.6 1.25 6.56L12 17.5l-5.92 3.25 1.25-6.56-4.83-4.6 6.55-.83z" />
+    </svg>
+  );
+}
+
 export default function TaskPriorityBadge({ priority, variant = 'badge' }: { priority: TaskPriority; variant?: 'badge' | 'flag' }) {
   const c = config[priority];
   if (priority === 'none') return null;
@@ -25,7 +34,7 @@ export default function TaskPriorityBadge({ priority, variant = 'badge' }: { pri
   if (variant === 'flag') {
     return (
       <span className="inline-flex items-center gap-1 text-xs">
-        <FlagIcon color={c.flagColor} />
+        {priority === 'top' ? <StarIcon color={c.flagColor} /> : <FlagIcon color={c.flagColor} />}
         <span style={{ color: c.flagColor }} className="font-medium">{c.label}</span>
       </span>
     );

@@ -121,11 +121,12 @@ export const STORED_STATUSES: GoalStoredStatus[] = ['planned', 'in_progress', 'o
 
 export const PRIORITY_META: Record<GoalPriority, { label: string; color: string; rank: number }> = {
   emergency: { label: 'Emergency', color: '#b91c1c', rank: 0 },
-  urgent: { label: 'Urgent', color: '#ef4444', rank: 1 },
-  high: { label: 'High', color: '#f97316', rank: 2 },
-  normal: { label: 'Normal', color: '#3b82f6', rank: 3 },
-  low: { label: 'Low', color: '#94a3b8', rank: 4 },
-  none: { label: 'No priority', color: '#cbd5e1', rank: 5 },
+  top: { label: 'Top Priority', color: '#f59e0b', rank: 1 },
+  urgent: { label: 'Urgent', color: '#ef4444', rank: 2 },
+  high: { label: 'High', color: '#f97316', rank: 3 },
+  normal: { label: 'Normal', color: '#3b82f6', rank: 4 },
+  low: { label: 'Low', color: '#94a3b8', rank: 5 },
+  none: { label: 'No priority', color: '#cbd5e1', rank: 6 },
 };
 
 export const PROJECT_COLORS = [

@@ -125,6 +125,13 @@ export function groupTasksByBucket(tasks: Task[], statuses: SpaceStatus[], fadin
   })).filter((g) => g.tasks.length > 0);
 }
 
+/** Lane of a task. Top Priority is essentially Urgent (ranked higher), so it
+ *  rides in the Urgent lane. */
+export function priorityLaneOf(t: Task): string {
+  const p = (t.priority as string) || 'none';
+  return p === 'top' ? 'urgent' : p;
+}
+
 export const PRIORITY_LANES: { key: string; label: string; color: string }[] = [
   { key: 'emergency', label: 'Emergency', color: '#b91c1c' },
   { key: 'urgent', label: 'Urgent', color: '#ef4444' },

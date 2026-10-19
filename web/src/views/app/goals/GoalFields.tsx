@@ -97,7 +97,11 @@ export function PriorityBadge({ priority, showNone = false }: { priority: GoalPr
   const m = PRIORITY_META[priority];
   return (
     <span className="gl-priority" style={{ '--pr': m.color } as React.CSSProperties} data-p={priority}>
-      <svg width="12" height="12" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 21V4m0 0h11l-2 4 2 4H5" fill={priority === 'none' ? 'none' : 'currentColor'} stroke="currentColor" strokeWidth="2" strokeLinejoin="round" /></svg>
+      {priority === 'top' ? (
+        <svg width="12" height="12" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.5l2.95 6.26 6.55.83-4.83 4.6 1.25 6.56L12 17.5l-5.92 3.25 1.25-6.56-4.83-4.6 6.55-.83z" fill="currentColor" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" /></svg>
+      ) : (
+        <svg width="12" height="12" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 21V4m0 0h11l-2 4 2 4H5" fill={priority === 'none' ? 'none' : 'currentColor'} stroke="currentColor" strokeWidth="2" strokeLinejoin="round" /></svg>
+      )}
       {m.label}
     </span>
   );

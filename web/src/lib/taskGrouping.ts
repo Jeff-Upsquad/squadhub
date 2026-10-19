@@ -125,15 +125,17 @@ export function isTaskUpcoming(t: Task, tz: string): boolean {
 
 export const PRIORITY_ORDER: Record<string, number> = {
   emergency: 0,
-  urgent: 1,
-  high: 2,
-  normal: 3,
-  low: 4,
-  none: 5,
+  top: 1,
+  urgent: 2,
+  high: 3,
+  normal: 4,
+  low: 5,
+  none: 6,
 };
 
 export const PRIORITY_LABELS: Record<string, string> = {
   emergency: 'Emergency',
+  top: 'Top Priority',
   urgent: 'Urgent',
   high: 'High',
   normal: 'Normal',
@@ -281,7 +283,9 @@ export function groupByDate(tasks: Task[], field: 'work_date' | 'due_date', tz: 
 export function groupByPriority(tasks: Task[]): Group[] {
   const map = new Map<string, Group>();
   for (const t of tasks) {
-    const p = (t.priority as string) || 'none';
+    // Top Priority is essentially Urgent (ranked higher): it lives in the
+    // Urgent group, sorted above plain urgent tasks.
+    const p = t.priority === 'top' ? 'urgent' : ((t.priority as string) || 'none');
     if (!map.has(p)) {
       map.set(p, {
         key: p,
@@ -291,6 +295,10 @@ export function groupByPriority(tasks: Task[]): Group[] {
       });
     }
     map.get(p)!.tasks.push(t);
+  }
+  for (const g of map.values()) {
+    const tops = g.tasks.filter((t) => t.priority === 'top');
+    if (tops.length > 0) g.tasks = [...tops, ...g.tasks.filter((t) => t.priority !== 'top')];
   }
   return [...map.values()].sort((a, b) => (a.sort as number) - (b.sort as number));
 }

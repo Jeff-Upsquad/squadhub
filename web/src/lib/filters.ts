@@ -18,7 +18,7 @@ export const WORK_DATE_PRESETS: { value: WorkDatePreset; label: string }[] = [
   { value: 'no_date', label: 'No work date' },
 ];
 
-export const PRIORITY_OPTIONS: TaskPriority[] = ['emergency', 'urgent', 'high', 'normal', 'low', 'none'];
+export const PRIORITY_OPTIONS: TaskPriority[] = ['emergency', 'top', 'urgent', 'high', 'normal', 'low', 'none'];
 
 export interface TaskFilterState {
   statusCategories?: string[];
@@ -104,7 +104,8 @@ export function filterTasks(tasks: Task[], filters: TaskFilterState | undefined 
 
     if (f.priorities && f.priorities.length > 0) {
       const p = (t.priority ?? 'none') as TaskPriority;
-      if (!f.priorities.includes(p)) return false;
+      // Top Priority is essentially Urgent: it also matches an Urgent filter.
+      if (!f.priorities.includes(p) && !(p === 'top' && f.priorities.includes('urgent'))) return false;
     }
 
     if (f.assigneeIds && f.assigneeIds.length > 0) {

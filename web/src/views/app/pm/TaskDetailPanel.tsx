@@ -135,6 +135,7 @@ function formatSeconds(totalSeconds: number): string {
 
 const PRIORITY_LABEL: Record<TaskPriority, string | null> = {
   emergency: 'EMG',
+  top: 'TOP',
   urgent: 'P0',
   high: 'P1',
   normal: 'P2',
@@ -144,6 +145,7 @@ const PRIORITY_LABEL: Record<TaskPriority, string | null> = {
 
 const PRIORITY_NAME: Record<TaskPriority, string> = {
   emergency: 'Emergency',
+  top: 'Top Priority',
   urgent: 'Urgent',
   high: 'High',
   normal: 'Normal',
@@ -3386,7 +3388,7 @@ export default function TaskDetailPanel({
               left: Math.min(priorityAnchor.left, window.innerWidth - 200),
             }}
           >
-            {(['urgent', 'high', 'normal', 'low', 'none'] as TaskPriority[]).map((p) => (
+            {(['top', 'urgent', 'high', 'normal', 'low', 'none'] as TaskPriority[]).map((p) => (
               <button
                 key={p}
                 onClick={() => {

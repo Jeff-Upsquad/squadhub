@@ -14,6 +14,7 @@ import { PRIORITY_LABELS } from '../../lib/taskGrouping';
 
 const PRIORITY_DOT: Record<TaskPriority, string> = {
   emergency: '#b91c1c',
+  top: '#f59e0b',
   urgent: '#ef4444',
   high: '#f97316',
   normal: '#3b82f6',

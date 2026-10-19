@@ -959,3 +959,14 @@ button.gl-list-group-title { cursor: pointer; }
 @media (prefers-reduced-motion: reduce) {
   .gl-root *, .gl-pop, .gl-modal, .gl-modal * { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
 }
+
+/* Home "Top Priority" goals card (above the Focus list): the panel row
+   design adapted to a compact dashboard card. */
+.gl-topgoals .hm-card-head { padding: 12px 18px 6px; gap: 7px; }
+.gl-topgoals .hm-card-head h3 { font-size: 14px; font-weight: 650; letter-spacing: -0.02em; }
+.gl-topgoals .hm-card-head svg { width: 11px; height: 11px; }
+.gl-topgoals-list { display: flex; flex-direction: column; gap: 6px; padding: 4px 12px 12px; }
+.gl-topgoals .gl-hmp-goal { padding: 8px 12px; gap: 11px; border-radius: 12px; }
+.gl-topgoals .gl-hmp-goal strong { font-size: 13px; }
+.gl-topgoals .gl-card-pct { font-size: 10px; }
+.gl-topgoals .gl-card-pct small { font-size: 7.5px; }
