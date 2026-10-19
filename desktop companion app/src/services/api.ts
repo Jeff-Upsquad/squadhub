@@ -245,6 +245,45 @@ export function attachTaskLabel(taskId: string, tagId: string): Promise<TaskTag>
   });
 }
 
+// ── goals (mirrors web TaskCreatePanel: picked now, linked after create) ──────
+
+export interface GoalProjectLite {
+  id: string;
+  name: string;
+  color: string;
+}
+
+export interface GoalLite {
+  id: string;
+  project_id: string;
+  name: string;
+  status: string;
+  task_count: number;
+  completed_count: number;
+  progress: number;
+}
+
+export interface GoalsDataLite {
+  projects: GoalProjectLite[];
+  goals: GoalLite[];
+}
+
+/** GET /pm/goals — every goal visible in the user's first workspace. */
+export async function fetchGoals(): Promise<GoalsDataLite> {
+  const workspaces = await fetchWorkspaces();
+  const wid = workspaces[0]?.id;
+  if (!wid) return { projects: [], goals: [] };
+  return apiJson<GoalsDataLite>(`/pm/goals?workspace_id=${encodeURIComponent(wid)}`);
+}
+
+/** POST /pm/goals/:goalId/tasks — link a task to a goal. */
+export async function linkTaskToGoal(goalId: string, taskId: string): Promise<void> {
+  await apiJson(`/pm/goals/${goalId}/tasks`, {
+    method: 'POST',
+    body: JSON.stringify({ task_ids: [taskId] }),
+  });
+}
+
 /** PUT /pm/tasks/:id — update status (used for complete-on-add). */
 export function updateTaskStatus(taskId: string, status: string): Promise<{ id: string }> {
   return apiJson<{ id: string }>(`/pm/tasks/${taskId}`, {
