@@ -38,8 +38,10 @@ export default function InboxTaskDetail({
   taskId,
   onOpen,
   onStay,
+  reminderNotification,
 }: {
   taskId: string;
+  reminderNotification?: Notification;
   onOpen: () => void;
   onStay?: () => void;
 }) {
@@ -49,6 +51,9 @@ export default function InboxTaskDetail({
   const addComment = useAddComment(taskId);
   const updateTask = useUpdateTask((task as any)?.list_id || null);
 
+  const [reminderError, setReminderError] = useState('');
+  const [snoozing, setSnoozing] = useState(false);
+  const [snoozeMinutes, setSnoozeMinutes] = useState(10);
   const [text, setText] = useState('');
   const [mentions, setMentions] = useState<string[]>([]);
 
@@ -117,7 +122,7 @@ export default function InboxTaskDetail({
           <h1>{t.title}</h1>
           <div className="th-sub" style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
             <span style={{ textTransform: 'capitalize' }}>{status}</span>
-            {t.due_date && <span>Due {new Date(t.due_date).toLocaleDateString([], { month: 'short', day: 'numeric' })}</span>}
+            {t.due_date && <span>Due {new Date(t.due_date).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</span>}
             {t.priority && t.priority !== 'none' && <span style={{ textTransform: 'capitalize' }}>{t.priority}</span>}
           </div>
         </div>
@@ -143,6 +148,21 @@ export default function InboxTaskDetail({
           Open
         </button>
       </div>
+
+      {reminderNotification && !isDone && <div style={{ padding: '12px 20px', display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+        <select aria-label="Snooze duration" value={snoozeMinutes} onChange={e => setSnoozeMinutes(Number(e.target.value))} style={{ background: 'var(--surface)', color: 'var(--sh-ink)', padding: 6 }}>{[5,10,15,30,60,1440].map(m => <option key={m} value={m}>{m === 1440 ? '1 day' : `${m} minutes`}</option>)}</select>
+        <button disabled={snoozing} className="top-btn ghost-border" onClick={async () => {
+          setSnoozing(true); setReminderError('');
+          try {
+            await api.post(`/pm/tasks/${taskId}/reminder-action`, { notification_id: reminderNotification.id, action: 'snooze', minutes: snoozeMinutes });
+            void queryClient.invalidateQueries({ queryKey: ['task', taskId] });
+            void queryClient.invalidateQueries({ queryKey: ['notifications'] });
+            void queryClient.invalidateQueries({ queryKey: ['my-tasks'] });
+          } catch (e: any) { setReminderError(e.response?.data?.error || 'Could not snooze reminder'); }
+          finally { setSnoozing(false); }
+        }}>Snooze reminder</button>
+        {reminderError && <p role="alert" style={{ color: '#ef4444', fontSize: 12 }}>{reminderError}</p>}
+      </div>}
 
       <div className="th-scroll">
         {assignees.length > 0 && (

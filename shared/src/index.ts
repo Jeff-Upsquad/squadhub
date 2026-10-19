@@ -1784,6 +1784,7 @@ export type NotificationType =
   | 'task_completed'
   | 'task_commented'
   | 'task_due_soon'
+  | 'task_reminder'
   | 'mention'
   | 'reaction_added'
   | 'meeting_invited'
@@ -5456,3 +5457,5 @@ export interface SquadBotActivityReport {
 
 export * from './goals';
 export * from './contentRoles';
+
+export { REMINDER_TYPE_KEY, hasReminderIntent, parseReminderTitle, reminderDescription } from './reminders';

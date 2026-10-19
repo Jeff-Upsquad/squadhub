@@ -1,3 +1,4 @@
+import { startTaskRemindersCron } from './cron/task-reminders-cron';
 import { startContentBriefCrmCron } from './cron/content-brief-crm-cron';
 import express from 'express';
 import cors from 'cors';
@@ -378,6 +379,7 @@ server.listen(config.port, () => {
     startScheduledMessagesSweeper(io);
     startHuddleSweeper(io);
     startRoutineCron();
+    startTaskRemindersCron();
     startTaskMirrorCron();
     startElapsedTimeCron();
     startHoursCompletionCron();

@@ -8,6 +8,7 @@ const TYPE_LABELS: Record<string, string> = {
   task_completed: 'Task Completed',
   task_commented: 'New Comment',
   task_due_soon: 'Due Soon',
+  task_reminder: 'Reminder',
   mention: 'Mention',
   message_mention: 'Mention',
   thread_reply: 'Thread Reply',

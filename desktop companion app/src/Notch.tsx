@@ -1,3 +1,4 @@
+import ReminderCard, { useCompanionReminders } from './ReminderCard';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { getCurrentWindow, LogicalSize, LogicalPosition, currentMonitor } from '@tauri-apps/api/window';
 import { invoke } from '@tauri-apps/api/core';
@@ -69,6 +70,7 @@ export default function Notch() {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const userId = useAuthStore((s) => s.userId);
 
+  const { reminder, dismiss: dismissReminder } = useCompanionReminders(isAuthenticated && authHydrated);
   const [view, setView] = useState<View>('collapsed');
   const [tab, setTab] = useState<Tab>('timer');
   const [session, setSession] = useState<TimerSession | null>(null);
@@ -467,6 +469,10 @@ export default function Notch() {
   const breakSec = (today?.total_break_seconds || 0) + liveFor('break');
   const offSec = (today?.total_no_work_seconds || 0) + liveFor('no_work');
   const totalSec = Math.max(1, workSec + breakSec + offSec);
+
+  useEffect(() => { if (reminder) void surface('expanded', false); }, [reminder?.id, surface, view]);
+
+  if (reminder) return <div className="notch-root"><div className="notch-panel" ref={cardRef as any}><ReminderCard key={reminder.id} reminder={reminder} dismiss={dismissReminder} /></div></div>;
 
   // ── render: collapsed pill ──────────────────────────────────────────────────
   if (view === 'collapsed') {

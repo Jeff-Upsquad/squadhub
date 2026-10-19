@@ -43,6 +43,8 @@ export async function sendPartnerPush(notification: PartnerNotification): Promis
     type: notification.type || '',
     reference_type: notification.reference_type || '',
     reference_id: notification.reference_id || '',
+    task_id: asStr(meta.task_id),
+    due_at: asStr(meta.due_at),
     channel_id: asStr(meta.channel_id),
     dm_conversation_id: asStr(meta.dm_conversation_id),
     // Thread root id when the message is a reply, so the app can deep-link the

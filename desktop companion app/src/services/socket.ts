@@ -1,3 +1,4 @@
+import { emit } from '@tauri-apps/api/event';
 import { io, type Socket } from 'socket.io-client';
 import { useAuthStore } from '../stores/authStore';
 import { refreshTokens } from './auth';
@@ -64,8 +65,11 @@ export function connectSocket(): Socket {
   });
 
   socket.on('new_notification', (notification) => {
-    showNotification(notification);
+    void showNotification(notification);
+    if (notification.type === 'task_reminder') void emit('reminder:received', notification);
   });
+
+  socket.on('notifications_read', payload => { void emit('reminder:read', payload); });
 
   return socket;
 }

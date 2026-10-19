@@ -1,3 +1,4 @@
+import ReminderFields from '../../../components/pm/ReminderFields';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useCreateTask, usePersonalList } from '../../../hooks/useTasks';
 import { useFocusTask } from '../../../hooks/useDayPlanner';
@@ -1174,6 +1175,10 @@ export default function TaskCreatePanel({
               className="td-title-hero flex-1 bg-transparent outline-none m-0 placeholder:text-[color:var(--sh-ink-4)]"
             />
           </div>
+
+          <ReminderFields title={draft.title} reminder={currentType?.key === 'reminders'} due={draft.due_date}
+            onDetect={(due) => setDraft(d => ({ ...d, task_type_id: taskTypes?.find(t => t.key === 'reminders')?.id || d.task_type_id, ...(due ? { due_date: due } : {}) }))}
+            onDue={(due) => setDraft(d => ({ ...d, due_date: due }))} />
 
           {/* Description — boxed right under title (hidden for design tasks, Brief replaces it) */}
           {!isDesignTask && (
