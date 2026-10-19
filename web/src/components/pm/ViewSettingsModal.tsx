@@ -41,6 +41,7 @@ const TYPE_OPTIONS: { type: ListView; label: string; desc: string; icon: ReactNo
 ];
 
 const STANDARD_PRIORITIES: { value: TaskPriority; label: string; color: string }[] = [
+  { value: 'top', label: 'Top Priority', color: PRIORITY_META.top.color },
   { value: 'none', label: 'None', color: '#94a3b8' },
   { value: 'low', label: 'Low', color: PRIORITY_META.low.color },
   { value: 'normal', label: 'Normal', color: PRIORITY_META.normal.color },

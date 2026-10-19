@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type CSSProperties } from 'react';
-import type { Goal } from '@squadhub/shared';
+import type { Goal, Task } from '@squadhub/shared';
 import api from '../../../services/api';
 import { usePMStore } from '../../../stores/pmStore';
 import { useWorkspaceStore } from '../../../stores/workspaceStore';
@@ -9,6 +9,7 @@ import GoalDetail from './GoalDetail';
 import GoalCreateDialog from './GoalCreateDialog';
 import { PickGoalDialog, SourceDialog } from './GoalLinkDialog';
 import { useGoalsData, useTaskGoals } from './goalsApi';
+import DashboardTaskRow from '../home/DashboardTaskRow';
 import { useGoalsUI } from './goalsStore';
 import { STATUS_META, daysBetween, formatDay, isGoalInMotion, isGoalOverdue, todayKey } from './goalUtils';
 import './goals.css';
@@ -127,6 +128,63 @@ export function HomeGoalsChip({ goals, onOpen }: { goals: Goal[]; onOpen: () => 
         {late && <span className="ping" />}
       </div>
       <div className="val">{goals.length}</div>
+    </div>
+  );
+}
+
+/**
+ * Home "Top Priority" tab, mounted just below the In-progress card and above
+ * the Focus list. Appears while at least one task or in-motion goal is marked
+ * Top Priority: tasks render as dashboard rows, goals in the same row design
+ * as the goals panel behind the disappearing Goals card.
+ */
+export function HomeTopPriorityGoals({ tasks = [] }: { tasks?: Task[] }) {
+  const { data } = useGoalsData();
+  const openGoal = useGoalsUI((s) => s.openGoal);
+  const setActiveTask = usePMStore((s) => s.setActiveTask);
+  const goals = useGoalsInMotion().filter((g) => g.priority === 'top');
+  if (goals.length === 0 && tasks.length === 0) return null;
+  const today = todayKey();
+  const total = goals.length + tasks.length;
+  return (
+    <div className="hm-card gl-root gl-topgoals">
+      <div className="hm-card-head">
+        <svg width="12" height="12" viewBox="0 0 24 24" aria-hidden="true" style={{ color: '#f59e0b', flex: 'none' }}>
+          <path d="M12 2.5l2.95 6.26 6.55.83-4.83 4.6 1.25 6.56L12 17.5l-5.92 3.25 1.25-6.56-4.83-4.6 6.55-.83z" fill="currentColor" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
+        </svg>
+        <h3>Top Priority</h3>
+        <span className="hm-count">· {total} item{total === 1 ? '' : 's'}</span>
+      </div>
+      <div className="gl-topgoals-list">
+        {tasks.map((t) => (
+          <DashboardTaskRow key={`t:${t.id}`} task={t} onOpen={() => setActiveTask(t.id)} />
+        ))}
+        {goals.map((g, i) => {
+          const p = data.projects.find((x) => x.id === g.project_id);
+          const left = g.due_date ? daysBetween(today, g.due_date) : null;
+          return (
+            <button key={g.id} type="button" className="gl-hmp-goal" style={{ '--gc': p?.color, animationDelay: `${i * 35}ms` } as CSSProperties}
+              onClick={() => openGoal(g.id)}>
+              <ProgressRing progress={g.progress} size={36} stroke={3.5} color={p?.color}>
+                <b className="gl-card-pct">{g.progress}<small>%</small></b>
+              </ProgressRing>
+              <span className="gl-hmp-text">
+                <small><i />{p?.name} · {STATUS_META[g.status].label}</small>
+                <strong>{g.name}</strong>
+                <span className="gl-hmp-meta">
+                  <SegmentBar done={g.completed_count} total={g.task_count} color={p?.color} />
+                  <em>{g.completed_count}/{g.task_count}</em>
+                </span>
+              </span>
+              {left != null && (
+                <span className="gl-due" data-tone={left < 0 ? 'late' : left <= 3 ? 'soon' : undefined}>
+                  {left < 0 ? `${-left}d late` : left === 0 ? 'Today' : left <= 14 ? `${left}d left` : formatDay(g.due_date)}
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }

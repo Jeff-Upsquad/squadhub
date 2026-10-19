@@ -95,6 +95,7 @@ function formatDueRelative(iso: string | null | undefined): { text: string; acce
 
 const PRIORITY_LABEL: Record<TaskPriority, string | null> = {
   emergency: 'EMG',
+  top: 'TOP',
   urgent: 'P0',
   high: 'P1',
   normal: 'P2',
@@ -104,6 +105,7 @@ const PRIORITY_LABEL: Record<TaskPriority, string | null> = {
 
 const PRIORITY_NAME: Record<TaskPriority, string> = {
   emergency: 'Emergency',
+  top: 'Top Priority',
   urgent: 'Urgent',
   high: 'High',
   normal: 'Normal',
@@ -111,7 +113,7 @@ const PRIORITY_NAME: Record<TaskPriority, string> = {
   none: 'None',
 };
 
-const PRIORITY_ORDER: TaskPriority[] = ['urgent', 'high', 'normal', 'low', 'none', 'emergency'];
+const PRIORITY_ORDER: TaskPriority[] = ['top', 'urgent', 'high', 'normal', 'low', 'none', 'emergency'];
 
 const META_ICONS: Record<string, React.ReactNode> = {
   Assignee: (

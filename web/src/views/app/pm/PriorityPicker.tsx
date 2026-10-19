@@ -7,15 +7,16 @@ import EmergencyConfirm from './EmergencyConfirm';
 // surfaces. Colours mirror TaskPriorityBadge so a task reads the same whether
 // it shows as a badge, a flag, or this inline cell.
 export const PRIORITY_META: Record<TaskPriority, { label: string; color: string }> = {
-  emergency: { label: 'Emergency', color: '#b91c1c' },
-  urgent:    { label: 'Urgent',    color: '#ef4444' },
+  emergency: { label: 'Emergency',    color: '#b91c1c' },
+  top:       { label: 'Top Priority', color: '#f59e0b' },
+  urgent:    { label: 'Urgent',       color: '#ef4444' },
   high:      { label: 'High',      color: '#f97316' },
   normal:    { label: 'Normal',    color: '#3b82f6' },
   low:       { label: 'Low',       color: '#6b7280' },
   none:      { label: 'None',      color: 'transparent' },
 };
 
-const STANDARD: TaskPriority[] = ['urgent', 'high', 'normal', 'low', 'none'];
+const STANDARD: TaskPriority[] = ['top', 'urgent', 'high', 'normal', 'low', 'none'];
 
 // Anchored popover for changing a task's priority — same shape as the other
 // inline pickers (AssigneePicker / DatePicker): position from a cell rect,
@@ -87,10 +88,16 @@ export default function PriorityPicker({
             data-active={p === value || undefined}
             onClick={() => { onChange(p); onClose(); }}
           >
-            <span
-              className="nt-pri-dot"
-              style={{ background: m.color, borderColor: p === 'none' ? 'var(--sh-hair-2)' : m.color }}
-            />
+            {p === 'top' ? (
+              <svg width="13" height="13" viewBox="0 0 24 24" fill={m.color} stroke={m.color} strokeWidth="1.5" strokeLinejoin="round" aria-hidden="true" style={{ flex: 'none', marginRight: 2 }}>
+                <path d="M12 2.5l2.95 6.26 6.55.83-4.83 4.6 1.25 6.56L12 17.5l-5.92 3.25 1.25-6.56-4.83-4.6 6.55-.83z" />
+              </svg>
+            ) : (
+              <span
+                className="nt-pri-dot"
+                style={{ background: m.color, borderColor: p === 'none' ? 'var(--sh-hair-2)' : m.color }}
+              />
+            )}
             {m.label}
           </button>
         );

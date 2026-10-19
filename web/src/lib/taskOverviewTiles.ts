@@ -25,7 +25,7 @@ export function overviewDay(iso: string | null | undefined, tz: string): string 
 export function matchesOverviewTile(task: Task, tile: OverviewTile, tz: string, now = new Date()): boolean {
   if (tile === 'all') return true;
   if (isTaskCompleted(task)) return false;
-  if (tile === 'urgent') return task.priority === 'urgent' || task.priority === 'emergency';
+  if (tile === 'urgent') return task.priority === 'urgent' || task.priority === 'top' || task.priority === 'emergency';
   if (tile === 'attention') return ['help', 'unblocked'].includes(stageKeyOf(task).toLowerCase());
   const today = overviewDay(now.toISOString(), tz)!;
   const work = overviewDay(task.work_date, tz);

@@ -9,6 +9,7 @@ import { isTaskVisibleInView } from '../../../lib/viewKeywordMatching';
 import { isTaskCompleted } from '../../../lib/taskGrouping';
 import {
   PRIORITY_LANES,
+  priorityLaneOf,
   bucketOfTask,
   effectiveStageKey,
   findStatus,
@@ -424,7 +425,7 @@ export default function StageBoardView({
             ))}
           </div>
           {PRIORITY_LANES.map((lane) => {
-            const laneCount = columns.reduce((n, c) => n + c.tasks.filter((t) => (t.priority || 'none') === lane.key).length, 0);
+            const laneCount = columns.reduce((n, c) => n + c.tasks.filter((t) => priorityLaneOf(t) === lane.key).length, 0);
             if (laneCount === 0) return null;
             return (
               <div key={lane.key} className="sw-lane">
@@ -437,7 +438,7 @@ export default function StageBoardView({
                   <StageColumn
                     key={c.key}
                     column={c}
-                    tasks={c.tasks.filter((t) => (t.priority || 'none') === lane.key)}
+                    tasks={c.tasks.filter((t) => priorityLaneOf(t) === lane.key)}
                     showStageOnCards={showStageOnCards}
                     statuses={statuses}
                     canEdit={canEdit}

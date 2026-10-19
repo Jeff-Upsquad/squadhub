@@ -25,6 +25,7 @@ import { useMobileSpaces, type OpenTarget } from './useMobileSpaces';
 
 const PRIORITIES: { value: TaskPriority; label: string; color: string }[] = [
   { value: 'emergency', label: 'Emergency', color: '#b91c1c' },
+  { value: 'top', label: 'Top Priority', color: '#f59e0b' },
   { value: 'urgent', label: 'Urgent', color: '#ef4444' },
   { value: 'high', label: 'High', color: '#f97316' },
   { value: 'normal', label: 'Normal', color: '#3b82f6' },

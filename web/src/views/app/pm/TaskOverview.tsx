@@ -11,6 +11,7 @@ import { isTaskCompleted, isTaskUpcoming, buildFocusTodayGroup, isTaskFocused, t
 import { stagesFromStatuses } from '../../../lib/stages';
 import {
   PRIORITY_LANES,
+  priorityLaneOf,
   dedupeStatuses,
   findStatus,
   groupTasksByStatusDirectory,
@@ -55,13 +56,14 @@ const GROUP_OPTIONS: { value: OverviewGroup; label: string }[] = [
 
 const PRIORITY_PILL: Record<string, { label: string; dot: string; emergency?: boolean }> = {
   emergency: { label: 'Emergency', dot: '#FF453A', emergency: true },
+  top: { label: 'Top Priority', dot: '#FFB340' },
   urgent: { label: 'Urgent', dot: '#FF453A' },
   high: { label: 'High', dot: '#FFB340' },
   normal: { label: 'Normal', dot: '#2962FF' },
   low: { label: 'Low', dot: '#A0A0A0' },
 };
 
-const FILTER_PRIORITIES: TaskPriority[] = ['emergency', 'urgent', 'high', 'normal', 'low', 'none'];
+const FILTER_PRIORITIES: TaskPriority[] = ['emergency', 'top', 'urgent', 'high', 'normal', 'low', 'none'];
 
 const RING = 2 * Math.PI * 6;
 
@@ -346,7 +348,7 @@ export default function TaskOverview({
         });
       }
     } else if (group === 'priority') {
-      out = PRIORITY_LANES.map((p) => one(p.key, p.label, p.color, listed.filter((t) => (t.priority || 'none') === p.key)));
+      out = PRIORITY_LANES.map((p) => one(p.key, p.label, p.color, listed.filter((t) => priorityLaneOf(t) === p.key)));
     } else if (group === 'assignee') {
       const people = new Map<string, { user: User; tasks: Task[] }>();
       const none: Task[] = [];

@@ -133,7 +133,7 @@ export function useSecondaryCards(): SecondaryCardsResult {
     // Urgent: every urgent-priority task regardless of dates — except one whose
     // work_date is in the future, which is held back until that day arrives.
     const urgent = all
-      .filter((t) => t.priority === 'urgent' && !isFutureDay(t.work_date, tz))
+      .filter((t) => (t.priority === 'urgent' || t.priority === 'top') && !isFutureDay(t.work_date, tz))
       .map((t) => toItem(t, 'urgent'));
 
     // Label cards: carry the label AND are starred OR have a today/overdue date.

@@ -488,6 +488,7 @@ const PRIORITY_OPTIONS: { value: TaskPriority; label: string }[] = [
   { value: 'low', label: 'Low' },
   { value: 'normal', label: 'Normal' },
   { value: 'high', label: 'High' },
+  { value: 'top', label: 'Top Priority' },
   { value: 'urgent', label: 'Urgent' },
 ];
 

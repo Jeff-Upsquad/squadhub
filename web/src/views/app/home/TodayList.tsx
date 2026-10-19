@@ -19,7 +19,7 @@ import { groupTasks, isTaskFocused, collapseGroupedTasks, isGroupedRow, GROUP_BY
 import GroupedTaskRow from './GroupedTaskRow';
 import { buildFocusTasks, buildInProgressTasks, isDeferredWorkedTask } from '../../../lib/inProgressTasks';
 import DayCalendar from '../day-planner/DayCalendar';
-import { GoalTaskFlag } from '../goals/GoalIntegration';
+import { GoalTaskFlag, HomeTopPriorityGoals } from '../goals/GoalIntegration';
 import TaskRelationshipsButton from '../../../components/pm/TaskRelationshipsButton';
 import { planDateKey, computeSnoozeTargets, useFocusTask } from '../../../hooks/useDayPlanner';
 import { useIsMobile } from '../../../hooks/useIsMobile';
@@ -223,6 +223,19 @@ export default function TodayList() {
     return buildInProgressTasks(data?.in_progress_today ?? [], allAvailable, activeIds, workedTaskContext);
   }, [data, activeWB, timers, workedTaskContext]);
   const inProgressTasks = useRetainFading(rawInProgress, fadingTaskIds);
+  // Every open Top Priority task across all my-tasks buckets, deduped —
+  // surfaced together with Top Priority goals in the Home "Top Priority" card.
+  const topPriorityTasks = useMemo(() => {
+    if (!data) return [];
+    const merged = [
+      ...(data.in_progress_today ?? []), ...(data.focused ?? []),
+      ...data.overdue, ...data.today, ...data.tomorrow, ...data.upcoming, ...data.later,
+      ...(data.day_planner ?? []), ...(data.unscheduled ?? []),
+    ];
+    const seen = new Set<string>();
+    return merged.filter((t) =>
+      t.priority === 'top' && !isTaskCompleted(t) && !seen.has(t.id) && (seen.add(t.id), true));
+  }, [data]);
   const inProgressIds = useMemo(() => new Set(inProgressTasks.map((t) => t.id)), [inProgressTasks]);
 
   // In-progress tasks that have NOT been assigned a bucket — these stay in the
@@ -410,6 +423,7 @@ export default function TodayList() {
         {renderTaskCollection(unbucketedInProgress)}
       </div>
     )}
+    <HomeTopPriorityGoals tasks={topPriorityTasks} />
     <div className="hm-card">
       <div className="hm-card-head">
         <h3>Focus list</h3>

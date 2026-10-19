@@ -5,7 +5,7 @@
 /** Stored statuses. `achieved` is derived: every included task is complete. */
 export type GoalStoredStatus = 'planned' | 'in_progress' | 'on_hold';
 export type GoalStatus = GoalStoredStatus | 'achieved';
-export type GoalPriority = 'emergency' | 'urgent' | 'high' | 'normal' | 'low' | 'none';
+export type GoalPriority = 'emergency' | 'top' | 'urgent' | 'high' | 'normal' | 'low' | 'none';
 export type GoalEndpoint = 'start' | 'end';
 
 export interface GoalProject {
