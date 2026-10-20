@@ -18,6 +18,7 @@ import { formatTracked, toLocalDateKey } from '../../../lib/formatDuration';
 import { groupTasks, isTaskFocused, collapseGroupedTasks, isGroupedRow, GROUP_BY_OPTIONS, isTaskCompleted } from '../../../lib/taskGrouping';
 import GroupedTaskRow from './GroupedTaskRow';
 import { buildFocusTasks, buildInProgressTasks, isDeferredWorkedTask } from '../../../lib/inProgressTasks';
+import { useTopPriorityTasks } from '../../../hooks/useTopPriorityTasks';
 import DayCalendar from '../day-planner/DayCalendar';
 import { GoalTaskFlag, HomeTopPriorityGoals } from '../goals/GoalIntegration';
 import TaskRelationshipsButton from '../../../components/pm/TaskRelationshipsButton';
@@ -225,7 +226,7 @@ export default function TodayList() {
   const inProgressTasks = useRetainFading(rawInProgress, fadingTaskIds);
   // Every open Top Priority task across all my-tasks buckets, deduped —
   // surfaced together with Top Priority goals in the Home "Top Priority" card.
-  const topPriorityTasks = useMemo(() => {
+  const topPriorityCandidates = useMemo(() => {
     if (!data) return [];
     const merged = [
       ...(data.in_progress_today ?? []), ...(data.focused ?? []),
@@ -237,6 +238,10 @@ export default function TodayList() {
       t.priority === 'top' && !isTaskCompleted(t) && !seen.has(t.id) && (seen.add(t.id), true));
   }, [data]);
   const inProgressIds = useMemo(() => new Set(inProgressTasks.map((t) => t.id)), [inProgressTasks]);
+  // Time gate: a Top Priority task waits for its work day, and waits for its
+  // Evening / Night slot, before it surfaces — the same rules the rest of My
+  // Home applies. A held-back task reappears in the card the moment it is due.
+  const topPriorityTasks = useTopPriorityTasks(topPriorityCandidates, inProgressIds);
 
   // In-progress tasks that have NOT been assigned a bucket — these stay in the
   // "In progress" card. Those with a bucket ('evening', 'night', 'focus') flow
