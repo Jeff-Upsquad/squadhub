@@ -2,7 +2,7 @@ import TaskLocation from '../../../components/pm/TaskLocation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { Task } from '@squadhub/shared';
-import { isTaskCompleted } from '../../../lib/taskGrouping';
+import { isTaskCompleted, isTaskFocused } from '../../../lib/taskGrouping';
 import { usePMStore } from '../../../stores/pmStore';
 import { useAuthStore } from '../../../stores/authStore';
 import { useUpdateTask } from '../../../hooks/useTasks';
@@ -10,7 +10,7 @@ import { useCompletionGate } from '../../../hooks/useCompletionGate';
 import { useParallelTimers } from '../../../hooks/useParallelTimers';
 import { useTaskTypes } from '../../../hooks/useTaskTypes';
 import { useActiveWorkBlockRun, useStopWorkBlockRun } from '../../../hooks/useWorkBlocks';
-import { computeSnoozeTargets } from '../../../hooks/useDayPlanner';
+import { computeSnoozeTargets, useFocusTask } from '../../../hooks/useDayPlanner';
 import { useIsMobile } from '../../../hooks/useIsMobile';
 import { formatTracked } from '../../../lib/formatDuration';
 import { formatTaskDates } from '../pm/taskHelpers';
@@ -45,10 +45,14 @@ const PRIORITY_LABEL: Record<string, string | null> = {
   none: null,
 };
 
-export default function DashboardTaskRow({ task, onOpen: openOverride, completeInResource = false }: {
+export default function DashboardTaskRow({ task, onOpen: openOverride, completeInResource = false, showBucketMove = false }: {
   task: Task;
   onOpen?: () => void;
   completeInResource?: boolean;
+  // Top Priority rows offer the Evening / Night placement so a task can be
+  // deferred to a time of day without leaving the card. The gate then holds
+  // it back until that time arrives.
+  showBucketMove?: boolean;
 }) {
   const setActiveTask = usePMStore((s) => s.setActiveTask);
   const setPeekTask = usePMStore((s) => s.setPeekTask);
@@ -141,6 +145,7 @@ export default function DashboardTaskRow({ task, onOpen: openOverride, completeI
         completeInResource={completeInResource}
         onRowTransitionEnd={onRowTransitionEnd}
         isFadingOut={isFadingOut}
+        showBucketMove={showBucketMove}
       />
       {/* Portaled to <body>: the slide-over aside is transformed AND
           overflow-hidden, which would otherwise contain + clip these
@@ -197,6 +202,7 @@ function DashboardTaskRowInner({
   completeInResource,
   onRowTransitionEnd,
   isFadingOut,
+  showBucketMove = false,
 }: {
   task: Task;
   isDone: boolean;
@@ -214,6 +220,7 @@ function DashboardTaskRowInner({
   completeInResource: boolean;
   onRowTransitionEnd: (e: React.TransitionEvent<HTMLDivElement>) => void;
   isFadingOut: boolean;
+  showBucketMove?: boolean;
 }) {
   const updateTask = useUpdateTask(null);
   const { timers, requestStartTimer, stopTimer } = useParallelTimers();
@@ -247,6 +254,11 @@ function DashboardTaskRowInner({
   const [menuPos, setMenuPos] = useState<{ left: number; top: number } | null>(null);
   const moveRef = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  // Evening / Night placement — only rendered for the Top Priority card, where
+  // deferring a task to a time of day keeps it in this card.
+  const setFocusBucket = usePMStore((s) => s.setFocusBucket);
+  const ownBucket = usePMStore((s) => s.focusBuckets[task.id]);
+  const focusTask = useFocusTask();
   // Tomorrow / This Saturday / Next Monday at local midnight — shared with the
   // Focus list rows so every surface moves dates identically.
   const targets = useMemo(() => computeSnoozeTargets(), []);
@@ -273,7 +285,8 @@ function DashboardTaskRowInner({
     if (menuPos) { setMenuPos(null); return; }
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
     const MENU_W = 210;
-    const MENU_H = 150;
+    // The Evening / Night entries add a separator and two rows.
+    const MENU_H = showBucketMove ? 250 : 150;
     const MARGIN = 6;
     const flipUp = rect.bottom + MARGIN + MENU_H > window.innerHeight;
     setMenuPos({
@@ -307,6 +320,17 @@ function DashboardTaskRowInner({
     e.stopPropagation();
     setMenuPos(null);
     updateTask.mutate({ id: task.id, work_date: iso } as any);
+  };
+
+  // Park the task in the Evening / Night section. The Top Priority gate then
+  // holds it back until that time of day, so it drops out of the card now and
+  // reappears when its slot comes around. The task is starred so it also
+  // lands in the matching Focus list section.
+  const moveToBucket = (e: React.MouseEvent, bucket: 'evening' | 'night') => {
+    e.stopPropagation();
+    setMenuPos(null);
+    setFocusBucket(task.id, bucket, task.recurring_parent_id ?? undefined);
+    if (!isTaskFocused(task)) focusTask.mutate({ id: task.id, focused: true });
   };
 
   return (
@@ -426,6 +450,19 @@ function DashboardTaskRowInner({
           <span>Next week</span>
           <span className="dim">{targets.nextMonday.date}</span>
         </button>
+        {showBucketMove && (
+          <>
+            <div className="hm-bucket-menu-sep" role="separator" />
+            <button type="button" role="menuitem" className="hm-bucket-menu-item" data-active={ownBucket === 'evening'} onClick={(e) => moveToBucket(e, 'evening')}>
+              <span>Evening</span>
+              <span className="dim">after 3 PM</span>
+            </button>
+            <button type="button" role="menuitem" className="hm-bucket-menu-item" data-active={ownBucket === 'night'} onClick={(e) => moveToBucket(e, 'night')}>
+              <span>Night</span>
+              <span className="dim">after 7 PM</span>
+            </button>
+          </>
+        )}
       </div>,
       document.body,
     )}

@@ -157,7 +157,7 @@ export function HomeTopPriorityGoals({ tasks = [] }: { tasks?: Task[] }) {
       </div>
       <div className="gl-topgoals-list">
         {tasks.map((t) => (
-          <DashboardTaskRow key={`t:${t.id}`} task={t} onOpen={() => setActiveTask(t.id)} />
+          <DashboardTaskRow key={`t:${t.id}`} task={t} onOpen={() => setActiveTask(t.id)} showBucketMove />
         ))}
         {goals.map((g, i) => {
           const p = data.projects.find((x) => x.id === g.project_id);
