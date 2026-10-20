@@ -13,6 +13,34 @@ afterEach(() => {
 });
 
 describe('Focus placement across midnight', () => {
+  it('remembers removals after midnight and allows explicit Focus placement again', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 9, 18, 23, 59));
+    usePMStore.getState().reset();
+    usePMStore.getState().dismissInProgressTask('removed');
+    for (const day of [19, 20]) {
+      vi.setSystemTime(new Date(2026, 9, day, 0, 1));
+      usePMStore.getState().rolloverDismissedInProgress();
+      expect(usePMStore.getState().removedFromFocusIds).toEqual(['removed']);
+      expect(usePMStore.getState().dismissedInProgressIds).toEqual([]);
+    }
+    usePMStore.getState().setFocusBucket('removed', 'focus');
+    expect(usePMStore.getState().removedFromFocusIds).toEqual([]);
+  });
+
+  it('preserves removals saved by the previous version when the day changes', () => {
+    usePMStore.getState()._hydrateFromServer({
+      removedFromFocusIds: [], dismissedInProgressIds: ['legacy'], dismissedInProgressDate: '2020-01-01',
+    });
+    usePMStore.getState().rolloverDismissedInProgress();
+    expect(usePMStore.getState().removedFromFocusIds).toEqual(['legacy']);
+  });
+
+  it('restores removal history from saved preferences', () => {
+    usePMStore.getState()._hydrateFromServer({ removedFromFocusIds: ['saved'] });
+    expect(usePMStore.getState().removedFromFocusIds).toEqual(['saved']);
+  });
+
   it('keeps a worked task in Focus across successive day changes', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date(2026, 9, 18, 23, 59));

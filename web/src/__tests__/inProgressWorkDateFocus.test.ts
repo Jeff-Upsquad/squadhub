@@ -88,6 +88,23 @@ describe('persistent In progress', () => {
       .toEqual([]);
   });
 
+  it('keeps a removed undated task out across days, but allows dates, stars and running timers', () => {
+    const removed = task({ work_date: null, due_date: null, focused_at: null });
+    for (const today of ['2026-10-14', '2026-10-15', '2026-10-21']) {
+      const ctx = { ...context(today), removedFromFocusIds: [removed.id] };
+      expect(buildInProgressTasks([removed], [removed], [], ctx)).toEqual([]);
+      expect(buildFocusTasks([removed], ctx)).toEqual([]);
+      expect(buildInProgressTasks([removed], [removed], [removed.id], ctx)).toEqual([removed]);
+      for (const eligible of [
+        { ...removed, work_date: '2026-10-13T00:00:00Z' },
+        { ...removed, due_date: '2026-10-14T00:00:00Z' },
+        { ...removed, focused_at: '2026-10-14T00:00:00Z' },
+      ]) {
+        expect(buildInProgressTasks([eligible], [eligible], [], ctx)).toEqual([eligible]);
+      }
+    }
+  });
+
   it('keeps unrescheduled work with no work date', () => {
     const worked = task({ work_date: null });
     expect(buildInProgressTasks([worked], [worked], [], context('2026-10-14'))).toEqual([worked]);

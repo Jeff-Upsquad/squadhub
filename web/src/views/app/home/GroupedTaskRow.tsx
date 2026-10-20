@@ -144,8 +144,8 @@ export default function GroupedTaskRow({
   // "Remove from focus list" — drop the whole group from the Home focus list.
   // Clears any bucket (including inherited template buckets) and clears the
   // focus star on any starred task. Tasks sitting in the In progress section
-  // are additionally hidden from there for the rest of today (untouched in
-  // their project list) — except while a timer or group session is running,
+  // are hidden for today; undated, unstarred removals stay hidden across days
+  // (untouched in their project list), except while a timer or group session is running,
   // when they keep showing.
   const removeFromFocus = (e: React.MouseEvent) => {
     e.stopPropagation();
