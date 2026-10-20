@@ -5,7 +5,14 @@ export type WorkedTaskContext = {
   workedAtByTask: Record<string, string>;
   timeZone: string;
   today: string;
+  removedFromFocusIds?: string[];
 };
+
+/** Removal survives day changes unless a date or focus star makes the task eligible again. */
+function isRemovedWithoutSchedule(task: Task, context: WorkedTaskContext): boolean {
+  return !!context.removedFromFocusIds?.includes(task.id)
+    && !task.work_date && !task.due_date && !isTaskFocused(task);
+}
 
 /** A later work day defers older work until the user works on the task again. */
 export function isDeferredWorkedTask(task: Task, context: WorkedTaskContext): boolean {
@@ -24,6 +31,7 @@ export function buildFocusTasks(availableTasks: Task[], context: WorkedTaskConte
   const dismissed = new Set(dismissedTaskIds);
   return [...unique.values()]
     .filter((task) => !isTaskCompleted(task)
+      && !isRemovedWithoutSchedule(task, context)
       && (isTaskFocused(task) || isDeferredWorkedTask(task, context))
       && !(dismissed.has(task.id) && isDeferredWorkedTask(task, context))
       && !isFutureDay(task.work_date, context.timeZone))
@@ -51,5 +59,5 @@ export function buildInProgressTasks(
   const activeIds = new Set(activeTaskIds);
   return [...activeTasks, ...[...tasks.values()].filter((task) => !addedIds.has(task.id))]
     .filter((task) => !isTaskCompleted(task)
-      && (activeIds.has(task.id) || !isDeferredWorkedTask(task, context)));
+      && (activeIds.has(task.id) || (!isRemovedWithoutSchedule(task, context) && !isDeferredWorkedTask(task, context))));
 }

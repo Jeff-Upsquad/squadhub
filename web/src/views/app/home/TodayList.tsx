@@ -82,6 +82,7 @@ export default function TodayList() {
   const focusBuckets = usePMStore((s) => s.focusBuckets);
   const recurringFocusBuckets = usePMStore((s) => s.recurringFocusBuckets);
   const rolloverFocusBuckets = usePMStore((s) => s.rolloverFocusBuckets);
+  const removedFromFocusIds = usePMStore((s) => s.removedFromFocusIds);
   const dismissedInProgressIds = usePMStore((s) => s.dismissedInProgressIds);
   const rolloverDismissedInProgress = usePMStore((s) => s.rolloverDismissedInProgress);
   const groupedExpanded = usePMStore((s) => s.groupedExpanded);
@@ -111,8 +112,8 @@ export default function TodayList() {
   const tz = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC', []);
   const [today, setToday] = useState(() => planDateKey());
   const workedTaskContext = useMemo(() => ({
-    workedAtByTask: data?.worked_at_by_task ?? {}, timeZone: tz, today,
-  }), [data?.worked_at_by_task, tz, today]);
+    workedAtByTask: data?.worked_at_by_task ?? {}, timeZone: tz, today, removedFromFocusIds,
+  }), [data?.worked_at_by_task, tz, today, removedFromFocusIds]);
 
   // Starred tasks and tasks rescheduled after their last worked day return to
   // Focus when their work date arrives. Saved history is caller-specific and
@@ -346,7 +347,8 @@ export default function TodayList() {
   // (remembered per template in recurringFocusBuckets, so the next spawned copy
   // reappears there). rolloverFocusBuckets no-ops until the day flips, so the
   // mount call + once-a-minute tick fire it exactly once when midnight passes,
-  // even with the app left open. Tasks hidden from In progress come back too.
+  // even with the app left open. Dated tasks can come back; undated,
+  // unstarred removals stay hidden.
   useEffect(() => {
     rolloverFocusBuckets();
     rolloverDismissedInProgress();
@@ -746,8 +748,8 @@ function TodayRow({ task: t, onOpen, secondsToday = 0, liveSecs = 0, isInProgres
   // a recurring task doesn't reappear there), and when the task carries a
   // focus star, clears the star server-side too. A task sitting in the
   // In progress section is additionally hidden from there for the rest of
-  // today (it stays untouched in its project list) — unless a timer is
-  // running on it right now, in which case it keeps showing while tracked.
+  // today; undated, unstarred tasks stay hidden across days. The project task
+  // is untouched. Running timers keep the task visible while tracked.
   const focusTask = useFocusTask();
   const dismissInProgressTask = usePMStore((s) => s.dismissInProgressTask);
   const isStarred = isTaskFocused(t);
@@ -756,7 +758,7 @@ function TodayRow({ task: t, onOpen, secondsToday = 0, liveSecs = 0, isInProgres
     setMenuPos(null);
     setFocusBucket(t.id, null, t.recurring_parent_id ?? undefined);
     if (isStarred) focusTask.mutate({ id: t.id, focused: false });
-    if ((isInProgress || isDeferredFocus) && !isTiming) dismissInProgressTask(t.id);
+    if (!isTiming) dismissInProgressTask(t.id);
   };
 
   // Date moves — push the task's work_date to the target local-midnight. A
