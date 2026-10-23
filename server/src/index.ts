@@ -145,6 +145,8 @@ import huddlesRoutes from './routes/huddles';
 import featureTipsRoutes from './routes/feature-tips';
 import adminFeatureTipsRoutes from './routes/admin/feature-tips';
 import agentRoutes from './routes/agent';
+import saasBridgeRoutes from './routes/bridge';
+import { bridgeJsonParser } from './utils/bridgeSign';
 import { startCheckInCron } from './cron/checkin-cron';
 import { startTimesheetCron } from './cron/timesheet-cron';
 import { startTimerCron } from './cron/timer-cron';
@@ -174,6 +176,9 @@ app.use(cors({
   origin: [config.clientUrl, config.adminUrl, config.cashbookUrl, config.desktopUrl].filter(Boolean),
   credentials: true,
 }));
+// Squad Hub SaaS bridge — HMAC-signed server-to-server API. Mounted before the
+// app-wide JSON parser so its own parser can keep the raw body for signing.
+app.use('/bridge/v1', morgan('dev'), bridgeJsonParser, saasBridgeRoutes);
 app.use(express.json({ limit: '10mb' }));
 app.use(morgan('dev'));
 

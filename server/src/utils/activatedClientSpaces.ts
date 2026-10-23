@@ -316,7 +316,7 @@ async function grantChannels(userIds: string[], channelIds: string[], actorId: s
   if (error) throw new Error(error.message);
 }
 
-async function resolveClientIdForCard(card: any, supplied?: string | null): Promise<string | null> {
+export async function resolveClientIdForCard(card: any, supplied?: string | null): Promise<string | null> {
   if (supplied) return supplied;
 
   let submission: { id: string; email: string | null; business_name: string | null } | null = null;

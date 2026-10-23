@@ -31,7 +31,7 @@ interface HandoffInput {
 
 // Resolve a card recipient to a SquadHub users.id. Partners already carry the
 // user id; talents are matched by the email on their card recipient row.
-async function resolveRecipientUserId(
+export async function resolveRecipientUserId(
   cardId: string,
   type: RecipientType,
   id: string | null,
@@ -56,7 +56,7 @@ async function resolveRecipientUserId(
 }
 
 // card → submission_subscription → submission → client.
-async function resolveCardClientId(cardId: string): Promise<string | null> {
+export async function resolveCardClientId(cardId: string): Promise<string | null> {
   const { data: card } = await supabaseAdmin
     .from('subscription_cards')
     .select('submission_subscription_id')

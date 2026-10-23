@@ -19,31 +19,7 @@ router.get('/opportunities', async (req: Request, res: Response) => {
   }
 
   try {
-    const groups = await Promise.all(
-      productTypes.map((cardType) => fetchCanonicalCards(req.userEmail!, cardType)),
-    );
-    const items = groups.flat();
-    const recipientIds = items.map((item) => String(item?.id || '')).filter(Boolean);
-    const { data: decisions, error: decisionsError } = recipientIds.length
-      ? await supabaseAdmin
-          .from('partner_opportunity_notification_responses')
-          .select('recipient_id, kind, action')
-          .eq('user_id', req.userId!)
-          .in('recipient_id', recipientIds)
-      : { data: [], error: null };
-    // The feed should remain usable during a rolling deploy before the new
-    // migration lands; only the response badges are absent in that window.
-    if (decisionsError) console.warn('[discover-partner] notification responses unavailable:', decisionsError.message);
-    const decisionsByRecipient = new Map<string, Record<string, string>>();
-    for (const decision of decisions || []) {
-      const current = decisionsByRecipient.get(decision.recipient_id) || {};
-      current[decision.kind] = decision.action;
-      decisionsByRecipient.set(decision.recipient_id, current);
-    }
-    const data = items.map((item) => ({
-      ...adaptCanonicalCard(item, req.userId!),
-      notification_responses: decisionsByRecipient.get(String(item.id)) || {},
-    }));
+    const data = await listDiscoverOpportunities(req.userId!, req.userEmail);
     res.json({ success: true, data });
   } catch (err: any) {
     console.error('[discover-partner] opportunity fetch failed:', err?.message);
@@ -53,6 +29,42 @@ router.get('/opportunities', async (req: Request, res: Response) => {
     });
   }
 });
+
+/**
+ * The partner's Discover feed: SquadHire canonical cards (subscription,
+ * assignment, hiring) for this email, adapted to the partner card shape, with
+ * the partner's shortlist/selection notification decisions attached.
+ * Shared by GET /partner/discover/opportunities and the Squad Hub SaaS bridge
+ * (GET /bridge/v1/talent/:id/opportunities). Throws an Error carrying `status`
+ * on upstream failure.
+ */
+export async function listDiscoverOpportunities(userId: string, email: string): Promise<any[]> {
+  const groups = await Promise.all(
+    productTypes.map((cardType) => fetchCanonicalCards(email, cardType)),
+  );
+  const items = groups.flat();
+  const recipientIds = items.map((item) => String(item?.id || '')).filter(Boolean);
+  const { data: decisions, error: decisionsError } = recipientIds.length
+    ? await supabaseAdmin
+        .from('partner_opportunity_notification_responses')
+        .select('recipient_id, kind, action')
+        .eq('user_id', userId)
+        .in('recipient_id', recipientIds)
+    : { data: [], error: null };
+  // The feed should remain usable during a rolling deploy before the new
+  // migration lands; only the response badges are absent in that window.
+  if (decisionsError) console.warn('[discover-partner] notification responses unavailable:', decisionsError.message);
+  const decisionsByRecipient = new Map<string, Record<string, string>>();
+  for (const decision of decisions || []) {
+    const current = decisionsByRecipient.get(decision.recipient_id) || {};
+    current[decision.kind] = decision.action;
+    decisionsByRecipient.set(decision.recipient_id, current);
+  }
+  return items.map((item) => ({
+    ...adaptCanonicalCard(item, userId),
+    notification_responses: decisionsByRecipient.get(String(item.id)) || {},
+  }));
+}
 
 const respondSchema = z.object({ action: z.enum(['accept', 'reject']) });
 const offerAmountSchema = z.object({
