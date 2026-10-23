@@ -268,7 +268,8 @@ class Planner:
                 if f.get("client_id") in self.clients:
                     roots_by_client[f["client_id"]].append(f)
                 else:
-                    P("orphan_client_folder", "warn", hub_folder_id=f["id"], note="client_id missing in clients")
+                    P("orphan_client_folder", "warn", hub_folder_id=f["id"],
+                      note="client folder has no client_id (FK is ON DELETE SET NULL) or an unknown one; not moved")
         legacy_by_client = defaultdict(list)
         for s in self.idx.spaces.values():
             if s.get("client_id") and not s.get("deleted_at"):
