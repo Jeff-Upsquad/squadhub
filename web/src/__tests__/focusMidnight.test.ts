@@ -62,16 +62,32 @@ describe('Focus placement across midnight', () => {
       .toBeUndefined();
   });
 
-  it('still resets Evening/Night placements and keeps recurring preferences', () => {
+  it('returns Evening/Night tasks to Focus at midnight and keeps recurring preferences', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date(2026, 9, 18, 23, 59));
     usePMStore.getState().reset();
     usePMStore.getState().setFocusBucket('evening-task', 'evening');
     usePMStore.getState().setFocusBucket('night-task', 'night', 'routine');
 
-    vi.setSystemTime(new Date(2026, 9, 19, 0, 1));
+    // Same-day checks must leave the chosen sections alone.
     usePMStore.getState().rolloverFocusBuckets();
-    expect(usePMStore.getState().focusBuckets).toEqual({});
+    expect(usePMStore.getState().focusBuckets).toEqual({
+      'evening-task': 'evening', 'night-task': 'night',
+    });
+
+    for (const day of [19, 20]) {
+      vi.setSystemTime(new Date(2026, 9, day, 0, 1));
+      usePMStore.getState().rolloverFocusBuckets();
+      const state = usePMStore.getState();
+      expect(state.focusBuckets).toEqual({ 'evening-task': 'focus', 'night-task': 'focus' });
+      // Worked tasks must resolve to Focus instead of falling back to In progress.
+      for (const id of ['evening-task', 'night-task']) {
+        expect(effectiveFocusBucket({ id }, state.focusBuckets, state.recurringFocusBuckets, true)).toBe('focus');
+      }
+      expect(effectiveFocusBucket(
+        { id: 'night-task', recurring_parent_id: 'routine' }, state.focusBuckets, state.recurringFocusBuckets,
+      )).toBe('focus');
+    }
     expect(usePMStore.getState().recurringFocusBuckets).toEqual({ routine: 'night' });
   });
 });

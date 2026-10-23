@@ -1,7 +1,7 @@
 // "Later today" triage buckets for the Home Focus list. A starred task can be
 // moved into Evening (after 3 PM) or Night (after 7 PM). Per-instance
-// assignments live in `focusBuckets`. Evening/Night assignments reset at
-// local midnight, but explicit main Focus placements persist; a recurring
+// assignments live in `focusBuckets`. Evening/Night tasks move to Focus at
+// local midnight, and explicit main Focus placements persist; a recurring
 // task's section is instead remembered per recurrence template in
 // `recurringFocusBuckets`, so every freshly spawned copy reappears in the
 // same section.
