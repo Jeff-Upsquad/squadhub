@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { requireAuth } from '../middleware/auth';
 import { checkResourceAccess, meetsAccessLevel } from '../middleware/permissions';
 import { supabaseAdmin } from '../supabase';
-import { workspaceIdOf } from '../middleware/workspace';
+import { reachableWorkspaceIds, workspaceIdOf } from '../middleware/workspace';
 import { isDmParticipant } from '../utils/dmAccess';
 import type {
   MeetingEventDetail,
@@ -41,6 +41,7 @@ async function isParticipant(meetingId: string, userId: string): Promise<boolean
   const { data: ev } = await supabaseAdmin
     .from('meeting_events')
     .select('created_by')
+    .in('workspace_id', await reachableWorkspaceIds())
     .eq('id', meetingId)
     .maybeSingle();
   if (!ev) return false;
@@ -71,6 +72,7 @@ async function isHost(meetingId: string, userId: string): Promise<boolean> {
   const { data: ev } = await supabaseAdmin
     .from('meeting_events')
     .select('created_by')
+    .in('workspace_id', await reachableWorkspaceIds())
     .eq('id', meetingId)
     .maybeSingle();
   return !!ev && (ev as any).created_by === userId;
@@ -88,6 +90,7 @@ async function buildDetail(meetingId: string, viewerId: string): Promise<Meeting
   const { data: event } = await supabaseAdmin
     .from('meeting_events')
     .select('*')
+    .in('workspace_id', await reachableWorkspaceIds())
     .eq('id', meetingId)
     .maybeSingle();
   if (!event) return null;
@@ -250,6 +253,7 @@ router.get('/my', async (req: Request, res: Response) => {
     const { data: created } = await supabaseAdmin
       .from('meeting_events')
       .select('id')
+      .in('workspace_id', await reachableWorkspaceIds())
       .eq('created_by', userId);
     for (const c of (created || []) as any[]) ids.add(c.id);
 
@@ -261,6 +265,7 @@ router.get('/my', async (req: Request, res: Response) => {
     const { data: events, error } = await supabaseAdmin
       .from('meeting_events')
       .select('*')
+      .in('workspace_id', await reachableWorkspaceIds())
       .in('id', Array.from(ids))
       .order('created_at', { ascending: false });
     if (error) {
@@ -343,6 +348,7 @@ router.post('/', async (req: Request, res: Response) => {
       const { data: members } = await supabaseAdmin
         .from('resource_memberships')
         .select('user_id')
+        .eq('workspace_id', eventWorkspaceId)
         .eq('resource_type', 'channel')
         .eq('resource_id', body.origin_channel_id);
       for (const m of (members || []) as any[]) guestSet.add(m.user_id);
@@ -445,6 +451,7 @@ router.post('/', async (req: Request, res: Response) => {
       await supabaseAdmin
         .from('meeting_events')
         .update({ link_provider: link.provider, link_url: link.url, link_meta: link.meta })
+        .eq('workspace_id', eventWorkspaceId)
         .eq('id', meetingId);
     }
 
@@ -504,6 +511,7 @@ router.patch('/:id', requireMeetingParticipant(), async (req: Request, res: Resp
     await supabaseAdmin
       .from('meeting_events')
       .update({ ...patch, updated_at: new Date().toISOString() })
+      .in('workspace_id', await reachableWorkspaceIds())
       .eq('id', meetingId)
       .eq('status', 'open');
     const detail = await buildDetail(meetingId, req.userId!);
@@ -530,7 +538,7 @@ router.post('/:id/guests', requireMeetingParticipant(), async (req: Request, res
       return;
     }
     const { guest_ids } = z.object({ guest_ids: z.array(z.string().uuid()).min(1) }).parse(req.body);
-    const { data: ev } = await supabaseAdmin.from('meeting_events').select('title').eq('id', meetingId).maybeSingle();
+    const { data: ev } = await supabaseAdmin.from('meeting_events').select('title').in('workspace_id', await reachableWorkspaceIds()).eq('id', meetingId).maybeSingle();
     await supabaseAdmin
       .from('meeting_event_guests')
       .upsert(
@@ -627,6 +635,7 @@ router.post('/:id/suggest', requireMeetingParticipant(), async (req: Request, re
     const { data: ev } = await supabaseAdmin
       .from('meeting_events')
       .select('title')
+      .in('workspace_id', await reachableWorkspaceIds())
       .eq('id', meetingId)
       .maybeSingle();
     const { data: guests } = await supabaseAdmin
@@ -698,6 +707,7 @@ router.post(
         const { data: ev } = await supabaseAdmin
           .from('meeting_events')
           .select('title')
+          .in('workspace_id', await reachableWorkspaceIds())
           .eq('id', meetingId)
           .maybeSingle();
         const suggester = (slot as any)?.suggested_by as string | null;
@@ -757,6 +767,7 @@ router.post('/:id/confirm', requireMeetingParticipant(), async (req: Request, re
     const { data: ev } = await supabaseAdmin
       .from('meeting_events')
       .select('*')
+      .in('workspace_id', await reachableWorkspaceIds())
       .eq('id', meetingId)
       .maybeSingle();
 
@@ -785,6 +796,7 @@ router.post('/:id/confirm', requireMeetingParticipant(), async (req: Request, re
         updated_at: new Date().toISOString(),
         ...linkPatch,
       })
+      .in('workspace_id', await reachableWorkspaceIds())
       .eq('id', meetingId);
 
     const { data: guests } = await supabaseAdmin
@@ -828,6 +840,7 @@ router.post('/:id/cancel', requireMeetingParticipant(), async (req: Request, res
     const { data: ev } = await supabaseAdmin
       .from('meeting_events')
       .update({ status: 'cancelled', updated_at: new Date().toISOString() })
+      .in('workspace_id', await reachableWorkspaceIds())
       .eq('id', meetingId)
       .select('title')
       .maybeSingle();
@@ -879,6 +892,7 @@ router.post('/:id/post-card', requireMeetingParticipant(), async (req: Request, 
     const { data: ev } = await supabaseAdmin
       .from('meeting_events')
       .select('title')
+      .in('workspace_id', await reachableWorkspaceIds())
       .eq('id', meetingId)
       .maybeSingle();
     await postCard(req, meetingId, req.userId!, channel_id ?? null, dm_conversation_id ?? null, (ev as any)?.title ?? 'Meeting');

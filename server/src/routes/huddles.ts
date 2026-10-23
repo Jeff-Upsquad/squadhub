@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { requireAuth } from '../middleware/auth';
 import { checkResourceAccess, meetsAccessLevel, isWorkspaceAdmin } from '../middleware/permissions';
 import { supabaseAdmin } from '../supabase';
+import { getMembership, reachableWorkspaceIds, workspaceIdOf } from '../middleware/workspace';
 import type { HuddleDetail, HuddleJoinCredentials, HuddleParticipant } from '@squadhub/shared';
 import { config } from '../config';
 import { closeRoom, isLivekitConfigured, listRoomIdentities, mintJoinToken } from '../services/livekit';
@@ -52,13 +53,31 @@ async function canUseConversation(userId: string, channelId: string | null, dmId
     const level = await checkResourceAccess(userId, 'channel', channelId);
     return !!level && meetsAccessLevel(level, 'commenter');
   }
-  if (dmId) return isDmParticipant(userId, dmId);
+  if (dmId) {
+    // Tenant wall: a DM participant who has since lost access to the DM's
+    // workspace (e.g. removed from a shared workspace) can't use it any more.
+    const ws = await workspaceIdOf('dm', dmId);
+    return !!ws && !!(await getMembership(userId, ws)) && isDmParticipant(userId, dmId);
+  }
   return false;
 }
 
+/** Workspace of the conversation a huddle belongs to. */
+function conversationWorkspace(channelId: string | null, dmId: string | null): Promise<string | null> {
+  return channelId ? workspaceIdOf('channel', channelId) : workspaceIdOf('dm', dmId as string);
+}
+
+// Shared by member routes (after loadAccessible), the public share-link routes
+// (by unguessable code) and the sweeper — so the huddle id is already resolved
+// by the caller. Everything else is pinned to the huddle's own workspace.
 export async function buildHuddleDetail(huddleId: string): Promise<HuddleDetail | null> {
-  const [{ data: huddle }, { data: parts }, { data: card }] = await Promise.all([
-    supabaseAdmin.from('huddles').select('*').eq('id', huddleId).maybeSingle(),
+  const { data: huddle } = await supabaseAdmin
+    .from('huddles') // tenant-scope: system helper keyed by a huddle id the caller already resolved (loadAccessible / share code / sweeper)
+    .select('*')
+    .eq('id', huddleId)
+    .maybeSingle();
+  if (!huddle) return null;
+  const [{ data: parts }, { data: card }] = await Promise.all([
     supabaseAdmin
       .from('huddle_participants')
       .select('*')
@@ -68,13 +87,13 @@ export async function buildHuddleDetail(huddleId: string): Promise<HuddleDetail 
     supabaseAdmin
       .from('messages')
       .select('id')
+      .eq('workspace_id', (huddle as any).workspace_id)
       .eq('huddle_id', huddleId)
       .is('parent_message_id', null)
       .order('created_at', { ascending: true })
       .limit(1)
       .maybeSingle(),
   ]);
-  if (!huddle) return null;
   const { data: starter } = await supabaseAdmin
     .from('users')
     .select('id, display_name, avatar_url')
@@ -101,7 +120,7 @@ export function emitHuddle(io: any, detail: HuddleDetail): void {
 export async function endHuddle(io: any, huddleId: string): Promise<HuddleDetail | null> {
   const now = new Date().toISOString();
   const { data: updated } = await supabaseAdmin
-    .from('huddles')
+    .from('huddles') // tenant-scope: system helper keyed by a huddle id the caller already resolved (loadAccessible / share code / sweeper)
     .update({ ended_at: now, updated_at: now })
     .eq('id', huddleId)
     .is('ended_at', null)
@@ -189,7 +208,7 @@ function requireConfigured(res: Response): boolean {
 
 router.get('/public/:code', async (req: Request, res: Response) => {
   const { data: huddle } = await supabaseAdmin
-    .from('huddles')
+    .from('huddles') // tenant-scope: public share link — lookup by unguessable code is the capability; only landing-page fields leave
     .select('id')
     .eq('code', req.params.code as string)
     .maybeSingle();
@@ -222,7 +241,7 @@ router.post('/public/:code/join', async (req: Request, res: Response) => {
     if (!requireConfigured(res)) return;
     const body = z.object({ name: z.string().trim().min(1).max(40) }).parse(req.body);
     const { data: huddle } = await supabaseAdmin
-      .from('huddles')
+      .from('huddles') // tenant-scope: public share link — lookup by unguessable code is the capability; only landing-page fields leave
       .select('id, ended_at, allow_guests')
       .eq('code', req.params.code as string)
       .maybeSingle();
@@ -263,6 +282,7 @@ router.post('/public/:code/leave', async (req: Request, res: Response) => {
     res.status(400).json({ success: false, error: 'identity required' });
     return;
   }
+  // tenant-scope: public share link — lookup by unguessable code is the capability (guest leave)
   const { data: huddle } = await supabaseAdmin.from('huddles').select('id').eq('code', req.params.code as string).maybeSingle();
   if (!huddle) {
     res.status(404).json({ success: false, error: 'SquadUp not found' });
@@ -303,7 +323,7 @@ router.get('/active', async (req: Request, res: Response) => {
     res.status(403).json({ success: false, error: 'No access to this conversation' });
     return;
   }
-  let q = supabaseAdmin.from('huddles').select('id').is('ended_at', null);
+  let q = supabaseAdmin.from('huddles').select('id').eq('workspace_id', await conversationWorkspace(channelId, dmId)).is('ended_at', null);
   q = channelId ? q.eq('channel_id', channelId) : q.eq('dm_conversation_id', dmId as string);
   const { data } = await q.maybeSingle();
   const detail = data ? await buildHuddleDetail((data as any).id) : null;
@@ -332,7 +352,8 @@ router.post('/', async (req: Request, res: Response) => {
     }
 
     // Already live? Join that one instead of racing the unique index.
-    let existing = supabaseAdmin.from('huddles').select('id').is('ended_at', null);
+    const convWs = await conversationWorkspace(channelId, dmId);
+    let existing = supabaseAdmin.from('huddles').select('id').eq('workspace_id', convWs).is('ended_at', null);
     existing = channelId ? existing.eq('channel_id', channelId) : existing.eq('dm_conversation_id', dmId as string);
     const { data: live } = await existing.maybeSingle();
 
@@ -355,8 +376,8 @@ router.post('/', async (req: Request, res: Response) => {
       if (error || !created) {
         // Unique-index race: someone started it a moment ago — fall through to join.
         const { data: again } = await (channelId
-          ? supabaseAdmin.from('huddles').select('id').is('ended_at', null).eq('channel_id', channelId)
-          : supabaseAdmin.from('huddles').select('id').is('ended_at', null).eq('dm_conversation_id', dmId as string)
+          ? supabaseAdmin.from('huddles').select('id').eq('workspace_id', convWs).is('ended_at', null).eq('channel_id', channelId)
+          : supabaseAdmin.from('huddles').select('id').eq('workspace_id', convWs).is('ended_at', null).eq('dm_conversation_id', dmId as string)
         ).maybeSingle();
         if (!again) {
           res.status(500).json({ success: false, error: error?.message || 'Could not start SquadUp' });
@@ -386,10 +407,11 @@ router.post('/', async (req: Request, res: Response) => {
 });
 
 // Loads the huddle and checks the caller may see it (conversation member).
-async function loadAccessible(req: Request, res: Response): Promise<{ id: string; channel_id: string | null; dm_conversation_id: string | null; ended_at: string | null; started_by: string; room_name: string } | null> {
+async function loadAccessible(req: Request, res: Response): Promise<{ id: string; workspace_id: string; channel_id: string | null; dm_conversation_id: string | null; ended_at: string | null; started_by: string; room_name: string } | null> {
   const { data: huddle } = await supabaseAdmin
     .from('huddles')
-    .select('id, channel_id, dm_conversation_id, ended_at, started_by, room_name')
+    .select('id, workspace_id, channel_id, dm_conversation_id, ended_at, started_by, room_name')
+    .in('workspace_id', await reachableWorkspaceIds())
     .eq('id', req.params.id as string)
     .maybeSingle();
   if (!huddle) {
@@ -450,7 +472,7 @@ router.post('/:id/leave', async (req: Request, res: Response) => {
 router.post('/:id/end', async (req: Request, res: Response) => {
   const h = await loadAccessible(req, res);
   if (!h) return;
-  if (h.started_by !== req.userId && !(await isWorkspaceAdmin(req.userId!))) {
+  if (h.started_by !== req.userId && !(await isWorkspaceAdmin(req.userId!, h.workspace_id))) {
     res.status(403).json({ success: false, error: 'Only the person who started the SquadUp can end it for everyone' });
     return;
   }
@@ -467,6 +489,7 @@ router.patch('/:id', async (req: Request, res: Response) => {
     await supabaseAdmin
       .from('huddles')
       .update({ ...patch, updated_at: new Date().toISOString() })
+      .eq('workspace_id', h.workspace_id)
       .eq('id', h.id);
     const detail = await buildHuddleDetail(h.id);
     if (detail) emitHuddle(req.app.get('io'), detail);
@@ -487,7 +510,7 @@ router.patch('/:id', async (req: Request, res: Response) => {
 export async function reconcileHuddles(io: any): Promise<void> {
   if (!isLivekitConfigured()) return;
   const { data: live } = await supabaseAdmin
-    .from('huddles')
+    .from('huddles') // tenant-scope: cron sweeper over every live huddle (system job, acts on no tenant's behalf)
     .select('id, room_name, started_at')
     .is('ended_at', null);
   for (const h of (live || []) as any[]) {

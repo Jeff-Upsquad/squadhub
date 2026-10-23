@@ -1,5 +1,3 @@
 {
-  "server/src/routes/huddles.ts": 13,
-  "server/src/routes/meetings_events.ts": 15,
   "server/src/routes/timer.ts": 11
 }
