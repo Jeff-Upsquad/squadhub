@@ -45,7 +45,7 @@ export default function SaasClientWorkspaces() {
     if (win) win.opener = null;
     setOpening(ws.id);
     try {
-      const res = await api.post('/saas/sso', {});
+      const res = await api.post('/saas/sso', { workspace_id: ws.id });
       const d = res.data?.data;
       const url: string | null = typeof d === 'string' ? d : d?.url || d?.login_url || null;
       if (!url) throw new Error('No login link returned');

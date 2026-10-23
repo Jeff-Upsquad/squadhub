@@ -2,7 +2,7 @@
  * Internal staff → Squad Hub SaaS "Client workspaces".
  *
  *   GET  /saas/my-workspaces  → SaaS GET  /bridge/v1/staff/:hubUserId/workspaces
- *   POST /saas/sso            → SaaS POST /bridge/v1/staff/sso { hub_user_id }
+ *   POST /saas/sso            → SaaS POST /bridge/v1/staff/sso { hub_user_id, workspace_id? }
  *
  * Internal users only. When the bridge isn't configured both answer 503
  * { code: 'saas_not_connected' } and the web sidebar hides the section.
@@ -55,8 +55,13 @@ router.get('/my-workspaces', (req, res) =>
   call(req, res, 'GET', `/bridge/v1/staff/${encodeURIComponent(req.userId as string)}/workspaces`),
 );
 
-router.post('/sso', (req, res) =>
-  call(req, res, 'POST', '/bridge/v1/staff/sso', { hub_user_id: req.userId }),
-);
+router.post('/sso', (req, res) => {
+  // Only the landing workspace comes from the client; the identity is always the caller's own.
+  const workspaceId = typeof req.body?.workspace_id === 'string' ? req.body.workspace_id : undefined;
+  return call(req, res, 'POST', '/bridge/v1/staff/sso', {
+    hub_user_id: req.userId,
+    ...(workspaceId ? { workspace_id: workspaceId } : {}),
+  });
+});
 
 export default router;
