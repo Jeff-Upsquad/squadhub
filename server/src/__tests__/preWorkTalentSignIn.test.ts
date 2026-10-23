@@ -20,7 +20,7 @@ vi.mock('../utils/squadhireCredentials', () => ({
 }));
 
 vi.mock('../utils/squadhireTalentSession', () => ({
-  ensurePartnerWorkspaceMembership: mocks.ensureMembership,
+  ensureTalentAccount: mocks.ensureMembership,
 }));
 
 import { provisionPreWorkTalentPartner } from '../utils/squadhireTalentSelfSignIn';
@@ -70,7 +70,7 @@ describe('pre-work talent sign-in', () => {
     );
     // Work stays locked until a card is assigned.
     expect(inserted).toMatchObject({ user_type: 'partner', status: 'active', work_unlocked_at: null });
-    expect(mocks.ensureMembership).toHaveBeenCalledWith('partner-1', null);
+    expect(mocks.ensureMembership).toHaveBeenCalledWith('partner-1', expect.objectContaining({ talent_user_id: 'talent-1' }));
   });
 
   it('creates nothing when SquadHire does not recognise the credentials', async () => {

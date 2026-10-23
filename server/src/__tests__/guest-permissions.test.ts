@@ -23,10 +23,15 @@ vi.mock('../supabase', () => {
 import { getUserPermissions } from '../middleware/permissions';
 import { supabaseAdmin } from '../supabase';
 
+// SaaS: permissions are per workspace, so the lookup is
+// .select().eq('workspace_id').eq('user_id').maybeSingle().
+const WS = 'ws-1';
 function mockSupabaseChain(data: any, error: any = null) {
-  const mockSingle = vi.fn().mockResolvedValue({ data, error });
-  const mockEq = vi.fn().mockReturnValue({ single: mockSingle });
-  const mockSelect = vi.fn().mockReturnValue({ eq: mockEq });
+  const terminal = { single: vi.fn().mockResolvedValue({ data, error }), maybeSingle: vi.fn().mockResolvedValue({ data, error }) };
+  const chain: any = { ...terminal };
+  chain.eq = vi.fn().mockReturnValue(chain);
+  chain.in = vi.fn().mockResolvedValue({ data: [], error: null });
+  const mockSelect = vi.fn().mockReturnValue(chain);
   (supabaseAdmin.from as ReturnType<typeof vi.fn>).mockReturnValue({ select: mockSelect });
 }
 
@@ -61,12 +66,13 @@ describe('Guest Permission Enforcement', () => {
       },
     });
 
-    const { permissions, workspaceRole } = await getUserPermissions('guest-user-id');
+    const { permissions, workspaceRole } = await getUserPermissions('guest-user-id', WS);
 
     expect(workspaceRole).toBe('guest');
 
     // Verify every single permission is false — no default-allow fallback
     for (const [_key, value] of Object.entries(permissions)) {
+      if (typeof value !== 'boolean') continue; // time_edit_window_hours is numeric
       expect(value).toBe(false);
     }
   });
@@ -78,12 +84,13 @@ describe('Guest Permission Enforcement', () => {
       roles: null,
     });
 
-    const { permissions, workspaceRole } = await getUserPermissions('guest-user-id');
+    const { permissions, workspaceRole } = await getUserPermissions('guest-user-id', WS);
 
     expect(workspaceRole).toBe('guest');
 
     // All permissions must be false — no default-allow fallback
     for (const [_key, value] of Object.entries(permissions)) {
+      if (typeof value !== 'boolean') continue; // time_edit_window_hours is numeric
       expect(value).toBe(false);
     }
   });
@@ -91,7 +98,7 @@ describe('Guest Permission Enforcement', () => {
   it('should return all-false when no workspace membership exists', async () => {
     mockSupabaseChain(null, { message: 'not found' });
 
-    const { permissions, workspaceRole } = await getUserPermissions('nonexistent-user');
+    const { permissions, workspaceRole } = await getUserPermissions('nonexistent-user', WS);
 
     expect(workspaceRole).toBe('guest');
     expect(permissions.can_create_channels).toBe(false);
@@ -104,12 +111,13 @@ describe('Guest Permission Enforcement', () => {
       roles: null,
     });
 
-    const { permissions, workspaceRole } = await getUserPermissions('admin-user-id');
+    const { permissions, workspaceRole } = await getUserPermissions('admin-user-id', WS);
 
     expect(workspaceRole).toBe('admin');
 
     // Verify every permission is true for admin
     for (const [_key, value] of Object.entries(permissions)) {
+      if (typeof value !== 'boolean') continue; // time_edit_window_hours is numeric
       expect(value).toBe(true);
     }
   });
@@ -127,7 +135,7 @@ describe('Guest Permission Enforcement', () => {
       },
     });
 
-    const { permissions } = await getUserPermissions('member-user-id');
+    const { permissions } = await getUserPermissions('member-user-id', WS);
 
     expect(permissions.can_create_channels).toBe(true);
     expect(permissions.can_edit_messages).toBe(true);
@@ -150,7 +158,7 @@ describe('Guest Permission Enforcement', () => {
       },
     });
 
-    const { permissions } = await getUserPermissions('guest-user-id');
+    const { permissions } = await getUserPermissions('guest-user-id', WS);
 
     // The requirePermission middleware checks: if (!permissions[key]) → 403
     // Simulate that check here:
