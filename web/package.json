@@ -35,8 +35,7 @@
     "react-dom": "^19.0.0",
     "react-player": "^3.4.0",
     "socket.io-client": "^4.8.1",
-    "zustand": "^5.0.3",
-    "@squad-bots/core": "file:../../squad-bots/packages/core"
+    "zustand": "^5.0.3"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.0.0",

@@ -1,7 +1,6 @@
 export * from './taskTimerBridge';
 import type { CompanionTaskTimer, CompanionTimerSnapshot, CompanionTimerCommand, CompanionTimerReply } from './taskTimerBridge';
 import { SPECIALIST_ROLES } from './contentRoles';
-import type { SquadBotHomeApp } from '@squad-bots/core/types';
 // ============================================================
 // SquadHub Shared Types
 // Used by both the server and web frontend
@@ -3804,7 +3803,6 @@ export type LmsTrack = 'learning' | 'sop' | 'knowledge';
 
 // off: does nothing · practice: works but sends nothing · approval: a person
 // approves each reply · live: works on its own.
-export type { SquadBotStatus, SquadBotHomeApp, AiProviderKind, AiProviderBillingSettings, AiProviderBillingMetric, AiProviderBilling, AiProvider, SquadBotAi, SquadBot, SquadBotRun, SquadBotDetail } from '@squad-bots/core/types';
 
 /** A Knowledge Center category, as served live by SquadHire. */
 export interface KnowledgeCategoryOption {
@@ -3859,7 +3857,7 @@ export interface LmsItem {
   // Knowledge track only: legacy primary bot; bots contains all linked bots.
   bot_id?: string | null;
   bot?: { id: string; internal_name: string } | null;
-  bots?: { id: string; internal_name: string; home_app: SquadBotHomeApp }[];
+  bots?: { id: string; internal_name: string; home_app: string }[];
   // Contributor "submit for review" flow (migration 165). When origin_item_id
   // is set this item is a draft CLONE proposing changes to that live item.
   origin_item_id?: string | null;

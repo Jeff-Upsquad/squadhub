@@ -9,7 +9,6 @@
     "dev": "tsc --watch"
   },
   "dependencies": {
-    "@squad-bots/core": "file:../../squad-bots/packages/core",
     "chrono-node": "^2.10.3"
   }
 }
