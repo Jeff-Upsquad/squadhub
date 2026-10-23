@@ -21,3 +21,4 @@ up and writes the SOPs.
 | [test-handoff.md](test-handoff.md) | Plain-language handoff after something becomes testable (adapt URLs once app.squadhub.in exists) |
 | [google-meet-setup.md](google-meet-setup.md) | Meeting-link provider setup (inherited from Squad Hub) |
 | [huddles-setup.md](huddles-setup.md) | LiveKit huddles setup (inherited from Squad Hub) |
+| [migrate_from_hub.md](migrate_from_hub.md) | Move existing Hub businesses/talents into SaaS accounts (plan → copy → freeze tooling in `tools/migrate_from_hub/`) |

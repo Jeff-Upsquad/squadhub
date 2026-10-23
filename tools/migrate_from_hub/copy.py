@@ -362,10 +362,12 @@ class Copier:
                    "host_workspace_id": self.ws_map.get(acc.get("host_key")) if acc["kind"] == "shared" else None,
                    "created_by": owner}
             parts.append(insert("workspaces", [row]))
-            parts.append(insert("platform_audit_log", [{"id": det_id("audit", ws_id), "action": "account.created",
-                                                        "workspace_id": ws_id, "actor_user_id": owner,
-                                                        "details": {"kind": acc["kind"], "source": "hub_migration",
-                                                                    "plan_key": acc["key"], "run_id": self.run_id}}]))
+            details = json.dumps({"kind": acc["kind"], "source": "hub_migration",
+                                  "plan_key": acc["key"], "run_id": self.run_id})
+            parts.append(f"INSERT INTO public.platform_audit_log (action, workspace_id, actor_user_id, details) "
+                         f"SELECT 'account.created', {lit(ws_id)}, {lit(owner)}, {dq(details)}::jsonb "
+                         f"WHERE NOT EXISTS (SELECT 1 FROM public.platform_audit_log WHERE workspace_id = {lit(ws_id)} "
+                         f"AND action = 'account.created');\n")
         else:
             for col in ("hub_partner_user_id", "squadhire_business_id", "squadhire_talent_id") + (
                     ("hub_client_id",) if acc["kind"] == "business" else ()):
@@ -477,7 +479,7 @@ class Copier:
                           "recurrence_paused": bool(t.get("recurrence_paused")),
                           "recurring_parent_id": det_id("task", t["recurring_parent_id"]) if t.get("recurring_parent_id") in task_ids else None,
                           "recurrence_instance_date": t.get("recurrence_instance_date") if t.get("recurring_parent_id") in task_ids else None,
-                          "created_via": "hub_migration"})
+                          "created_via": t.get("created_via") or "unknown"})
             idm.append(("tasks", t["id"], tid, ws_id))
         parts.append(insert("tasks", tasks))
         comments = []
@@ -606,7 +608,7 @@ class Copier:
             talents = {a["key"]: a for a in self.plan["accounts"] if a["kind"] == "talent"}
             for l in acc["links"]:
                 o = talents[l["talent_key"]]["owner"]
-                members.append(dict(o, role="member"))
+                members.append(dict(o, role="member", talent=True))
             for s in acc["staff"]:
                 members.append({"hub_user_id": s, "role": "member", "staff": True})
             acc = dict(acc, owner=host["owner"], members=members)
@@ -617,9 +619,11 @@ class Copier:
         grants: Dict[str, List] = {owner: [("manager", "all")]}
         for m in acc.get("members", []):
             uid = self.user_map[m.get("hub_user_id") or m.get("email_key")]
+            if m.get("talent"):
+                continue  # talents only get their category spaces (below)
             if m.get("staff"):
                 grants.setdefault(uid, []).append(("member", "all"))
-            elif acc["kind"] != "shared" or m["role"] in ("admin", "member") and m.get("hub_user_id") not in self._talent_owner_ids():
+            else:
                 grants.setdefault(uid, []).append(("manager" if m["role"] == "admin" else "member", "all"))
         links_sql = ""
         if acc["kind"] == "shared":
@@ -650,9 +654,6 @@ class Copier:
         rep["saas_workspace_id"] = ws_id
         rep["adopted_existing"] = bool(existing)
         self.report[key] = rep
-
-    def _talent_owner_ids(self) -> set:
-        return {a["owner"].get("hub_user_id") for a in self.plan["accounts"] if a["kind"] == "talent"}
 
     def run(self, only: Optional[str]) -> dict:
         self.prepare()
