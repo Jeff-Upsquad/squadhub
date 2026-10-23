@@ -4,6 +4,7 @@ import { z } from 'zod';
 import type { User, TaskRecurrence, TaskTag, TaskListPath } from '@squadhub/shared';
 import { parseReminderTitle, taskRecurrenceOccursOn, getTaskStatusCategory, isWaitingOrUnblockedStatus } from '@squadhub/shared';
 import { supabaseAdmin } from '../../supabase';
+import { getUserWorkspaceIds } from '../../middleware/workspace';
 import { requireAuth } from '../../middleware/auth';
 import { requireUserType } from '../../middleware/userType';
 import { checkResourceAccess, meetsAccessLevel, requirePermission, isWorkspaceAdmin, isResourceLocked } from '../../middleware/permissions';
@@ -632,13 +633,13 @@ router.get('/tasks', async (req: Request, res: Response) => {
     // ADDED into it from elsewhere (task_list_links). Fetch the linked task ids
     // first, then OR them into the query.
     const { data: linkRows } = await supabaseAdmin
-      .from('task_list_links')
+      .from('task_list_links') // tenant-scope: list access checked via checkResourceAccess above
       .select('task_id')
       .eq('list_id', listId);
     const linkedIds = Array.from(new Set((linkRows || []).map((r: any) => r.task_id).filter(Boolean)));
 
     let query = supabaseAdmin
-      .from('tasks')
+      .from('tasks') // tenant-scope: list access checked via checkResourceAccess above; linked ids come from that list
       .select('*')
       // Routine templates never render in list views — only their spawned copies do.
       .is('recurrence', null);
@@ -712,9 +713,12 @@ router.get('/tasks/my', async (req: Request, res: Response) => {
     const tz = (req.query.tz as string) || 'Asia/Kolkata';
     const includeDone = req.query.include_done === 'true';
 
+    // My Tasks aggregates across EVERY workspace the user belongs to
+    // (own accounts + shared workspaces) — no switching needed.
     let query = supabaseAdmin
       .from('tasks')
       .select('*')
+      .in('workspace_id', await getUserWorkspaceIds(req.userId!))
       .contains('assignee_ids', [req.userId!])
       // Hide routine templates — their spawned copies carry the real work.
       .is('recurrence', null);
@@ -881,7 +885,7 @@ router.get('/tasks/my', async (req: Request, res: Response) => {
     const workedIds = [...workedHistory.keys()];
 
     const { data: activeWbRuns } = await supabaseAdmin
-      .from('work_block_runs')
+      .from('work_block_runs') // tenant-scope: caller's own rows (user_id = caller)
       .select('task_id, started_at')
       .eq('user_id', req.userId!)
       .is('ended_at', null);
@@ -964,10 +968,12 @@ router.get('/tasks/new', async (req: Request, res: Response) => {
     // Same base shape as /tasks/my: skip routine templates and done/closed/cancelled tasks.
     // Also skip mirrored Course/Meeting tasks — they're auto-materialised, not
     // something the user needs to "review" as a freshly-assigned task.
+    const myWorkspaces = await getUserWorkspaceIds(userId);
     const base = () =>
       supabaseAdmin
         .from('tasks')
         .select('*')
+        .in('workspace_id', myWorkspaces)
         .is('recurrence', null)
         .is('source_kind', null)
         .not('status', 'in', '(done,closed,cancelled,Done,Closed,Cancelled)');
@@ -1003,7 +1009,7 @@ router.get('/tasks/new', async (req: Request, res: Response) => {
     const candidateIds = Array.from(byId.keys());
     for (let i = 0; i < candidateIds.length; i += 100) {
       const reviewedRes = await supabaseAdmin
-        .from('task_reviews')
+        .from('task_reviews') // tenant-scope: caller's own rows (user_id = caller)
         .select('task_id')
         .eq('user_id', userId)
         .in('task_id', candidateIds.slice(i, i + 100));
@@ -1061,6 +1067,7 @@ router.get('/tasks/emergency', async (req: Request, res: Response) => {
     const { data, error } = await supabaseAdmin
       .from('tasks')
       .select('*')
+      .in('workspace_id', await getUserWorkspaceIds(req.userId!))
       .eq('priority', 'emergency')
       .not('status', 'in', '(done,closed,cancelled,Done,Closed,Cancelled)')
       .is('parent_task_id', null)
@@ -1108,7 +1115,7 @@ router.get('/tasks/my-time-entries', async (req: Request, res: Response) => {
     }
     const entries: any[] = [];
     for (let offset = 0; ; offset += 1000) {
-      let query = supabaseAdmin.from('task_time_entries').select('*')
+      let query = supabaseAdmin.from('task_time_entries').select('*') // tenant-scope: caller's own rows (user_id = caller)
         .eq('user_id', req.userId!).order('started_at', { ascending: false })
         .order('id', { ascending: true });
       if (parsed?.success) query = query.eq('workspace_id', parsed.data.workspace_id)
@@ -2376,7 +2383,7 @@ router.post('/tasks/:id/reminder-action', async (req: Request, res: Response) =>
       notification_id: z.string().uuid(), action: z.enum(['snooze', 'complete']),
       minutes: z.number().int().refine(n => [5, 10, 15, 30, 60, 1440].includes(n)).optional(),
     }).parse(req.body);
-    const { data: notification, error: notificationError } = await supabaseAdmin.from('notifications').select('*')
+    const { data: notification, error: notificationError } = await supabaseAdmin.from('notifications').select('*') // tenant-scope: caller's own rows (user_id = caller)
       .eq('id', notification_id).eq('user_id', req.userId!).eq('type', 'task_reminder').eq('reference_id', req.params.id).maybeSingle();
     if (notificationError) throw notificationError;
     if (!notification) { res.status(404).json({ success: false, error: 'Reminder not found' }); return; }
@@ -2508,22 +2515,11 @@ router.post('/tasks', async (req: Request, res: Response) => {
     if (parentList?.folder_id) {
       const { data: parentFolder } = await supabaseAdmin
         .from('folders')
-        .select('client_id, auto_assignee_ids, default_task_type_id')
+        .select('auto_assignee_ids, default_task_type_id')
         .eq('id', parentList.folder_id)
         .single();
       folderAutoIds = (parentFolder?.auto_assignee_ids as string[] | null) || [];
       folderDefaultTypeId = (parentFolder as any)?.default_task_type_id || null;
-      if (parentFolder?.client_id) {
-        const { data: n, error: nErr } = await supabaseAdmin.rpc(
-          'increment_client_task_counter',
-          { p_client_id: parentFolder.client_id },
-        );
-        if (nErr) {
-          console.warn('[pm/tasks] increment_client_task_counter failed:', nErr);
-        } else if (typeof n === 'number') {
-          displayNumber = n;
-        }
-      }
     }
     if (parentList?.space_id) {
       const { data: parentSpace } = await supabaseAdmin
@@ -2925,7 +2921,7 @@ router.put('/tasks/:id', async (req: Request, res: Response) => {
       && (prior as any)?.work_date !== body.work_date) {
       try {
         await supabaseAdmin
-          .from('task_day_plans')
+          .from('task_day_plans') // tenant-scope: caller's own rows (user_id = caller)
           .delete()
           .eq('task_id', id)
           .eq('user_id', req.userId!);
@@ -4013,7 +4009,7 @@ router.delete('/tasks/:id/review', async (req: Request, res: Response) => {
   try {
     const id = req.params.id as string;
     const { error } = await supabaseAdmin
-      .from('task_reviews')
+      .from('task_reviews') // tenant-scope: caller's own rows (user_id = caller)
       .delete()
       .eq('task_id', id)
       .eq('user_id', req.userId!);

@@ -82,7 +82,7 @@ router.post('/scheduled', requireAuth, async (req: Request, res: Response) => {
 router.get('/scheduled', requireAuth, async (req: Request, res: Response) => {
   try {
     let query = supabaseAdmin
-      .from('chat_scheduled_messages')
+      .from('chat_scheduled_messages') // tenant-scope: caller's own rows (user_id = caller)
       .select('*')
       .eq('user_id', req.userId)
       .eq('status', 'pending')
@@ -109,7 +109,7 @@ router.get('/scheduled', requireAuth, async (req: Request, res: Response) => {
 router.delete('/scheduled/:id', requireAuth, async (req: Request, res: Response) => {
   try {
     const { data, error } = await supabaseAdmin
-      .from('chat_scheduled_messages')
+      .from('chat_scheduled_messages') // tenant-scope: caller's own rows (user_id = caller)
       .update({ status: 'canceled' })
       .eq('id', req.params.id)
       .eq('user_id', req.userId)

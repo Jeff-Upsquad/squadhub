@@ -63,9 +63,9 @@ router.get('/work-blocks/:task_id', async (req: Request, res: Response, next: Ne
       { data: runs, error: runsErr },
       { data: links, error: linksErr },
     ] = await Promise.all([
-      supabaseAdmin.from('work_blocks').select('*').eq('task_id', taskId).maybeSingle(),
+      supabaseAdmin.from('work_blocks').select('*').eq('task_id', taskId).maybeSingle(), // tenant-scope: caller's own rows (user_id = caller)
       supabaseAdmin
-        .from('work_block_runs')
+        .from('work_block_runs') // tenant-scope: caller's own rows (user_id = caller)
         .select('*')
         .eq('task_id', taskId)
         .eq('user_id', req.userId!)
@@ -335,7 +335,7 @@ router.post('/work-blocks/:task_id/runs', async (req: Request, res: Response) =>
     // lost (offline / crashed tab).
     const startedAt = new Date();
     const { data: existing } = await supabaseAdmin
-      .from('work_block_runs')
+      .from('work_block_runs') // tenant-scope: caller's own rows (user_id = caller)
       .select('id, task_id, user_id, started_at')
       .eq('user_id', req.userId!)
       .is('ended_at', null)
@@ -373,7 +373,7 @@ router.patch('/work-blocks/runs/:run_id', async (req: Request, res: Response) =>
   try {
     const runId = req.params.run_id as string;
     const { data: existing, error: fetchErr } = await supabaseAdmin
-      .from('work_block_runs')
+      .from('work_block_runs') // tenant-scope: caller's own rows (user_id = caller)
       .select('*')
       .eq('id', runId)
       .eq('user_id', req.userId!)
@@ -403,7 +403,7 @@ router.patch('/work-blocks/runs/:run_id', async (req: Request, res: Response) =>
 router.get('/work-blocks/active', async (req: Request, res: Response) => {
   try {
     const { data: run } = await supabaseAdmin
-      .from('work_block_runs')
+      .from('work_block_runs') // tenant-scope: caller's own rows (user_id = caller)
       .select('*')
       .eq('user_id', req.userId!)
       .is('ended_at', null)

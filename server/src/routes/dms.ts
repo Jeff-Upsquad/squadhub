@@ -102,7 +102,7 @@ router.post('/', requireAuth, requireWorkUnlocked, requirePermission('can_send_d
         // Return existing conversation even if the pairing rule would now
         // block a *new* thread — they can still open what they already have.
         const { data: conv } = await supabaseAdmin
-          .from('dm_conversations')
+          .from('dm_conversations') // tenant-scope: conversation just created/found inside the verified workspace for this caller
           .select('*, participants:dm_participants(user_id, user:users(id, display_name, avatar_url))')
           .eq('id', existing[0].id)
           .single();
@@ -147,7 +147,7 @@ router.post('/', requireAuth, requireWorkUnlocked, requirePermission('can_send_d
 
     // Fetch back with participants
     const { data: fullConv } = await supabaseAdmin
-      .from('dm_conversations')
+      .from('dm_conversations') // tenant-scope: conversation just created/found inside the verified workspace for this caller
       .select('*, participants:dm_participants(user_id, user:users(id, display_name, avatar_url))')
       .eq('id', conversation.id)
       .single();

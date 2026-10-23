@@ -2,6 +2,16 @@ import { Router, Request, Response } from 'express';
 import { supabaseAdmin } from '../supabase';
 import { requireAuth } from '../middleware/auth';
 import type { NotificationsReadPayload } from '@squadhub/shared';
+import { getUserWorkspaceIds } from '../middleware/workspace';
+
+// Notifications aggregate across EVERY workspace the user belongs to (Slack
+// Connect model: no switching to see what's waiting). Rows from a workspace the
+// user has left are excluded. `?workspace_id=` narrows to one (verified by
+// requireAuth).
+async function visibleWorkspaceIds(req: Request): Promise<string[]> {
+  if (typeof req.query.workspace_id === 'string' && req.workspaceId) return [req.workspaceId];
+  return getUserWorkspaceIds(req.userId!);
+}
 
 const router = Router();
 router.use(requireAuth);
@@ -27,6 +37,7 @@ router.get('/', async (req: Request, res: Response) => {
       .from('notifications')
       .select('*, actor:users!notifications_actor_id_fkey(id, display_name, email, avatar_url)')
       .eq('user_id', req.userId!)
+      .in('workspace_id', await visibleWorkspaceIds(req))
       .order('created_at', { ascending: false })
       .limit(limit);
 
@@ -52,6 +63,7 @@ router.get('/unread-count', async (req: Request, res: Response) => {
       .from('notifications')
       .select('*', { count: 'exact', head: true })
       .eq('user_id', req.userId!)
+      .in('workspace_id', await visibleWorkspaceIds(req))
       .eq('is_read', false);
 
     if (error) {
@@ -75,6 +87,7 @@ router.patch('/:id/read', async (req: Request, res: Response) => {
       .update({ is_read: true })
       .eq('id', id)
       .eq('user_id', req.userId!)
+      .in('workspace_id', await visibleWorkspaceIds(req))
       .select()
       .single();
 
@@ -118,6 +131,7 @@ router.post('/read-conversation', async (req: Request, res: Response) => {
       .from('notifications')
       .update({ is_read: true })
       .eq('user_id', req.userId!)
+      .in('workspace_id', await visibleWorkspaceIds(req))
       .eq('is_read', false)
       .eq(`metadata->>${metaKey}`, metaVal)
       .select('id');
@@ -144,6 +158,7 @@ router.post('/mark-all-read', async (_req: Request, res: Response) => {
       .from('notifications')
       .update({ is_read: true })
       .eq('user_id', _req.userId!)
+      .in('workspace_id', await visibleWorkspaceIds(_req))
       .eq('is_read', false);
 
     if (error) {
@@ -168,7 +183,8 @@ router.delete('/:id', async (req: Request, res: Response) => {
       .from('notifications')
       .delete()
       .eq('id', id)
-      .eq('user_id', req.userId!);
+      .eq('user_id', req.userId!)
+      .in('workspace_id', await visibleWorkspaceIds(req));
 
     if (error) {
       res.status(500).json({ success: false, error: error.message });

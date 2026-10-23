@@ -79,7 +79,7 @@ router.post('/', async (req: Request, res: Response) => {
     const body = createSchema.parse(req.body);
 
     const { data, error } = await supabaseAdmin
-      .from('favorites')
+      .from('favorites') // tenant-scope: insert carries body.workspace_id, verified against membership by requireAuth
       .insert({ ...body, user_id: (req as any).userId })
       .select()
       .single();
@@ -108,7 +108,7 @@ router.post('/', async (req: Request, res: Response) => {
 router.delete('/:id', async (req: Request, res: Response) => {
   try {
     const { error } = await supabaseAdmin
-      .from('favorites')
+      .from('favorites') // tenant-scope: caller's own rows (user_id = caller)
       .delete()
       .eq('id', req.params.id)
       .eq('user_id', (req as any).userId);

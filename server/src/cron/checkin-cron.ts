@@ -17,59 +17,55 @@ export async function markMissingCheckIns(): Promise<void> {
   }
 
   try {
-    // Get all active users
-    const { data: users } = await supabaseAdmin
-      .from('users')
-      .select('id')
-      .eq('status', 'active');
+    // SaaS: check-ins are per workspace (account). Sweep every active
+    // workspace that has a check-in mini app enabled, marking its members who
+    // didn't check in there today.
+    const { data: enabled } = await supabaseAdmin
+      .from('workspace_mini_apps')
+      .select('workspace_id, workspaces!inner(status)')
+      .in('slug', ['check-ins', 'daily-checkin', 'daily-checkin-partners'])
+      .eq('enabled', true)
+      .eq('workspaces.status', 'active');
+    const workspaceIds = [...new Set((enabled || []).map((r: any) => r.workspace_id as string))];
 
-    if (!users || users.length === 0) {
-      console.log('[CheckIn Cron] No active users found');
-      return;
+    let marked = 0;
+    for (const workspaceId of workspaceIds) {
+      const { data: members } = await supabaseAdmin
+        .from('workspace_members')
+        .select('user_id, role_id, users!inner(status)')
+        .eq('workspace_id', workspaceId)
+        .eq('users.status', 'active');
+      if (!members?.length) continue;
+
+      const { data: checkedIn } = await supabaseAdmin
+        .from('checkins')
+        .select('user_id')
+        .eq('workspace_id', workspaceId)
+        .eq('date', today);
+      const done = new Set((checkedIn || []).map((c: any) => c.user_id));
+
+      const records = (members as any[])
+        .filter((m) => !done.has(m.user_id))
+        .map((m) => ({
+          workspace_id: workspaceId,
+          user_id: m.user_id,
+          date: today,
+          status: 'no_checkin',
+          completed_items: [],
+          role_id: m.role_id || null,
+        }));
+      if (!records.length) continue;
+
+      const { error } = await supabaseAdmin
+        .from('checkins')
+        .upsert(records, { onConflict: 'workspace_id,user_id,date', ignoreDuplicates: true });
+      if (error) {
+        console.error(`[CheckIn Cron] ${workspaceId}: error inserting missing check-ins:`, error);
+        continue;
+      }
+      marked += records.length;
     }
-
-    // Get users who already checked in today
-    const { data: checkedIn } = await supabaseAdmin
-      .from('checkins')
-      .select('user_id')
-      .eq('date', today);
-
-    const checkedInIds = new Set((checkedIn || []).map((c: any) => c.user_id));
-
-    // Find users who haven't checked in
-    const missingUsers = users.filter((u: any) => !checkedInIds.has(u.id));
-
-    if (missingUsers.length === 0) {
-      console.log('[CheckIn Cron] All users checked in today');
-      return;
-    }
-
-    // Get role_ids for missing users
-    const missingIds = missingUsers.map((u: any) => u.id);
-    const { data: members } = await supabaseAdmin
-      .from('workspace_members')
-      .select('user_id, role_id')
-      .in('user_id', missingIds);
-
-    const roleMap = new Map((members || []).map((m: any) => [m.user_id, m.role_id]));
-
-    // Insert no_checkin records
-    const records = missingUsers.map((u: any) => ({
-      user_id: u.id,
-      date: today,
-      status: 'no_checkin',
-      completed_items: [],
-      role_id: roleMap.get(u.id) || null,
-    }));
-
-    const { error } = await supabaseAdmin
-      .from('checkins')
-      .upsert(records, { onConflict: 'user_id,date' });
-
-    if (error) {
-      console.error('[CheckIn Cron] Error inserting missing check-ins:', error);
-      return;
-    }
+    const missingUsers = { length: marked };
 
     console.log(`[CheckIn Cron] Marked ${missingUsers.length} users as no_checkin for ${today}`);
   } catch (err) {

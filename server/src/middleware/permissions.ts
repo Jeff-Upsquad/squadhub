@@ -226,9 +226,11 @@ export async function checkResourceAccess(
 
   // Check if user is the resource creator (always has access)
   let creatorId: string | null = null;
+  let publicChannel = false;
   if (resourceType === 'channel') {
-    const { data } = await supabaseAdmin.from('channels').select('created_by').eq('id', resourceId).single();
+    const { data } = await supabaseAdmin.from('channels').select('created_by, is_private').eq('id', resourceId).single();
     creatorId = data?.created_by;
+    publicChannel = data?.is_private === false;
   } else if (resourceType === 'space') {
     const { data } = await supabaseAdmin.from('spaces').select('created_by').eq('id', resourceId).single();
     creatorId = data?.created_by;
@@ -256,6 +258,9 @@ export async function checkResourceAccess(
   if (rm) {
     return rm.access_level as AccessLevel;
   }
+
+  // Public channels are open to every member of their workspace (not guests).
+  if (publicChannel && membership.role !== 'guest') return 'member';
 
   // Inheritance: folder inherits from space, list inherits from folder then space
   if (resourceType === 'folder') {

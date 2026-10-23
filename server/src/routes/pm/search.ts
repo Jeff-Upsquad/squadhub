@@ -86,17 +86,17 @@ router.get('/search', async (req: Request, res: Response) => {
       // Resolve via creator-of + resource_memberships at each level
       const [memSpaceRes, memFolderRes, memListRes] = await Promise.all([
         supabaseAdmin
-          .from('resource_memberships')
+          .from('resource_memberships') // tenant-scope: caller's own rows (user_id = caller)
           .select('resource_id')
           .eq('resource_type', 'space')
           .eq('user_id', userId),
         supabaseAdmin
-          .from('resource_memberships')
+          .from('resource_memberships') // tenant-scope: caller's own rows (user_id = caller)
           .select('resource_id')
           .eq('resource_type', 'folder')
           .eq('user_id', userId),
         supabaseAdmin
-          .from('resource_memberships')
+          .from('resource_memberships') // tenant-scope: caller's own rows (user_id = caller)
           .select('resource_id')
           .eq('resource_type', 'list')
           .eq('user_id', userId),

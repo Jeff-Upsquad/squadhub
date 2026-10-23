@@ -115,7 +115,7 @@ async function upsertDailySummary(
   context: string = 'default',
 ): Promise<void> {
   let query = supabaseAdmin
-    .from('daily_time_summaries')
+    .from('daily_time_summaries') // tenant-scope: caller's own rows (user_id = caller)
     .select('*')
     .eq('user_id', userId)
     .eq('date', date)
@@ -492,7 +492,7 @@ router.get('/daily-summaries', async (req: Request, res: Response) => {
     }
 
     let query = supabaseAdmin
-      .from('daily_time_summaries')
+      .from('daily_time_summaries') // tenant-scope: caller's own rows (user_id = caller)
       .select('date, total_work_seconds')
       .eq('user_id', userId)
       .gte('date', from)

@@ -43,8 +43,8 @@ router.get('/personal', async (req: Request, res: Response) => {
     // Hydrate the space with its statuses (seeded by the on-insert trigger) and
     // the default list for the client.
     const [{ data: space }, { data: list }] = await Promise.all([
-      supabaseAdmin.from('spaces').select('*, space_statuses(*)').eq('id', spaceId).single(),
-      supabaseAdmin.from('lists').select('*').eq('id', listId).single(),
+      supabaseAdmin.from('spaces').select('*, space_statuses(*)').eq('id', spaceId).single(), // tenant-scope: caller's personal space/list resolved by getOrCreatePersonalSpaceId for the active workspace
+      supabaseAdmin.from('lists').select('*').eq('id', listId).single(), // tenant-scope: caller's personal space/list resolved by getOrCreatePersonalSpaceId for the active workspace
     ]);
 
     res.json({ success: true, data: { space, list } });

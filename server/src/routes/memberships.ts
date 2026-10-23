@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { requireAuth } from '../middleware/auth';
 import { checkResourceAccess, meetsAccessLevel, isWorkspaceAdmin } from '../middleware/permissions';
 import { supabaseAdmin } from '../supabase';
+import { getMembership, workspaceIdOf } from '../middleware/workspace';
 
 
 const router = Router();
@@ -33,7 +34,7 @@ router.get('/', async (req: Request, res: Response) => {
     // Must be manager or admin to list members
     const userLevel = await checkResourceAccess(req.userId!, resourceType, resourceId);
     if (!userLevel || !meetsAccessLevel(userLevel, 'manager')) {
-      const admin = await isWorkspaceAdmin(req.userId!);
+      const admin = await isWorkspaceAdmin(req.userId!, await workspaceIdOf(resourceType, resourceId));
       if (!admin) {
         res.status(403).json({ success: false, error: 'Manager access required to view members' });
         return;
@@ -41,7 +42,7 @@ router.get('/', async (req: Request, res: Response) => {
     }
 
     const { data, error } = await supabaseAdmin
-      .from('resource_memberships')
+      .from('resource_memberships') // tenant-scope: resource access (manager) checked via checkResourceAccess in this handler
       .select('*, users!resource_memberships_user_id_fkey(id, display_name, email, avatar_url, user_type)')
       .eq('resource_type', resourceType)
       .eq('resource_id', resourceId)
@@ -66,7 +67,7 @@ router.get('/', async (req: Request, res: Response) => {
       workspaceId = (sp as any)?.workspace_id ?? null;
     } else if (resourceType === 'folder') {
       const { data: f } = await supabaseAdmin
-        .from('folders').select('space_id').eq('id', resourceId).single();
+        .from('folders').select('space_id').eq('id', resourceId).single(); // tenant-scope: resource access (manager) checked via checkResourceAccess in this handler
       if ((f as any)?.space_id) {
         const { data: sp } = await supabaseAdmin
           .from('spaces').select('workspace_id').eq('id', (f as any).space_id).single();
@@ -74,7 +75,7 @@ router.get('/', async (req: Request, res: Response) => {
       }
     } else if (resourceType === 'list') {
       const { data: l } = await supabaseAdmin
-        .from('lists').select('space_id').eq('id', resourceId).single();
+        .from('lists').select('space_id').eq('id', resourceId).single(); // tenant-scope: resource access (manager) checked via checkResourceAccess in this handler
       if ((l as any)?.space_id) {
         const { data: sp } = await supabaseAdmin
           .from('spaces').select('workspace_id').eq('id', (l as any).space_id).single();
@@ -128,11 +129,19 @@ router.post('/', async (req: Request, res: Response) => {
     // Must be manager or admin to add members
     const userLevel = await checkResourceAccess(req.userId!, body.resource_type, body.resource_id);
     if (!userLevel || !meetsAccessLevel(userLevel, 'manager')) {
-      const admin = await isWorkspaceAdmin(req.userId!);
+      const admin = await isWorkspaceAdmin(req.userId!, await workspaceIdOf(body.resource_type, body.resource_id));
       if (!admin) {
         res.status(403).json({ success: false, error: 'Manager access required to invite members' });
         return;
       }
+    }
+
+    // The invitee must belong to the resource's workspace (or reach it through
+    // a shared-workspace link) — resources never leak across accounts.
+    const resourceWs = await workspaceIdOf(body.resource_type, body.resource_id);
+    if (!resourceWs || !(await getMembership(body.user_id, resourceWs))) {
+      res.status(400).json({ success: false, error: 'That person is not a member of this workspace' });
+      return;
     }
 
     const { data, error } = await supabaseAdmin
@@ -178,7 +187,7 @@ router.put('/:id', async (req: Request, res: Response) => {
 
     // Get the membership to check resource
     const { data: existing } = await supabaseAdmin
-      .from('resource_memberships')
+      .from('resource_memberships') // tenant-scope: resource access (manager) checked via checkResourceAccess in this handler
       .select('resource_type, resource_id')
       .eq('id', id)
       .single();
@@ -191,7 +200,7 @@ router.put('/:id', async (req: Request, res: Response) => {
     // Must be manager or admin
     const userLevel = await checkResourceAccess(req.userId!, existing.resource_type, existing.resource_id);
     if (!userLevel || !meetsAccessLevel(userLevel, 'manager')) {
-      const admin = await isWorkspaceAdmin(req.userId!);
+      const admin = await isWorkspaceAdmin(req.userId!, await workspaceIdOf(existing.resource_type, existing.resource_id));
       if (!admin) {
         res.status(403).json({ success: false, error: 'Manager access required to change access levels' });
         return;
@@ -199,7 +208,7 @@ router.put('/:id', async (req: Request, res: Response) => {
     }
 
     const { data, error } = await supabaseAdmin
-      .from('resource_memberships')
+      .from('resource_memberships') // tenant-scope: resource access (manager) checked via checkResourceAccess in this handler
       .update({ access_level: body.access_level })
       .eq('id', id)
       .select('*, users!resource_memberships_user_id_fkey(id, display_name, email, avatar_url, user_type)')
@@ -231,7 +240,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
 
     // Get the membership
     const { data: existing } = await supabaseAdmin
-      .from('resource_memberships')
+      .from('resource_memberships') // tenant-scope: resource access (manager) checked via checkResourceAccess in this handler
       .select('resource_type, resource_id, user_id, access_level')
       .eq('id', id)
       .single();
@@ -244,7 +253,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
     // Must be manager or admin
     const userLevel = await checkResourceAccess(req.userId!, existing.resource_type, existing.resource_id);
     if (!userLevel || !meetsAccessLevel(userLevel, 'manager')) {
-      const admin = await isWorkspaceAdmin(req.userId!);
+      const admin = await isWorkspaceAdmin(req.userId!, await workspaceIdOf(existing.resource_type, existing.resource_id));
       if (!admin) {
         res.status(403).json({ success: false, error: 'Manager access required to remove members' });
         return;
@@ -254,7 +263,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
     // Cannot remove the last manager
     if (existing.access_level === 'manager') {
       const { count } = await supabaseAdmin
-        .from('resource_memberships')
+        .from('resource_memberships') // tenant-scope: resource access (manager) checked via checkResourceAccess in this handler
         .select('*', { count: 'exact', head: true })
         .eq('resource_type', existing.resource_type)
         .eq('resource_id', existing.resource_id)
@@ -266,7 +275,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
       }
     }
 
-    const { error } = await supabaseAdmin.from('resource_memberships').delete().eq('id', id);
+    const { error } = await supabaseAdmin.from('resource_memberships').delete().eq('id', id); // tenant-scope: resource access (manager) checked via checkResourceAccess in this handler
 
     if (error) {
       res.status(500).json({ success: false, error: error.message });
@@ -284,7 +293,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
 router.get('/my-permissions', async (req: Request, res: Response) => {
   try {
     const { data: membership } = await supabaseAdmin
-      .from('workspace_members')
+      .from('workspace_members') // tenant-scope: caller's own rows (user_id = caller)
       .select('id, role, role_id, roles(permissions)')
       .eq('user_id', req.userId!)
       .single();

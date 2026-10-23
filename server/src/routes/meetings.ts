@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { requireAuth } from '../middleware/auth';
 import { supabaseAdmin } from '../supabase';
 import { mirrorMeeting } from '../services/taskMirror';
+import { getUserWorkspaceIds, requireWorkspace } from '../middleware/workspace';
 
 const router = Router();
 
@@ -35,9 +36,11 @@ router.get('/my', async (req: Request, res: Response) => {
     const userId = req.userId!;
     const tz = (req.query.tz as string) || 'Asia/Kolkata';
 
+    // Aggregated across every workspace the user belongs to (Home card).
     const { data, error } = await supabaseAdmin
       .from('meetings')
       .select('*')
+      .in('workspace_id', await getUserWorkspaceIds(userId))
       .eq('status', 'scheduled')
       .or(`created_by.eq.${userId},attendee_ids.cs.{${userId}}`)
       .order('scheduled_at', { ascending: true });
@@ -69,14 +72,29 @@ router.get('/my', async (req: Request, res: Response) => {
 // POST /meetings — create a meeting. The creator is always implicitly an
 // attendee for card purposes (the /my query matches on created_by too).
 // ------------------------------------------------------------
-router.post('/', async (req: Request, res: Response) => {
+router.post('/', requireWorkspace, async (req: Request, res: Response) => {
   try {
     const userId = req.userId!;
     const body = createSchema.parse(req.body);
 
+    // Attendees must be members of the meeting's (active) workspace.
+    if (body.attendee_ids?.length) {
+      const { data: members } = await supabaseAdmin
+        .from('workspace_members')
+        .select('user_id')
+        .eq('workspace_id', req.workspaceId!)
+        .in('user_id', body.attendee_ids);
+      const ok = new Set((members || []).map((m: any) => m.user_id));
+      if (body.attendee_ids.some((id) => !ok.has(id))) {
+        res.status(400).json({ success: false, error: 'Attendees must be members of this workspace' });
+        return;
+      }
+    }
+
     const { data, error } = await supabaseAdmin
       .from('meetings')
       .insert({
+        workspace_id: req.workspaceId!,
         title: body.title,
         scheduled_at: body.scheduled_at,
         duration_min: body.duration_min ?? 30,
@@ -117,6 +135,7 @@ router.post('/:id/done', async (req: Request, res: Response) => {
       .from('meetings')
       .select('id, created_by, attendee_ids')
       .eq('id', id)
+      .in('workspace_id', await getUserWorkspaceIds(userId))
       .single();
 
     if (fetchErr || !existing) {
@@ -135,7 +154,7 @@ router.post('/:id/done', async (req: Request, res: Response) => {
     const { data, error } = await supabaseAdmin
       .from('meetings')
       .update({ status: 'done', updated_at: new Date().toISOString() })
-      .eq('id', id)
+      .eq('id', id) // tenant-scope: participant of a meeting in one of the user's workspaces (checked above)
       .select()
       .single();
 

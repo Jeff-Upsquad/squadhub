@@ -222,7 +222,7 @@ router.get('/day-plans', async (req: Request, res: Response) => {
       return;
     }
     const { data, error } = await supabaseAdmin
-      .from('task_day_plans')
+      .from('task_day_plans') // tenant-scope: caller's own rows (user_id = caller)
       .select('*')
       .eq('user_id', req.userId!)
       .eq('plan_date', date)
@@ -490,7 +490,7 @@ router.patch('/day-plans/:id', async (req: Request, res: Response) => {
     }
     const patch: Record<string, unknown> = { ...parsed.data, updated_at: new Date().toISOString() };
     const { data, error } = await supabaseAdmin
-      .from('task_day_plans')
+      .from('task_day_plans') // tenant-scope: caller's own rows (user_id = caller)
       .update(patch)
       .eq('id', id)
       .eq('user_id', req.userId!)
@@ -518,7 +518,7 @@ router.delete('/day-plans/:id', async (req: Request, res: Response) => {
   try {
     const id = req.params.id as string;
     const { error } = await supabaseAdmin
-      .from('task_day_plans')
+      .from('task_day_plans') // tenant-scope: caller's own rows (user_id = caller)
       .delete()
       .eq('id', id)
       .eq('user_id', req.userId!);
@@ -548,7 +548,7 @@ router.delete('/day-plans', async (req: Request, res: Response) => {
       return;
     }
     const { error } = await supabaseAdmin
-      .from('task_day_plans')
+      .from('task_day_plans') // tenant-scope: caller's own rows (user_id = caller)
       .delete()
       .eq('task_id', task_id)
       .eq('plan_date', plan_date)
@@ -616,7 +616,7 @@ router.delete('/group-day-plans', async (req: Request, res: Response) => {
       return;
     }
     const { error } = await supabaseAdmin
-      .from('group_day_plans')
+      .from('group_day_plans') // tenant-scope: caller's own rows (user_id = caller)
       .delete()
       .eq('container_type', container_type)
       .eq('container_id', container_id)

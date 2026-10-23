@@ -675,7 +675,7 @@ router.patch('/goals/:id/tasks/:taskId/schedule', route(async (req) => {
       .select('id, work_date, start_date, due_date, metadata'));
     if (fields.work_date && fields.work_date !== prior.work_date) {
       try {
-        await exec(db.from('task_day_plans').delete().eq('task_id', taskId).eq('user_id', req.userId!));
+        await exec(db.from('task_day_plans').delete().eq('task_id', taskId).eq('user_id', req.userId!)); // tenant-scope: caller's own rows (user_id = caller)
       } catch (e) { console.error('[pm/goals] stale day-plan cleanup failed:', e); }
     }
     const events: TaskActivityEvent[] = [];

@@ -30,7 +30,7 @@ router.get('/shared-with-me', async (req: Request, res: Response) => {
         .eq('workspace_id', workspaceId)
         .is('deleted_at', null),
       supabaseAdmin
-        .from('resource_memberships')
+        .from('resource_memberships') // tenant-scope: caller's own rows (user_id = caller)
         .select('resource_id')
         .eq('resource_type', 'space')
         .eq('user_id', userId),
@@ -44,14 +44,14 @@ router.get('/shared-with-me', async (req: Request, res: Response) => {
 
     // 2. Get direct list memberships for this user
     const { data: listMemberships } = await supabaseAdmin
-      .from('resource_memberships')
+      .from('resource_memberships') // tenant-scope: caller's own rows (user_id = caller)
       .select('id, resource_id, access_level, invited_by, created_at')
       .eq('resource_type', 'list')
       .eq('user_id', userId);
 
     // 3. Get direct folder memberships for this user
     const { data: folderMemberships } = await supabaseAdmin
-      .from('resource_memberships')
+      .from('resource_memberships') // tenant-scope: caller's own rows (user_id = caller)
       .select('id, resource_id, access_level, invited_by, created_at')
       .eq('resource_type', 'folder')
       .eq('user_id', userId);
@@ -148,7 +148,7 @@ router.get('/shared-tree', async (req: Request, res: Response) => {
         .eq('workspace_id', workspaceId)
         .is('deleted_at', null),
       supabaseAdmin
-        .from('resource_memberships')
+        .from('resource_memberships') // tenant-scope: caller's own rows (user_id = caller)
         .select('resource_id')
         .eq('resource_type', 'space')
         .eq('user_id', userId),
@@ -163,12 +163,12 @@ router.get('/shared-tree', async (req: Request, res: Response) => {
     // 2. Direct folder + list memberships.
     const [{ data: folderMemberships }, { data: listMemberships }] = await Promise.all([
       supabaseAdmin
-        .from('resource_memberships')
+        .from('resource_memberships') // tenant-scope: caller's own rows (user_id = caller)
         .select('resource_id, access_level')
         .eq('resource_type', 'folder')
         .eq('user_id', userId),
       supabaseAdmin
-        .from('resource_memberships')
+        .from('resource_memberships') // tenant-scope: caller's own rows (user_id = caller)
         .select('resource_id, access_level')
         .eq('resource_type', 'list')
         .eq('user_id', userId),

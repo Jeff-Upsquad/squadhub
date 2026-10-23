@@ -226,7 +226,7 @@ router.patch('/group-runs/runs/:run_id', async (req: Request, res: Response) => 
   try {
     const runId = req.params.run_id as string;
     const { data: existing, error: fetchErr } = await supabaseAdmin
-      .from('group_runs')
+      .from('group_runs') // tenant-scope: caller's own rows (user_id = caller)
       .select('*')
       .eq('id', runId)
       .eq('user_id', req.userId!)
@@ -255,7 +255,7 @@ router.patch('/group-runs/runs/:run_id', async (req: Request, res: Response) => 
 router.get('/group-runs/active', async (req: Request, res: Response) => {
   try {
     const { data: run } = await supabaseAdmin
-      .from('group_runs')
+      .from('group_runs') // tenant-scope: caller's own rows (user_id = caller)
       .select('*')
       .eq('user_id', req.userId!)
       .is('ended_at', null)
@@ -277,7 +277,7 @@ router.get('/group-runs/history', async (req: Request, res: Response) => {
       return;
     }
     const { data: runs, error } = await supabaseAdmin
-      .from('group_runs')
+      .from('group_runs') // tenant-scope: caller's own rows (user_id = caller)
       .select('*')
       .eq('group_key', groupKey)
       .eq('user_id', req.userId!)

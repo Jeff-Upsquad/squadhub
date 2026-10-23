@@ -106,20 +106,21 @@ router.get('/', requireAuth, async (req: Request, res: Response) => {
 
     // Non-admins: only channels they have membership for, or they created
     const { data: memberships } = await supabaseAdmin
-      .from('resource_memberships')
+      .from('resource_memberships') // tenant-scope: caller's own rows (user_id = caller)
       .select('resource_id')
       .eq('resource_type', 'channel')
       .eq('user_id', req.userId!);
 
     const memberChannelIds = (memberships || []).map((m: any) => m.resource_id);
 
-    // Also include channels the user created
+    // Also include channels the user created, and every PUBLIC channel of the
+    // workspace (e.g. #general) — public = open to all workspace members.
     const { data: createdChannels } = await supabaseAdmin
       .from('channels')
       .select('id')
       .eq('workspace_id', workspaceId)
       .is('deleted_at', null)
-      .eq('created_by', req.userId!);
+      .or(`created_by.eq.${req.userId!},is_private.eq.false`);
 
     const createdIds = (createdChannels || []).map((c: any) => c.id);
     const allIds = [...new Set([...memberChannelIds, ...createdIds])];

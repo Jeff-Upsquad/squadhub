@@ -81,7 +81,7 @@ router.get('/', requireAuth, async (req: Request, res: Response) => {
     }
 
     let query = supabaseAdmin
-      .from('messages')
+      .from('messages') // tenant-scope: channel access (checkResourceAccess) or DM participation checked above
       .select('*, sender:users!sender_id(id, display_name, avatar_url), reactions(*, user:users!user_id(id, display_name, avatar_url))')
       .eq('is_deleted', false)
       .order('created_at', { ascending: false })
@@ -120,7 +120,7 @@ router.get('/', requireAuth, async (req: Request, res: Response) => {
     const parentIds = messages.filter((m: any) => (m.reply_count || 0) > 0).map((m: any) => m.id);
     if (parentIds.length > 0) {
       const { data: replies } = await supabaseAdmin
-        .from('messages')
+        .from('messages') // tenant-scope: parents come from the access-checked page above
         .select('parent_message_id, sender_id, created_at, sender:users!sender_id(id, display_name, avatar_url)')
         .in('parent_message_id', parentIds)
         .eq('is_deleted', false)
@@ -355,7 +355,7 @@ router.post('/mark-read', requireAuth, async (req: Request, res: Response) => {
 // access rules in routes/channels.ts (admins: all; others: memberships +
 // channels they created). Returns null for "all channels in workspace" (admin).
 async function accessibleChannelIds(userId: string, workspaceId: string): Promise<string[]> {
-  const admin = await isWorkspaceAdmin(userId);
+  const admin = await isWorkspaceAdmin(userId, workspaceId);
   if (admin) {
     const { data } = await supabaseAdmin
       .from('channels')
@@ -365,7 +365,7 @@ async function accessibleChannelIds(userId: string, workspaceId: string): Promis
     return (data || []).map((c: any) => c.id);
   }
   const { data: memberships } = await supabaseAdmin
-    .from('resource_memberships')
+    .from('resource_memberships') // tenant-scope: caller's own rows (user_id = caller)
     .select('resource_id')
     .eq('resource_type', 'channel')
     .eq('user_id', userId);
@@ -478,7 +478,7 @@ router.get('/search', requireAuth, async (req: Request, res: Response) => {
     if (channelIds.length > 0) {
       queries.push(
         supabaseAdmin
-          .from('messages')
+          .from('messages') // tenant-scope: channelIds limited to accessible channels of a verified workspace
           .select(SELECT)
           .in('channel_id', channelIds)
           .eq('is_deleted', false)
@@ -491,7 +491,7 @@ router.get('/search', requireAuth, async (req: Request, res: Response) => {
     if (dmIds.length > 0) {
       queries.push(
         supabaseAdmin
-          .from('messages')
+          .from('messages') // tenant-scope: dmIds limited to the caller's DMs in a verified workspace
           .select(SELECT)
           .in('dm_conversation_id', dmIds)
           .eq('is_deleted', false)
@@ -519,7 +519,7 @@ router.get('/search', requireAuth, async (req: Request, res: Response) => {
     const channelNameById: Record<string, string> = {};
     if (matchedChannelIds.length > 0) {
       const { data: chs } = await supabaseAdmin
-        .from('channels')
+        .from('channels') // tenant-scope: ids from the access-filtered search results
         .select('id, name')
         .in('id', matchedChannelIds);
       for (const c of (chs || []) as any[]) channelNameById[c.id] = c.name;
@@ -574,7 +574,7 @@ router.get('/:id', requireAuth, async (req: Request, res: Response) => {
   try {
     const id = req.params.id;
     const { data, error } = await supabaseAdmin
-      .from('messages')
+      .from('messages') // tenant-scope: lookup; channel access / DM participation checked right after
       .select('*, sender:users!sender_id(id, display_name, avatar_url)')
       .eq('id', id)
       .maybeSingle();
@@ -588,12 +588,9 @@ router.get('/:id', requireAuth, async (req: Request, res: Response) => {
       return;
     }
 
-    if ((data as any).channel_id) {
-      const access = await checkResourceAccess(req.userId!, 'channel', (data as any).channel_id);
-      if (!access) {
-        res.status(403).json({ success: false, error: 'You do not have access to this message' });
-        return;
-      }
+    if (!(await canAccessMessage(req.userId!, (data as any).id))) {
+      res.status(403).json({ success: false, error: 'You do not have access to this message' });
+      return;
     }
 
     res.json({ success: true, data });
@@ -609,7 +606,7 @@ router.get('/:id/thread', requireAuth, async (req: Request, res: Response) => {
     const id = req.params.id;
 
     const { data: msg } = await supabaseAdmin
-      .from('messages')
+      .from('messages') // tenant-scope: lookup; channel access / DM participation checked right after
       .select('id, channel_id, dm_conversation_id, parent_message_id')
       .eq('id', id)
       .maybeSingle();
@@ -621,22 +618,19 @@ router.get('/:id/thread', requireAuth, async (req: Request, res: Response) => {
 
     const rootId = (msg as any).parent_message_id || id;
 
-    if ((msg as any).channel_id) {
-      const access = await checkResourceAccess(req.userId!, 'channel', (msg as any).channel_id);
-      if (!access) {
-        res.status(403).json({ success: false, error: 'You do not have access to this message' });
-        return;
-      }
+    if (!(await canAccessMessage(req.userId!, (msg as any).id))) {
+      res.status(403).json({ success: false, error: 'You do not have access to this message' });
+      return;
     }
 
     const [{ data: root }, { data: replies }] = await Promise.all([
       supabaseAdmin
-        .from('messages')
+        .from('messages') // tenant-scope: thread root access checked above
         .select('*, sender:users!sender_id(id, display_name, avatar_url), reactions(*, user:users!user_id(id, display_name, avatar_url))')
         .eq('id', rootId)
         .maybeSingle(),
       supabaseAdmin
-        .from('messages')
+        .from('messages') // tenant-scope: thread root access checked above
         .select('*, sender:users!sender_id(id, display_name, avatar_url), reactions(*, user:users!user_id(id, display_name, avatar_url))')
         .eq('parent_message_id', rootId)
         .eq('is_deleted', false)
@@ -653,10 +647,29 @@ router.get('/:id/thread', requireAuth, async (req: Request, res: Response) => {
 });
 
 // POST /messages/:id/reactions — add a reaction (commenter+ on channel)
+
+// A message is reachable when its channel is (checkResourceAccess = tenant wall
+// + membership) or the caller is a participant of its DM.
+async function canAccessMessage(userId: string, messageId: string): Promise<boolean> {
+  const { data: msg } = await supabaseAdmin
+    .from('messages')
+    .select('channel_id, dm_conversation_id') // tenant-scope: lookup only; access decided below
+    .eq('id', messageId)
+    .maybeSingle();
+  if (!msg) return false;
+  if ((msg as any).channel_id) return !!(await checkResourceAccess(userId, 'channel', (msg as any).channel_id));
+  if ((msg as any).dm_conversation_id) return isDmParticipant(userId, (msg as any).dm_conversation_id);
+  return false;
+}
+
 router.post('/:id/reactions', requireAuth, async (req: Request, res: Response) => {
   try {
-    const messageId = req.params.id;
+    const messageId = req.params.id as string;
     const { emoji } = req.body;
+    if (!(await canAccessMessage(req.userId!, messageId))) {
+      res.status(403).json({ success: false, error: 'You do not have access to this message' });
+      return;
+    }
 
     if (!emoji || typeof emoji !== 'string') {
       res.status(400).json({ success: false, error: 'emoji is required' });
@@ -665,7 +678,7 @@ router.post('/:id/reactions', requireAuth, async (req: Request, res: Response) =
 
     // Check if user already reacted with this emoji
     const { data: existing } = await supabaseAdmin
-      .from('reactions')
+      .from('reactions') // tenant-scope: caller's own rows (user_id = caller)
       .select('id')
       .eq('message_id', messageId)
       .eq('user_id', req.userId!)
@@ -674,7 +687,7 @@ router.post('/:id/reactions', requireAuth, async (req: Request, res: Response) =
 
     if (existing) {
       // Remove the reaction (toggle off)
-      await supabaseAdmin.from('reactions').delete().eq('id', existing.id);
+      await supabaseAdmin.from('reactions').delete().eq('id', existing.id); // tenant-scope: own reaction row (caller's id) on an access-checked message
       res.json({ success: true, message: 'Reaction removed' });
       return;
     }
@@ -696,7 +709,7 @@ router.post('/:id/reactions', requireAuth, async (req: Request, res: Response) =
     if (io) {
       // We need the channel/dm of the message to know which room to emit to
       const { data: msg } = await supabaseAdmin
-        .from('messages')
+        .from('messages') // tenant-scope: access-checked message (canAccessMessage)
         .select('channel_id, dm_conversation_id')
         .eq('id', messageId)
         .single();
@@ -727,7 +740,7 @@ router.patch('/:id', requireAuth, async (req: Request, res: Response) => {
     }
 
     const { data: msg } = await supabaseAdmin
-      .from('messages')
+      .from('messages') // tenant-scope: lookup; sender must be the caller
       .select('id, sender_id, type, created_at, is_deleted')
       .eq('id', id)
       .maybeSingle();
@@ -750,7 +763,7 @@ router.patch('/:id', requireAuth, async (req: Request, res: Response) => {
     }
 
     const { data, error } = await supabaseAdmin
-      .from('messages')
+      .from('messages') // tenant-scope: sender-only edit (checked above)
       .update({ content, edited_at: new Date().toISOString() })
       .eq('id', id)
       .select('*, sender:users!sender_id(id, display_name, avatar_url)')
@@ -781,7 +794,7 @@ router.delete('/:id', requireAuth, async (req: Request, res: Response) => {
     const id = req.params.id;
 
     const { data: msg } = await supabaseAdmin
-      .from('messages')
+      .from('messages') // tenant-scope: lookup; sender must be the caller
       .select('id, sender_id, file_url, channel_id, dm_conversation_id, created_at, is_deleted')
       .eq('id', id)
       .maybeSingle();
@@ -800,7 +813,7 @@ router.delete('/:id', requireAuth, async (req: Request, res: Response) => {
     }
 
     const { error } = await supabaseAdmin
-      .from('messages')
+      .from('messages') // tenant-scope: sender-only delete (checked above)
       .update({ is_deleted: true })
       .eq('id', id);
 
@@ -825,7 +838,7 @@ router.delete('/:id', requireAuth, async (req: Request, res: Response) => {
     // up the removal on their next tick.
     try {
       await supabaseAdmin
-        .from('notifications')
+        .from('notifications') // tenant-scope: notifications of the caller's own deleted message
         .delete()
         .eq('reference_type', 'message')
         .eq('reference_id', id);
@@ -917,7 +930,7 @@ router.post('/:id/restore', requireAuth, requireAdmin, async (req: Request, res:
     }
 
     const { data, error } = await supabaseAdmin
-      .from('messages')
+      .from('messages') // tenant-scope: restore within the active workspace (checked above)
       .update({ content: entry.previous_content, edited_at: new Date().toISOString() })
       .eq('id', id)
       .select('*, sender:users!sender_id(id, display_name, avatar_url)')

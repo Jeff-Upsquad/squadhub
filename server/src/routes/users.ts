@@ -4,6 +4,9 @@ import { requireAuth } from '../middleware/auth';
 import { supabaseAdmin } from '../supabase';
 import { isUserWorkLocked, resolveWorkAccess } from '../utils/workAccess';
 import { getUserSkills } from '../utils/skills';
+import { checkResourceAccess } from '../middleware/permissions';
+import { getMembership, getUserWorkspaceIds } from '../middleware/workspace';
+import { isDmParticipant } from '../utils/dmAccess';
 
 const router = Router();
 
@@ -21,57 +24,70 @@ router.get('/search', requireAuth, async (req: Request, res: Response) => {
     const dmConversationId = (req.query.dm_conversation_id as string) || '';
     const workspaceId = (req.query.workspace_id as string) || '';
 
-    // Scope the mention picker to a conversation when asked: channel → its
-    // members (resource_memberships) + creator; DM → its participants. With no
-    // scope param the search stays global (other callers rely on that).
+    // Tenancy: the picker only ever returns people the caller shares a
+    // workspace with. Channel → its members (+creator) after an access check;
+    // DM → its participants (caller must be one); otherwise the members of the
+    // requested/active workspace, or of all the caller's workspaces.
     let allowedIds: string[] | null = null;
     if (channelId) {
+      const level = await checkResourceAccess(req.userId!, 'channel', channelId);
+      if (!level) {
+        res.status(403).json({ success: false, error: 'No access to this channel' });
+        return;
+      }
       const { data: ch } = await supabaseAdmin
         .from('channels')
-        .select('created_by, workspace_id, linked_resource_type')
+        .select('created_by, workspace_id, is_private')
         .eq('id', channelId)
         .single();
-      const linkedType = (ch as any)?.linked_resource_type as string | null;
-      if (linkedType && linkedType.startsWith('crm_')) {
-        // CRM team chats: let @mention reach the whole CRM roster so a teammate
-        // who isn't in the chat yet can be pulled in (not just existing members).
-        // Mirrors the CRM's own /team-chats/mentionable: crm_app_access, then
-        // fall back to workspace members.
-        const wsId = (ch as any)?.workspace_id as string | undefined;
-        let rosterIds: string[] = [];
-        if (wsId) {
-          const { data: grants } = await supabaseAdmin
-            .from('crm_app_access')
-            .select('user_id')
-            .eq('workspace_id', wsId)
-            .eq('app', 'squadcrm')
-            .eq('enabled', true);
-          rosterIds = (grants || []).map((g: any) => g.user_id);
-          if (!rosterIds.length) {
-            const { data: wm } = await supabaseAdmin
-              .from('workspace_members')
-              .select('user_id')
-              .eq('workspace_id', wsId);
-            rosterIds = (wm || []).map((m: any) => m.user_id);
-          }
-        }
-        allowedIds = [...new Set<string>(rosterIds)];
+      if ((ch as any)?.is_private === false) {
+        const { data: wm } = await supabaseAdmin
+          .from('workspace_members')
+          .select('user_id')
+          .eq('workspace_id', (ch as any).workspace_id);
+        allowedIds = (wm || []).map((m: any) => m.user_id as string);
       } else {
         const { data: members } = await supabaseAdmin
           .from('resource_memberships')
           .select('user_id')
           .eq('resource_type', 'channel')
-          .eq('resource_id', channelId);
+          .eq('resource_id', channelId); // tenant-scope: channel access checked above
         const ids = new Set<string>((members || []).map((m: any) => m.user_id));
         if ((ch as any)?.created_by) ids.add((ch as any).created_by);
         allowedIds = [...ids];
       }
     } else if (dmConversationId) {
+      if (!(await isDmParticipant(req.userId!, dmConversationId))) {
+        res.status(403).json({ success: false, error: 'No access to this conversation' });
+        return;
+      }
       const { data: parts } = await supabaseAdmin
         .from('dm_participants')
         .select('user_id')
         .eq('conversation_id', dmConversationId);
       allowedIds = [...new Set<string>((parts || []).map((p: any) => p.user_id))];
+    } else {
+      let wsIds: string[];
+      if (workspaceId) {
+        if (!(await getMembership(req.userId!, workspaceId))) {
+          res.status(403).json({ success: false, error: 'You are not a member of this workspace' });
+          return;
+        }
+        wsIds = [workspaceId];
+      } else if (req.workspaceId) {
+        wsIds = [req.workspaceId];
+      } else {
+        wsIds = await getUserWorkspaceIds(req.userId!);
+      }
+      const ids = new Set<string>();
+      if (wsIds.length) {
+        const { data: wm } = await supabaseAdmin
+          .from('workspace_members')
+          .select('user_id')
+          .in('workspace_id', wsIds);
+        for (const m of wm || []) ids.add(m.user_id as string);
+      }
+      allowedIds = [...ids];
     }
 
     if (allowedIds !== null && allowedIds.length === 0) {
@@ -115,11 +131,12 @@ router.get('/search', requireAuth, async (req: Request, res: Response) => {
     const users = data || [];
     if (users.length > 0) {
       const ids = users.map((u: any) => u.id);
+      const roleWs = workspaceId || req.workspaceId;
       let memberQuery = supabaseAdmin
-        .from('workspace_members')
+        .from('workspace_members') // tenant-scope: ids already restricted to members of the caller's workspaces; role lookup narrowed when a workspace is named
         .select('user_id, role:role_id(name, color)')
         .in('user_id', ids);
-      if (workspaceId) memberQuery = memberQuery.eq('workspace_id', workspaceId);
+      if (roleWs) memberQuery = memberQuery.eq('workspace_id', roleWs);
       const { data: members } = await memberQuery;
       const roleByUser = new Map<string, { name: string; color: string | null } | null>();
       for (const m of (members || []) as any[]) {

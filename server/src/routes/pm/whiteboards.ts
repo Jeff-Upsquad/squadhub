@@ -30,7 +30,7 @@ async function loadWhiteboardView(req: Request, res: Response, requireLevel: 'vi
   const viewId = req.params.viewId as string;
 
   const { data: view, error } = await supabaseAdmin
-    .from('list_views')
+    .from('list_views') // tenant-scope: parent list access checked via checkResourceAccess in loadWhiteboardView
     .select('id, list_id, view_type, is_private, owner_id')
     .eq('id', viewId)
     .maybeSingle();
@@ -64,7 +64,7 @@ router.get('/views/:viewId/whiteboard', async (req: Request, res: Response) => {
     if (!view) return;
 
     const { data, error } = await supabaseAdmin
-      .from('whiteboards')
+      .from('whiteboards') // tenant-scope: parent list access checked via checkResourceAccess in loadWhiteboardView
       .select('data')
       .eq('view_id', view.id)
       .maybeSingle();

@@ -201,22 +201,36 @@ export async function workspaceIdOf(resourceType: string, resourceId: string): P
   return ((data as any)?.workspace_id as string) ?? null;
 }
 
-/** Pick the workspace id a request names, without verifying it. */
-function requestedWorkspaceId(req: Request): string | undefined {
-  const header = req.header('x-workspace-id');
-  if (header) return header.trim();
-  const q = req.query?.workspace_id;
-  if (typeof q === 'string' && q) return q;
-  return undefined;
+/**
+ * The workspace a request names: `X-Workspace-Id`, and/or a `workspace_id`
+ * query parameter (older routes pass it that way). When both are present they
+ * must agree, so admin/role checks — which use the active workspace — always
+ * run against the same workspace a route then filters by.
+ */
+function requestedWorkspaceId(req: Request): { id?: string; conflict: boolean } {
+  const header = req.header('x-workspace-id')?.trim() || undefined;
+  const q = typeof req.query?.workspace_id === 'string' && req.query.workspace_id ? (req.query.workspace_id as string) : undefined;
+  // A JSON body naming workspace_id (create channel/space/DM, favorites, timer,
+  // uploads, goals…) is held to the same rule.
+  const b = req.body && typeof (req.body as any).workspace_id === 'string' && (req.body as any).workspace_id
+    ? ((req.body as any).workspace_id as string)
+    : undefined;
+  const named = [header, q, b].filter(Boolean) as string[];
+  if (new Set(named).size > 1) return { conflict: true };
+  return { id: named[0], conflict: false };
 }
 
 /**
  * Called by requireAuth after the user is known. Verifies the requested
  * workspace (if any) and sets req.workspaceId / req.workspaceRole. Returns
- * false (after answering 403) when the named workspace isn't reachable.
+ * false (after answering) when the named workspace isn't reachable.
  */
 export async function resolveActiveWorkspace(req: Request, res: Response): Promise<boolean> {
-  const wsId = requestedWorkspaceId(req);
+  const { id: wsId, conflict } = requestedWorkspaceId(req);
+  if (conflict) {
+    res.status(400).json({ success: false, error: 'X-Workspace-Id and workspace_id disagree' });
+    return false;
+  }
   if (!wsId) return true;
   const membership = await getMembership(req.userId!, wsId);
   if (!membership) {

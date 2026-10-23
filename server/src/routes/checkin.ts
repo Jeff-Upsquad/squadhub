@@ -7,12 +7,16 @@ import { nowIST, todayIST, formatTimeIST, isNonWorkingDay } from '../utils/ist';
 import { getUserRoleIds } from '../utils/roles';
 import { resolveDeadlineTime } from '../utils/checkin';
 import { PARTNER_USER_TYPES } from '@squadhub/shared';
+import { requireWorkspace } from '../middleware/workspace';
 
 const router = Router();
 
 // All check-in routes require auth and a user type in scope
+// SaaS: check-ins belong to the ACTIVE workspace (account) — a talent checks in
+// to their own account; a business can run check-ins for its team.
 router.use(requireAuth);
-router.use(requireUserType('internal', ...PARTNER_USER_TYPES));
+router.use(requireUserType('internal', ...PARTNER_USER_TYPES, 'client', 'client_staff'));
+router.use(requireWorkspace);
 
 // POST /checkin/submit — submit daily check-in
 const submitSchema = z.object({
@@ -29,6 +33,7 @@ router.post('/submit', async (req: Request, res: Response) => {
     const { data: existing } = await supabaseAdmin
       .from('checkins')
       .select('id')
+      .eq('workspace_id', req.workspaceId!)
       .eq('user_id', userId)
       .eq('date', today)
       .neq('status', 'no_checkin')
@@ -52,6 +57,7 @@ router.post('/submit', async (req: Request, res: Response) => {
     const { data: members } = await supabaseAdmin
       .from('workspace_members')
       .select('role_id')
+      .eq('workspace_id', req.workspaceId!)
       .eq('user_id', userId)
       .limit(1);
     const member = members?.[0] || null;
@@ -89,13 +95,14 @@ router.post('/submit', async (req: Request, res: Response) => {
     const { data, error } = await supabaseAdmin
       .from('checkins')
       .upsert({
+        workspace_id: req.workspaceId!,
         user_id: userId,
         date: today,
         submitted_at: new Date().toISOString(),
         status,
         completed_items: body.completed_items,
         role_id: member?.role_id || null,
-      }, { onConflict: 'user_id,date' })
+      }, { onConflict: 'workspace_id,user_id,date' })
       .select()
       .single();
 
@@ -126,6 +133,7 @@ router.get('/today', async (req: Request, res: Response) => {
     const { data: checkinRows } = await supabaseAdmin
       .from('checkins')
       .select('*')
+      .eq('workspace_id', req.workspaceId!)
       .eq('user_id', userId)
       .eq('date', today)
       .limit(1);
@@ -135,6 +143,7 @@ router.get('/today', async (req: Request, res: Response) => {
     const { data: memberRows } = await supabaseAdmin
       .from('workspace_members')
       .select('role_id, roles(id, name)')
+      .eq('workspace_id', req.workspaceId!)
       .eq('user_id', userId)
       .limit(1);
     const member = memberRows?.[0] || null;
@@ -215,6 +224,7 @@ router.get('/dashboard', async (req: Request, res: Response) => {
     const { data: checkins } = await supabaseAdmin
       .from('checkins')
       .select('*')
+      .eq('workspace_id', req.workspaceId!)
       .eq('user_id', userId)
       .gte('date', startDate)
       .lte('date', endDate)

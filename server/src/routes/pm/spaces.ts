@@ -71,7 +71,7 @@ router.get('/spaces', async (req: Request, res: Response) => {
 
     // Non-admins: only spaces they have membership for, or they created
     const { data: memberships } = await supabaseAdmin
-      .from('resource_memberships')
+      .from('resource_memberships') // tenant-scope: caller's own rows (user_id = caller)
       .select('resource_id, access_level')
       .eq('resource_type', 'space')
       .eq('user_id', req.userId!);
@@ -155,7 +155,7 @@ router.get('/workspaces', async (req: Request, res: Response) => {
 
     // Non-admins: only workspace roots they have membership for, or they created.
     const { data: memberships } = await supabaseAdmin
-      .from('resource_memberships')
+      .from('resource_memberships') // tenant-scope: caller's own rows (user_id = caller)
       .select('resource_id, access_level')
       .eq('resource_type', 'space')
       .eq('user_id', req.userId!);
