@@ -4,6 +4,7 @@ import type { User } from '@squadhub/shared';
 import { supabaseAdmin } from '../../supabase';
 import { requireAuth } from '../../middleware/auth';
 import { requireUserType } from '../../middleware/userType';
+import { workspaceIdOf } from '../../middleware/workspace';
 import { requirePermission, checkResourceAccess, meetsAccessLevel, isWorkspaceAdmin, isResourceLocked } from '../../middleware/permissions';
 import { PARTNER_USER_TYPES } from '@squadhub/shared';
 
@@ -45,8 +46,11 @@ router.get('/lists', async (req: Request, res: Response) => {
       return;
     }
 
-    const admin = await isWorkspaceAdmin(req.userId!);
-    let query = supabaseAdmin.from('lists').select('*').is('deleted_at', null).order('position');
+    // Access was verified on the container; pin the listing to ITS workspace,
+    // and only owners/admins of that workspace see archived lists.
+    const containerWs = folderId ? await workspaceIdOf('folder', folderId) : await workspaceIdOf('space', spaceId);
+    const admin = await isWorkspaceAdmin(req.userId!, containerWs);
+    let query = supabaseAdmin.from('lists').select('*').eq('workspace_id', containerWs).is('deleted_at', null).order('position');
     if (!admin) query = query.eq('status', 'active');
 
     if (folderId) {
@@ -91,7 +95,8 @@ router.post('/lists/reorder', async (req: Request, res: Response) => {
       return;
     }
 
-    const adminUser = await isWorkspaceAdmin(req.userId!);
+    const containerWs = await workspaceIdOf(containerType, containerId);
+    const adminUser = await isWorkspaceAdmin(req.userId!, containerWs);
     if (!adminUser && await isResourceLocked(containerType, containerId)) {
       res.status(403).json({ success: false, error: `This ${containerType} is locked` });
       return;
@@ -99,7 +104,7 @@ router.post('/lists/reorder', async (req: Request, res: Response) => {
 
     // Fetch the container's full membership and require exact coverage so
     // positions stay unique and no list is silently dropped.
-    let query = supabaseAdmin.from('lists').select('id').eq('space_id', body.space_id).is('deleted_at', null);
+    let query = supabaseAdmin.from('lists').select('id').eq('workspace_id', containerWs).eq('space_id', body.space_id).is('deleted_at', null);
     if (folderId) query = query.eq('folder_id', folderId);
     else query = query.is('folder_id', null);
     const { data: containerLists, error: fetchError } = await query;
@@ -122,6 +127,7 @@ router.post('/lists/reorder', async (req: Request, res: Response) => {
       const { error } = await supabaseAdmin
         .from('lists')
         .update({ position: i })
+        .eq('workspace_id', containerWs)
         .eq('id', body.ordered_ids[i]);
       if (error) {
         console.error('Reorder lists error:', error.message);
@@ -152,9 +158,11 @@ router.get('/lists/:id', async (req: Request, res: Response) => {  try {
       return;
     }
 
+    const listWs = await workspaceIdOf('list', id);
     const { data: list, error } = await supabaseAdmin
       .from('lists')
       .select('*')
+      .eq('workspace_id', listWs)
       .eq('id', id)
       .single();
 
@@ -168,12 +176,14 @@ router.get('/lists/:id', async (req: Request, res: Response) => {  try {
       supabaseAdmin
         .from('tasks')
         .select('*', { count: 'exact', head: true })
+        .eq('workspace_id', listWs)
         .eq('list_id', id)
         .is('parent_task_id', null)
         .is('recurrence', null),
       supabaseAdmin
         .from('space_statuses')
         .select('*')
+        .eq('workspace_id', listWs)
         .eq('space_id', list.space_id)
         .order('position'),
     ]);
@@ -199,6 +209,7 @@ router.get('/lists/:id/assignable-users', async (req: Request, res: Response) =>
       return;
     }
 
+    const listWs = await workspaceIdOf('list', listId);
     const resourceFilters: Array<{ type: string; id: string }> = [
       { type: 'list', id: listId },
     ];
@@ -206,6 +217,7 @@ router.get('/lists/:id/assignable-users', async (req: Request, res: Response) =>
     const { data: list } = await supabaseAdmin
       .from('lists')
       .select('folder_id, space_id')
+      .eq('workspace_id', listWs)
       .eq('id', listId)
       .single();
     if ((list as any)?.folder_id) {
@@ -222,6 +234,7 @@ router.get('/lists/:id/assignable-users', async (req: Request, res: Response) =>
     const { data: memberships, error } = await supabaseAdmin
       .from('resource_memberships')
       .select('user_id, users!resource_memberships_user_id_fkey(id, display_name, email, avatar_url, user_type, is_admin, status, created_at)')
+      .eq('workspace_id', listWs)
       .or(orClauses);
 
     if (error) {
@@ -259,8 +272,25 @@ router.post('/lists', requirePermission('can_create_lists'), async (req: Request
       return;
     }
 
-    // Lock check on parent space/folder
-    const adminUser = await isWorkspaceAdmin(req.userId!);
+    // The folder (if any) must live in the target space — lists never straddle
+    // spaces or workspaces.
+    const spaceWs = await workspaceIdOf('space', body.space_id);
+    if (body.folder_id) {
+      const { data: folder } = await supabaseAdmin
+        .from('folders')
+        .select('id')
+        .eq('workspace_id', spaceWs)
+        .eq('space_id', body.space_id)
+        .eq('id', body.folder_id)
+        .maybeSingle();
+      if (!folder) {
+        res.status(400).json({ success: false, error: 'Folder not found in this space' });
+        return;
+      }
+    }
+
+    // Lock check on parent space/folder: only owners/admins of ITS workspace bypass.
+    const adminUser = await isWorkspaceAdmin(req.userId!, spaceWs);
     if (!adminUser) {
       const parentType = body.folder_id ? 'folder' : 'space';
       const parentId = body.folder_id || body.space_id;
@@ -273,6 +303,7 @@ router.post('/lists', requirePermission('can_create_lists'), async (req: Request
     const { count } = await supabaseAdmin
       .from('lists')
       .select('*', { count: 'exact', head: true })
+      .eq('workspace_id', spaceWs)
       .eq('space_id', body.space_id)
       .is('deleted_at', null);
 
@@ -361,7 +392,8 @@ router.put('/lists/:id', async (req: Request, res: Response) => {
       return;
     }
 
-    const adminUser = await isWorkspaceAdmin(req.userId!);
+    const listWs = await workspaceIdOf('list', id);
+    const adminUser = await isWorkspaceAdmin(req.userId!, listWs);
     if (!adminUser && await isResourceLocked('list', id)) {
       res.status(403).json({ success: false, error: 'This list is locked' });
       return;
@@ -381,6 +413,7 @@ router.put('/lists/:id', async (req: Request, res: Response) => {
       const { data: currentList } = await supabaseAdmin
         .from('lists')
         .select('space_id, folder_id')
+        .eq('workspace_id', listWs)
         .eq('id', id)
         .single();
       if (!currentList) {
@@ -398,6 +431,7 @@ router.put('/lists/:id', async (req: Request, res: Response) => {
         const { data: destSpace } = await supabaseAdmin
           .from('spaces')
           .select('id, deleted_at')
+          .eq('workspace_id', listWs)
           .eq('id', resolvedSpaceId)
           .single();
         if (!destSpace || destSpace.deleted_at) {
@@ -420,6 +454,7 @@ router.put('/lists/:id', async (req: Request, res: Response) => {
         const { data: destFolder } = await supabaseAdmin
           .from('folders')
           .select('id, space_id, deleted_at')
+          .eq('workspace_id', listWs)
           .eq('id', resolvedFolderId)
           .single();
         if (!destFolder || destFolder.deleted_at) {
@@ -436,6 +471,7 @@ router.put('/lists/:id', async (req: Request, res: Response) => {
     const { data, error } = await supabaseAdmin
       .from('lists')
       .update(updates)
+      .eq('workspace_id', listWs)
       .eq('id', id)
       .select()
       .single();
@@ -463,7 +499,8 @@ router.delete('/lists/:id', async (req: Request, res: Response) => {
       return;
     }
 
-    const adminUser = await isWorkspaceAdmin(req.userId!);
+    const listWs = await workspaceIdOf('list', id);
+    const adminUser = await isWorkspaceAdmin(req.userId!, listWs);
     if (!adminUser && await isResourceLocked('list', id)) {
       res.status(403).json({ success: false, error: 'This list is locked' });
       return;
@@ -472,6 +509,7 @@ router.delete('/lists/:id', async (req: Request, res: Response) => {
     const { error } = await supabaseAdmin
       .from('lists')
       .update({ deleted_at: new Date().toISOString() })
+      .eq('workspace_id', listWs)
       .eq('id', id);
 
     if (error) {

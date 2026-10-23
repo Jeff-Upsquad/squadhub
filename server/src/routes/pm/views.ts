@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { supabaseAdmin } from '../../supabase';
 import { requireAuth } from '../../middleware/auth';
 import { requireUserType } from '../../middleware/userType';
+import { reachableWorkspaceIds, workspaceIdOf } from '../../middleware/workspace';
 import { checkResourceAccess, meetsAccessLevel, isWorkspaceAdmin, isResourceLocked } from '../../middleware/permissions';
 import { PARTNER_USER_TYPES } from '@squadhub/shared';
 
@@ -57,6 +58,7 @@ async function loadView(req: Request, res: Response, requireLevel: 'viewer' | 'm
   const { data: view, error } = await supabaseAdmin
     .from('list_views')
     .select('*')
+    .in('workspace_id', await reachableWorkspaceIds())
     .eq('id', viewId)
     .maybeSingle();
 
@@ -83,6 +85,7 @@ async function loadView(req: Request, res: Response, requireLevel: 'viewer' | 'm
 
   return view as {
     id: string;
+    workspace_id: string;
     list_id: string;
     view_type: 'list' | 'board' | 'whiteboard';
     is_default: boolean;
@@ -102,9 +105,11 @@ router.get('/lists/:id/views', async (req: Request, res: Response) => {
       return;
     }
 
+    const listWs = await workspaceIdOf('list', listId);
     const { data, error } = await supabaseAdmin
       .from('list_views')
       .select('*')
+      .eq('workspace_id', listWs)
       .eq('list_id', listId)
       .or(`is_private.eq.false,owner_id.eq.${req.userId!}`)
       .order('position', { ascending: true })
@@ -133,7 +138,8 @@ router.post('/lists/:id/views', async (req: Request, res: Response) => {
       return;
     }
 
-    const adminUser = await isWorkspaceAdmin(req.userId!);
+    const listWs = await workspaceIdOf('list', listId);
+    const adminUser = await isWorkspaceAdmin(req.userId!, listWs);
     if (!adminUser && (await isResourceLocked('list', listId))) {
       res.status(403).json({ success: false, error: 'This list is locked' });
       return;
@@ -144,6 +150,7 @@ router.post('/lists/:id/views', async (req: Request, res: Response) => {
     const { data: last } = await supabaseAdmin
       .from('list_views')
       .select('position')
+      .eq('workspace_id', listWs)
       .eq('list_id', listId)
       .order('position', { ascending: false })
       .limit(1)
@@ -188,7 +195,7 @@ router.put('/views/:viewId', async (req: Request, res: Response) => {
     const view = await loadView(req, res, 'member');
     if (!view) return;
 
-    const adminUser = await isWorkspaceAdmin(req.userId!);
+    const adminUser = await isWorkspaceAdmin(req.userId!, view.workspace_id);
     if (!adminUser && (await isResourceLocked('list', view.list_id))) {
       res.status(403).json({ success: false, error: 'This list is locked' });
       return;
@@ -207,6 +214,7 @@ router.put('/views/:viewId', async (req: Request, res: Response) => {
       await supabaseAdmin
         .from('list_views')
         .update({ is_default: false })
+        .eq('workspace_id', view.workspace_id)
         .eq('list_id', view.list_id);
       updates.is_default = true;
     }
@@ -214,6 +222,7 @@ router.put('/views/:viewId', async (req: Request, res: Response) => {
     const { data, error } = await supabaseAdmin
       .from('list_views')
       .update(updates)
+      .eq('workspace_id', view.workspace_id)
       .eq('id', view.id)
       .select()
       .single();
@@ -241,7 +250,7 @@ router.delete('/views/:viewId', async (req: Request, res: Response) => {
     const view = await loadView(req, res, 'member');
     if (!view) return;
 
-    const adminUser = await isWorkspaceAdmin(req.userId!);
+    const adminUser = await isWorkspaceAdmin(req.userId!, view.workspace_id);
     if (!adminUser && (await isResourceLocked('list', view.list_id))) {
       res.status(403).json({ success: false, error: 'This list is locked' });
       return;
@@ -250,6 +259,7 @@ router.delete('/views/:viewId', async (req: Request, res: Response) => {
     const { count } = await supabaseAdmin
       .from('list_views')
       .select('*', { count: 'exact', head: true })
+      .eq('workspace_id', view.workspace_id)
       .eq('list_id', view.list_id);
 
     if ((count ?? 0) <= 1) {
@@ -257,7 +267,7 @@ router.delete('/views/:viewId', async (req: Request, res: Response) => {
       return;
     }
 
-    const { error } = await supabaseAdmin.from('list_views').delete().eq('id', view.id);
+    const { error } = await supabaseAdmin.from('list_views').delete().eq('workspace_id', view.workspace_id).eq('id', view.id);
     if (error) {
       res.status(500).json({ success: false, error: error.message });
       return;
@@ -268,13 +278,14 @@ router.delete('/views/:viewId', async (req: Request, res: Response) => {
       const { data: next } = await supabaseAdmin
         .from('list_views')
         .select('id')
+        .eq('workspace_id', view.workspace_id)
         .eq('list_id', view.list_id)
         .order('position', { ascending: true })
         .order('created_at', { ascending: true })
         .limit(1)
         .maybeSingle();
       if (next?.id) {
-        await supabaseAdmin.from('list_views').update({ is_default: true }).eq('id', next.id);
+        await supabaseAdmin.from('list_views').update({ is_default: true }).eq('workspace_id', view.workspace_id).eq('id', next.id);
       }
     }
 

@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { supabaseAdmin } from '../../supabase';
 import { requireAuth } from '../../middleware/auth';
 import { requireUserType } from '../../middleware/userType';
+import { workspaceIdOf } from '../../middleware/workspace';
 import { requirePermission, isWorkspaceAdmin, checkResourceAccess, meetsAccessLevel, isResourceLocked, getAccessibleDescendants, accessLevelRank } from '../../middleware/permissions';
 import { PARTNER_USER_TYPES } from '@squadhub/shared';
 import type { AccessLevel, User } from '@squadhub/shared';
@@ -43,14 +44,15 @@ const createSchema = z.object({
 // GET /pm/spaces?workspace_id=xxx — list spaces the user has access to
 router.get('/spaces', async (req: Request, res: Response) => {
   try {
-    const workspaceId = req.query.workspace_id as string;
+    // requireAuth verified ?workspace_id membership (it is the active workspace).
+    const workspaceId = req.workspaceId as string;
     if (!workspaceId) {
       res.status(400).json({ success: false, error: 'workspace_id is required' });
       return;
     }
 
     // Admins see all spaces
-    const admin = await isWorkspaceAdmin(req.userId!);
+    const admin = await isWorkspaceAdmin(req.userId!, workspaceId);
     if (admin) {
       const { data, error } = await supabaseAdmin
         .from('spaces')
@@ -71,8 +73,9 @@ router.get('/spaces', async (req: Request, res: Response) => {
 
     // Non-admins: only spaces they have membership for, or they created
     const { data: memberships } = await supabaseAdmin
-      .from('resource_memberships') // tenant-scope: caller's own rows (user_id = caller)
+      .from('resource_memberships')
       .select('resource_id, access_level')
+      .eq('workspace_id', workspaceId)
       .eq('resource_type', 'space')
       .eq('user_id', req.userId!);
 
@@ -128,14 +131,15 @@ router.get('/spaces', async (req: Request, res: Response) => {
 // GET /pm/workspaces?workspace_id=xxx — list workspace roots (internal/partner).
 router.get('/workspaces', async (req: Request, res: Response) => {
   try {
-    const workspaceId = req.query.workspace_id as string;
+    // requireAuth verified ?workspace_id membership (it is the active workspace).
+    const workspaceId = req.workspaceId as string;
     if (!workspaceId) {
       res.status(400).json({ success: false, error: 'workspace_id is required' });
       return;
     }
 
     // Admins see all workspace roots.
-    const admin = await isWorkspaceAdmin(req.userId!);
+    const admin = await isWorkspaceAdmin(req.userId!, workspaceId);
     if (admin) {
       const { data, error } = await supabaseAdmin
         .from('spaces')
@@ -155,8 +159,9 @@ router.get('/workspaces', async (req: Request, res: Response) => {
 
     // Non-admins: only workspace roots they have membership for, or they created.
     const { data: memberships } = await supabaseAdmin
-      .from('resource_memberships') // tenant-scope: caller's own rows (user_id = caller)
+      .from('resource_memberships')
       .select('resource_id, access_level')
+      .eq('workspace_id', workspaceId)
       .eq('resource_type', 'space')
       .eq('user_id', req.userId!);
 
@@ -230,9 +235,13 @@ router.get('/spaces/:id', async (req: Request, res: Response) => {
       userLevel = levels.reduce((best, lvl) => (accessLevelRank(lvl) > accessLevelRank(best) ? lvl : best), levels[0]);
     }
 
+    // Both branches above verified the caller can reach this space's workspace
+    // (checkResourceAccess / getAccessibleDescendants); pin every read to it.
+    const spaceWs = await workspaceIdOf('space', id);
     const { data: space, error } = await supabaseAdmin
       .from('spaces')
       .select('*, space_statuses(*)')
+      .eq('workspace_id', spaceWs)
       .eq('id', id)
       .single();
 
@@ -246,6 +255,7 @@ router.get('/spaces/:id', async (req: Request, res: Response) => {
     const { data: allFolders } = await supabaseAdmin
       .from('folders')
       .select('*')
+      .eq('workspace_id', spaceWs)
       .eq('space_id', id)
       .is('deleted_at', null)
       .order('position');
@@ -261,6 +271,7 @@ router.get('/spaces/:id', async (req: Request, res: Response) => {
     const { data: allLists } = await supabaseAdmin
       .from('lists')
       .select('*')
+      .eq('workspace_id', spaceWs)
       .eq('space_id', id)
       .is('deleted_at', null)
       .order('position');
@@ -384,6 +395,7 @@ router.post('/spaces', requirePermission('can_create_spaces'), async (req: Reque
     const { data, error } = await supabaseAdmin
       .from('spaces')
       .select('*, space_statuses(*)')
+      .eq('workspace_id', body.workspace_id)
       .eq('id', inserted.id)
       .single();
 
@@ -416,9 +428,11 @@ router.get('/spaces/:id/assignable-users', async (req: Request, res: Response) =
       return;
     }
 
+    const spaceWs = await workspaceIdOf('space', spaceId);
     const { data: memberships, error } = await supabaseAdmin
       .from('resource_memberships')
       .select('user_id, users!resource_memberships_user_id_fkey(id, display_name, email, avatar_url, user_type, is_admin, status, created_at)')
+      .eq('workspace_id', spaceWs)
       .eq('resource_type', 'space')
       .eq('resource_id', spaceId);
 
@@ -456,8 +470,9 @@ router.put('/spaces/:id', async (req: Request, res: Response) => {
       return;
     }
 
-    // Lock check (admins bypass via checkResourceAccess returning 'manager')
-    const admin = await isWorkspaceAdmin(req.userId!);
+    // Lock check: only owners/admins of the SPACE's workspace bypass.
+    const spaceWs = await workspaceIdOf('space', id);
+    const admin = await isWorkspaceAdmin(req.userId!, spaceWs);
     if (!admin && await isResourceLocked('space', id)) {
       res.status(403).json({ success: false, error: 'This space is locked' });
       return;
@@ -475,6 +490,7 @@ router.put('/spaces/:id', async (req: Request, res: Response) => {
     const { data, error } = await supabaseAdmin
       .from('spaces')
       .update(updates)
+      .eq('workspace_id', spaceWs)
       .eq('id', id)
       .select('*, space_statuses(*)')
       .single();
@@ -502,7 +518,8 @@ router.delete('/spaces/:id', async (req: Request, res: Response) => {
       return;
     }
 
-    const admin = await isWorkspaceAdmin(req.userId!);
+    const spaceWs = await workspaceIdOf('space', id);
+    const admin = await isWorkspaceAdmin(req.userId!, spaceWs);
     if (!admin && await isResourceLocked('space', id)) {
       res.status(403).json({ success: false, error: 'This space is locked' });
       return;
@@ -514,6 +531,7 @@ router.delete('/spaces/:id', async (req: Request, res: Response) => {
     const { error } = await supabaseAdmin
       .from('spaces')
       .update({ deleted_at: now })
+      .eq('workspace_id', spaceWs)
       .eq('id', id);
 
     if (error) {
@@ -522,8 +540,8 @@ router.delete('/spaces/:id', async (req: Request, res: Response) => {
     }
 
     // Also soft-delete child folders and lists
-    await supabaseAdmin.from('folders').update({ deleted_at: now }).eq('space_id', id).is('deleted_at', null);
-    await supabaseAdmin.from('lists').update({ deleted_at: now }).eq('space_id', id).is('deleted_at', null);
+    await supabaseAdmin.from('folders').update({ deleted_at: now }).eq('workspace_id', spaceWs).eq('space_id', id).is('deleted_at', null);
+    await supabaseAdmin.from('lists').update({ deleted_at: now }).eq('workspace_id', spaceWs).eq('space_id', id).is('deleted_at', null);
 
     res.json({ success: true, message: 'Space moved to trash' });
   } catch (err) {

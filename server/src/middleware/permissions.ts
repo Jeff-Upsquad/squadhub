@@ -176,17 +176,23 @@ export function requirePermission(permissionKey: keyof RolePermissions) {
       return;
     }
 
-    // The workspace the action targets: the active one, or the one named by
-    // the body's container (space/folder/list/channel/workspace).
-    let wsId = req.workspaceId ?? null;
-    if (!wsId && req.body) {
-      const b = req.body as Record<string, unknown>;
-      if (typeof b.workspace_id === 'string') {
-        wsId = (await getMembership(req.userId, b.workspace_id)) ? b.workspace_id : null;
-      } else if (typeof b.space_id === 'string') wsId = await workspaceIdOf('space', b.space_id);
-      else if (typeof b.folder_id === 'string') wsId = await workspaceIdOf('folder', b.folder_id);
-      else if (typeof b.list_id === 'string') wsId = await workspaceIdOf('list', b.list_id);
-      else if (typeof b.channel_id === 'string') wsId = await workspaceIdOf('channel', b.channel_id);
+    // The workspace the action targets: the one the body's container
+    // (space/folder/list/channel) lives in — permissions are evaluated where the
+    // write lands, never in whichever workspace happens to be active — else the
+    // body's workspace_id (requireAuth already held it equal to the header),
+    // else the active workspace.
+    let wsId: string | null = null;
+    const b = (req.body || {}) as Record<string, unknown>;
+    if (typeof b.space_id === 'string') wsId = await workspaceIdOf('space', b.space_id);
+    else if (typeof b.folder_id === 'string') wsId = await workspaceIdOf('folder', b.folder_id);
+    else if (typeof b.list_id === 'string') wsId = await workspaceIdOf('list', b.list_id);
+    else if (typeof b.channel_id === 'string') wsId = await workspaceIdOf('channel', b.channel_id);
+    else if (typeof b.workspace_id === 'string') {
+      wsId = (await getMembership(req.userId, b.workspace_id)) ? b.workspace_id : null;
+    } else wsId = req.workspaceId ?? null;
+    if (!wsId) {
+      res.status(403).json({ success: false, error: `Permission denied: ${permissionKey} is required` });
+      return;
     }
     const { permissions } = await getUserPermissions(req.userId, wsId);
 
@@ -393,16 +399,21 @@ export async function getAccessibleDescendants(
   userId: string,
   spaceId: string,
 ): Promise<{ folderLevels: Map<string, AccessLevel>; listLevels: Map<string, AccessLevel> }> {
+  const folderLevels = new Map<string, AccessLevel>();
+  const listLevels = new Map<string, AccessLevel>();
+
+  // Tenant wall: leftover resource_memberships grant nothing once the user can
+  // no longer reach the space's workspace (e.g. removed from a shared workspace).
+  const spaceWs = await workspaceIdOf('space', spaceId);
+  if (!spaceWs || !(await getMembership(userId, spaceWs))) return { folderLevels, listLevels };
+
   const [{ data: folders }, { data: lists }] = await Promise.all([
-    supabaseAdmin.from('folders').select('id').eq('space_id', spaceId).is('deleted_at', null),
-    supabaseAdmin.from('lists').select('id').eq('space_id', spaceId).is('deleted_at', null),
+    supabaseAdmin.from('folders').select('id').eq('workspace_id', spaceWs).eq('space_id', spaceId).is('deleted_at', null),
+    supabaseAdmin.from('lists').select('id').eq('workspace_id', spaceWs).eq('space_id', spaceId).is('deleted_at', null),
   ]);
 
   const folderIds = (folders || []).map((f: any) => f.id);
   const listIds = (lists || []).map((l: any) => l.id);
-
-  const folderLevels = new Map<string, AccessLevel>();
-  const listLevels = new Map<string, AccessLevel>();
 
   if (folderIds.length > 0) {
     const { data: fm } = await supabaseAdmin

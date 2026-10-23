@@ -7,7 +7,7 @@ import { supabaseAdmin } from '../../supabase';
 import { getUserWorkspaceIds, reachableWorkspaceIds, workspaceIdOf } from '../../middleware/workspace';
 import { requireAuth } from '../../middleware/auth';
 import { requireUserType } from '../../middleware/userType';
-import { checkResourceAccess, meetsAccessLevel, requirePermission, isWorkspaceAdmin, isAdminOfResource, isResourceLocked } from '../../middleware/permissions';
+import { checkResourceAccess, meetsAccessLevel, getUserPermissions, isWorkspaceAdmin, isAdminOfResource, isResourceLocked } from '../../middleware/permissions';
 import { getUserRoleIds } from '../../utils/roles';
 import { PARTNER_USER_TYPES } from '@squadhub/shared';
 import { spawnRoutineInstance } from '../../services/routineSpawner';
@@ -3917,14 +3917,24 @@ router.post('/tasks/:id/comments', async (req: Request, res: Response) => {
 });
 
 // DELETE /pm/task-comments/:id — requires can_delete_messages or member access
-router.delete('/task-comments/:id', requirePermission('can_delete_messages'), async (req: Request, res: Response) => {
+router.delete('/task-comments/:id', async (req: Request, res: Response) => {
   try {
     const id = req.params.id as string;
     // Resolve the parent task before the comment row is gone, so the deletion can
     // be attributed to the right task's feed.
     const { data: comment } = await supabaseAdmin
-      .from('task_comments').select('task_id').in('workspace_id', await reachableWorkspaceIds()).eq('id', id).maybeSingle();
-    const { error } = await supabaseAdmin.from('task_comments').delete().in('workspace_id', await reachableWorkspaceIds()).eq('id', id);
+      .from('task_comments').select('task_id, workspace_id').in('workspace_id', await reachableWorkspaceIds()).eq('id', id).maybeSingle();
+    if (!comment) {
+      res.status(404).json({ success: false, error: 'Comment not found' });
+      return;
+    }
+    // can_delete_messages is evaluated in the COMMENT's workspace, not the active one.
+    const { permissions } = await getUserPermissions(req.userId!, (comment as any).workspace_id);
+    if (!permissions.can_delete_messages) {
+      res.status(403).json({ success: false, error: 'Permission denied: can_delete_messages is required' });
+      return;
+    }
+    const { error } = await supabaseAdmin.from('task_comments').delete().eq('workspace_id', (comment as any).workspace_id).eq('id', id);
 
     if (error) {
       res.status(500).json({ success: false, error: error.message });

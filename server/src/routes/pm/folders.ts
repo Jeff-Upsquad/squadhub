@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { supabaseAdmin } from '../../supabase';
 import { requireAuth } from '../../middleware/auth';
 import { requireUserType } from '../../middleware/userType';
+import { workspaceIdOf } from '../../middleware/workspace';
 import { requirePermission, checkResourceAccess, meetsAccessLevel, isWorkspaceAdmin, isResourceLocked, getPrimaryRolePermissions } from '../../middleware/permissions';
 import { PARTNER_USER_TYPES } from '@squadhub/shared';
 import type { User } from '@squadhub/shared';
@@ -39,11 +40,13 @@ router.get('/folders', async (req: Request, res: Response) => {
       return;
     }
 
-    // Non-admins only see active folders.
-    const admin = await isWorkspaceAdmin(req.userId!);
+    // Non-admins only see active folders. Admin = owner/admin of the SPACE's workspace.
+    const spaceWs = await workspaceIdOf('space', spaceId);
+    const admin = await isWorkspaceAdmin(req.userId!, spaceWs);
     let query = supabaseAdmin
       .from('folders')
       .select('*, lists(*)')
+      .eq('workspace_id', spaceWs)
       .eq('space_id', spaceId)
       .is('deleted_at', null)
       .order('position');
@@ -75,9 +78,11 @@ router.get('/folders/:id', async (req: Request, res: Response) => {
       return;
     }
 
+    const folderWs = await workspaceIdOf('folder', id);
     const { data: folder, error } = await supabaseAdmin
       .from('folders')
       .select('*, lists(*)')
+      .eq('workspace_id', folderWs)
       .eq('id', id)
       .is('deleted_at', null)
       .single();
@@ -97,6 +102,7 @@ router.get('/folders/:id', async (req: Request, res: Response) => {
     const { data: childRows } = await supabaseAdmin
       .from('folders')
       .select('id, name, position, status, space_id')
+      .eq('workspace_id', folderWs)
       .eq('parent_folder_id', id)
       .is('deleted_at', null)
       .eq('status', 'active')
@@ -134,16 +140,33 @@ router.post('/folders', requirePermission('can_create_folders'), async (req: Req
       return;
     }
 
-    // Lock check on parent space
-    const adminUser = await isWorkspaceAdmin(req.userId!);
+    // Lock check on parent space: only owners/admins of ITS workspace bypass.
+    const spaceWs = await workspaceIdOf('space', body.space_id);
+    const adminUser = await isWorkspaceAdmin(req.userId!, spaceWs);
     if (!adminUser && await isResourceLocked('space', body.space_id)) {
       res.status(403).json({ success: false, error: 'This space is locked' });
       return;
     }
 
+    // A parent folder must live in the same space (and so the same workspace).
+    if (body.parent_folder_id) {
+      const { data: parent } = await supabaseAdmin
+        .from('folders')
+        .select('id')
+        .eq('workspace_id', spaceWs)
+        .eq('space_id', body.space_id)
+        .eq('id', body.parent_folder_id)
+        .maybeSingle();
+      if (!parent) {
+        res.status(400).json({ success: false, error: 'Parent folder not found in this space' });
+        return;
+      }
+    }
+
     const { count } = await supabaseAdmin
       .from('folders')
       .select('*', { count: 'exact', head: true })
+      .eq('workspace_id', spaceWs)
       .eq('space_id', body.space_id);
 
     const insertPayload: Record<string, unknown> = {
@@ -241,6 +264,7 @@ router.get('/folders/:id/assignable-users', async (req: Request, res: Response) 
       return;
     }
 
+    const folderWs = await workspaceIdOf('folder', folderId);
     const resourceFilters: Array<{ type: string; id: string }> = [
       { type: 'folder', id: folderId },
     ];
@@ -248,6 +272,7 @@ router.get('/folders/:id/assignable-users', async (req: Request, res: Response) 
     const { data: folder } = await supabaseAdmin
       .from('folders')
       .select('space_id')
+      .eq('workspace_id', folderWs)
       .eq('id', folderId)
       .single();
     if ((folder as any)?.space_id) {
@@ -261,6 +286,7 @@ router.get('/folders/:id/assignable-users', async (req: Request, res: Response) 
     const { data: memberships, error } = await supabaseAdmin
       .from('resource_memberships')
       .select('user_id, users!resource_memberships_user_id_fkey(id, display_name, email, avatar_url, user_type, is_admin, status, created_at)')
+      .eq('workspace_id', folderWs)
       .or(orClauses);
 
     if (error) {
@@ -296,7 +322,8 @@ router.put('/folders/:id', async (req: Request, res: Response) => {
       return;
     }
 
-    const adminUser = await isWorkspaceAdmin(req.userId!);
+    const folderWs = await workspaceIdOf('folder', id);
+    const adminUser = await isWorkspaceAdmin(req.userId!, folderWs);
     if (!adminUser && await isResourceLocked('folder', id)) {
       res.status(403).json({ success: false, error: 'This folder is locked' });
       return;
@@ -318,6 +345,7 @@ router.put('/folders/:id', async (req: Request, res: Response) => {
       const { data: currentFolder } = await supabaseAdmin
         .from('folders')
         .select('space_id')
+        .eq('workspace_id', folderWs)
         .eq('id', id)
         .single();
       if (!currentFolder) {
@@ -330,9 +358,11 @@ router.put('/folders/:id', async (req: Request, res: Response) => {
         const { data: destSpace } = await supabaseAdmin
           .from('spaces')
           .select('id, deleted_at')
+          .eq('workspace_id', folderWs)
           .eq('id', newSpaceId)
           .single();
         if (!destSpace || destSpace.deleted_at) {
+          // (scoped to the folder's workspace: folders never move across workspaces)
           res.status(400).json({ success: false, error: 'Destination space does not exist' });
           return;
         }
@@ -351,6 +381,7 @@ router.put('/folders/:id', async (req: Request, res: Response) => {
     const { data, error } = await supabaseAdmin
       .from('folders')
       .update(updates)
+      .eq('workspace_id', folderWs)
       .eq('id', id)
       .select()
       .single();
@@ -365,11 +396,12 @@ router.put('/folders/:id', async (req: Request, res: Response) => {
       const { error: cascadeErr } = await supabaseAdmin
         .from('lists')
         .update({ space_id: newSpaceId })
+        .eq('workspace_id', folderWs)
         .eq('folder_id', id)
         .is('deleted_at', null);
       if (cascadeErr) {
         // Roll back the folder move to keep the invariant.
-        await supabaseAdmin.from('folders').update({ space_id: oldSpaceId }).eq('id', id);
+        await supabaseAdmin.from('folders').update({ space_id: oldSpaceId }).eq('workspace_id', folderWs).eq('id', id);
         console.error('[pm/folders] cascade list move failed, rolled back:', cascadeErr);
         res.status(500).json({ success: false, error: 'Failed to move child lists; folder move rolled back' });
         return;
@@ -394,7 +426,8 @@ router.delete('/folders/:id', async (req: Request, res: Response) => {
       return;
     }
 
-    const adminUser = await isWorkspaceAdmin(req.userId!);
+    const folderWs = await workspaceIdOf('folder', id);
+    const adminUser = await isWorkspaceAdmin(req.userId!, folderWs);
     if (!adminUser && await isResourceLocked('folder', id)) {
       res.status(403).json({ success: false, error: 'This folder is locked' });
       return;
@@ -406,6 +439,7 @@ router.delete('/folders/:id', async (req: Request, res: Response) => {
     const { error } = await supabaseAdmin
       .from('folders')
       .update({ deleted_at: now })
+      .eq('workspace_id', folderWs)
       .eq('id', id);
 
     if (error) {
@@ -414,7 +448,7 @@ router.delete('/folders/:id', async (req: Request, res: Response) => {
     }
 
     // Also soft-delete child lists
-    await supabaseAdmin.from('lists').update({ deleted_at: now }).eq('folder_id', id).is('deleted_at', null);
+    await supabaseAdmin.from('lists').update({ deleted_at: now }).eq('workspace_id', folderWs).eq('folder_id', id).is('deleted_at', null);
 
     res.json({ success: true, message: 'Folder moved to trash' });
   } catch (err) {

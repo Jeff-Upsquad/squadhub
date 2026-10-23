@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { supabaseAdmin } from '../../supabase';
 import { requireAuth } from '../../middleware/auth';
 import { requireUserType } from '../../middleware/userType';
-import { checkResourceAccess, meetsAccessLevel, isWorkspaceAdmin, isResourceLocked } from '../../middleware/permissions';
+import { checkResourceAccess, meetsAccessLevel, isAdminOfResource, isResourceLocked } from '../../middleware/permissions';
 import { PARTNER_USER_TYPES } from '@squadhub/shared';
 
 const router = Router();
@@ -87,7 +87,7 @@ router.put('/views/:viewId/whiteboard', async (req: Request, res: Response) => {
     const view = await loadWhiteboardView(req, res, 'member');
     if (!view) return;
 
-    const adminUser = await isWorkspaceAdmin(req.userId!);
+    const adminUser = await isAdminOfResource(req.userId!, 'list', view.list_id);
     if (!adminUser && (await isResourceLocked('list', view.list_id))) {
       res.status(403).json({ success: false, error: 'This list is locked' });
       return;
