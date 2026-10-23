@@ -53,8 +53,7 @@ vi.mock('../utils/squadhireSsoShared', async (orig) => {
   };
 });
 
-import type { Tables } from './helpers/fakeSupabase';
-const db: Tables = vi.hoisted(() => ({
+const db: any = vi.hoisted(() => ({
   users: [],
   workspaces: [],
   workspace_members: [],
@@ -291,7 +290,7 @@ describe('impersonation', () => {
 
     // The session is flagged for the banner.
     const imp = await fetch(`${base}/auth/impersonation`, { headers: { Authorization: `Bearer ${frag.get('access_token')}` } });
-    expect((await imp.json()).data).toMatchObject({ active: true, actor_email: ACTOR.email, reason: 'Debug a payouts issue' });
+    expect(((await imp.json()) as any).data).toMatchObject({ active: true, actor_email: ACTOR.email, reason: 'Debug a payouts issue' });
 
     // Second use fails.
     const second = await fetch(`${base}/auth/one-time${url.search}`, { redirect: 'manual' });
@@ -317,7 +316,7 @@ describe('seat limit', () => {
         method: 'POST',
         headers: { Authorization: 'Bearer owner-token', 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, role }),
-      }).then(async (r) => ({ status: r.status, body: await r.json() }));
+      }).then(async (r) => ({ status: r.status, body: (await r.json()) as any }));
     expect((await add('one@biz.test')).status).toBe(201);
     const second = await add('two@biz.test');
     expect(second.status).toBe(403);
