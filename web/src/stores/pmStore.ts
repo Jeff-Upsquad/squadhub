@@ -196,7 +196,7 @@ interface PMState {
   // spawned copy of a recurring task reappears in the same section.
   recurringFocusBuckets: Record<string, FocusBucket>;
   // Local date (todayKey) the per-instance focusBuckets were last rolled over.
-  // When it goes stale, rolloverFocusBuckets clears Evening/Night assignments.
+  // When it goes stale, rolloverFocusBuckets moves Evening/Night tasks to Focus.
   // Explicit main Focus placements and recurringFocusBuckets stay untouched.
   focusBucketsRolloverDate: string;
   // Persistent removal history: undated, unstarred tasks stay out of Home.
@@ -848,8 +848,8 @@ export const usePMStore = create<PMState>()(
         });
         triggerSave();
       },
-      // Clear per-instance Evening/Night buckets once the local day flips.
-      // Keep explicit Focus placements so previously worked tasks do not return
+      // Move per-instance Evening/Night tasks to Focus once the local day flips.
+      // Explicit Focus placements keep previously worked tasks from returning
       // to In progress overnight. Recurring sections remain in their templates.
       // A no-op until the
       // stored date is stale, so the mount call + once-a-minute tick fire it
@@ -861,7 +861,7 @@ export const usePMStore = create<PMState>()(
           if (state.focusBucketsRolloverDate === today) return state;
           changed = true;
           const focusBuckets = Object.fromEntries(
-            Object.entries(state.focusBuckets).filter(([, bucket]) => bucket === 'focus'),
+            Object.keys(state.focusBuckets).map((id) => [id, 'focus' as const]),
           );
           return { focusBuckets, focusBucketsRolloverDate: today };
         });
