@@ -1455,9 +1455,9 @@ router.delete('/tasks/:id/time-entries/:entryId', async (req: Request, res: Resp
     // editing — and means 'reduce' cannot delete a negative adjustment, which
     // would put time back on. Admins editing someone else's entry are capped
     // to reduce-only even though they hold 'full'.
-    const level = await getUserSkillLevel(req.userId!, 'edit_logged_time');
+    const level = await getUserSkillLevel(req.userId!, 'edit_logged_time', (entry as any).workspace_id);
     const isOther = (entry as any).user_id !== req.userId!;
-    const effectiveLevel = isOther && (await isUserAdmin(req.userId!)) && level === 'full' ? 'reduce' : level;
+    const effectiveLevel = isOther && (await isUserAdmin(req.userId!, (entry as any).workspace_id)) && level === 'full' ? 'reduce' : level;
     const denied = checkLoggedTimeChange(effectiveLevel, (entry as any).duration_seconds, 0);
     if (denied) {
       res.status(403).json({ success: false, error: denied });
@@ -1602,9 +1602,9 @@ router.patch('/tasks/:id/time-entries/:entryId', async (req: Request, res: Respo
     // Any edit — even a note or a moved start — is changing logged time, so
     // the skill is required throughout; 'reduce' additionally can't raise it.
     // Admins editing someone else's entry are capped to reduce-only.
-    const level = await getUserSkillLevel(req.userId!, 'edit_logged_time');
+    const level = await getUserSkillLevel(req.userId!, 'edit_logged_time', (entry as any).workspace_id);
     const isOther = e.user_id !== req.userId!;
-    const effectiveLevel = isOther && (await isUserAdmin(req.userId!)) && level === 'full' ? 'reduce' : level;
+    const effectiveLevel = isOther && (await isUserAdmin(req.userId!, (entry as any).workspace_id)) && level === 'full' ? 'reduce' : level;
     const denied = checkLoggedTimeChange(effectiveLevel, oldSeconds, newSeconds);
     if (denied) {
       const msg = isOther && effectiveLevel === 'reduce' && newSeconds > oldSeconds
@@ -3433,7 +3433,7 @@ router.patch('/tasks/:id/time-tracked', async (req: Request, res: Response) => {
     const oldTotal = (existing as any)?.time_tracked || 0;
     const delta = time_tracked - oldTotal;
 
-    const level = await getUserSkillLevel(req.userId!, 'edit_logged_time');
+    const level = await getUserSkillLevel(req.userId!, 'edit_logged_time', await workspaceIdOf('task', id));
     const denied = checkLoggedTimeChange(level, oldTotal, time_tracked);
     if (denied) {
       res.status(403).json({ success: false, error: denied });

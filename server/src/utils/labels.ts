@@ -91,7 +91,7 @@ export async function visibleGroupIds(
       .in('group_id', allIds);
     (ua || []).forEach((r: any) => visible.add(r.group_id));
 
-    const roleIds = await getUserRoleIds(userId);
+    const roleIds = await getUserRoleIds(userId, workspaceId);
     if (roleIds.length) {
       const { data: ra } = await supabaseAdmin
         .from('label_group_role_access')
@@ -121,7 +121,7 @@ export async function canCreateLabels(
     .maybeSingle();
   if (ua) return true;
 
-  const roleIds = await getUserRoleIds(userId);
+  const roleIds = await getUserRoleIds(userId, workspaceId);
   if (roleIds.length) {
     const { data: ra } = await supabaseAdmin
       .from('label_create_role_access')

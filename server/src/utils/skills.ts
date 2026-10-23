@@ -27,14 +27,16 @@ interface Principals {
 // Everything a grant can match a user by: the user row itself, their user
 // type, and their roles (primary — or the default role when unset — plus any
 // secondary roles, the same set getUserPermissions unions over).
-async function loadPrincipals(userId: string): Promise<Principals> {
+async function loadPrincipals(userId: string, workspaceId?: string | null): Promise<Principals> {
   const { data: user } = await supabaseAdmin
     .from('users')
     .select('is_admin, user_type')
     .eq('id', userId)
     .maybeSingle();
 
-  const wsId = currentWorkspaceId();
+  // The workspace the skill is exercised in (e.g. a time entry's), defaulting
+  // to the active one.
+  const wsId = workspaceId || currentWorkspaceId();
   const { data: membership } = wsId
     ? await supabaseAdmin
         .from('workspace_members')
@@ -75,9 +77,9 @@ async function loadPrincipals(userId: string): Promise<Principals> {
 }
 
 /** True when the user is a platform or workspace admin (auto-holds every skill). */
-export async function isUserAdmin(userId: string): Promise<boolean> {
+export async function isUserAdmin(userId: string, workspaceId?: string | null): Promise<boolean> {
   try {
-    const p = await loadPrincipals(userId);
+    const p = await loadPrincipals(userId, workspaceId);
     return p.isAdmin;
   } catch {
     return false;
@@ -89,8 +91,8 @@ export async function isUserAdmin(userId: string): Promise<boolean> {
  * every skill; everyone else gets the highest grant matching them directly,
  * through a role, or through their user type.
  */
-export async function getUserSkills(userId: string): Promise<MySkills> {
-  const p = await loadPrincipals(userId);
+export async function getUserSkills(userId: string, workspaceId?: string | null): Promise<MySkills> {
+  const p = await loadPrincipals(userId, workspaceId);
   const out: MySkills = {};
 
   if (p.isAdmin) {
@@ -116,9 +118,9 @@ export async function getUserSkills(userId: string): Promise<MySkills> {
   return out;
 }
 
-export async function getUserSkillLevel(userId: string, key: SkillKey): Promise<string | null> {
+export async function getUserSkillLevel(userId: string, key: SkillKey, workspaceId?: string | null): Promise<string | null> {
   if (!getSkillDef(key)) return null;
-  return (await getUserSkills(userId))[key] ?? null;
+  return (await getUserSkills(userId, workspaceId))[key] ?? null;
 }
 
 /**
