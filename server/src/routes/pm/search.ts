@@ -31,7 +31,10 @@ async function isAdminInWorkspace(userId: string, workspaceId: string): Promise<
 // user can access.
 router.get('/search', async (req: Request, res: Response) => {
   try {
-    const workspaceId = req.query.workspace_id as string;
+    // requireAuth already verified ?workspace_id / X-Workspace-Id membership
+    // and bound it as the active workspace. Every query below filters by it, so
+    // search can never return another workspace's spaces, folders, lists or tasks.
+    const workspaceId = req.workspaceId as string;
     const rawQuery = (req.query.q as string) || '';
     const q = rawQuery.trim();
     const limit = Math.min(parseInt((req.query.limit as string) || '25', 10) || 25, 50);
@@ -78,6 +81,7 @@ router.get('/search', async (req: Request, res: Response) => {
       const { data: allLists, error: allListsErr } = await supabaseAdmin
         .from('lists')
         .select('id')
+        .eq('workspace_id', workspaceId)
         .in('space_id', workspaceSpaceIds)
         .is('deleted_at', null);
       logStep('admin allLists', allListsErr);
@@ -88,16 +92,19 @@ router.get('/search', async (req: Request, res: Response) => {
         supabaseAdmin
           .from('resource_memberships') // tenant-scope: caller's own rows (user_id = caller)
           .select('resource_id')
+          .eq('workspace_id', workspaceId)
           .eq('resource_type', 'space')
           .eq('user_id', userId),
         supabaseAdmin
           .from('resource_memberships') // tenant-scope: caller's own rows (user_id = caller)
           .select('resource_id')
+          .eq('workspace_id', workspaceId)
           .eq('resource_type', 'folder')
           .eq('user_id', userId),
         supabaseAdmin
           .from('resource_memberships') // tenant-scope: caller's own rows (user_id = caller)
           .select('resource_id')
+          .eq('workspace_id', workspaceId)
           .eq('resource_type', 'list')
           .eq('user_id', userId),
       ]);
@@ -118,6 +125,7 @@ router.get('/search', async (req: Request, res: Response) => {
         const r = await supabaseAdmin
           .from('lists')
           .select('id, folder_id, space_id')
+          .eq('workspace_id', workspaceId)
           .in('space_id', Array.from(accessibleSpaceIds))
           .is('deleted_at', null);
         logStep('listsViaSpace', r.error);
@@ -130,6 +138,7 @@ router.get('/search', async (req: Request, res: Response) => {
         const r = await supabaseAdmin
           .from('folders')
           .select('id, space_id')
+          .eq('workspace_id', workspaceId)
           .in('id', folderMemIds)
           .is('deleted_at', null);
         logStep('folderRows', r.error);
@@ -143,6 +152,7 @@ router.get('/search', async (req: Request, res: Response) => {
         const r = await supabaseAdmin
           .from('folders')
           .select('id, space_id')
+          .eq('workspace_id', workspaceId)
           .eq('created_by', userId)
           .is('deleted_at', null);
         logStep('createdFolders', r.error);
@@ -159,6 +169,7 @@ router.get('/search', async (req: Request, res: Response) => {
         const r = await supabaseAdmin
           .from('lists')
           .select('id')
+          .eq('workspace_id', workspaceId)
           .in('folder_id', Array.from(accessibleFolderIds))
           .is('deleted_at', null);
         logStep('listsViaFolder', r.error);
@@ -172,6 +183,7 @@ router.get('/search', async (req: Request, res: Response) => {
         const r = await supabaseAdmin
           .from('lists')
           .select('id, space_id')
+          .eq('workspace_id', workspaceId)
           .in('id', listMemIds)
           .is('deleted_at', null);
         logStep('listsViaDirect', r.error);
@@ -184,6 +196,7 @@ router.get('/search', async (req: Request, res: Response) => {
       const createdListsRes = await supabaseAdmin
         .from('lists')
         .select('id, space_id')
+        .eq('workspace_id', workspaceId)
         .eq('created_by', userId)
         .is('deleted_at', null);
       logStep('createdLists', createdListsRes.error);
@@ -230,6 +243,7 @@ router.get('/search', async (req: Request, res: Response) => {
     const { data: folderRows, error: folderSearchErr } = await supabaseAdmin
       .from('folders')
       .select('id, name, space_id')
+      .eq('workspace_id', workspaceId)
       .in('space_id', workspaceSpaceIds)
       .is('deleted_at', null)
       .ilike('name', `%${safeQ}%`)
@@ -259,6 +273,7 @@ router.get('/search', async (req: Request, res: Response) => {
       const { data: listRows, error: listSearchErr } = await supabaseAdmin
         .from('lists')
         .select('id, name, folder_id, space_id')
+        .eq('workspace_id', workspaceId)
         .in('id', accessibleListIds)
         .is('deleted_at', null)
         .ilike('name', `%${safeQ}%`)
@@ -274,6 +289,7 @@ router.get('/search', async (req: Request, res: Response) => {
         const { data: folderInfos } = await supabaseAdmin
           .from('folders')
           .select('id, name')
+          .eq('workspace_id', workspaceId)
           .in('id', folderIdsNeeded);
         for (const f of (folderInfos || []) as any[]) {
           folderNameById[f.id] = f.name;
@@ -305,6 +321,7 @@ router.get('/search', async (req: Request, res: Response) => {
       let query = supabaseAdmin
         .from('tasks')
         .select(taskFields)
+        .eq('workspace_id', workspaceId)
         .in('list_id', accessibleListIds)
         .is('recurrence', null)
         .ilike(field, `%${safeQ}%`)
@@ -342,6 +359,7 @@ router.get('/search', async (req: Request, res: Response) => {
       const { data: listInfos } = await supabaseAdmin
         .from('lists')
         .select('id, name, folder_id, space_id')
+        .eq('workspace_id', workspaceId)
         .in('id', matchedListIds);
       for (const l of (listInfos || []) as any[]) {
         listInfoById[l.id] = l;
@@ -360,6 +378,7 @@ router.get('/search', async (req: Request, res: Response) => {
       const { data: folderInfos } = await supabaseAdmin
         .from('folders')
         .select('id, name')
+        .eq('workspace_id', workspaceId)
         .in('id', folderIdsNeeded);
       for (const f of (folderInfos || []) as any[]) {
         folderNameById[f.id] = f.name;
@@ -375,6 +394,7 @@ router.get('/search', async (req: Request, res: Response) => {
       const { data: spaceInfos } = await supabaseAdmin
         .from('spaces')
         .select('id, name, color')
+        .eq('workspace_id', workspaceId)
         .in('id', spaceIdsNeeded);
       for (const s of (spaceInfos || []) as any[]) {
         spaceNameById[s.id] = s.name;
@@ -393,6 +413,7 @@ router.get('/search', async (req: Request, res: Response) => {
       const { data: spaceStatuses } = await supabaseAdmin
         .from('space_statuses')
         .select('space_id, name, category')
+        .eq('workspace_id', workspaceId)
         .in('space_id', spaceIdsNeeded);
       for (const s of (spaceStatuses || []) as any[]) {
         statusCategoryByKey[`${s.space_id}::${s.name}`] = s.category;

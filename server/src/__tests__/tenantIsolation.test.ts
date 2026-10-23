@@ -62,7 +62,9 @@ describe('tenant isolation', () => {
   describe('tasks', () => {
     it("refuses reading another workspace's task by id", async () => {
       const r = await get(`/pm/tasks/${id(31)}`, { workspace: ACME });
-      expect(r.status).toBe(403);
+      // 404: the tenant-scoped lookup doesn't even admit the task exists.
+      expect([403, 404]).toContain(r.status);
+      expect(JSON.stringify(r.body)).not.toContain('Bolt secret task');
     });
 
     it("refuses listing another workspace's list", async () => {

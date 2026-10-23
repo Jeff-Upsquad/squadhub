@@ -338,6 +338,18 @@ export async function isWorkspaceAdmin(userId: string, workspaceId?: string | nu
 }
 
 /**
+ * Owner/admin of the workspace the RESOURCE lives in. Use this — never the
+ * request's active workspace — for admin bypasses on a specific resource
+ * (locks, delete-anyone's, manage): an admin of workspace A must not bypass
+ * anything in workspace B just because A is the active workspace.
+ */
+export async function isAdminOfResource(userId: string, resourceType: string, resourceId: string): Promise<boolean> {
+  const wsId = await workspaceIdOf(resourceType, resourceId);
+  if (!wsId) return false;
+  return isWorkspaceAdmin(userId, wsId);
+}
+
+/**
  * Check if a resource (space/folder/list) is locked.
  * Also checks parent resources: a list is locked if its folder or space is locked.
  */

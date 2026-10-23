@@ -51,6 +51,8 @@ export interface WorkspaceMembership {
 interface TenantContext {
   userId?: string;
   workspaceId?: string;
+  /** Memoised getUserWorkspaceIds(userId) for this request. */
+  reachable?: Promise<string[]>;
 }
 
 const tenantStore = new AsyncLocalStorage<TenantContext>();
@@ -58,6 +60,23 @@ const tenantStore = new AsyncLocalStorage<TenantContext>();
 /** The active workspace of the request currently executing (if any). */
 export function currentWorkspaceId(): string | undefined {
   return tenantStore.getStore()?.workspaceId;
+}
+
+/**
+ * Every workspace the CURRENT request's user can reach (direct + shared),
+ * memoised for the request. Fail-closed: outside a request context (no user)
+ * it returns [] so a query filtered by it matches nothing.
+ *
+ * Used as the tenant wall for queries that hydrate or aggregate rows whose
+ * ids came from an already-authorised read: `.in('workspace_id', await
+ * reachableWorkspaceIds())` guarantees no other tenant's row can come back
+ * even if an id was forged or a link points across workspaces.
+ */
+export function reachableWorkspaceIds(): Promise<string[]> {
+  const store = tenantStore.getStore();
+  if (!store?.userId) return Promise.resolve([]);
+  if (!store.reachable) store.reachable = getUserWorkspaceIds(store.userId);
+  return store.reachable;
 }
 
 /** Run `fn` with a tenant context (used by requireAuth and by tests). */

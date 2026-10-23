@@ -8,9 +8,12 @@ const task = '00000000-0000-0000-0000-000000000002';
 const notification = '00000000-0000-0000-0000-000000000003';
 vi.mock('../middleware/auth', () => ({ requireAuth: (req: any, _res: any, next: any) => { req.userId = '00000000-0000-0000-0000-000000000001'; next(); } }));
 vi.mock('../middleware/userType', () => ({ requireUserType: () => (_req: any, _res: any, next: any) => next() }));
+vi.mock('../middleware/workspace', () => ({
+  getUserWorkspaceIds: async () => ['ws'], reachableWorkspaceIds: async () => ['ws'], workspaceIdOf: async () => 'ws',
+}));
 vi.mock('../middleware/permissions', () => ({
   checkResourceAccess: async () => state.access, meetsAccessLevel: (level: string) => level === 'member',
-  isWorkspaceAdmin: async () => false, isResourceLocked: async () => state.locked,
+  isWorkspaceAdmin: async () => false, isAdminOfResource: async () => false, isResourceLocked: async () => state.locked,
   requirePermission: () => (_req: any, _res: any, next: any) => next(),
 }));
 vi.mock('../utils/statusGroups', () => ({ normalizeTaskStatusForList: async () => 'closed', defaultTaskStatusForList: async () => 'open', getListStageInfo: async () => ({}) }));
@@ -27,8 +30,8 @@ vi.mock('../supabase', () => ({ supabaseAdmin: { from: (table: string) => {
   };
   const q: any = {
     select: () => q,
-    eq: (key: string, val: any) => { filters.push(r => key.startsWith('metadata->>') ? r.metadata?.[key.slice(11)] === val : r[key] === val); return q; },
-    in: (key: string, vals: any[]) => { filters.push(r => vals.includes(r[key])); return q; },
+    eq: (key: string, val: any) => { filters.push(r => key.startsWith('metadata->>') ? r.metadata?.[key.slice(11)] === val : (key === 'workspace_id' ? (r[key] ?? 'ws') : r[key]) === val); return q; },
+    in: (key: string, vals: any[]) => { filters.push(r => vals.includes(key === 'workspace_id' ? (r[key] ?? 'ws') : r[key])); return q; },
     update: (patch: any) => { changes = patch; return q; },
     maybeSingle: async () => { const result = execute(); return { ...result, data: result.data[0] || null }; },
     single: async () => { const result = execute(); return { ...result, data: result.data[0] || null }; },

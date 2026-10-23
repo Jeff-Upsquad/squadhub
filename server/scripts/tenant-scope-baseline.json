@@ -11,11 +11,9 @@
   "server/src/routes/pm/labels.ts": 5,
   "server/src/routes/pm/lists.ts": 14,
   "server/src/routes/pm/routines.ts": 4,
-  "server/src/routes/pm/search.ts": 15,
   "server/src/routes/pm/shared-with-me.ts": 5,
   "server/src/routes/pm/spaces.ts": 9,
   "server/src/routes/pm/task-attachments.ts": 5,
-  "server/src/routes/pm/tasks.ts": 105,
   "server/src/routes/pm/views.ts": 9,
   "server/src/routes/pm/workBlocks.ts": 9,
   "server/src/routes/timer.ts": 11

@@ -3,7 +3,8 @@ import express from 'express';
 import type { Server } from 'node:http';
 
 const store = vi.hoisted(() => ({ tables: {} as Record<string, any[]> }));
-vi.mock('../middleware/auth', () => ({ requireAuth: (req: any, _res: any, next: any) => { req.userId = 'me'; next(); } }));
+// requireAuth verifies ?workspace_id membership and binds it as req.workspaceId.
+vi.mock('../middleware/auth', () => ({ requireAuth: (req: any, _res: any, next: any) => { req.userId = 'me'; req.workspaceId = req.query.workspace_id; next(); } }));
 vi.mock('../middleware/userType', () => ({ requireUserType: () => (_req: any, _res: any, next: any) => next() }));
 vi.mock('../supabase', () => ({ supabaseAdmin: { from: (table: string) => {
   const filters: ((row: any) => boolean)[] = [];
@@ -58,7 +59,19 @@ beforeEach(() => {
     ],
   };
 });
+// Mirror the DB's saas_fill_workspace_id triggers: child rows inherit the
+// workspace of their parent (space → folder/list → task; resource → membership).
+function stampWorkspaces() {
+  const t = store.tables;
+  const wsOf = (table: string, id: string) => (t[table] || []).find((r) => r.id === id)?.workspace_id;
+  for (const r of t.folders || []) r.workspace_id ??= wsOf('spaces', r.space_id);
+  for (const r of t.lists || []) r.workspace_id ??= wsOf('spaces', r.space_id) ?? 'other';
+  for (const r of t.tasks || []) r.workspace_id ??= wsOf('lists', r.list_id);
+  for (const r of t.space_statuses || []) r.workspace_id ??= wsOf('spaces', r.space_id);
+  for (const r of t.resource_memberships || []) r.workspace_id ??= wsOf(`${r.resource_type}s`, r.resource_id);
+}
 async function search(params = '') {
+  stampWorkspaces();
   const response = await fetch(`${base}/search?workspace_id=workspace&q=needle${params}`);
   expect(response.status).toBe(200);
   return (await response.json() as any).data;
@@ -86,6 +99,7 @@ describe('task description search', () => {
   });
   it('treats wildcard characters as literal search text', async () => {
     store.tables.tasks.push({ id: 'literal', title: 'Literal', description: '100%_complete', list_id: 'visible' });
+    stampWorkspaces();
     const response = await fetch(`${base}/search?workspace_id=workspace&q=${encodeURIComponent('%_')}&include_descriptions=true`);
     const data = (await response.json() as any).data;
     expect(data.descriptions.map((t: any) => t.id)).toEqual(['literal']);

@@ -4,10 +4,10 @@ import { z } from 'zod';
 import type { User, TaskRecurrence, TaskTag, TaskListPath } from '@squadhub/shared';
 import { parseReminderTitle, taskRecurrenceOccursOn, getTaskStatusCategory, isWaitingOrUnblockedStatus } from '@squadhub/shared';
 import { supabaseAdmin } from '../../supabase';
-import { getUserWorkspaceIds } from '../../middleware/workspace';
+import { getUserWorkspaceIds, reachableWorkspaceIds, workspaceIdOf } from '../../middleware/workspace';
 import { requireAuth } from '../../middleware/auth';
 import { requireUserType } from '../../middleware/userType';
-import { checkResourceAccess, meetsAccessLevel, requirePermission, isWorkspaceAdmin, isResourceLocked } from '../../middleware/permissions';
+import { checkResourceAccess, meetsAccessLevel, requirePermission, isWorkspaceAdmin, isAdminOfResource, isResourceLocked } from '../../middleware/permissions';
 import { getUserRoleIds } from '../../utils/roles';
 import { PARTNER_USER_TYPES } from '@squadhub/shared';
 import { spawnRoutineInstance } from '../../services/routineSpawner';
@@ -88,7 +88,7 @@ const updateSchema = z.object({
 
 // Helper to get list_id from a task
 async function getTaskListId(taskId: string): Promise<string | null> {
-  const { data } = await supabaseAdmin.from('tasks').select('list_id').eq('id', taskId).single();
+  const { data } = await supabaseAdmin.from('tasks').select('list_id').in('workspace_id', await reachableWorkspaceIds()).eq('id', taskId).single();
   return data?.list_id || null;
 }
 
@@ -103,12 +103,13 @@ async function getTaskListId(taskId: string): Promise<string | null> {
 async function getSpaceDoneStatusNames(listId: string | null): Promise<Set<string>> {
   const names = new Set<string>();
   if (!listId) return names;
-  const { data: list } = await supabaseAdmin.from('lists').select('space_id').eq('id', listId).single();
+  const { data: list } = await supabaseAdmin.from('lists').select('space_id').in('workspace_id', await reachableWorkspaceIds()).eq('id', listId).single();
   const spaceId = (list as any)?.space_id;
   if (!spaceId) return names;
   const { data } = await supabaseAdmin
     .from('space_statuses')
     .select('name, category')
+    .in('workspace_id', await reachableWorkspaceIds())
     .eq('space_id', spaceId)
     .in('category', ['done', 'closed']);
   for (const s of (data || []) as { name: string }[]) names.add(s.name);
@@ -132,18 +133,21 @@ async function countOpenCompletionItems(
   const { data: subs } = await supabaseAdmin
     .from('tasks')
     .select('status')
+    .in('workspace_id', await reachableWorkspaceIds())
     .eq('parent_task_id', taskId);
   const open_subtasks = (subs || []).filter((s: any) => !isDoneStatus(s.status)).length;
 
   const { data: cls } = await supabaseAdmin
     .from('task_checklists')
     .select('id')
+    .in('workspace_id', await reachableWorkspaceIds())
     .eq('task_id', taskId);
   let open_checklist_items = 0;
   if (cls && cls.length > 0) {
     const { count } = await supabaseAdmin
       .from('task_checklist_items')
       .select('id', { count: 'exact', head: true })
+      .in('workspace_id', await reachableWorkspaceIds())
       .in('checklist_id', cls.map((c: any) => c.id))
       .eq('is_done', false);
     open_checklist_items = count || 0;
@@ -271,6 +275,7 @@ export async function hydrateTaskMeta<T extends { id: string; created_by?: strin
     const { data: comments } = await supabaseAdmin
       .from('task_comments')
       .select('task_id, content, user_id, created_at, users(id, display_name, avatar_url)')
+      .in('workspace_id', await reachableWorkspaceIds())
       .in('task_id', ids)
       .order('created_at', { ascending: false });
     for (const c of (comments || []) as any[]) {
@@ -295,6 +300,7 @@ export async function hydrateTaskMeta<T extends { id: string; created_by?: strin
     const { data: acts } = await supabaseAdmin
       .from('task_activity')
       .select('task_id, created_at')
+      .in('workspace_id', await reachableWorkspaceIds())
       .in('task_id', ids)
       .eq('event_type', 'field_change')
       .eq('field', 'status')
@@ -320,6 +326,7 @@ export async function hydrateSubtasks<T extends { id: string }>(
   const { data: children } = await supabaseAdmin
     .from('tasks')
     .select('id, title, list_id, status, priority, due_date, work_date, parent_task_id, assignee_ids, metadata, created_at, time_tracked')
+    .in('workspace_id', await reachableWorkspaceIds())
     .in('parent_task_id', ids)
     .order('created_at', { ascending: true });
   const hydratedChildren = await hydrateLists(await hydrateAssignees(children || []));
@@ -360,15 +367,16 @@ async function resolveListContainers(
   const { data: lists } = await supabaseAdmin
     .from('lists')
     .select('id, name, space_id, folder_id, group_tasks')
+    .in('workspace_id', await reachableWorkspaceIds())
     .in('id', listIds);
   const spaceIds = Array.from(new Set((lists || []).map((l: any) => l.space_id).filter(Boolean)));
   const folderIds = Array.from(new Set((lists || []).map((l: any) => l.folder_id).filter(Boolean)));
   const [{ data: spaces }, { data: folders }] = await Promise.all([
     spaceIds.length
-      ? supabaseAdmin.from('spaces').select('id, name, group_tasks').in('id', spaceIds)
+      ? supabaseAdmin.from('spaces').select('id, name, group_tasks').in('workspace_id', await reachableWorkspaceIds()).in('id', spaceIds)
       : Promise.resolve({ data: [] as any[] }),
     folderIds.length
-      ? supabaseAdmin.from('folders').select('id, name, group_tasks').in('id', folderIds)
+      ? supabaseAdmin.from('folders').select('id, name, group_tasks').in('workspace_id', await reachableWorkspaceIds()).in('id', folderIds)
       : Promise.resolve({ data: [] as any[] }),
   ]);
   const spaceById = new Map<string, { id: string; name: string; group_tasks?: boolean }>(
@@ -440,6 +448,7 @@ export async function hydrateMultiHomeGroups<T extends { id: string; group_conta
   const { data: links } = await supabaseAdmin
     .from('task_list_links')
     .select('task_id, list_id')
+    .in('workspace_id', await reachableWorkspaceIds())
     .in('task_id', taskIds);
   const secondaryListIds = Array.from(new Set((links || []).map((r: any) => r.list_id).filter(Boolean)));
   const byList = await resolveListContainers(secondaryListIds);
@@ -478,6 +487,7 @@ async function hydrateParents<T extends { parent_task_id: string | null }>(
   const { data: parents } = await supabaseAdmin
     .from('tasks')
     .select('id, title')
+    .in('workspace_id', await reachableWorkspaceIds())
     .in('id', parentIds);
   const byId = new Map<string, { id: string; title: string }>(
     (parents || []).map((p: any) => [p.id, { id: p.id, title: p.title }]),
@@ -632,15 +642,21 @@ router.get('/tasks', async (req: Request, res: Response) => {
     // Multi-homing: a list shows its own tasks (list_id = listId) PLUS any tasks
     // ADDED into it from elsewhere (task_list_links). Fetch the linked task ids
     // first, then OR them into the query.
+    // checkResourceAccess verified the list's workspace is reachable; every
+    // read below is pinned to THAT workspace so a link row pointing at another
+    // workspace's task can never surface it here.
+    const listWs = await workspaceIdOf('list', listId);
     const { data: linkRows } = await supabaseAdmin
-      .from('task_list_links') // tenant-scope: list access checked via checkResourceAccess above
+      .from('task_list_links')
       .select('task_id')
+      .eq('workspace_id', listWs)
       .eq('list_id', listId);
     const linkedIds = Array.from(new Set((linkRows || []).map((r: any) => r.task_id).filter(Boolean)));
 
     let query = supabaseAdmin
-      .from('tasks') // tenant-scope: list access checked via checkResourceAccess above; linked ids come from that list
+      .from('tasks')
       .select('*')
+      .eq('workspace_id', listWs)
       // Routine templates never render in list views — only their spawned copies do.
       .is('recurrence', null);
 
@@ -753,6 +769,7 @@ router.get('/tasks/my', async (req: Request, res: Response) => {
       const { data: spaceStatuses } = await supabaseAdmin
         .from('space_statuses')
         .select('space_id, name, category')
+        .in('workspace_id', await reachableWorkspaceIds())
         .in('space_id', spaceIds as string[]);
       doneStatusKeys = new Set(
         (spaceStatuses || [])
@@ -861,6 +878,7 @@ router.get('/tasks/my', async (req: Request, res: Response) => {
       const { data: createdFocused } = await supabaseAdmin
         .from('tasks')
         .select('*')
+        .in('workspace_id', await reachableWorkspaceIds())
         .not('focused_at', 'is', null)
         .eq('created_by', req.userId!);
       let extra = (createdFocused ?? []).filter((t: any) => !existingIds.has(t.id) && isFocused(t));
@@ -909,6 +927,7 @@ router.get('/tasks/my', async (req: Request, res: Response) => {
         const { data: extraRows } = await supabaseAdmin
           .from('tasks')
           .select('*')
+          .in('workspace_id', await reachableWorkspaceIds())
           .in('id', missingWorked);
         let preFiltered = (extraRows ?? []);
         if (!includeDone) {
@@ -928,6 +947,7 @@ router.get('/tasks/my', async (req: Request, res: Response) => {
           const { data: extraSpaceStatuses } = await supabaseAdmin
             .from('space_statuses')
             .select('space_id, name, category')
+            .in('workspace_id', await reachableWorkspaceIds())
             .in('space_id', extraSpaceIds as string[]);
           for (const s of extraSpaceStatuses || []) {
             if ((s as any).category === 'done' || (s as any).category === 'closed') {
@@ -1038,6 +1058,7 @@ router.get('/tasks/new', async (req: Request, res: Response) => {
       const { data: spaceStatuses } = await supabaseAdmin
         .from('space_statuses')
         .select('space_id, name, category')
+        .in('workspace_id', await reachableWorkspaceIds())
         .in('space_id', spaceIds as string[]);
       const doneStatusKeys = new Set(
         (spaceStatuses || [])
@@ -1136,6 +1157,7 @@ router.get('/tasks/my-time-entries', async (req: Request, res: Response) => {
     const { data: tasks } = await supabaseAdmin
       .from('tasks')
       .select('id, title, description, list_id, metadata, parent_task_id, time_tracked')
+      .in('workspace_id', await reachableWorkspaceIds())
       .in('id', taskIds);
 
     const excludedIds = await getExcludedTaskIds((tasks || []) as any[]);
@@ -1182,7 +1204,7 @@ router.get('/tasks/my-time-entries', async (req: Request, res: Response) => {
         Array.from(perRun.values()).flatMap((m) => Array.from(m.keys())),
       ));
       const { data: childTasks } = childTaskIds.length
-        ? await supabaseAdmin.from('tasks').select('id, title').in('id', childTaskIds)
+        ? await supabaseAdmin.from('tasks').select('id, title').in('workspace_id', await reachableWorkspaceIds()).in('id', childTaskIds)
         : { data: [] as any[] };
       const titleById = new Map((childTasks || []).map((t: any) => [t.id, t.title as string]));
 
@@ -1234,6 +1256,7 @@ router.post('/tasks/:id/time-entries', async (req: Request, res: Response) => {
     const { data: task } = await supabaseAdmin
       .from('tasks')
       .select('id, list_id')
+      .in('workspace_id', await reachableWorkspaceIds())
       .eq('id', taskId)
       .single();
     if (!task) {
@@ -1365,6 +1388,7 @@ router.get('/tasks/:id/time-entries', async (req: Request, res: Response) => {
     const { data: entries, error } = await supabaseAdmin
       .from('task_time_entries')
       .select('*')
+      .in('workspace_id', await reachableWorkspaceIds())
       .eq('task_id', taskId)
       .order('started_at', { ascending: false })
       .limit(50);
@@ -1441,6 +1465,7 @@ router.delete('/tasks/:id/time-entries/:entryId', async (req: Request, res: Resp
     const { error: delErr } = await supabaseAdmin
       .from('task_time_entries')
       .delete()
+      .in('workspace_id', await reachableWorkspaceIds())
       .eq('id', entryId);
     if (delErr) {
       res.status(500).json({ success: false, error: delErr.message });
@@ -1460,10 +1485,11 @@ router.delete('/tasks/:id/time-entries/:entryId', async (req: Request, res: Resp
     // the daily summary is nudged by the inverse on the entry's own day.
     const seconds = (entry as any).duration_seconds as number;
     const { data: taskRow } = await supabaseAdmin
-      .from('tasks').select('time_tracked').eq('id', taskId).single();
+      .from('tasks').select('time_tracked').in('workspace_id', await reachableWorkspaceIds()).eq('id', taskId).single();
     await supabaseAdmin
       .from('tasks')
       .update({ time_tracked: Math.max(0, ((taskRow as any)?.time_tracked || 0) - seconds) })
+      .in('workspace_id', await reachableWorkspaceIds())
       .eq('id', taskId);
     // Only unwind the day if this entry ever fed it. A timer that overlapped a
     // work-block run was logged with skipDailySummary (the block owns that
@@ -1605,6 +1631,7 @@ router.patch('/tasks/:id/time-entries/:entryId', async (req: Request, res: Respo
         edited_at: new Date().toISOString(),
         edited_by: req.userId!,
       })
+      .in('workspace_id', await reachableWorkspaceIds())
       .eq('id', entryId)
       .select()
       .single();
@@ -1616,10 +1643,11 @@ router.patch('/tasks/:id/time-entries/:entryId', async (req: Request, res: Respo
     const delta = newSeconds - oldSeconds;
     if (delta !== 0) {
       const { data: taskRow } = await supabaseAdmin
-        .from('tasks').select('time_tracked').eq('id', taskId).single();
+        .from('tasks').select('time_tracked').in('workspace_id', await reachableWorkspaceIds()).eq('id', taskId).single();
       await supabaseAdmin
         .from('tasks')
         .update({ time_tracked: Math.max(0, ((taskRow as any)?.time_tracked || 0) + delta) })
+        .in('workspace_id', await reachableWorkspaceIds())
         .eq('id', taskId);
       await logTaskActivity(taskId, req.userId!, [{
         event_type: 'field_change', field: 'time_tracked',
@@ -1681,6 +1709,7 @@ router.get('/tasks/:id', async (req: Request, res: Response) => {
     const { data: task, error } = await supabaseAdmin
       .from('tasks')
       .select('*, task_types(key)')
+      .in('workspace_id', await reachableWorkspaceIds())
       .eq('id', id)
       .single();
 
@@ -1695,6 +1724,7 @@ router.get('/tasks/:id', async (req: Request, res: Response) => {
       const { count } = await supabaseAdmin
         .from('task_comments')
         .select('*', { count: 'exact', head: true })
+        .in('workspace_id', await reachableWorkspaceIds())
         .eq('task_id', id);
       commentCount = count || 0;
     } catch { /* table may not exist */ }
@@ -1710,6 +1740,7 @@ router.get('/tasks/:id', async (req: Request, res: Response) => {
     const { data: subtasks } = await supabaseAdmin
       .from('tasks')
       .select('id, title, status, priority, due_date, assignee_ids, metadata, created_at')
+      .in('workspace_id', await reachableWorkspaceIds())
       .eq('parent_task_id', id)
       .order('created_at', { ascending: true });
 
@@ -1728,6 +1759,7 @@ router.get('/tasks/:id', async (req: Request, res: Response) => {
       const { data: tpl } = await supabaseAdmin
         .from('tasks')
         .select('id, title, recurrence')
+        .in('workspace_id', await reachableWorkspaceIds())
         .eq('id', (task as any).recurring_parent_id)
         .maybeSingle();
       if (tpl) routineTemplate = tpl as any;
@@ -1759,6 +1791,7 @@ router.get('/companion-timers', async (req: Request, res: Response) => {
     const { data, error } = await supabaseAdmin
       .from('tasks')
       .select('id, title, list_id, time_tracked, metadata')
+      .in('workspace_id', await reachableWorkspaceIds())
       .eq('created_by', req.userId!)
       .contains('metadata', { companion_timer_pending: true })
       .order('created_at', { ascending: true })
@@ -1782,6 +1815,7 @@ router.post('/tasks/:id/companion-timer/claim', async (req: Request, res: Respon
     const { data: task, error } = await supabaseAdmin
       .from('tasks')
       .select('id, title, list_id, time_tracked, metadata')
+      .in('workspace_id', await reachableWorkspaceIds())
       .eq('id', req.params.id as string)
       .eq('created_by', req.userId!)
       .maybeSingle();
@@ -1803,6 +1837,7 @@ router.post('/tasks/:id/companion-timer/claim', async (req: Request, res: Respon
     const { data: claimed, error: claimError } = await supabaseAdmin
       .from('tasks')
       .update({ metadata: nextMetadata })
+      .in('workspace_id', await reachableWorkspaceIds())
       .eq('id', task.id)
       .contains('metadata', { companion_timer_pending: true, companion_timer_started_at: startedAt })
       .select('id')
@@ -1837,6 +1872,7 @@ router.post('/tasks/:id/companion-timer/start', async (req: Request, res: Respon
     const { data: task, error } = await supabaseAdmin
       .from('tasks')
       .select('id, list_id, metadata')
+      .in('workspace_id', await reachableWorkspaceIds())
       .eq('id', id)
       .maybeSingle();
     if (error) throw error;
@@ -1854,6 +1890,7 @@ router.post('/tasks/:id/companion-timer/start', async (req: Request, res: Respon
     const { error: updateError } = await supabaseAdmin
       .from('tasks')
       .update({ metadata })
+      .in('workspace_id', await reachableWorkspaceIds())
       .eq('id', id);
     if (updateError) throw updateError;
     res.json({ success: true, data: { id, started_at: startedAt } });
@@ -1872,6 +1909,7 @@ router.post('/tasks/:id/companion-timer/cancel', async (req: Request, res: Respo
     const { data: task, error } = await supabaseAdmin
       .from('tasks')
       .select('id, list_id, metadata')
+      .in('workspace_id', await reachableWorkspaceIds())
       .eq('id', id)
       .maybeSingle();
     if (error) throw error;
@@ -1892,6 +1930,7 @@ router.post('/tasks/:id/companion-timer/cancel', async (req: Request, res: Respo
       const { error: updateError } = await supabaseAdmin
         .from('tasks')
         .update({ metadata: nextMetadata })
+        .in('workspace_id', await reachableWorkspaceIds())
         .eq('id', id);
       if (updateError) throw updateError;
     }
@@ -1939,6 +1978,7 @@ async function handleTaskCompletionDependencies(taskId: string, userId: string, 
     const { data: currentTask } = await supabaseAdmin
       .from('tasks')
       .select('id, metadata')
+      .in('workspace_id', await reachableWorkspaceIds())
       .eq('id', taskId)
       .maybeSingle();
 
@@ -1958,6 +1998,7 @@ async function handleTaskCompletionDependencies(taskId: string, userId: string, 
       const { data: waitingTasks } = await supabaseAdmin
         .from('tasks')
         .select('id')
+        .in('workspace_id', await reachableWorkspaceIds())
         .contains('metadata', { relationships: [{ target_task_id: taskId, type: 'waiting_on' }] });
       if (waitingTasks) {
         for (const wt of waitingTasks) {
@@ -1976,6 +2017,7 @@ async function handleTaskCompletionDependencies(taskId: string, userId: string, 
         const { data: depTask } = await supabaseAdmin
           .from('tasks')
           .select('id, status, list_id, metadata')
+          .in('workspace_id', await reachableWorkspaceIds())
           .eq('id', targetId)
           .maybeSingle();
         if (!depTask) continue;
@@ -1999,6 +2041,7 @@ async function handleTaskCompletionDependencies(taskId: string, userId: string, 
           const { data: otherTasks } = await supabaseAdmin
             .from('tasks')
             .select('id, status, list_id')
+            .in('workspace_id', await reachableWorkspaceIds())
             .in('id', otherTargetIds);
 
           for (const ot of (otherTasks || [])) {
@@ -2016,6 +2059,7 @@ async function handleTaskCompletionDependencies(taskId: string, userId: string, 
           await supabaseAdmin
             .from('tasks')
             .update({ status: next.status, metadata: next.metadata, last_modified_by: userId })
+            .in('workspace_id', await reachableWorkspaceIds())
             .eq('id', targetId);
 
           await logTaskActivity(targetId, userId, [
@@ -2035,6 +2079,7 @@ async function handleTaskCompletionDependencies(taskId: string, userId: string, 
         const { data: depTask } = await supabaseAdmin
           .from('tasks')
           .select('id, status, list_id, metadata')
+          .in('workspace_id', await reachableWorkspaceIds())
           .eq('id', targetId)
           .maybeSingle();
         if (!depTask) continue;
@@ -2048,6 +2093,7 @@ async function handleTaskCompletionDependencies(taskId: string, userId: string, 
           await supabaseAdmin
             .from('tasks')
             .update({ status: 'waiting_on_dependency', metadata: nextMeta, last_modified_by: userId })
+            .in('workspace_id', await reachableWorkspaceIds())
             .eq('id', targetId);
           await logTaskActivity(targetId, userId, [
             { event_type: 'field_change', field: 'status', old_value: (depTask as any).status, new_value: 'waiting_on_dependency' },
@@ -2059,6 +2105,7 @@ async function handleTaskCompletionDependencies(taskId: string, userId: string, 
           await supabaseAdmin
             .from('tasks')
             .update({ status: 'waiting_on_dependency', last_modified_by: userId })
+            .in('workspace_id', await reachableWorkspaceIds())
             .eq('id', targetId);
 
           await logTaskActivity(targetId, userId, [
@@ -2095,6 +2142,7 @@ router.get('/tasks/:id/relationships', async (req: Request, res: Response) => {
     const { data: task, error } = await supabaseAdmin
       .from('tasks')
       .select('id, metadata')
+      .in('workspace_id', await reachableWorkspaceIds())
       .eq('id', id)
       .maybeSingle();
     if (error) throw error;
@@ -2115,6 +2163,7 @@ router.get('/tasks/:id/relationships', async (req: Request, res: Response) => {
     const { data: targetTasks, error: targetsError } = await supabaseAdmin
       .from('tasks')
       .select('id, title, status, priority, list_id, lists(id, name, space_id, spaces(id, name, color)), due_date, display_number, metadata')
+      .in('workspace_id', await reachableWorkspaceIds())
       .in('id', targetIds);
     if (targetsError) throw targetsError;
 
@@ -2195,8 +2244,8 @@ router.post('/tasks/:id/relationships', async (req: Request, res: Response) => {
     }
 
     const [{ data: taskA }, { data: taskB }] = await Promise.all([
-      supabaseAdmin.from('tasks').select('id, title, status, metadata').eq('id', id).single(),
-      supabaseAdmin.from('tasks').select('id, title, status, metadata').eq('id', body.target_task_id).single(),
+      supabaseAdmin.from('tasks').select('id, title, status, metadata').in('workspace_id', await reachableWorkspaceIds()).eq('id', id).single(),
+      supabaseAdmin.from('tasks').select('id, title, status, metadata').in('workspace_id', await reachableWorkspaceIds()).eq('id', body.target_task_id).single(),
     ]);
 
     if (!taskA || !taskB) {
@@ -2250,8 +2299,8 @@ router.post('/tasks/:id/relationships', async (req: Request, res: Response) => {
     }
 
     await Promise.all([
-      supabaseAdmin.from('tasks').update(patchA).eq('id', id),
-      supabaseAdmin.from('tasks').update(patchB).eq('id', body.target_task_id),
+      supabaseAdmin.from('tasks').update(patchA).in('workspace_id', await reachableWorkspaceIds()).eq('id', id),
+      supabaseAdmin.from('tasks').update(patchB).in('workspace_id', await reachableWorkspaceIds()).eq('id', body.target_task_id),
     ]);
 
     // Log activities
@@ -2309,8 +2358,8 @@ router.delete('/tasks/:id/relationships/:targetTaskId', async (req: Request, res
     }
 
     const [{ data: taskA }, { data: taskB }] = await Promise.all([
-      supabaseAdmin.from('tasks').select('id, status, metadata').eq('id', id).single(),
-      supabaseAdmin.from('tasks').select('id, status, metadata').eq('id', targetId).single(),
+      supabaseAdmin.from('tasks').select('id, status, metadata').in('workspace_id', await reachableWorkspaceIds()).eq('id', id).single(),
+      supabaseAdmin.from('tasks').select('id, status, metadata').in('workspace_id', await reachableWorkspaceIds()).eq('id', targetId).single(),
     ]);
 
     if (taskA) {
@@ -2325,7 +2374,7 @@ router.delete('/tasks/:id/relationships/:targetTaskId', async (req: Request, res
         patchA.status = next.status;
         patchA.metadata = next.metadata;
       }
-      await supabaseAdmin.from('tasks').update(patchA).eq('id', id);
+      await supabaseAdmin.from('tasks').update(patchA).in('workspace_id', await reachableWorkspaceIds()).eq('id', id);
       const eventsA: any[] = [{ event_type: 'field_change', field: 'relationships', old_value: { target_task_id: targetId }, new_value: null }];
       if (shouldUnblockA) {
         eventsA.push({ event_type: 'field_change', field: 'status', old_value: 'waiting_on_dependency', new_value: patchA.status });
@@ -2345,7 +2394,7 @@ router.delete('/tasks/:id/relationships/:targetTaskId', async (req: Request, res
         patchB.status = next.status;
         patchB.metadata = next.metadata;
       }
-      await supabaseAdmin.from('tasks').update(patchB).eq('id', targetId);
+      await supabaseAdmin.from('tasks').update(patchB).in('workspace_id', await reachableWorkspaceIds()).eq('id', targetId);
       const eventsB: any[] = [{ event_type: 'field_change', field: 'relationships', old_value: { target_task_id: id }, new_value: null }];
       if (shouldUnblockB) {
         eventsB.push({ event_type: 'field_change', field: 'status', old_value: 'waiting_on_dependency', new_value: patchB.status });
@@ -2387,11 +2436,11 @@ router.post('/tasks/:id/reminder-action', async (req: Request, res: Response) =>
       .eq('id', notification_id).eq('user_id', req.userId!).eq('type', 'task_reminder').eq('reference_id', req.params.id).maybeSingle();
     if (notificationError) throw notificationError;
     if (!notification) { res.status(404).json({ success: false, error: 'Reminder not found' }); return; }
-    const { data: task, error: taskError } = await supabaseAdmin.from('tasks').select('*, task_types(key)').eq('id', req.params.id).maybeSingle();
+    const { data: task, error: taskError } = await supabaseAdmin.from('tasks').select('*, task_types(key)').in('workspace_id', await reachableWorkspaceIds()).eq('id', req.params.id).maybeSingle();
     if (taskError) throw taskError;
     if (!task) { res.status(404).json({ success: false, error: 'Task not found' }); return; }
     const level = await checkResourceAccess(req.userId!, 'list', task.list_id);
-    if (!level || !meetsAccessLevel(level, 'member') || (!await isWorkspaceAdmin(req.userId!) && await isResourceLocked('list', task.list_id))) {
+    if (!level || !meetsAccessLevel(level, 'member') || (!await isWorkspaceAdmin(req.userId!, task.workspace_id) && await isResourceLocked('list', task.list_id))) {
       res.status(403).json({ success: false, error: 'Member access to an unlocked list required' }); return;
     }
     if (task.task_types?.key !== 'reminders' || await isTaskStatusDone(task.list_id, task.status)
@@ -2410,10 +2459,10 @@ router.post('/tasks/:id/reminder-action', async (req: Request, res: Response) =>
     } else {
       changes.due_date = new Date(Date.now() + (minutes || 10) * 60_000).toISOString();
     }
-    const { data, error } = await supabaseAdmin.from('tasks').update(changes).eq('id', task.id).eq('due_date', task.due_date).eq('status', task.status).select().maybeSingle();
+    const { data, error } = await supabaseAdmin.from('tasks').update(changes).in('workspace_id', await reachableWorkspaceIds()).eq('id', task.id).eq('due_date', task.due_date).eq('status', task.status).select().maybeSingle();
     if (error) throw error;
     if (!data) { res.status(409).json({ success: false, error: 'Reminder changed on another device. Open the task to continue.' }); return; }
-    const { data: read, error: readError } = await supabaseAdmin.from('notifications').update({ is_read: true }).eq('type', 'task_reminder')
+    const { data: read, error: readError } = await supabaseAdmin.from('notifications').update({ is_read: true }).in('workspace_id', await reachableWorkspaceIds()).eq('type', 'task_reminder')
       .eq('reference_id', task.id).eq('metadata->>due_at', notification.metadata.due_at).select('id, user_id');
     if (readError) throw readError;
     for (const row of read || []) req.app.get('io')?.to(`chat_user:${row.user_id}`).emit('notifications_read', { kind: 'ids', ids: [row.id] });
@@ -2444,7 +2493,7 @@ router.post('/tasks', async (req: Request, res: Response) => {
       return;
     }
 
-    const adminUser = await isWorkspaceAdmin(req.userId!);
+    const adminUser = await isAdminOfResource(req.userId!, 'list', body.list_id);
     if (!adminUser && await isResourceLocked('list', body.list_id)) {
       res.status(403).json({ success: false, error: 'This list is locked' });
       return;
@@ -2470,6 +2519,7 @@ router.post('/tasks', async (req: Request, res: Response) => {
     let duplicateQuery = supabaseAdmin
       .from('tasks')
       .select('*')
+      .in('workspace_id', await reachableWorkspaceIds())
       .eq('created_by', req.userId!)
       .eq('list_id', body.list_id)
       .eq('title', body.title.trim())
@@ -2507,6 +2557,7 @@ router.post('/tasks', async (req: Request, res: Response) => {
     const { data: parentList } = await supabaseAdmin
       .from('lists')
       .select('folder_id, space_id, auto_assignee_ids, default_task_type_id')
+      .in('workspace_id', await reachableWorkspaceIds())
       .eq('id', body.list_id)
       .single();
     listAutoIds = (parentList?.auto_assignee_ids as string[] | null) || [];
@@ -2516,6 +2567,7 @@ router.post('/tasks', async (req: Request, res: Response) => {
       const { data: parentFolder } = await supabaseAdmin
         .from('folders')
         .select('auto_assignee_ids, default_task_type_id')
+        .in('workspace_id', await reachableWorkspaceIds())
         .eq('id', parentList.folder_id)
         .single();
       folderAutoIds = (parentFolder?.auto_assignee_ids as string[] | null) || [];
@@ -2525,6 +2577,7 @@ router.post('/tasks', async (req: Request, res: Response) => {
       const { data: parentSpace } = await supabaseAdmin
         .from('spaces')
         .select('auto_assignee_ids, default_task_type_id')
+        .in('workspace_id', await reachableWorkspaceIds())
         .eq('id', parentList.space_id)
         .single();
       spaceAutoIds = (parentSpace?.auto_assignee_ids as string[] | null) || [];
@@ -2638,7 +2691,7 @@ router.post('/tasks', async (req: Request, res: Response) => {
       });
       if (!logged.ok) {
         // No time entry was written: remove the new task so retry cannot duplicate it.
-        await supabaseAdmin.from('tasks').delete().eq('id', task.id);
+        await supabaseAdmin.from('tasks').delete().in('workspace_id', await reachableWorkspaceIds()).eq('id', task.id);
         res.status(500).json({ success: false, error: `Could not save logged time: ${logged.error}` });
         return;
       }
@@ -2724,16 +2777,20 @@ router.put('/tasks/:id', async (req: Request, res: Response) => {
       return;
     }
 
-    const adminUser = await isWorkspaceAdmin(req.userId!);
+    const adminUser = await isAdminOfResource(req.userId!, 'list', listId);
     if (!adminUser && await isResourceLocked('list', listId)) {
       res.status(403).json({ success: false, error: 'This list is locked' });
       return;
     }
 
     if (body.list_id && body.list_id !== listId) {
+      // A task can only move within its own workspace (the tasks trigger would
+      // reject a cross-workspace move anyway; answer 400 instead of a 500).
+      const taskWs = await workspaceIdOf('task', id);
       const { data: destList } = await supabaseAdmin
         .from('lists')
         .select('id, deleted_at')
+        .eq('workspace_id', taskWs)
         .eq('id', body.list_id)
         .single();
       if (!destList || destList.deleted_at) {
@@ -2757,6 +2814,7 @@ router.put('/tasks/:id', async (req: Request, res: Response) => {
     const { data: prior } = await supabaseAdmin
       .from('tasks')
       .select('time_estimate, list_id, title, description, status, priority, due_date, work_date, start_date, task_type_id, assignee_ids, recurrence, recurring_parent_id, recurrence_instance_date, metadata, parent_task_id')
+      .in('workspace_id', await reachableWorkspaceIds())
       .eq('id', id)
       .single();
     validateWorkRange(
@@ -2861,6 +2919,7 @@ router.put('/tasks/:id', async (req: Request, res: Response) => {
     const { data, error } = await supabaseAdmin
       .from('tasks')
       .update(updatePayload)
+      .in('workspace_id', await reachableWorkspaceIds())
       .eq('id', id)
       .select()
       .single();
@@ -2872,6 +2931,7 @@ router.put('/tasks/:id', async (req: Request, res: Response) => {
 
     if (body.due_date !== undefined || body.task_type_id !== undefined || body.status !== undefined) {
       const { data: retired } = await supabaseAdmin.from('notifications').select('id, user_id')
+        .in('workspace_id', await reachableWorkspaceIds())
         .eq('type', 'task_reminder').eq('reference_id', id).eq('is_read', true);
       for (const row of retired || []) req.app.get('io')?.to(`chat_user:${row.user_id}`).emit('notifications_read', { kind: 'ids', ids: [row.id] });
     }
@@ -2905,6 +2965,7 @@ router.put('/tasks/:id', async (req: Request, res: Response) => {
       await supabaseAdmin
         .from('task_list_links')
         .delete()
+        .in('workspace_id', await reachableWorkspaceIds())
         .eq('task_id', id)
         .eq('list_id', body.list_id);
     }
@@ -2944,7 +3005,7 @@ router.put('/tasks/:id', async (req: Request, res: Response) => {
         let workspaceId: string | null = null;
         if (estimateListId) {
           const { data: list } = await supabaseAdmin
-            .from('lists').select('space_id').eq('id', estimateListId).single();
+            .from('lists').select('space_id').in('workspace_id', await reachableWorkspaceIds()).eq('id', estimateListId).single();
           const { data: space } = (list as any)?.space_id
             ? await supabaseAdmin.from('spaces').select('workspace_id').eq('id', (list as any).space_id).single()
             : { data: null as any };
@@ -2980,11 +3041,12 @@ router.put('/tasks/:id', async (req: Request, res: Response) => {
             ?? todayIST();
           const newEstimate: number | null = body.time_estimate ?? null;
           if (templateId !== edited.id) {
-            await supabaseAdmin.from('tasks').update({ time_estimate: newEstimate }).eq('id', templateId);
+            await supabaseAdmin.from('tasks').update({ time_estimate: newEstimate }).in('workspace_id', await reachableWorkspaceIds()).eq('id', templateId);
           }
           await supabaseAdmin
             .from('tasks')
             .update({ time_estimate: newEstimate })
+            .in('workspace_id', await reachableWorkspaceIds())
             .eq('recurring_parent_id', templateId)
             .gte('recurrence_instance_date', anchorDate)
             .neq('id', edited.id);
@@ -3031,7 +3093,7 @@ router.put('/tasks/:id', async (req: Request, res: Response) => {
         const ids = [estimateListId, body.list_id].filter(Boolean) as string[];
         const nameById = new Map<string, string>();
         if (ids.length) {
-          const { data: lists } = await supabaseAdmin.from('lists').select('id, name').in('id', ids);
+          const { data: lists } = await supabaseAdmin.from('lists').select('id, name').in('workspace_id', await reachableWorkspaceIds()).in('id', ids);
           for (const l of (lists || []) as any[]) nameById.set(l.id, l.name);
         }
         events.push({
@@ -3131,15 +3193,16 @@ async function buildListPaths(
   const { data: lists } = await supabaseAdmin
     .from('lists')
     .select('id, name, space_id, folder_id')
+    .in('workspace_id', await reachableWorkspaceIds())
     .in('id', ids);
   const spaceIds = Array.from(new Set((lists || []).map((l: any) => l.space_id).filter(Boolean)));
   const folderIds = Array.from(new Set((lists || []).map((l: any) => l.folder_id).filter(Boolean)));
   const [{ data: spaces }, { data: folders }] = await Promise.all([
     spaceIds.length
-      ? supabaseAdmin.from('spaces').select('id, name, color').in('id', spaceIds)
+      ? supabaseAdmin.from('spaces').select('id, name, color').in('workspace_id', await reachableWorkspaceIds()).in('id', spaceIds)
       : Promise.resolve({ data: [] as any[] }),
     folderIds.length
-      ? supabaseAdmin.from('folders').select('id, name').in('id', folderIds)
+      ? supabaseAdmin.from('folders').select('id, name').in('workspace_id', await reachableWorkspaceIds()).in('id', folderIds)
       : Promise.resolve({ data: [] as any[] }),
   ]);
   const spaceById = new Map((spaces || []).map((s: any) => [s.id, s]));
@@ -3179,6 +3242,7 @@ router.get('/tasks/:id/lists', async (req: Request, res: Response) => {
     const { data: links } = await supabaseAdmin
       .from('task_list_links')
       .select('list_id, created_at')
+      .in('workspace_id', await reachableWorkspaceIds())
       .eq('task_id', id)
       .order('created_at', { ascending: true });
     const linkIds = (links || []).map((l: any) => l.list_id).filter((lid: string) => lid !== primaryListId);
@@ -3219,22 +3283,28 @@ router.post('/tasks/:id/lists', async (req: Request, res: Response) => {
       return;
     }
 
-    const adminUser = await isWorkspaceAdmin(req.userId!);
+    const adminUser = await isAdminOfResource(req.userId!, 'list', primaryListId);
     const targets = Array.from(new Set(parsed.list_ids)).filter((lid) => lid !== primaryListId);
 
     // Drop lists the task is already linked into.
     const { data: existing } = await supabaseAdmin
       .from('task_list_links')
       .select('list_id')
+      .in('workspace_id', await reachableWorkspaceIds())
       .eq('task_id', id);
     const existingIds = new Set((existing || []).map((r: any) => r.list_id));
     const toAdd = targets.filter((lid) => !existingIds.has(lid));
 
+    // Links never cross workspaces: a task added into another workspace's list
+    // would surface to that workspace's members. Destination lists must live in
+    // the task's own workspace (anything else reads as "does not exist").
+    const taskWs = await workspaceIdOf('task', id);
     const inserted: string[] = [];
     for (const lid of toAdd) {
       const { data: destList } = await supabaseAdmin
         .from('lists')
         .select('id, deleted_at')
+        .eq('workspace_id', taskWs)
         .eq('id', lid)
         .single();
       if (!destList || (destList as any).deleted_at) {
@@ -3264,7 +3334,7 @@ router.post('/tasks/:id/lists', async (req: Request, res: Response) => {
     // Activity: one "added to list" event per newly-linked list, name snapshotted.
     if (inserted.length) {
       const nameById = new Map<string, string>();
-      const { data: lists } = await supabaseAdmin.from('lists').select('id, name').in('id', inserted);
+      const { data: lists } = await supabaseAdmin.from('lists').select('id, name').in('workspace_id', await reachableWorkspaceIds()).in('id', inserted);
       for (const l of (lists || []) as any[]) nameById.set(l.id, l.name);
       await logTaskActivity(id, req.userId!, inserted.map((lid) => ({
         event_type: 'list_link_added',
@@ -3308,6 +3378,7 @@ router.delete('/tasks/:id/lists/:listId', async (req: Request, res: Response) =>
     const { error } = await supabaseAdmin
       .from('task_list_links')
       .delete()
+      .in('workspace_id', await reachableWorkspaceIds())
       .eq('task_id', id)
       .eq('list_id', listId);
     if (error) {
@@ -3316,7 +3387,7 @@ router.delete('/tasks/:id/lists/:listId', async (req: Request, res: Response) =>
     }
 
     const { data: removedList } = await supabaseAdmin
-      .from('lists').select('id, name').eq('id', listId).maybeSingle();
+      .from('lists').select('id, name').in('workspace_id', await reachableWorkspaceIds()).eq('id', listId).maybeSingle();
     await logTaskActivity(id, req.userId!, [{
       event_type: 'list_link_removed',
       old_value: { id: listId, name: (removedList as any)?.name ?? null },
@@ -3360,6 +3431,7 @@ router.patch('/tasks/:id/time-tracked', async (req: Request, res: Response) => {
     const { data: existing } = await supabaseAdmin
       .from('tasks')
       .select('time_tracked, list_id, assignee_ids')
+      .in('workspace_id', await reachableWorkspaceIds())
       .eq('id', id)
       .single();
     const oldTotal = (existing as any)?.time_tracked || 0;
@@ -3381,6 +3453,7 @@ router.patch('/tasks/:id/time-tracked', async (req: Request, res: Response) => {
     const { data, error } = await supabaseAdmin
       .from('tasks')
       .update({ time_tracked })
+      .in('workspace_id', await reachableWorkspaceIds())
       .eq('id', id)
       .select()
       .single();
@@ -3400,7 +3473,7 @@ router.patch('/tasks/:id/time-tracked', async (req: Request, res: Response) => {
       }]);
 
       const { data: list } = await supabaseAdmin
-        .from('lists').select('space_id').eq('id', (existing as any).list_id).single();
+        .from('lists').select('space_id').in('workspace_id', await reachableWorkspaceIds()).eq('id', (existing as any).list_id).single();
       const { data: space } = list?.space_id
         ? await supabaseAdmin.from('spaces').select('workspace_id').eq('id', (list as any).space_id).single()
         : { data: null as any };
@@ -3442,6 +3515,7 @@ router.patch('/tasks/:id/time-tracked', async (req: Request, res: Response) => {
               total_work_seconds: existingSummary.total_work_seconds + delta,
               updated_at: new Date().toISOString(),
             })
+            .eq('workspace_id', workspaceId)
             .eq('id', existingSummary.id);
         } else {
           await supabaseAdmin
@@ -3491,7 +3565,7 @@ router.delete('/tasks/:id', async (req: Request, res: Response) => {
       return;
     }
 
-    const adminUser = await isWorkspaceAdmin(req.userId!);
+    const adminUser = await isAdminOfResource(req.userId!, 'list', listId);
     if (!adminUser && await isResourceLocked('list', listId)) {
       res.status(403).json({ success: false, error: 'This list is locked' });
       return;
@@ -3502,9 +3576,9 @@ router.delete('/tasks/:id', async (req: Request, res: Response) => {
     // subtask deletion can surface in the surviving PARENT's feed — the mirror of
     // the subtask_added event written on create.
     const { data: doomed } = await supabaseAdmin
-      .from('tasks').select('parent_task_id, title').eq('id', id).maybeSingle();
+      .from('tasks').select('parent_task_id, title').in('workspace_id', await reachableWorkspaceIds()).eq('id', id).maybeSingle();
 
-    const { error } = await supabaseAdmin.from('tasks').delete().eq('id', id);
+    const { error } = await supabaseAdmin.from('tasks').delete().in('workspace_id', await reachableWorkspaceIds()).eq('id', id);
 
     if (error) {
       res.status(500).json({ success: false, error: error.message });
@@ -3527,6 +3601,7 @@ router.delete('/tasks/:id', async (req: Request, res: Response) => {
       await supabaseAdmin
         .from('notifications')
         .delete()
+        .in('workspace_id', await reachableWorkspaceIds())
         .eq('reference_type', 'task')
         .eq('reference_id', id);
     } catch (e) {
@@ -3569,6 +3644,7 @@ router.get('/tasks/:id/assignable-users', async (req: Request, res: Response) =>
     const { data: list } = await supabaseAdmin
       .from('lists')
       .select('folder_id, space_id')
+      .in('workspace_id', await reachableWorkspaceIds())
       .eq('id', listId)
       .single();
     if ((list as any)?.folder_id) {
@@ -3586,6 +3662,7 @@ router.get('/tasks/:id/assignable-users', async (req: Request, res: Response) =>
     const { data: memberships, error } = await supabaseAdmin
       .from('resource_memberships')
       .select('user_id, users!resource_memberships_user_id_fkey(id, display_name, email, avatar_url, user_type, is_admin, status, created_at)')
+      .in('workspace_id', await reachableWorkspaceIds())
       .or(orClauses);
 
     if (error) {
@@ -3629,6 +3706,7 @@ router.get('/tasks/:id/comments', async (req: Request, res: Response) => {
     const { data, error } = await supabaseAdmin
       .from('task_comments')
       .select('*, users(id, display_name, email, avatar_url)')
+      .in('workspace_id', await reachableWorkspaceIds())
       .eq('task_id', taskId)
       .order('created_at');
 
@@ -3678,26 +3756,31 @@ router.get('/tasks/:id/activity', async (req: Request, res: Response) => {
       supabaseAdmin
         .from('task_activity')
         .select('id, user_id, event_type, field, old_value, new_value, created_at')
+        .in('workspace_id', await reachableWorkspaceIds())
         .eq('task_id', taskId)
         .order('created_at', { ascending: false }),
       supabaseAdmin
         .from('task_comments')
         .select('id, user_id, created_at')
+        .in('workspace_id', await reachableWorkspaceIds())
         .eq('task_id', taskId)
         .order('created_at', { ascending: false }),
       supabaseAdmin
         .from('task_estimate_changes')
         .select('id, user_id, old_estimate, new_estimate, created_at')
+        .in('workspace_id', await reachableWorkspaceIds())
         .eq('task_id', taskId)
         .order('created_at', { ascending: false }),
       supabaseAdmin
         .from('tasks')
         .select('created_by, created_at')
+        .in('workspace_id', await reachableWorkspaceIds())
         .eq('id', taskId)
         .maybeSingle(),
       supabaseAdmin
         .from('task_time_entries')
         .select('id, user_id, started_at, stopped_at, duration_seconds, source, note, edited_at, created_at')
+        .in('workspace_id', await reachableWorkspaceIds())
         .eq('task_id', taskId)
         .order('stopped_at', { ascending: false })
         .limit(50),
@@ -3840,8 +3923,8 @@ router.delete('/task-comments/:id', requirePermission('can_delete_messages'), as
     // Resolve the parent task before the comment row is gone, so the deletion can
     // be attributed to the right task's feed.
     const { data: comment } = await supabaseAdmin
-      .from('task_comments').select('task_id').eq('id', id).maybeSingle();
-    const { error } = await supabaseAdmin.from('task_comments').delete().eq('id', id);
+      .from('task_comments').select('task_id').in('workspace_id', await reachableWorkspaceIds()).eq('id', id).maybeSingle();
+    const { error } = await supabaseAdmin.from('task_comments').delete().in('workspace_id', await reachableWorkspaceIds()).eq('id', id);
 
     if (error) {
       res.status(500).json({ success: false, error: error.message });
@@ -3868,6 +3951,7 @@ router.patch('/tasks/:id/focus', async (req: Request, res: Response) => {
     const { data, error } = await supabaseAdmin
       .from('tasks')
       .update({ focused_at: focused ? new Date().toISOString() : null })
+      .in('workspace_id', await reachableWorkspaceIds())
       .eq('id', id)
       .select('*')
       .single();
@@ -3900,6 +3984,7 @@ router.patch('/tasks/:id/snooze', async (req: Request, res: Response) => {
     const { data, error } = await supabaseAdmin
       .from('tasks')
       .update({ snoozed_until: until })
+      .in('workspace_id', await reachableWorkspaceIds())
       .eq('id', id)
       .select('*')
       .single();
@@ -3930,6 +4015,7 @@ router.post('/tasks/:id/build-dispatch', async (req: Request, res: Response) => 
     const { data: task } = await supabaseAdmin
       .from('tasks')
       .select('id, status, list_id, metadata')
+      .in('workspace_id', await reachableWorkspaceIds())
       .eq('id', id)
       .maybeSingle();
     if (!task) {
@@ -3959,6 +4045,7 @@ router.post('/tasks/:id/build-dispatch', async (req: Request, res: Response) => 
     const { data: updated, error } = await supabaseAdmin
       .from('tasks')
       .update(patch)
+      .in('workspace_id', await reachableWorkspaceIds())
       .eq('id', id)
       .select('*')
       .single();
