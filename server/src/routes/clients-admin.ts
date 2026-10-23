@@ -116,7 +116,9 @@ async function assignPlansToClient(clientId: string, planIds: string[]) {
   return { error: null };
 }
 
-async function enrichClient(
+// Exported for the Squad Hub SaaS bridge (routes/bridge/business.ts), which
+// serves a business's cards from this same matcher instead of re-deriving it.
+export async function enrichClient(
   client: any,
   opts: { includeArchived?: boolean; withCardLifecycle?: boolean } = {},
 ) {

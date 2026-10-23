@@ -36,6 +36,9 @@ export interface GrossProfitParams {
   currency?: string | null;
   /** Filter to a subscription role slug (e.g. 'designer', 'video_editor'). */
   subscription?: string | null;
+  /** Restrict the ledger to these cards (e.g. one business's cards, for the
+   *  SaaS bridge's per-business payments view). Omitted = every card. */
+  cardIds?: string[] | null;
 }
 
 export interface PeriodSpec {
@@ -209,11 +212,18 @@ export async function computeGrossProfit(
 
   // Ledger of engagements. Scale is small; fetch all and let activeDaysInMonth
   // decide membership (it correctly handles null work dates via the fallbacks).
-  const { data, error } = await supabaseAdmin
+  let termsQuery = supabaseAdmin
     .from('subscription_assignment_terms')
     .select(
       'id, card_id, recipient_name, business_name, subscription_name, assigned_date, unassigned_date, work_start_date, work_end_date, status, plan_snapshot, partner_price, subscription_price, currency',
     );
+  if (params.cardIds) {
+    termsQuery = termsQuery.in(
+      'card_id',
+      params.cardIds.length ? params.cardIds : ['00000000-0000-0000-0000-000000000000'],
+    );
+  }
+  const { data, error } = await termsQuery;
   if (error) throw new Error(error.message);
   const terms = (data || []) as TermRow[];
 
