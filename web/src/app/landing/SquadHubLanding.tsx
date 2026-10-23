@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import Icon, { type IconName } from './PreviewIcon';
+import { useSignupOpen } from '../../hooks/useSignupConfig';
 import './landing.css';
 import './asset.css';
 
@@ -125,6 +126,7 @@ function FeatureOverview() {
 
 export default function SquadHubLanding() {
   const [menuOpen, setMenuOpen] = useState(false);
+  const signupOpen = useSignupOpen() === true;
   return <div className="sl-page">
     <a href="#main" className="sl-skip">Skip to content</a>
     <header className="sl-header"><div className="sl-nav sl-container"><a href="#main" aria-label="SquadHub home"><Brand /></a><nav aria-label="Main navigation" className={menuOpen ? 'sl-nav-links is-open' : 'sl-nav-links'}><a href="#why-squadhub" onClick={() => setMenuOpen(false)}>Overview</a><a href="#essentials" onClick={() => setMenuOpen(false)}>Features</a><a href="#your-day" onClick={() => setMenuOpen(false)}>Your day</a><a href="#faq" onClick={() => setMenuOpen(false)}>FAQ</a></nav><div className="sl-nav-actions"><Link href="/login" className="sl-login">Log in</Link><Link href="/app" className="sl-button sl-button-small">Get started</Link><button className="sl-menu-toggle" aria-label={menuOpen ? 'Close menu' : 'Open menu'} aria-expanded={menuOpen} onClick={() => setMenuOpen(open => !open)}><Icon name={menuOpen ? 'close' : 'panel'} size={22} /></button></div></div></header>
@@ -146,7 +148,7 @@ export default function SquadHubLanding() {
         ['Can I use it outside my browser?', 'Yes. SquadHub has a desktop companion and mobile apps, so your workspace can stay close whether you’re at your desk or on the move. You can find the available downloads from the app download page.'],
         ['How do I get into my workspace?', 'Use “Open SquadHub” to enter the app, or log in with your SquadHub account. If you’re new, the sign-up page will help you create an account.'],
       ].map(([question, answer]) => <details key={question}><summary>{question}<span className="sl-faq-plus"><Icon name="plus" size={18} /></span></summary><p>{answer}{question === 'Can I use it outside my browser?' && <> <Link href="/download-app">View app downloads <Icon name="upRight" size={12} /></Link></>}</p></details>)}</div></section>
-      <section className="sl-final-cta"><div className="sl-container"><span className="sl-section-label">Get started</span><h2>Make room for<br />your best work.</h2><p>Your people. Your projects. Your next big thing.<br />Give them a shared home.</p><Link href="/app" className="sl-button sl-button-white">Open SquadHub <Icon name="arrow" size={18} /></Link><span className="sl-final-note">New to the squad? <Link href="/signup">Create an account <Icon name="upRight" size={12} /></Link></span><span className="sl-cta-watermark" aria-hidden="true">SH.</span></div></section>
+      <section className="sl-final-cta"><div className="sl-container"><span className="sl-section-label">Get started</span><h2>Make room for<br />your best work.</h2><p>Your people. Your projects. Your next big thing.<br />Give them a shared home.</p><Link href="/app" className="sl-button sl-button-white">Open SquadHub <Icon name="arrow" size={18} /></Link>{signupOpen ? <span className="sl-final-note">New to the squad? <Link href="/signup">Create an account <Icon name="upRight" size={12} /></Link></span> : <span className="sl-final-note">New to the squad? Open SquadHub from your SquadHire account.</span>}<span className="sl-cta-watermark" aria-hidden="true">SH.</span></div></section>
     </main>
     <footer className="sl-footer sl-container"><div><a href="#main" aria-label="SquadHub home"><Brand /></a><p>A shared space. A stronger squad.</p></div><nav aria-label="Footer navigation"><a href="#workspace">The workspace</a><Link href="/download-app">Get the app <Icon name="upRight" size={13} /></Link><Link href="/login">Log in</Link></nav><span>© {new Date().getFullYear()} SquadHub<br /><span>Powered by UpSquad</span></span></footer>
   </div>;

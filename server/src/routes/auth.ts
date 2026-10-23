@@ -13,6 +13,7 @@ import { startSquadhireBusinessSession } from '../utils/squadhireBusinessSession
 import { redeemSquadhireTalentSsoCode } from '../utils/squadhireTalentSso';
 import { startSquadhireTalentSession } from '../utils/squadhireTalentSession';
 import { requireAuth } from '../middleware/auth';
+import { config } from '../config';
 import { rateLimit } from '../utils/rateLimit';
 import * as passwordReset from '../services/passwordReset';
 import type { UserType } from '@squadhub/shared';
@@ -48,10 +49,37 @@ const ssoCodeSchema = z.object({
   code: z.string().min(1),
 });
 
+export const SIGNUP_CLOSED_MESSAGE =
+  'Sign-up is not open yet. SquadHub accounts are created through SquadHire — open SquadHub from your SquadHire account to sign in.';
+
+// GET /auth/signup-config — lets the web app hide self-serve signup while it is
+// closed (PUBLIC_SIGNUP_ENABLED).
+router.get('/signup-config', (_req: Request, res: Response) => {
+  res.json({ success: true, data: { public_signup_enabled: config.publicSignupEnabled } });
+});
+
+/** A pending, unexpired workspace invitation exists for this email. */
+async function hasPendingInvitation(email: string): Promise<boolean> {
+  const { data } = await supabaseAdmin
+    .from('invitations')
+    .select('expires_at')
+    .ilike('email', email)
+    .eq('status', 'pending'); // tenant-scope: invitee lookup by email across inviting workspaces (existence check only)
+  return ((data || []) as { expires_at: string }[]).some((inv) => new Date(inv.expires_at) > new Date());
+}
+
 // POST /auth/register
 router.post('/register', async (req: Request, res: Response) => {
   try {
     const body = registerSchema.parse(req.body);
+
+    // Self-serve signup is closed unless PUBLIC_SIGNUP_ENABLED=true. People a
+    // workspace invited can still create their account (that's how teams add
+    // members); everyone else comes in through SquadHire SSO.
+    if (!config.publicSignupEnabled && !(await hasPendingInvitation(body.email))) {
+      res.status(403).json({ success: false, code: 'SIGNUP_DISABLED', error: SIGNUP_CLOSED_MESSAGE });
+      return;
+    }
 
     // Create user in Supabase Auth (admin API for user creation)
     const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({

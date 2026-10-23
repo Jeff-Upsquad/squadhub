@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import api from '../services/api';
+import { useSignupOpen, SIGNUP_CLOSED_MESSAGE } from '../hooks/useSignupConfig';
 
 export default function SignupPage() {
   const [displayName, setDisplayName] = useState('');
@@ -11,6 +12,10 @@ export default function SignupPage() {
   const [loading, setLoading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [wasInvited, setWasInvited] = useState(false);
+  // Public signup is closed in Phase 1 (PUBLIC_SIGNUP_ENABLED). The form stays
+  // reachable for people a workspace invited — the server only admits them.
+  const signupOpen = useSignupOpen();
+  const [hasInvite, setHasInvite] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -80,19 +85,55 @@ export default function SignupPage() {
     );
   }
 
+  const brand = (
+    <div className="flex items-center gap-2">
+      <span className="inline-flex h-6 w-6 items-center justify-center rounded-[7px] bg-[#0F172B] text-[10px] font-bold text-white dark:bg-white dark:text-[#0F172B]">
+        SH
+      </span>
+      <div className="flex flex-col leading-tight">
+        <p className="font-[family-name:var(--font-display)] text-base font-semibold tracking-tight text-[#0F172B] dark:text-foreground">
+          SquadHub
+        </p>
+        <p className="text-[11px] text-[#62748E] dark:text-foreground-muted">Powered by UpSquad</p>
+      </div>
+    </div>
+  );
+
+  if (signupOpen === null) return brand;
+
+  if (signupOpen === false && !hasInvite) {
+    return (
+      <>
+        {brand}
+        <div className="w-full rounded-2xl border border-[#E2E8F0] bg-white px-8 py-10 text-center shadow-md ring-1 ring-black/5 dark:border-divider dark:bg-surface dark:ring-white/5">
+          <h1 className="font-[family-name:var(--font-display)] text-xl font-semibold tracking-tight text-[#0F172B] sm:text-2xl dark:text-foreground">
+            Sign up isn&apos;t open yet
+          </h1>
+          <p className="mt-2 text-sm text-[#62748E] dark:text-foreground-muted">{SIGNUP_CLOSED_MESSAGE}</p>
+          <Link
+            href="/login"
+            className="mt-6 inline-flex h-11 items-center justify-center rounded-lg bg-[#2962FF] px-6 text-sm font-semibold text-white shadow-sm transition hover:bg-[#1E4BD8]"
+          >
+            Go to Sign In
+          </Link>
+          <p className="mt-6 text-sm text-[#62748E] dark:text-foreground-muted">
+            Invited to a workspace?{' '}
+            <button
+              type="button"
+              onClick={() => setHasInvite(true)}
+              className="font-medium text-[#2962FF] hover:underline dark:text-[#5B8BFF]"
+            >
+              Create your account with the invited email
+            </button>
+          </p>
+        </div>
+      </>
+    );
+  }
+
   return (
     <>
-      <div className="flex items-center gap-2">
-        <span className="inline-flex h-6 w-6 items-center justify-center rounded-[7px] bg-[#0F172B] text-[10px] font-bold text-white dark:bg-white dark:text-[#0F172B]">
-          SH
-        </span>
-        <div className="flex flex-col leading-tight">
-          <p className="font-[family-name:var(--font-display)] text-base font-semibold tracking-tight text-[#0F172B] dark:text-foreground">
-            SquadHub
-          </p>
-          <p className="text-[11px] text-[#62748E] dark:text-foreground-muted">Powered by UpSquad</p>
-        </div>
-      </div>
+      {brand}
       <div className="w-full rounded-2xl border border-[#E2E8F0] bg-white px-8 py-10 shadow-md ring-1 ring-black/5 dark:border-divider dark:bg-surface dark:ring-white/5">
         <h1 className="text-center font-[family-name:var(--font-display)] text-xl font-semibold tracking-tight text-[#0F172B] sm:text-2xl dark:text-foreground">
           Create your account

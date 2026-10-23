@@ -7,6 +7,7 @@ import { useRouter } from 'next/navigation';
 import api from '../services/api';
 import { useAuthStore } from '../stores/authStore';
 import { loginRedirect } from '../lib/loginRedirect';
+import { useSignupOpen, SIGNUP_CLOSED_MESSAGE } from '../hooks/useSignupConfig';
 
 type PendingReset = {
   user: unknown;
@@ -25,6 +26,7 @@ export default function LoginPage() {
   const [passwordVisible, setPasswordVisible] = useState(false);
   const router = useRouter();
   const setAuth = useAuthStore((s) => s.setAuth);
+  const signupOpen = useSignupOpen() === true;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -175,9 +177,13 @@ export default function LoginPage() {
           <div className="msh-login-foot">
             <b>Part of the Squad Hub suite</b>
             <span>Your login connects you to tasks, chat, and your team’s workspace across Squad Hub.</span>
-            <p>
-              Don’t have an account? <Link href="/signup">Sign up</Link>
-            </p>
+            {signupOpen ? (
+              <p>
+                Don’t have an account? <Link href="/signup">Sign up</Link>
+              </p>
+            ) : (
+              <p>New to SquadHub? {SIGNUP_CLOSED_MESSAGE}</p>
+            )}
           </div>
         </div>
       </div>
@@ -289,10 +295,16 @@ export default function LoginPage() {
         )}
 
         <p className="mt-6 text-center text-sm text-[#62748E] dark:text-foreground-muted">
-          Don't have an account?{' '}
-          <Link href="/signup" className="font-medium text-[#2962FF] hover:underline dark:text-[#5B8BFF]">
-            Sign up
-          </Link>
+          {signupOpen ? (
+            <>
+              Don't have an account?{' '}
+              <Link href="/signup" className="font-medium text-[#2962FF] hover:underline dark:text-[#5B8BFF]">
+                Sign up
+              </Link>
+            </>
+          ) : (
+            <>New to SquadHub? {SIGNUP_CLOSED_MESSAGE}</>
+          )}
         </p>
       </div>
       </div>

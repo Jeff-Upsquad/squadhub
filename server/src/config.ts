@@ -28,6 +28,12 @@ export const config = {
   clientUrl: process.env.CLIENT_URL || 'http://localhost:3000',
   webAppUrl: process.env.WEB_APP_URL || process.env.CLIENT_URL || 'http://localhost:3000',
 
+  // Self-serve signup. Product decision (Phase 1): accounts come from
+  // SquadHire (SSO creates them); public signup stays OFF until launch. When
+  // off, POST /auth/register only admits emails with a pending workspace
+  // invitation. Set PUBLIC_SIGNUP_ENABLED=true to open it.
+  publicSignupEnabled: process.env.PUBLIC_SIGNUP_ENABLED === 'true',
+
   // Squad Hub (internal) bridge — see docs/bridge-contract.md. Bridge is
   // disabled (routes 503 / outbound no-op) while SAAS_BRIDGE_SECRET is unset.
   hubApiUrl: process.env.HUB_API_URL || '',
