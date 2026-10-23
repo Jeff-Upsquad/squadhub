@@ -9,8 +9,6 @@ import InboxMessageDetail from './inbox/InboxMessageDetail';
 import DesktopNotificationsBanner from '../../components/DesktopNotificationsBanner';
 import InstallPwaPrompt from '../../components/InstallPwaPrompt';
 import { useIsMobile } from '../../hooks/useIsMobile';
-import { openSopFromNotification, openSopSource, sopSourceFromNotification, sopTargetFromNotification } from '../../lib/openSopResource';
-import SopNotifCard from '../../components/sop/SopNotifCard';
 
 export type Notification = {
   id: string;
@@ -115,7 +113,6 @@ export function chatTargetFor(n: Notification): { id: string; kind: ChatKind } |
 // hidden, otherwise the click appears dead.
 export function hasOpenSource(n: Notification): boolean {
   if (n.reference_type === 'task' && n.metadata?.task_id) return true;
-  if (sopTargetFromNotification(n)) return true;
   return chatTargetFor(n) !== null;
 }
 
@@ -357,10 +354,6 @@ export default function InboxView({
       setActiveTask(n.metadata.task_id as string);
       return;
     }
-    if (sopTargetFromNotification(n)) {
-      openSopFromNotification(n);
-      return;
-    }
     const target = chatTargetFor(n);
     if (target) {
       setActiveChannel(target.id, target.kind);
@@ -436,23 +429,7 @@ export default function InboxView({
     </label>
   );
 
-  const renderRow = (n: Notification) =>
-    n.type === 'sop_flag' || n.type === 'sop_strike' ? (
-      <SopNotifCard
-        key={n.id}
-        n={n}
-        active={current?.id === n.id}
-        onSelect={() => onRowClick(n)}
-        onOpenSop={() => {
-          if (!n.is_read) markRead.mutate(n.id);
-          openSopFromNotification(n);
-        }}
-        onOpenSource={sopSourceFromNotification(n) ? () => {
-          if (!n.is_read) markRead.mutate(n.id);
-          openSopSource(n, { setHomeView });
-        } : undefined}
-      />
-    ) : (
+  const renderRow = (n: Notification) => (
       <NotifRow
         key={n.id}
         n={n}

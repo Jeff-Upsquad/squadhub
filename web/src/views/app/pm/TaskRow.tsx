@@ -25,8 +25,6 @@ import EstimatePopover from '../../../components/pm/EstimatePopover';
 import LogTimePopover from '../../../components/pm/LogTimePopover';
 import TaskTypeDropdown from '../../../components/pm/TaskTypeDropdown';
 import { formatDuration } from '../../../lib/timeDuration';
-import SopBreachReportModal from '../../../components/sop/SopBreachReportModal';
-import SopFlagDetailModal from '../../../components/sop/SopFlagDetailModal';
 import { GoalTaskFlag } from '../goals/GoalIntegration';
 import { useGoalsUI } from '../goals/goalsStore';
 import GoalIcon from '../goals/GoalIcons';
@@ -159,8 +157,6 @@ export default function TaskRow({
   // has open subtasks / unchecked checklist items. Blocking: no complete-anyway.
   const [incompletePrompt, setIncompletePrompt] = useState<{ rect: DOMRect; subtasks: number; checklist: number } | null>(null);
   const [moreOpen, setMoreOpen] = useState(false);
-  const [showReport, setShowReport] = useState(false);
-  const [flagDetail, setFlagDetail] = useState<any>(null);
   const [moreAnchor, setMoreAnchor] = useState<DOMRect | null>(null);
   const currentUser = useAuthStore((s) => s.user);
   const qc = useQueryClient();
@@ -992,12 +988,6 @@ export default function TaskRow({
                 >
                   <GoalIcon name="flag" size={13} /> Add to a goal
                 </button>
-                <button
-                  onClick={() => { setMoreOpen(false); setShowReport(true); }}
-                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-[12.5px] text-[var(--sh-ink)] hover:bg-[var(--sh-hair-3)]"
-                >
-                  <span className="text-[11px]">🚩</span> Report SOP breach
-                </button>
                 <div className="border-t border-[var(--sh-hair)] px-3 py-1 text-[10px] text-[var(--sh-ink-3)]">Task: {task.title.slice(0, 30)}</div>
               </div>
             </>
@@ -1162,20 +1152,6 @@ export default function TaskRow({
           onClose={() => setLogTimeAnchor(null)}
         />
       )}
-
-      {showReport && (
-        <SopBreachReportModal
-          targetUserId={assignees[0]?.id || (task as any).created_by || currentUser?.id || ''}
-          targetUserName={assignees[0]?.display_name || assignees[0]?.email || 'assignee'}
-          sourceKind="task"
-          sourceId={task.id}
-          taskId={task.id}
-          listId={effectiveListId}
-          onClose={() => setShowReport(false)}
-          onReported={(detail) => setFlagDetail(detail)}
-        />
-      )}
-      {flagDetail && <SopFlagDetailModal detail={flagDetail} onClose={() => setFlagDetail(null)} />}
     </>
   );
 }

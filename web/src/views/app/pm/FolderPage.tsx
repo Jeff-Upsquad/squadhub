@@ -4,7 +4,6 @@ import type { Folder, List, SpaceStatus, Task } from '@squadhub/shared';
 import api from '../../../services/api';
 import { usePMStore } from '../../../stores/pmStore';
 import { useSpace } from '../../../hooks/useSpaces';
-import ClientFolderReport from './client-design/ClientFolderReport';
 import TaskOverview from './TaskOverview';
 
 type FolderWithLists = Folder & { lists?: List[] };
@@ -86,12 +85,6 @@ export default function FolderPage({ folderId: propFolderId }: { folderId?: stri
         </div>
       </div>
     );
-  }
-
-  // A client folder holds no direct lists — its child design/video spaces hang
-  // off it. Render the per-space report (tabbed) instead of the empty task list.
-  if (folder?.folder_type === 'client') {
-    return <ClientFolderReport folder={folder} />;
   }
 
   return (

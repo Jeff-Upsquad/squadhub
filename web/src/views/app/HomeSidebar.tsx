@@ -12,7 +12,6 @@ import { useTabsStore } from '../../stores/tabsStore';
 import { useAuthStore } from '../../stores/authStore';
 import { useRecentOpensStore } from '../../stores/recentOpensStore';
 import { wantsNewTab, buildListSnapshot, buildFolderSnapshot, buildSpaceSnapshot, buildChatSnapshot, buildAppSnapshot } from '../../lib/tabSnapshots';
-import { useCardsAttention } from '@/views/admin/useCardsAttention';
 import SpaceTree, { WorkspaceTree } from './pm/SpaceTree';
 import TreeCollapse from '../../components/TreeCollapse';
 import CreateSpaceModal from './pm/CreateSpaceModal';
@@ -28,9 +27,6 @@ import { useDms } from '../../hooks/useDms';
 import NewDmModal from './chat/NewDmModal';
 import DmListItem from './chat/DmListItem';
 import UnreadBadge from '../../components/UnreadBadge';
-import { useCloseCrmChat, useCrmChats } from '../../hooks/useCrmChats';
-import TeamChatAppBadge from './teamchat/TeamChatAppBadge';
-import { useChatSidePanelStore } from '../../stores/chatSidePanelStore';
 
 // ---- Props ----
 interface HomeSidebarProps {
@@ -406,10 +402,6 @@ export default function HomeSidebar({
     });
   };
 
-  // Requirement Cards is the one app with a queue behind it — its tile carries
-  // how much of the pipeline is waiting on us. Skipped when it isn't on screen.
-  const cardsVisible = !appsCollapsed && appTiles.some((a) => a.slug === 'leads') || (appsMoreOpen && appMore.some((a) => a.slug === 'leads'));
-  const cardsAttention = useCardsAttention(cardsVisible);
 
   // ---- Favorites ----
   const favoriteItemsOrder = usePMStore((s) => s.favoriteItemsOrder);
@@ -516,18 +508,6 @@ export default function HomeSidebar({
     onLaunchApp(app);
   };
 
-  const { data: crmChats = [] } = useCrmChats(workspaceId);
-  const closeCrmChat = useCloseCrmChat(workspaceId);
-  const openChatPanel = useChatSidePanelStore((s) => s.open);
-  const activePanelChannelId = useChatSidePanelStore((s) => (s.isOpen ? s.channelId : null));
-  const openCrmChat = (ch: (typeof crmChats)[number]) =>
-    openChatPanel({
-      channelId: ch.channel_id,
-      containerLabel: ch.subtitle ? `${ch.label} · ${ch.subtitle}` : ch.label,
-      isCrmChat: true,
-      crmEntityType: ch.entity_type,
-      crmEntityId: ch.entity_id,
-    });
 
   // ---- Sidebar search ----
   const [findOpen, setFindOpen] = useState(false);
@@ -631,7 +611,6 @@ export default function HomeSidebar({
     }));
     visibleChannels.forEach((ch) => add({ key: `c:${ch.id}`, name: ch.name, d: ICON.channel, meta: 'Channel', open: go(() => onSelectChannel(ch.id)) }));
     dms.forEach((dm) => add({ key: `d:${dm.id}`, name: dmLabel(dm), d: ICON.chat, meta: 'Direct message', open: go(() => onSelectDm(dm.id)) }));
-    crmChats.forEach((ch) => add({ key: `cr:${ch.channel_id}`, name: ch.label, d: ICON.chat, meta: 'CRM chat', open: go(() => openCrmChat(ch)) }));
 
     const seen = new Set<string>();
     return entries
@@ -643,7 +622,7 @@ export default function HomeSidebar({
       .slice(0, 30);
     // Rebuilt per keystroke — the index is small and reads fresh query cache.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [findOpen, q, availableApps, sortedFavorites, workspaces, areas, sharedItems, visibleChannels, dms, crmChats, isClient, isPartner, meId]);
+  }, [findOpen, q, availableApps, sortedFavorites, workspaces, areas, sharedItems, visibleChannels, dms, isClient, isPartner, meId]);
 
   const highlight = (name: string) => {
     const i = name.toLowerCase().indexOf(q);
@@ -823,20 +802,6 @@ export default function HomeSidebar({
                 >
                   <AppIcon paths={app.paths} className="h-[13px] w-[13px] shrink-0" />
                   <span className="min-w-0 truncate">{app.name}</span>
-                  {app.slug === 'leads' && cardsAttention.total > 0 && (
-                    <span
-                      title={cardsAttention.parts.join(' · ')}
-                      className="absolute -right-1 -top-1 grid h-[14px] min-w-[14px] place-items-center rounded-full px-[3px] text-[9px] font-bold text-[#0a0a0a] shadow-[0_0_0_2px_var(--sidebar)]"
-                      style={{ background: 'var(--color-sh-warning)' }}
-                    >
-                      {cardsAttention.total > 99 ? '99+' : cardsAttention.total}
-                    </span>
-                  )}
-                  {(app.slug === 'squadcrm-teamchat' || app.slug === 'squadhire-teamchat') && (
-                    <span className="absolute -right-1 -top-1 flex">
-                      <TeamChatAppBadge source={app.slug === 'squadcrm-teamchat' ? 'crm' : 'shcrm'} />
-                    </span>
-                  )}
                 </button>
               );
             })}
@@ -1144,49 +1109,6 @@ export default function HomeSidebar({
             </div>
             {showNewDm && <NewDmModal workspaceId={workspaceId} onClose={() => setShowNewDm(false)} />}
 
-            {/* ---- CRM Chats ---- */}
-            <SectionLabel title="CRM Chats" />
-            <div className="px-2">
-              {crmChats.length === 0 ? (
-                <p className="px-2 py-2 text-[11.5px] leading-snug text-[var(--sh-ink-4)]">
-                  No open CRM chats. Open a deal or contact in CRM and start a team chat.
-                </p>
-              ) : (
-                crmChats.map((ch) => {
-                  const isActive = activePanelChannelId === ch.channel_id;
-                  return (
-                    <div key={ch.channel_id} className="sb-tree-node relative">
-                      <button
-                        type="button"
-                        title={ch.label}
-                        onClick={() => openCrmChat(ch)}
-                        className={`${ROW} gap-2 ${isActive ? ROW_ACTIVE : ROW_IDLE}`}
-                      >
-                        <span
-                          className={`h-2 w-2 shrink-0 rounded-full ${
-                            ch.entity_type === 'crm_deal' ? 'bg-indigo-500' : ch.entity_type === 'crm_contact' ? 'bg-sky-500' : 'bg-emerald-600'
-                          }`}
-                        />
-                        <span className="truncate">{ch.label}</span>
-                      </button>
-                      <div className="sb-row-acts sb-row-acts--row">
-                        <button
-                          type="button"
-                          title="Close chat"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            closeCrmChat.mutate(ch.channel_id);
-                          }}
-                          className="grid h-[18px] w-[18px] place-items-center rounded text-[var(--sh-ink-4)] transition hover:text-[var(--sh-ink)]"
-                        >
-                          ×
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })
-              )}
-            </div>
           </>
         )}
       </div>

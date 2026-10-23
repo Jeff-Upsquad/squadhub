@@ -5,8 +5,6 @@
   "scripts": {
     "dev": "next dev",
     "dev:preview": "SQUADHUB_NEXT_DIST_DIR=.next-ui-preview next dev --port 3010",
-    "check:shared-imports": "node scripts/check-shared-admin-imports.mjs",
-    "prebuild": "node scripts/check-shared-admin-imports.mjs",
     "build": "next build",
     "start": "next start",
     "lint": "eslint src/"

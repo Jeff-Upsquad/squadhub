@@ -1,3 +1,8 @@
+// TODO(bridge): Hub-owned data. In the SaaS this screen is served by Squad Hub
+// over the server-to-server bridge (docs/bridge-contract.md: business cards,
+// talent opportunities/assignments, partner payouts, support tickets). Until the
+// SaaS server proxies those /bridge/v1 calls, its routes answer 501 and this
+// screen shows its empty/error state.
 import { useMemo, useState, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import api from '../../../services/api';

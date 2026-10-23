@@ -2,7 +2,7 @@ import { useState } from 'react';
 import type { TeamTimerStatus } from '@squadhub/shared';
 import TimerDisplay from '../checkin/TimerDisplay';
 import { useAuthStore } from '../../../stores/authStore';
-import DmSidePanel, { type DmTarget } from '../check-ins/DmSidePanel';
+import DmSidePanel, { type DmTarget } from '../chat/DmSidePanel';
 
 const TYPE_LABELS: Record<string, { label: string; color: string; bg: string }> = {
   work: { label: 'Working', color: 'text-blue-700 dark:text-blue-300', bg: 'bg-blue-100 dark:bg-blue-500/20' },

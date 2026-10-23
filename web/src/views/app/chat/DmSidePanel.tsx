@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useWorkspaceStore } from '../../../stores/workspaceStore';
 import { useCreateDm } from '../../../hooks/useDms';
-import ChatPanel from '../chat/ChatPanel';
+import ChatPanel from './ChatPanel';
 
 export interface DmTarget {
   id: string;

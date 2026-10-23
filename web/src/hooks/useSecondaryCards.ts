@@ -3,7 +3,6 @@ import type { Task } from '@squadhub/shared';
 import { useMyTasksSummary } from './useMyTasksSummary';
 import { useUpdateTask } from './useTasks';
 import { usePMStore } from '../stores/pmStore';
-import { useLearningStore } from '../stores/learningStore';
 import { formatDated, formatTaskDates } from '../views/app/pm/taskHelpers';
 import { isFutureDay, isToday, isTaskFocused } from '../lib/taskGrouping';
 import api from '../services/api';
@@ -64,7 +63,6 @@ export function useSecondaryCards(): SecondaryCardsResult {
   const setPeekTask = usePMStore((s) => s.setPeekTask);
   const setActiveSecondaryCard = usePMStore((s) => s.setActiveSecondaryCard);
   const updateTask = useUpdateTask(null);
-  const setLearningTarget = useLearningStore((s) => s.setLearningTarget);
   const tz = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC', []);
 
   return useMemo<SecondaryCardsResult>(() => {
@@ -93,18 +91,6 @@ export function useSecondaryCards(): SecondaryCardsResult {
         kind,
         task: t,
         open: async () => {
-          if (t.source_kind === 'course' || t.source_kind === 'sop' || t.source_kind === 'post' || t.source_kind === 'knowledge') {
-            try {
-              const res = await api.get(`/lms/task-target?task_id=${t.id}`);
-              const target = res.data.data as { item_id: string; lesson_id: string | null; section_anchor: string | null };
-              if (target?.item_id) {
-                setLearningTarget({ itemId: target.item_id, lessonId: target.lesson_id, sectionAnchor: target.section_anchor });
-                setActiveSecondaryCard(null);
-                window.dispatchEvent(new CustomEvent('squadhub:open-resource'));
-                return;
-              }
-            } catch { /* fall through to normal task open */ }
-          }
           // Open in the lister: keep the secondary card panel open behind and
           // show the full task detail as a peek (desktop) so it reads exactly
           // like DashboardListPanel rows. Mobile has no peek layer, so use the
@@ -179,5 +165,5 @@ export function useSecondaryCards(): SecondaryCardsResult {
       knowledge: { items: sourceCard('knowledge'), isLoading },
       workOverdue: { items: workOverdue, isLoading },
     };
-  }, [data, isLoading, tz, setActiveTask, setPeekTask, setActiveSecondaryCard, updateTask, setLearningTarget]);
+  }, [data, isLoading, tz, setActiveTask, setPeekTask, setActiveSecondaryCard, updateTask]);
 }

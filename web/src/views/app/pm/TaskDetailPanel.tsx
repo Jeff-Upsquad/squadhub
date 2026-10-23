@@ -44,8 +44,6 @@ import { usePanelFileDrop } from './usePanelFileDrop';
 import { linkifyText } from '../../../lib/linkify';
 import { URL_PATTERN, splitTrailingPunct, toHref } from '../../../lib/urlPattern';
 import { openExternalUrl } from '../../../lib/openExternal';
-import SopBreachReportModal from '../../../components/sop/SopBreachReportModal';
-import SopFlagDetailModal from '../../../components/sop/SopFlagDetailModal';
 import WorkBlockSections from './WorkBlockSections';
 import {
   useStartWorkBlockRun,
@@ -58,7 +56,6 @@ import {
 import { useFolder } from '../../../hooks/useFolderTasks';
 import { isDesignStatusListName } from '../../../lib/designSpaceLists';
 import { useParallelTimers } from '../../../hooks/useParallelTimers';
-import { useLearningStore } from '../../../stores/learningStore';
 import { useIsMobile } from '../../../hooks/useIsMobile';
 import { GoalTaskFlag } from '../goals/GoalIntegration';
 import { useGoalsUI } from '../goals/goalsStore';
@@ -490,15 +487,6 @@ export default function TaskDetailPanel({
   const updateChecklistItem = useUpdateChecklistItem(effectiveTaskId);
   const deleteChecklistItem = useDeleteChecklistItem(effectiveTaskId);
   const qc = useQueryClient();
-  const setLearningTarget = useLearningStore((s) => s.setLearningTarget);
-  const openLearning = async () => {
-    if (!task) return;
-    const res = await api.get(`/lms/task-target?task_id=${task.id}`);
-    const target = res.data.data as { item_id: string; lesson_id: string | null; section_anchor: string | null };
-    setLearningTarget({ itemId: target.item_id, lessonId: target.lesson_id, sectionAnchor: target.section_anchor });
-    setActiveTask(null);
-    window.dispatchEvent(new CustomEvent('squadhub:open-resource'));
-  };
 
   // Read-only "Elapsed (idle)" for design/video spaces: the task's folder's
   // elapsed time for today (a per-space/day figure, written by the elapsed-time
@@ -649,9 +637,7 @@ export default function TaskDetailPanel({
   // Completion gate — set when a check-off is blocked because the task still
   // has open subtasks / unchecked checklist items. Blocking: no complete-anyway.
   const [incompletePrompt, setIncompletePrompt] = useState<{ rect: DOMRect; subtasks: number; checklist: number; subtaskId?: string } | null>(null);
-  const [showReport, setShowReport] = useState(false);
   const [relationshipsOpen, setRelationshipsOpen] = useState(false);
-  const [flagDetail, setFlagDetail] = useState<any>(null);
 
   useEffect(() => {
     if (!effectiveTaskId) { setMounted(false); return undefined; }
@@ -1474,7 +1460,6 @@ export default function TaskDetailPanel({
                   onDelete={handleDelete}
                   onAddToGoal={() => task && useGoalsUI.getState().pickGoalFor(task.id)}
                   onRelationships={() => setRelationshipsOpen(true)}
-                  onReportSop={() => setShowReport(true)}
                 />
               </div>
             </div>
@@ -1701,7 +1686,6 @@ export default function TaskDetailPanel({
               onDelete={handleDelete}
               onAddToGoal={() => task && useGoalsUI.getState().pickGoalFor(task.id)}
               onRelationships={() => setRelationshipsOpen(true)}
-              onReportSop={() => setShowReport(true)}
             />
           </div>
           {task && canEdit && (
@@ -2218,22 +2202,6 @@ export default function TaskDetailPanel({
                       updateTask.mutate({ id: task.id, status: key } as any);
                     }}
                   />
-                )}
-                {/* Resource source — mirrored tasks link back to their page/section. */}
-                {(task.source_kind === 'course' || task.source_kind === 'sop' || task.source_kind === 'post' || task.source_kind === 'knowledge') && (
-                  <div className="td-settings-row" data-half="false" style={{ gridColumn: '1 / -1', cursor: 'default' }}>
-                    <span className="k">{META_ICONS.Type}Resource</span>
-                    <span className="v">
-                      <button
-                        type="button"
-                        onClick={openLearning}
-                        className="td-prop-chip"
-                        style={{ cursor: 'pointer', background: 'var(--surface-alt)', color: 'var(--sh-ink)' }}
-                      >
-                        Open {task.source_kind === 'sop' ? 'SOP' : task.source_kind === 'course' ? 'Course' : task.source_kind === 'knowledge' ? 'Knowledge Doc' : 'Post'} ↗
-                      </button>
-                    </span>
-                  </div>
                 )}
                 <div className="td-m-group" data-td-group="status">
                 {/* Type — editable in normal lists, read-only in spaces / specialized tasks */}
@@ -3428,20 +3396,6 @@ export default function TaskDetailPanel({
           onCancel={() => setPendingEmergency(false)}
         />
       )}
-
-      {showReport && task && (
-        <SopBreachReportModal
-          targetUserId={assignees[0]?.id || (task as any).created_by || currentUser?.id || ''}
-          targetUserName={assignees[0]?.display_name || assignees[0]?.email || 'assignee'}
-          sourceKind="task"
-          sourceId={task.id}
-          taskId={task.id}
-          listId={(task as any).list_id || task.list?.id || null}
-          onClose={() => setShowReport(false)}
-          onReported={(detail) => setFlagDetail(detail)}
-        />
-      )}
-      {flagDetail && <SopFlagDetailModal detail={flagDetail} onClose={() => setFlagDetail(null)} />}
       {relationshipsOpen && task && (
         <TaskRelationshipsModal
           taskId={task.id}

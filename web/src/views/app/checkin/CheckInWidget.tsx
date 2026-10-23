@@ -4,16 +4,12 @@ import api from '../../../services/api';
 import CheckInSlider from './CheckInSlider';
 import TimerTab from './TimerTab';
 import DashboardTab from './DashboardTab';
-import OffDaysTab from './OffDaysTab';
-import DailyTimesheetTab from './DailyTimesheetTab';
 
-type Tab = 'timers' | 'checkin' | 'timesheet' | 'offdays';
+type Tab = 'timers' | 'checkin';
 
 const TABS: { id: Tab; label: string }[] = [
   { id: 'timers', label: 'Time Tracking' },
   { id: 'checkin', label: 'Check-In' },
-  { id: 'timesheet', label: 'Daily Timesheet' },
-  { id: 'offdays', label: 'Off Days' },
 ];
 
 export default function CheckInWidget({ title = 'Daily Check-In', context = 'default' }: { title?: string; context?: string }) {
@@ -86,14 +82,6 @@ export default function CheckInWidget({ title = 'Daily Check-In', context = 'def
       {activeTab === 'timers' ? (
         <div className="flex-1 overflow-y-auto">
           <TimerTab context={context} />
-        </div>
-      ) : activeTab === 'offdays' ? (
-        <div className="flex-1 overflow-y-auto">
-          <OffDaysTab />
-        </div>
-      ) : activeTab === 'timesheet' ? (
-        <div className="flex-1 overflow-y-auto">
-          <DailyTimesheetTab />
         </div>
       ) : (
         <div className="flex-1 overflow-y-auto">

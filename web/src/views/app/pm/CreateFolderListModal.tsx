@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useCreateFolder, useCreateList } from '../../../hooks/useSpaces';
-import { useAvailableProfiles } from '../../../hooks/useCustomProfiles';
 import type { CustomProfile } from '@squadhub/shared';
 
 const CATEGORY_COLORS: Record<string, string> = {
@@ -27,7 +26,10 @@ export default function CreateFolderListModal({
   const [selectedProfile, setSelectedProfile] = useState<CustomProfile | null>(null);
   const createFolder = useCreateFolder(spaceId);
   const createList = useCreateList(spaceId);
-  const { data: profiles, isLoading: profilesLoading } = useAvailableProfiles(type === 'client' ? 'folder' : type);
+  // Custom profiles (folder/list templates) were a Hub admin feature; the SaaS
+  // has none, so only "Blank" is offered.
+  const profiles: CustomProfile[] = [];
+  const profilesLoading = false;
 
   const isPending = createFolder.isPending || createList.isPending;
 
@@ -37,7 +39,7 @@ export default function CreateFolderListModal({
 
     if (type === 'folder') {
       createFolder.mutate(
-        { name: name.trim(), profile_id: selectedProfile?.id },
+        { name: name.trim() },
         { onSuccess: onClose },
       );
     } else if (type === 'client') {
@@ -47,7 +49,7 @@ export default function CreateFolderListModal({
       );
     } else {
       createList.mutate(
-        { name: name.trim(), folder_id: folderId, profile_id: selectedProfile?.id },
+        { name: name.trim(), folder_id: folderId },
         { onSuccess: onClose },
       );
     }

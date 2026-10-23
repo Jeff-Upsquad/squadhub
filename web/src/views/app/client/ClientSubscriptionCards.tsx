@@ -1,8 +1,11 @@
+// TODO(bridge): Hub-owned data. In the SaaS this screen must read the business's
+// cards from Squad Hub over the bridge (GET /bridge/v1/business/:hubClientId/cards,
+// see docs/bridge-contract.md). The server answers 501 until that lands; the
+// recipients drill-down was removed with the Hub sales module.
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import api from '../../../services/api';
 import type { ClientSubmissionSubscription, Country, SubscriptionCard } from '@squadhub/shared';
-import SubscriptionCardRecipientsPanel from '../sales/SubscriptionCardRecipientsPanel';
 
 type ClientSubscriptionCard = SubscriptionCard & {
   submission?: { id: string; business_name: string; country_id: string; country?: Country | null } | null;
@@ -114,15 +117,6 @@ export default function ClientSubscriptionCards() {
           )}
         </div>
       </div>
-
-      {openCard && (
-        <SubscriptionCardRecipientsPanel
-          card={openCard}
-          title={`${openCard.submission?.business_name || 'Business'} · ${openCard.submission_subscription?.subscription?.name || 'Subscription'}`}
-          onClose={() => setOpenCard(null)}
-          endpoint={`/users/me/subscription-cards/${openCard.id}/recipients`}
-        />
-      )}
     </div>
   );
 }

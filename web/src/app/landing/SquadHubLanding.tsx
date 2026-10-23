@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import Icon, { type IconName } from '../design-preview/PreviewIcon';
+import Icon, { type IconName } from './PreviewIcon';
 import './landing.css';
 import './asset.css';
 

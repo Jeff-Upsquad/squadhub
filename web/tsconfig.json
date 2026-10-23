@@ -20,8 +20,7 @@
     "baseUrl": ".",
     "paths": {
       "@/*": [
-        "src/*",
-        "../admin/src/*"
+        "src/*"
       ],
       "@squadhub/shared": [
         "../shared/dist/index"
@@ -37,10 +36,8 @@
   "include": [
     "**/*.ts",
     "**/*.tsx",
-    ".next-ui-preview/types/**/*.ts",
-    ".next/types/**/*.ts",
     "next-env.d.ts",
-    ".next-local-3007/types/**/*.ts"
+    ".next/types/**/*.ts"
   ],
   "exclude": [
     "node_modules"

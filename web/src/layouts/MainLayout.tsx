@@ -20,7 +20,6 @@ import ChatPanel from '../views/app/chat/ChatPanel';
 import HuddleDock from '../views/app/huddles/HuddleDock';
 import HuddleHeaderButton from '../views/app/huddles/HuddleHeaderButton';
 import SupportChannelView from '../views/app/support/SupportChannelView';
-import SupportAdminPage from '../views/app/support-admin/SupportAdminPage';
 import { useSupportOverview } from '../hooks/useSupport';
 import ChatSearch from '../views/app/chat/ChatSearch';
 import CreateChannelModal from '../views/app/chat/CreateChannelModal';
@@ -39,11 +38,7 @@ import HomeSidebar from '../views/app/HomeSidebar';
 import SearchPalette from '../views/app/SearchPalette';
 import SettingsSlider from '../components/SettingsSlider';
 import CheckInWidget from '../views/app/checkin/CheckInWidget';
-import CheckInsPage from '../views/app/check-ins/CheckInsPage';
-import CandidatesPage from '../views/app/candidates/CandidatesPage';
 import PartnerPaymentsPage from '../views/app/partner-payments/PartnerPaymentsPage';
-import CrmTeamChatView from '../views/app/teamchat/CrmTeamChatView';
-import ShcrmTeamChatEmbedView from '../views/app/teamchat/ShcrmTeamChatEmbedView';
 import MeetingsView from '../views/app/meetings/MeetingsView';
 import GlobalMeetingPanel from '../views/app/meetings/GlobalMeetingPanel';
 import ExternalTabPane from '../components/ExternalTabPane';
@@ -51,8 +46,6 @@ import NotesShell from '../views/app/notes/NotesShell';
 import { useHasMiniApp } from '../hooks/useMiniApps';
 import { useDms } from '../hooks/useDms';
 import TimeManagementPage from '../views/app/time-management/TimeManagementPage';
-import SalesLeadsPage from '../views/app/sales/SalesLeadsPage';
-import LeadsPage from '../views/app/leads/LeadsPage';
 import ThemeToggle from '../components/ThemeToggle';
 import RailTimer from './RailTimer';
 import ActiveTimerTiles from '../components/ActiveTimer';
@@ -60,13 +53,10 @@ import TimerConflictDialog from '../components/TimerConflictDialog';
 import TimerModeDialog from '../components/TimerModeDialog';
 import TimeSheetPanel from '../components/TimeSheetPanel';
 import ClientDashboard from '../views/app/client/ClientDashboard';
-import PartnerCashBook from '../views/app/partner/PartnerCashBook';
 import PartnerOpportunities from '../views/app/partner/PartnerOpportunities';
 import PartnerWorkLockedPage from '../views/app/partner/PartnerWorkLockedPage';
-import ClientCashBook from '../views/app/client/ClientCashBook';
 import ClientSubscriptionCards from '../views/app/client/ClientSubscriptionCards';
 import ClientJobCards from '../views/app/client/ClientJobCards';
-import ClientDesignDashboard from '../views/app/pm/client-design/ClientDesignDashboard';
 import Home from '../views/app/home/Home';
 import GoalsView from '../views/app/goals/GoalsView';
 import { GoalsHost } from '../views/app/goals/GoalIntegration';
@@ -84,14 +74,10 @@ import MyTasksView from '../views/app/MyTasksView';
 import DayPlannerView from '../views/app/DayPlannerView';
 import CalendarView from '../views/app/calendar/CalendarView';
 import RoutinesView from '../views/app/RoutinesView';
-import LearningShell from '../views/app/learning/LearningShell';
-import LearningSidebar from '../views/app/learning/LearningSidebar';
-import ClipsView from '../views/app/clips/ClipsView';
 import AppsSidebar from '../views/app/apps/AppsSidebar';
 import NotesSidebar from '../views/app/notes/NotesSidebar';
 import CalendarOuterPalette from '../views/app/calendar/CalendarOuterPalette';
 import CalendarRailPreview from '../views/app/calendar/CalendarRailPreview';
-import { useLearningStore } from '../stores/learningStore';
 import { launchApp, type AppDef } from '../config/apps';
 import { useUserType, useIsPartner } from '../hooks/useUserType';
 import { useNavHistory } from '../hooks/useNavHistory';
@@ -103,7 +89,6 @@ import BrowserNotificationsToggle from '../components/BrowserNotificationsToggle
 import { useIsMobile } from '../hooks/useIsMobile';
 import FeatureTipOverlay from '../components/FeatureTipOverlay';
 import { usePendingTips } from '../hooks/usePendingTips';
-import { useOpenSopTasks } from '../hooks/useLms';
 import { featureTipStore } from '../stores/featureTipStore';
 import TabBar from '../components/TabBar';
 import MobileShell from '../mobile/MobileShell';
@@ -399,8 +384,6 @@ export default function MainLayout() {
   const onlineUserIds = usePresenceStore((s) => s.onlineUserIds);
   const { data: unreadData } = useUnreadCount();
   const unreadCount = unreadData ?? 0;
-  const { data: openSopTasks } = useOpenSopTasks();
-  const openSopTaskCount = openSopTasks?.length ?? 0;
   // Mirror Inbox unread onto the installed-PWA Dock/taskbar icon badge.
   useAppBadge(unreadCount);
   // Drive the notification badge's red/pulse states from changes in the count.
@@ -495,8 +478,6 @@ export default function MainLayout() {
     window.localStorage.setItem(SIDEBAR_W_KEY, String(SIDEBAR_W_DEFAULT));
   };
   const isMobile = useIsMobile();
-  const learningActiveItemId = useLearningStore((s) => s.activeItemId);
-  const setLearningActiveItem = useLearningStore((s) => s.setActiveItem);
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
   const [showCreateChannel, setShowCreateChannel] = useState(false);
   // Mobile shell's "New message" row — the desktop sidebar opens this modal
@@ -973,19 +954,10 @@ export default function MainLayout() {
       const openChannel = params.get('open_channel');
       const openInbox = params.get('open_inbox');
       const openMessage = params.get('open_message');
-      const openResource = params.get('open_resource');
       const openGoal = params.get('open_goal');
       const conv = params.get('conv');
       if (openGoal) {
         useGoalsUI.getState().openGoal(openGoal);
-      } else if (openResource) {
-        useLearningStore.getState().setLearningTarget({
-          itemId: openResource,
-          lessonId: params.get('resource_page'),
-          edit: params.get('edit_resource') === '1',
-        });
-        setActiveSection('learning');
-        setMobileDrawerOpen(false);
       } else if (openInbox) {
         openInboxNotification(openInbox);
       } else if (openMessage && conv) {
@@ -1261,17 +1233,6 @@ export default function MainLayout() {
     }
   }, [currentWorkspace?.id]);
 
-  // A task or resource row elsewhere fired "open this resource". Switch the live
-  // view to the Resources module so LearningShell can pick up the target.
-  useEffect(() => {
-    const onOpenResource = () => {
-      setActiveSection('learning');
-      setMobileDrawerOpen(false);
-    };
-    window.addEventListener('squadhub:open-resource', onOpenResource);
-    return () => window.removeEventListener('squadhub:open-resource', onOpenResource);
-  }, [setActiveSection]);
-
   // Loading state
   if (workspacesLoading) {
     return (
@@ -1478,7 +1439,6 @@ export default function MainLayout() {
   const renderPane = (snap: TabSnapshot, active = true) => {
     const { section, homeView: hv } = snap;
     if (snap.externalUrl) return <ExternalTabPane url={snap.externalUrl} title={snap.externalTitle} />;
-    if (section === 'learning') return <LearningShell key="learning" />;
     if (section === 'docs') return <NotesShell />;
     if (section === 'cal') return <CalendarView />;
     if (section === 'apps') {
@@ -1486,19 +1446,9 @@ export default function MainLayout() {
       // state. App views reuse the same components as the home section.
       if (hv === 'checkin') return <CheckInWidget title="Daily Check-In Teammates" context="teammates" />;
       if (hv === 'checkin-partners') return <CheckInWidget title="Daily Check-In Partners" context="partners" />;
-      if (hv === 'check-ins') return <CheckInsPage />;
-      if (hv === 'candidates') return <CandidatesPage />;
       if (hv === 'partner-payments') return <PartnerPaymentsPage />;
-      if (hv === 'teamchat-crm') return <CrmTeamChatView source="crm" />;
-      if (hv === 'teamchat-shcrm') return <ShcrmTeamChatEmbedView />;
       if (hv === 'time-management') return <TimeManagementPage />;
-      if (hv === 'sales-leads') return <SalesLeadsPage />;
-      if (hv === 'leads') return <LeadsPage />;
-      if (hv === 'support-admin') return <SupportAdminPage />;
-      if (hv === 'clips') return <ClipsView />;
       if (hv === 'meetings') return <MeetingsView />;
-      if (hv === 'cashbook' && isPartner) return <PartnerCashBook />;
-      if (hv === 'cashbook' && (userType === 'client' || userType === 'client_staff')) return <ClientCashBook />;
       return (
         <div className="sh-view flex flex-1 flex-col items-center justify-center">
           <div className="mb-4 opacity-20 text-[var(--sh-ink-3)]">{ICON.apps}</div>
@@ -1530,27 +1480,16 @@ export default function MainLayout() {
       return renderChat(snap, active);
     }
     if (hv === 'tasks') {
-      if (snap.designFolderId) return <ClientDesignDashboard folderId={snap.designFolderId} />;
       if (snap.folderId && !snap.listId) return <FolderPage folderId={snap.folderId} />;
       if (snap.spacePageId && !snap.listId && !snap.folderId) return <SpacePage spacePageId={snap.spacePageId} />;
       return <ListPage listId={snap.listId ?? undefined} spaceId={snap.spaceId ?? undefined} active={active} />;
     }
     if (hv === 'checkin') return <CheckInWidget title="Daily Check-In Teammates" context="teammates" />;
     if (hv === 'checkin-partners') return <CheckInWidget title="Daily Check-In Partners" context="partners" />;
-    if (hv === 'check-ins') return <CheckInsPage />;
-    if (hv === 'candidates') return <CandidatesPage />;
     if (hv === 'partner-payments') return <PartnerPaymentsPage />;
-    if (hv === 'teamchat-crm') return <CrmTeamChatView source="crm" />;
-    if (hv === 'teamchat-shcrm') return <ShcrmTeamChatEmbedView />;
     if (hv === 'time-management') return <TimeManagementPage />;
-    if (hv === 'sales-leads') return <SalesLeadsPage />;
-    if (hv === 'leads') return <LeadsPage />;
-    if (hv === 'support-admin') return <SupportAdminPage />;
-    if (hv === 'clips') return <ClipsView />;
     if (hv === 'meetings') return <MeetingsView />;
     if (hv === 'hub' && (userType === 'client' || userType === 'client_staff')) return <ClientDashboard />;
-    if (hv === 'cashbook' && isPartner) return <PartnerCashBook />;
-    if (hv === 'cashbook' && (userType === 'client' || userType === 'client_staff')) return <ClientCashBook />;
     if (hv === 'subscription-cards' && (userType === 'client' || userType === 'client_staff')) return <ClientSubscriptionCards />;
     if (hv === 'job-cards' && (userType === 'client' || userType === 'client_staff')) return <ClientJobCards />;
     if (hv === 'opportunities' && isPartner) return <PartnerOpportunities />;
@@ -1571,9 +1510,6 @@ export default function MainLayout() {
           onCloseSidebar={() => setSidebarOpen(false)}
         />
       );
-    }
-    if (section === 'learning') {
-      return <LearningSidebar activeItemId={learningActiveItemId} onSelectItem={(id) => setLearningActiveItem(id, null, null)} />;
     }
     if (section === 'docs') return <NotesSidebar />;
     if (section === 'cal') return <CalendarOuterPalette />;
@@ -1823,17 +1759,6 @@ export default function MainLayout() {
             onPreviewLeave={closeRailPreviewSoon}
             onClick={() => { closeRailPreviewNow(); setActiveSection('apps'); }}
           />
-          <RailBtn
-            icon={ICON.learning}
-            label="Res"
-            anchorKey="rail.learning"
-            badge={openSopTaskCount || undefined}
-            active={activeSection === 'learning'}
-            previewing={railPreview === 'learning'}
-            onPreviewEnter={(event) => openRailPreviewSoon('learning', event)}
-            onPreviewLeave={closeRailPreviewSoon}
-            onClick={() => { closeRailPreviewNow(); setActiveSection('learning'); }}
-          />
           <button
             onClick={(e) => {
               setTimesheetAnchor((e.currentTarget as HTMLElement).getBoundingClientRect());
@@ -1985,7 +1910,7 @@ export default function MainLayout() {
           menu keeps the same width/height when switching (e.g. Home ↔
           Resources ↔ Calendar). An open Resource item hides the catalog sidebar
           to let its own chapter/page nav take over. */}
-      {currentWorkspace && !(activeSection === 'learning' && learningActiveItemId) && (
+      {currentWorkspace && (
         <div
           className={`sh-mod-side sh-mod-side-animated flex shrink-0 flex-col overflow-hidden relative z-[2] my-3 rounded-[22px] ${
             resizingSidebar ? 'sh-mod-side-resizing' : ''
