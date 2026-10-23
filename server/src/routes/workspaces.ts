@@ -241,7 +241,7 @@ router.post('/:id/members', requireAuth, async (req: Request, res: Response) => 
             .single()
         : await supabaseAdmin
             .from('invitations')
-            .insert({ workspace_id: wsId, email, role, invited_by: req.userId! })
+            .insert({ workspace_id: wsId, email, role, invited_by: req.userId!, status: 'pending' })
             .select()
             .single();
       if (error) {
