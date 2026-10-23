@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { requireAuth } from '../middleware/auth';
 import { requirePermission, isWorkspaceAdmin, checkResourceAccess, meetsAccessLevel, getUserPermissions } from '../middleware/permissions';
 import { supabaseAdmin } from '../supabase';
+import { workspaceIdOf } from '../middleware/workspace';
 
 const router = Router();
 
@@ -13,23 +14,19 @@ async function getContainerWorkspaceId(type: ContainerType, id: string): Promise
     const { data } = await supabaseAdmin.from('spaces').select('workspace_id').eq('id', id).single();
     return data?.workspace_id ?? null;
   }
-  const table = type === 'folder' ? 'folders' : 'lists';
-  const { data: row } = await supabaseAdmin.from(table).select('space_id').eq('id', id).single();
-  if (!row?.space_id) return null;
-  const { data: space } = await supabaseAdmin.from('spaces').select('workspace_id').eq('id', row.space_id).single();
-  return space?.workspace_id ?? null;
+  return workspaceIdOf(type, id);
 }
 
 // The (resource_type, resource_id) pairs whose members should gain channel
 // access — the container itself plus its ancestors, since access inherits
 // list → folder → space.
-async function containerMembershipScope(type: ContainerType, id: string): Promise<Array<{ t: string; id: string }>> {
+async function containerMembershipScope(type: ContainerType, id: string, wsId: string): Promise<Array<{ t: string; id: string }>> {
   const pairs: Array<{ t: string; id: string }> = [{ t: type, id }];
   if (type === 'folder') {
-    const { data } = await supabaseAdmin.from('folders').select('space_id').eq('id', id).single();
+    const { data } = await supabaseAdmin.from('folders').select('space_id').eq('workspace_id', wsId).eq('id', id).single();
     if (data?.space_id) pairs.push({ t: 'space', id: data.space_id });
   } else if (type === 'list') {
-    const { data } = await supabaseAdmin.from('lists').select('space_id, folder_id').eq('id', id).single();
+    const { data } = await supabaseAdmin.from('lists').select('space_id, folder_id').eq('workspace_id', wsId).eq('id', id).single();
     if (data?.folder_id) pairs.push({ t: 'folder', id: data.folder_id });
     if (data?.space_id) pairs.push({ t: 'space', id: data.space_id });
   }
@@ -39,13 +36,15 @@ async function containerMembershipScope(type: ContainerType, id: string): Promis
 // Grant everyone with access to the container (and its ancestors) access to the
 // linked channel, so the whole squad can chat immediately. Existing channel
 // memberships are left untouched (no downgrade).
-async function grantChannelAccessFromContainer(channelId: string, type: ContainerType, id: string): Promise<void> {
-  const pairs = await containerMembershipScope(type, id);
+// Container and channel are in the same workspace (wsId) — /link enforces it.
+async function grantChannelAccessFromContainer(channelId: string, type: ContainerType, id: string, wsId: string): Promise<void> {
+  const pairs = await containerMembershipScope(type, id, wsId);
   const userIds = new Set<string>();
   for (const p of pairs) {
     const { data } = await supabaseAdmin
       .from('resource_memberships')
       .select('user_id')
+      .eq('workspace_id', wsId)
       .eq('resource_type', p.t)
       .eq('resource_id', p.id);
     for (const r of data || []) userIds.add(r.user_id as string);
@@ -56,6 +55,7 @@ async function grantChannelAccessFromContainer(channelId: string, type: Containe
   const { data: existing } = await supabaseAdmin
     .from('resource_memberships')
     .select('user_id')
+    .eq('workspace_id', wsId)
     .eq('resource_type', 'channel')
     .eq('resource_id', channelId);
   for (const r of existing || []) userIds.delete(r.user_id as string);
@@ -80,14 +80,15 @@ const createChannelSchema = z.object({
 // GET /channels?workspace_id=xxx — list channels the user has access to
 router.get('/', requireAuth, async (req: Request, res: Response) => {
   try {
-    const workspaceId = req.query.workspace_id as string;
+    // requireAuth verified ?workspace_id membership (it is the active workspace).
+    const workspaceId = req.workspaceId as string;
     if (!workspaceId) {
       res.status(400).json({ success: false, error: 'workspace_id query param required' });
       return;
     }
 
-    // Admins see all channels
-    const admin = await isWorkspaceAdmin(req.userId!);
+    // Admins (owner/admin of THIS workspace) see all channels
+    const admin = await isWorkspaceAdmin(req.userId!, workspaceId);
     if (admin) {
       const { data, error } = await supabaseAdmin
         .from('channels')
@@ -106,8 +107,9 @@ router.get('/', requireAuth, async (req: Request, res: Response) => {
 
     // Non-admins: only channels they have membership for, or they created
     const { data: memberships } = await supabaseAdmin
-      .from('resource_memberships') // tenant-scope: caller's own rows (user_id = caller)
+      .from('resource_memberships')
       .select('resource_id')
+      .eq('workspace_id', workspaceId)
       .eq('resource_type', 'channel')
       .eq('user_id', req.userId!);
 
@@ -198,9 +200,11 @@ router.get('/:id/members', requireAuth, async (req: Request, res: Response) => {
       return;
     }
 
+    const channelWs = await workspaceIdOf('channel', id);
     const { data: memberships, error: memErr } = await supabaseAdmin
       .from('resource_memberships')
       .select('user_id')
+      .eq('workspace_id', channelWs)
       .eq('resource_type', 'channel')
       .eq('resource_id', id);
     if (memErr) {
@@ -213,6 +217,7 @@ router.get('/:id/members', requireAuth, async (req: Request, res: Response) => {
     const { data: channel } = await supabaseAdmin
       .from('channels')
       .select('created_by')
+      .eq('workspace_id', channelWs)
       .eq('id', id)
       .maybeSingle();
     if (channel?.created_by && !ids.includes(channel.created_by as string)) {
@@ -269,6 +274,7 @@ router.put('/:id', requireAuth, async (req: Request, res: Response) => {
     const { data, error } = await supabaseAdmin
       .from('channels')
       .update(updates)
+      .eq('workspace_id', await workspaceIdOf('channel', id))
       .eq('id', id)
       .select()
       .single();
@@ -298,6 +304,7 @@ router.delete('/:id', requireAuth, async (req: Request, res: Response) => {
     const { error } = await supabaseAdmin
       .from('channels')
       .update({ deleted_at: new Date().toISOString() })
+      .eq('workspace_id', await workspaceIdOf('channel', id))
       .eq('id', id);
 
     if (error) {
@@ -377,6 +384,7 @@ router.get('/linked', requireAuth, async (req: Request, res: Response) => {
     const { data, error } = await supabaseAdmin
       .from('channels')
       .select('*')
+      .eq('workspace_id', await workspaceIdOf(resourceType, resourceId))
       .eq('linked_resource_type', resourceType)
       .eq('linked_resource_id', resourceId)
       .is('deleted_at', null)
@@ -399,23 +407,30 @@ router.post('/link', requireAuth, async (req: Request, res: Response) => {
   try {
     const body = linkSchema.parse(req.body);
 
-    // Gate: admin OR container manager.
-    const admin = await isWorkspaceAdmin(req.userId!);
-    if (!admin) {
-      const level = await checkResourceAccess(req.userId!, body.resource_type, body.resource_id);
-      if (!level || !meetsAccessLevel(level, 'manager')) {
-        res.status(403).json({ success: false, error: 'Manager access required to link a channel' });
-        return;
-      }
+    // Gate: owner/admin of the CONTAINER's workspace, or manager of the container.
+    // (checkResourceAccess grants owners/admins of that workspace 'manager'.)
+    const workspaceId = await getContainerWorkspaceId(body.resource_type, body.resource_id);
+    const level = workspaceId ? await checkResourceAccess(req.userId!, body.resource_type, body.resource_id) : null;
+    if (!workspaceId || !level || !meetsAccessLevel(level, 'manager')) {
+      res.status(403).json({ success: false, error: 'Manager access required to link a channel' });
+      return;
     }
 
     let channelId = body.channel_id;
 
     if (channelId) {
-      // Linking an existing channel — set its container link.
+      // Linking an existing channel: it must live in the container's workspace
+      // and the caller must manage it — otherwise linking would grant the
+      // container's members access to someone else's channel.
+      const channelLevel = await checkResourceAccess(req.userId!, 'channel', channelId);
+      if ((await workspaceIdOf('channel', channelId)) !== workspaceId || !channelLevel || !meetsAccessLevel(channelLevel, 'manager')) {
+        res.status(403).json({ success: false, error: 'Manager access to a channel in this workspace is required' });
+        return;
+      }
       const { error } = await supabaseAdmin
         .from('channels')
         .update({ linked_resource_type: body.resource_type, linked_resource_id: body.resource_id })
+        .eq('workspace_id', workspaceId)
         .eq('id', channelId)
         .is('deleted_at', null);
       if (error) {
@@ -428,14 +443,9 @@ router.post('/link', requireAuth, async (req: Request, res: Response) => {
       }
     } else {
       // Creating a new channel — also require the create-channels permission.
-      const { permissions } = await getUserPermissions(req.userId!);
+      const { permissions } = await getUserPermissions(req.userId!, workspaceId);
       if (!permissions.can_create_channels) {
         res.status(403).json({ success: false, error: 'Permission denied: can_create_channels is required' });
-        return;
-      }
-      const workspaceId = await getContainerWorkspaceId(body.resource_type, body.resource_id);
-      if (!workspaceId) {
-        res.status(404).json({ success: false, error: 'Container not found' });
         return;
       }
       const { data, error } = await supabaseAdmin
@@ -463,9 +473,9 @@ router.post('/link', requireAuth, async (req: Request, res: Response) => {
     }
 
     // Auto-grant container members access to the channel.
-    await grantChannelAccessFromContainer(channelId!, body.resource_type, body.resource_id);
+    await grantChannelAccessFromContainer(channelId!, body.resource_type, body.resource_id, workspaceId);
 
-    const { data: channel } = await supabaseAdmin.from('channels').select('*').eq('id', channelId).single();
+    const { data: channel } = await supabaseAdmin.from('channels').select('*').eq('workspace_id', workspaceId).eq('id', channelId).single();
     res.status(201).json({ success: true, data: channel });
   } catch (err) {
     if (err instanceof z.ZodError) {
@@ -483,18 +493,18 @@ router.post('/unlink', requireAuth, async (req: Request, res: Response) => {
   try {
     const body = unlinkSchema.parse(req.body);
 
-    const admin = await isWorkspaceAdmin(req.userId!);
-    if (!admin) {
-      const level = await checkResourceAccess(req.userId!, body.resource_type, body.resource_id);
-      if (!level || !meetsAccessLevel(level, 'manager')) {
-        res.status(403).json({ success: false, error: 'Manager access required to unlink a channel' });
-        return;
-      }
+    // Owner/admin of the container's workspace or container manager.
+    const workspaceId = await getContainerWorkspaceId(body.resource_type, body.resource_id);
+    const level = workspaceId ? await checkResourceAccess(req.userId!, body.resource_type, body.resource_id) : null;
+    if (!workspaceId || !level || !meetsAccessLevel(level, 'manager')) {
+      res.status(403).json({ success: false, error: 'Manager access required to unlink a channel' });
+      return;
     }
 
     const { error } = await supabaseAdmin
       .from('channels')
       .update({ linked_resource_type: null, linked_resource_id: null })
+      .eq('workspace_id', workspaceId)
       .eq('linked_resource_type', body.resource_type)
       .eq('linked_resource_id', body.resource_id);
     if (error) {

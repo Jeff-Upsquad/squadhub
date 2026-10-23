@@ -14,7 +14,7 @@ import { z } from 'zod';
 import { supabaseAdmin } from '../supabase';
 import { requireAuth } from '../middleware/auth';
 import { isWorkspaceAdmin } from '../middleware/permissions';
-import { getMembership } from '../middleware/workspace';
+import { getMembership, reachableWorkspaceIds } from '../middleware/workspace';
 import { getUserRoleIds } from '../utils/roles';
 import { FILE_SIZE_LIMITS, generateNoteUploadUrl } from '../r2';
 import { unfurl } from '../services/unfurl';
@@ -46,7 +46,7 @@ async function getUserIdentities(userId: string, workspaceId?: string | null): P
 }
 
 async function loadNote(id: string): Promise<any | null> {
-  const { data } = await supabaseAdmin.from('squad_notes').select('*').eq('id', id).maybeSingle();
+  const { data } = await supabaseAdmin.from('squad_notes').select('*').in('workspace_id', await reachableWorkspaceIds()).eq('id', id).maybeSingle();
   return data;
 }
 
@@ -54,7 +54,7 @@ async function loadNote(id: string): Promise<any | null> {
 async function loadRoot(note: any): Promise<any> {
   const rootId = note.root_id || note.id;
   if (rootId === note.id) return note;
-  const { data } = await supabaseAdmin.from('squad_notes').select('*').eq('id', rootId).maybeSingle();
+  const { data } = await supabaseAdmin.from('squad_notes').select('*').eq('workspace_id', note.workspace_id).eq('id', rootId).maybeSingle();
   return data || note;
 }
 
@@ -90,13 +90,14 @@ async function getNoteAccess(userId: string, note: any): Promise<NoteAccess> {
 }
 
 // Collect a note id + every descendant id (BFS).
-async function collectSubtreeIds(rootId: string): Promise<string[]> {
+async function collectSubtreeIds(rootId: string, workspaceId: string): Promise<string[]> {
   const all = new Set<string>([rootId]);
   let frontier = [rootId];
   while (frontier.length) {
     const { data } = await supabaseAdmin
       .from('squad_notes')
       .select('id')
+      .eq('workspace_id', workspaceId)
       .in('parent_id', frontier);
     const next = (data || []).map((r: any) => r.id as string).filter((id) => !all.has(id));
     next.forEach((id) => all.add(id));
@@ -115,7 +116,7 @@ router.get('/trash', async (req: Request, res: Response) => {
       res.json({ success: true, data: [] });
       return;
     }
-    const admin = await isWorkspaceAdmin(req.userId!);
+    const admin = await isWorkspaceAdmin(req.userId!, ws);
     let q = supabaseAdmin
       .from('squad_notes')
       .select('id, parent_id, title, icon, deleted_at, owner_id')
@@ -202,7 +203,7 @@ router.get('/', async (req: Request, res: Response) => {
       return;
     }
 
-    if (await isWorkspaceAdmin(req.userId!)) {
+    if (await isWorkspaceAdmin(req.userId!, ws)) {
       const { data, error } = await supabaseAdmin
         .from('squad_notes')
         .select(TREE_FIELDS)
@@ -321,6 +322,7 @@ router.post('/', async (req: Request, res: Response) => {
     let posQ = supabaseAdmin
       .from('squad_notes')
       .select('position')
+      .eq('workspace_id', workspaceId)
       .is('deleted_at', null)
       .order('position', { ascending: false })
       .limit(1);
@@ -391,6 +393,7 @@ router.patch('/:id', async (req: Request, res: Response) => {
     const { data, error } = await supabaseAdmin
       .from('squad_notes')
       .update(patch)
+      .in('workspace_id', await reachableWorkspaceIds())
       .eq('id', req.params.id)
       .select()
       .single();
@@ -428,7 +431,7 @@ router.post('/:id/move', async (req: Request, res: Response) => {
       return;
     }
 
-    const subtree = await collectSubtreeIds(note.id);
+    const subtree = await collectSubtreeIds(note.id, note.workspace_id);
     let newRoot = note.id;
     if (body.parent_id) {
       if (subtree.includes(body.parent_id)) {
@@ -444,19 +447,25 @@ router.post('/:id/move', async (req: Request, res: Response) => {
         res.status(403).json({ success: false, error: 'No edit access to destination' });
         return;
       }
+      // Pages never move across workspaces.
+      if (parent.workspace_id !== note.workspace_id) {
+        res.status(400).json({ success: false, error: 'Destination is in another workspace' });
+        return;
+      }
       newRoot = parent.root_id || parent.id;
     }
 
     const { error: moveErr } = await supabaseAdmin
       .from('squad_notes')
       .update({ parent_id: body.parent_id, position: body.position ?? note.position })
+      .eq('workspace_id', note.workspace_id)
       .eq('id', note.id);
     if (moveErr) {
       res.status(500).json({ success: false, error: moveErr.message });
       return;
     }
     // Reseat root_id across the moved subtree (trigger only fixes the moved row).
-    await supabaseAdmin.from('squad_notes').update({ root_id: newRoot }).in('id', subtree);
+    await supabaseAdmin.from('squad_notes').update({ root_id: newRoot }).eq('workspace_id', note.workspace_id).in('id', subtree);
 
     res.json({ success: true });
   } catch (err: any) {
@@ -481,10 +490,11 @@ router.delete('/:id', async (req: Request, res: Response) => {
       res.status(403).json({ success: false, error: 'No edit access' });
       return;
     }
-    const ids = await collectSubtreeIds(note.id);
+    const ids = await collectSubtreeIds(note.id, note.workspace_id);
     const { error } = await supabaseAdmin
       .from('squad_notes')
       .update({ deleted_at: new Date().toISOString() })
+      .eq('workspace_id', note.workspace_id)
       .in('id', ids);
     if (error) {
       res.status(500).json({ success: false, error: error.message });
@@ -517,14 +527,14 @@ router.post('/:id/restore', async (req: Request, res: Response) => {
       detach = !parent || !!parent.deleted_at;
     }
 
-    const ids = await collectSubtreeIds(note.id);
-    await supabaseAdmin.from('squad_notes').update({ deleted_at: null }).in('id', ids);
+    const ids = await collectSubtreeIds(note.id, note.workspace_id);
+    await supabaseAdmin.from('squad_notes').update({ deleted_at: null }).eq('workspace_id', note.workspace_id).in('id', ids);
 
     if (detach) {
       // Clearing parent_id fires the trigger that resets this node's root_id to
       // itself; reseat the rest of the subtree to match.
-      await supabaseAdmin.from('squad_notes').update({ parent_id: null }).eq('id', note.id);
-      await supabaseAdmin.from('squad_notes').update({ root_id: note.id }).in('id', ids);
+      await supabaseAdmin.from('squad_notes').update({ parent_id: null }).eq('workspace_id', note.workspace_id).eq('id', note.id);
+      await supabaseAdmin.from('squad_notes').update({ root_id: note.id }).eq('workspace_id', note.workspace_id).in('id', ids);
     }
 
     res.json({ success: true });
@@ -546,7 +556,7 @@ router.get('/:id/shares', async (req: Request, res: Response) => {
     }
     const root = await loadRoot(note);
     const isOwner = root.owner_id === req.userId;
-    if (!isOwner && !(await isWorkspaceAdmin(req.userId!))) {
+    if (!isOwner && !(await isWorkspaceAdmin(req.userId!, note.workspace_id))) {
       res.status(403).json({ success: false, error: 'Only the owner can manage sharing' });
       return;
     }
@@ -601,7 +611,7 @@ router.put('/:id/shares', async (req: Request, res: Response) => {
     }
     const root = await loadRoot(note);
     const isOwner = root.owner_id === req.userId;
-    if (!isOwner && !(await isWorkspaceAdmin(req.userId!))) {
+    if (!isOwner && !(await isWorkspaceAdmin(req.userId!, note.workspace_id))) {
       res.status(403).json({ success: false, error: 'Only the owner can manage sharing' });
       return;
     }
@@ -625,7 +635,7 @@ router.put('/:id/shares', async (req: Request, res: Response) => {
 
     // Visibility follows whether any share exists; apply to the whole tree.
     const visibility = body.shares.length ? 'shared' : 'private';
-    await supabaseAdmin.from('squad_notes').update({ visibility }).eq('root_id', root.id);
+    await supabaseAdmin.from('squad_notes').update({ visibility }).eq('workspace_id', root.workspace_id).eq('root_id', root.id);
 
     res.json({ success: true, data: { visibility } });
   } catch (err: any) {
