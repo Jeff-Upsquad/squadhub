@@ -1,15 +1,14 @@
 import { supabaseAdmin } from '../supabase';
-import { currentWorkspaceId } from '../middleware/workspace';
+import { currentWorkspaceId, isWorkspaceAdminOf as isWorkspaceAdmin } from '../middleware/workspace';
 import { getUserRoleIds } from './roles';
 
-/** Platform admin flag (users.is_admin) — the bypass used across label gating. */
-export async function isPlatformAdmin(userId: string): Promise<boolean> {
-  const { data } = await supabaseAdmin
-    .from('users')
-    .select('is_admin')
-    .eq('id', userId)
-    .maybeSingle();
-  return !!(data as any)?.is_admin;
+/**
+ * Label admin bypass: owner/admin of the LABEL'S workspace. (users.is_admin is
+ * a Hub platform flag and grants nothing in SaaS — and an admin of another
+ * workspace must not bypass label gating here.)
+ */
+export async function isPlatformAdmin(userId: string, workspaceId: string): Promise<boolean> {
+  return isWorkspaceAdmin(userId, workspaceId);
 }
 
 /** Resolve the workspace a list belongs to via space. */
@@ -77,7 +76,7 @@ export async function visibleGroupIds(
     .select('id, is_default')
     .eq('workspace_id', workspaceId);
   const all = groups || [];
-  const isAdmin = opts?.isAdmin ?? (await isPlatformAdmin(userId));
+  const isAdmin = opts?.isAdmin ?? (await isPlatformAdmin(userId, workspaceId));
   if (isAdmin) return all.map((g: any) => g.id);
 
   const visible = new Set<string>();
@@ -111,7 +110,7 @@ export async function canCreateLabels(
   workspaceId: string,
   opts?: { isAdmin?: boolean },
 ): Promise<boolean> {
-  const isAdmin = opts?.isAdmin ?? (await isPlatformAdmin(userId));
+  const isAdmin = opts?.isAdmin ?? (await isPlatformAdmin(userId, workspaceId));
   if (isAdmin) return true;
 
   const { data: ua } = await supabaseAdmin

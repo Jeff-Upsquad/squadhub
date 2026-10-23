@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import { supabaseAdmin } from '../../supabase';
 import { requireAuth } from '../../middleware/auth';
+import { reachableWorkspaceIds } from '../../middleware/workspace';
 import { requireUserType } from '../../middleware/userType';
 import { checkResourceAccess, meetsAccessLevel } from '../../middleware/permissions';
 import { GetObjectCommand } from '@aws-sdk/client-s3';
@@ -23,7 +24,7 @@ router.use(requireAuth);
 router.use(requireUserType('internal', ...PARTNER_USER_TYPES, 'client', 'client_staff'));
 
 async function getTaskListId(taskId: string): Promise<string | null> {
-  const { data } = await supabaseAdmin.from('tasks').select('list_id').eq('id', taskId).single();
+  const { data } = await supabaseAdmin.from('tasks').select('list_id').in('workspace_id', await reachableWorkspaceIds()).eq('id', taskId).single();
   return data?.list_id || null;
 }
 
@@ -60,6 +61,7 @@ router.get('/tasks/:taskId/attachments', async (req: Request, res: Response) => 
     const { data, error } = await supabaseAdmin
       .from('task_attachments')
       .select('*')
+      .in('workspace_id', await reachableWorkspaceIds())
       .eq('task_id', taskId)
       .order('uploaded_at', { ascending: false });
 
@@ -237,6 +239,7 @@ router.get('/task-attachments/:id/download', async (req: Request, res: Response)
     const { data: row, error: fetchErr } = await supabaseAdmin
       .from('task_attachments')
       .select('id, task_id, object_key, file_name, mime_type')
+      .in('workspace_id', await reachableWorkspaceIds())
       .eq('id', id)
       .single();
 
@@ -288,6 +291,7 @@ router.delete('/task-attachments/:id', async (req: Request, res: Response) => {
     const { data: row, error: fetchErr } = await supabaseAdmin
       .from('task_attachments')
       .select('id, task_id, object_key, file_name')
+      .in('workspace_id', await reachableWorkspaceIds())
       .eq('id', id)
       .single();
 
@@ -302,7 +306,7 @@ router.delete('/task-attachments/:id', async (req: Request, res: Response) => {
       return;
     }
 
-    const { error: delErr } = await supabaseAdmin.from('task_attachments').delete().eq('id', id);
+    const { error: delErr } = await supabaseAdmin.from('task_attachments').delete().in('workspace_id', await reachableWorkspaceIds()).eq('id', id);
     if (delErr) {
       res.status(500).json({ success: false, error: delErr.message });
       return;

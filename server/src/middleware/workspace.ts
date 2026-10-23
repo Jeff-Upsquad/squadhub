@@ -79,6 +79,15 @@ export function reachableWorkspaceIds(): Promise<string[]> {
   return store.reachable;
 }
 
+/**
+ * Workspaces a LISTING should cover: the active workspace when the request
+ * names one (X-Workspace-Id — the web app always does), otherwise every
+ * workspace the caller can reach (older clients that never switch).
+ */
+export async function listingWorkspaceIds(req: Request): Promise<string[]> {
+  return req.workspaceId ? [req.workspaceId] : reachableWorkspaceIds();
+}
+
 /** Run `fn` with a tenant context (used by requireAuth and by tests). */
 export function runWithTenant<T>(ctx: TenantContext, fn: () => T): T {
   return tenantStore.run(ctx, fn);

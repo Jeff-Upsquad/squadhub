@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import { supabaseAdmin } from '../../supabase';
 import { requireAuth } from '../../middleware/auth';
+import { reachableWorkspaceIds } from '../../middleware/workspace';
 import { requireUserType } from '../../middleware/userType';
 import { checkResourceAccess, meetsAccessLevel } from '../../middleware/permissions';
 import { logTaskActivity } from '../../utils/taskActivity';
@@ -12,17 +13,17 @@ router.use(requireAuth);
 router.use(requireUserType('internal', ...PARTNER_USER_TYPES, 'client', 'client_staff'));
 
 async function getTaskListId(taskId: string): Promise<string | null> {
-  const { data } = await supabaseAdmin.from('tasks').select('list_id').eq('id', taskId).single();
+  const { data } = await supabaseAdmin.from('tasks').select('list_id').in('workspace_id', await reachableWorkspaceIds()).eq('id', taskId).single();
   return data?.list_id || null;
 }
 
 async function getChecklistTaskId(checklistId: string): Promise<string | null> {
-  const { data } = await supabaseAdmin.from('task_checklists').select('task_id').eq('id', checklistId).single();
+  const { data } = await supabaseAdmin.from('task_checklists').select('task_id').in('workspace_id', await reachableWorkspaceIds()).eq('id', checklistId).single();
   return data?.task_id || null;
 }
 
 async function getItemChecklistId(itemId: string): Promise<string | null> {
-  const { data } = await supabaseAdmin.from('task_checklist_items').select('checklist_id').eq('id', itemId).single();
+  const { data } = await supabaseAdmin.from('task_checklist_items').select('checklist_id').in('workspace_id', await reachableWorkspaceIds()).eq('id', itemId).single();
   return data?.checklist_id || null;
 }
 
@@ -48,6 +49,7 @@ router.get('/tasks/:taskId/checklists', async (req: Request, res: Response) => {
     const { data: checklists, error } = await supabaseAdmin
       .from('task_checklists')
       .select('*')
+      .in('workspace_id', await reachableWorkspaceIds())
       .eq('task_id', taskId)
       .order('position', { ascending: true });
 
@@ -61,6 +63,7 @@ router.get('/tasks/:taskId/checklists', async (req: Request, res: Response) => {
       ? await supabaseAdmin
           .from('task_checklist_items')
           .select('*')
+          .in('workspace_id', await reachableWorkspaceIds())
           .in('checklist_id', ids)
           .order('position', { ascending: true })
       : { data: [] as any[], error: null };
@@ -104,6 +107,7 @@ router.post('/tasks/:taskId/checklists', async (req: Request, res: Response) => 
     const { data: maxRow } = await supabaseAdmin
       .from('task_checklists')
       .select('position')
+      .in('workspace_id', await reachableWorkspaceIds())
       .eq('task_id', taskId)
       .order('position', { ascending: false })
       .limit(1)
@@ -168,11 +172,12 @@ router.put('/checklists/:id', async (req: Request, res: Response) => {
 
     // Snapshot the prior title so a rename can be logged with both sides.
     const { data: prior } = await supabaseAdmin
-      .from('task_checklists').select('title').eq('id', id).maybeSingle();
+      .from('task_checklists').select('title').in('workspace_id', await reachableWorkspaceIds()).eq('id', id).maybeSingle();
 
     const { data, error } = await supabaseAdmin
       .from('task_checklists')
       .update(body)
+      .in('workspace_id', await reachableWorkspaceIds())
       .eq('id', id)
       .select()
       .single();
@@ -220,9 +225,9 @@ router.delete('/checklists/:id', async (req: Request, res: Response) => {
 
     // Snapshot the title before the row is gone so the feed can name it.
     const { data: doomed } = await supabaseAdmin
-      .from('task_checklists').select('title').eq('id', id).maybeSingle();
+      .from('task_checklists').select('title').in('workspace_id', await reachableWorkspaceIds()).eq('id', id).maybeSingle();
 
-    const { error } = await supabaseAdmin.from('task_checklists').delete().eq('id', id);
+    const { error } = await supabaseAdmin.from('task_checklists').delete().in('workspace_id', await reachableWorkspaceIds()).eq('id', id);
     if (error) {
       res.status(500).json({ success: false, error: error.message });
       return;
@@ -266,6 +271,7 @@ router.post('/checklists/:id/items', async (req: Request, res: Response) => {
     const { data: maxRow } = await supabaseAdmin
       .from('task_checklist_items')
       .select('position')
+      .in('workspace_id', await reachableWorkspaceIds())
       .eq('checklist_id', checklistId)
       .order('position', { ascending: false })
       .limit(1)
@@ -291,7 +297,7 @@ router.post('/checklists/:id/items', async (req: Request, res: Response) => {
 
     // Activity: item creation surfaces in the task's Activity feed.
     const { data: parentChecklist } = await supabaseAdmin
-      .from('task_checklists').select('title').eq('id', checklistId).maybeSingle();
+      .from('task_checklists').select('title').in('workspace_id', await reachableWorkspaceIds()).eq('id', checklistId).maybeSingle();
     await logTaskActivity(taskId, req.userId!, [{
       event_type: 'checklist_item_added',
       new_value: {
@@ -358,12 +364,14 @@ router.put('/checklist-items/:id', async (req: Request, res: Response) => {
     const { data: priorItem } = await supabaseAdmin
       .from('task_checklist_items')
       .select('content, is_done, assigned_to, due_date')
+      .in('workspace_id', await reachableWorkspaceIds())
       .eq('id', id)
       .maybeSingle();
 
     const { data, error } = await supabaseAdmin
       .from('task_checklist_items')
       .update(patch)
+      .in('workspace_id', await reachableWorkspaceIds())
       .eq('id', id)
       .select()
       .single();
@@ -430,9 +438,9 @@ router.delete('/checklist-items/:id', async (req: Request, res: Response) => {
 
     // Snapshot the content before the row is gone so the feed can name it.
     const { data: doomed } = await supabaseAdmin
-      .from('task_checklist_items').select('content').eq('id', id).maybeSingle();
+      .from('task_checklist_items').select('content').in('workspace_id', await reachableWorkspaceIds()).eq('id', id).maybeSingle();
 
-    const { error } = await supabaseAdmin.from('task_checklist_items').delete().eq('id', id);
+    const { error } = await supabaseAdmin.from('task_checklist_items').delete().in('workspace_id', await reachableWorkspaceIds()).eq('id', id);
     if (error) {
       res.status(500).json({ success: false, error: error.message });
       return;

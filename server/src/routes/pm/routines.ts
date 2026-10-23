@@ -4,6 +4,7 @@ import { nextTaskRecurrenceDate, type TaskRecurrence } from '@squadhub/shared';
 import { PARTNER_USER_TYPES } from '@squadhub/shared';
 import { supabaseAdmin } from '../../supabase';
 import { requireAuth } from '../../middleware/auth';
+import { listingWorkspaceIds, reachableWorkspaceIds } from '../../middleware/workspace';
 import { requireUserType } from '../../middleware/userType';
 import { checkResourceAccess, meetsAccessLevel } from '../../middleware/permissions';
 import { spawnRoutineInstance } from '../../services/routineSpawner';
@@ -22,6 +23,7 @@ router.get('/routines', async (req: Request, res: Response) => {
     const { data, error } = await supabaseAdmin
       .from('tasks')
       .select('*')
+      .in('workspace_id', await listingWorkspaceIds(req))
       .not('recurrence', 'is', null)
       .order('created_at', { ascending: false });
 
@@ -47,6 +49,7 @@ router.get('/routines', async (req: Request, res: Response) => {
       const { data: instances } = await supabaseAdmin
         .from('tasks')
         .select('recurring_parent_id, recurrence_instance_date')
+        .in('workspace_id', await reachableWorkspaceIds())
         .in('recurring_parent_id', templateIds);
       for (const inst of (instances || []) as any[]) {
         const cur = statsByTemplate.get(inst.recurring_parent_id) || { count: 0, last: null };
@@ -93,6 +96,7 @@ async function requireTemplateMemberAccess(req: Request, res: Response, taskId: 
   const { data: template } = await supabaseAdmin
     .from('tasks')
     .select('*')
+    .in('workspace_id', await reachableWorkspaceIds())
     .eq('id', taskId)
     .maybeSingle();
   if (!template || !(template as any).recurrence) {
@@ -119,6 +123,7 @@ router.patch('/routines/:id', async (req: Request, res: Response) => {
     const { data, error } = await supabaseAdmin
       .from('tasks')
       .update({ recurrence_paused: paused, last_modified_by: req.userId! })
+      .eq('workspace_id', template.workspace_id)
       .eq('id', template.id)
       .select()
       .single();

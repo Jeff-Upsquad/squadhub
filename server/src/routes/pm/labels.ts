@@ -4,6 +4,7 @@ import type { TaskTag, LabelPickerData, LabelPickerGroup } from '@squadhub/share
 import { PARTNER_USER_TYPES } from '@squadhub/shared';
 import { supabaseAdmin } from '../../supabase';
 import { requireAuth } from '../../middleware/auth';
+import { reachableWorkspaceIds } from '../../middleware/workspace';
 import { requireUserType } from '../../middleware/userType';
 import { checkResourceAccess, meetsAccessLevel } from '../../middleware/permissions';
 import { logTaskActivity } from '../../utils/taskActivity';
@@ -26,6 +27,7 @@ async function taskListId(taskId: string): Promise<string | null> {
   const { data } = await supabaseAdmin
     .from('tasks')
     .select('list_id')
+    .in('workspace_id', await reachableWorkspaceIds())
     .eq('id', taskId)
     .maybeSingle();
   return (data as any)?.list_id ?? null;
@@ -59,7 +61,7 @@ router.get('/labels', async (req: Request, res: Response) => {
       return;
     }
 
-    const isAdmin = await isPlatformAdmin(req.userId!);
+    const isAdmin = await isPlatformAdmin(req.userId!, workspaceId);
     const visIds = await visibleGroupIds(req.userId!, workspaceId, { isAdmin });
 
     if (visIds.length === 0) {
@@ -80,6 +82,7 @@ router.get('/labels', async (req: Request, res: Response) => {
       supabaseAdmin
         .from('task_tags')
         .select(LABEL_COLUMNS)
+        .eq('workspace_id', workspaceId)
         .in('group_id', visIds)
         .order('name', { ascending: true }),
     ]);
@@ -140,7 +143,7 @@ router.post('/labels', async (req: Request, res: Response) => {
       return;
     }
 
-    const isAdmin = await isPlatformAdmin(req.userId!);
+    const isAdmin = await isPlatformAdmin(req.userId!, workspaceId);
     if (!meetsAccessLevel(level, 'manager') && !isAdmin) {
       res.status(403).json({ success: false, error: 'Only managers can create labels' });
       return;
@@ -175,7 +178,7 @@ router.post('/labels', async (req: Request, res: Response) => {
 
     const { data: label, error } = await supabaseAdmin
       .from('task_tags')
-      .insert(insert)
+      .insert({ ...insert, workspace_id: workspaceId })
       .select(LABEL_COLUMNS)
       .single();
 
@@ -233,6 +236,7 @@ router.post('/tasks/:id/labels', async (req: Request, res: Response) => {
     const { data: label } = await supabaseAdmin
       .from('task_tags')
       .select(LABEL_COLUMNS)
+      .eq('workspace_id', workspaceId)
       .eq('id', body.tag_id)
       .maybeSingle();
     if (!label || (label as any).workspace_id !== workspaceId) {
@@ -284,7 +288,7 @@ router.delete('/tasks/:id/labels/:tagId', async (req: Request, res: Response) =>
 
     // Snapshot the label name before detaching so the activity feed can show it.
     const { data: removedLabel } = await supabaseAdmin
-      .from('task_tags').select('id, name').eq('id', req.params.tagId).maybeSingle();
+      .from('task_tags').select('id, name').in('workspace_id', await reachableWorkspaceIds()).eq('id', req.params.tagId).maybeSingle();
 
     const { error } = await supabaseAdmin
       .from('task_tag_assignments')
@@ -392,7 +396,7 @@ router.put('/labels/:id', async (req: Request, res: Response) => {
       res.status(500).json({ success: false, error: 'Cannot resolve workspace for task' });
       return;
     }
-    const isAdmin = await isPlatformAdmin(req.userId!);
+    const isAdmin = await isPlatformAdmin(req.userId!, workspaceId);
     if (!meetsAccessLevel(level, 'manager') && !isAdmin) {
       res.status(403).json({ success: false, error: 'Only managers can edit labels' });
       return;

@@ -13,7 +13,9 @@ router.use(requireUserType('internal', ...PARTNER_USER_TYPES, 'client', 'client_
 // but whose parent space is NOT in their accessible space set.
 router.get('/shared-with-me', async (req: Request, res: Response) => {
   try {
-    const workspaceId = req.query.workspace_id as string;
+    // requireAuth verified ?workspace_id membership and bound it as the active
+    // workspace; every query below is pinned to it.
+    const workspaceId = req.workspaceId as string;
     if (!workspaceId) {
       res.status(400).json({ success: false, error: 'workspace_id is required' });
       return;
@@ -30,8 +32,9 @@ router.get('/shared-with-me', async (req: Request, res: Response) => {
         .eq('workspace_id', workspaceId)
         .is('deleted_at', null),
       supabaseAdmin
-        .from('resource_memberships') // tenant-scope: caller's own rows (user_id = caller)
+        .from('resource_memberships')
         .select('resource_id')
+        .eq('workspace_id', workspaceId)
         .eq('resource_type', 'space')
         .eq('user_id', userId),
     ]);
@@ -44,15 +47,17 @@ router.get('/shared-with-me', async (req: Request, res: Response) => {
 
     // 2. Get direct list memberships for this user
     const { data: listMemberships } = await supabaseAdmin
-      .from('resource_memberships') // tenant-scope: caller's own rows (user_id = caller)
+      .from('resource_memberships')
       .select('id, resource_id, access_level, invited_by, created_at')
+      .eq('workspace_id', workspaceId)
       .eq('resource_type', 'list')
       .eq('user_id', userId);
 
     // 3. Get direct folder memberships for this user
     const { data: folderMemberships } = await supabaseAdmin
-      .from('resource_memberships') // tenant-scope: caller's own rows (user_id = caller)
+      .from('resource_memberships')
       .select('id, resource_id, access_level, invited_by, created_at')
+      .eq('workspace_id', workspaceId)
       .eq('resource_type', 'folder')
       .eq('user_id', userId);
 
@@ -64,6 +69,7 @@ router.get('/shared-with-me', async (req: Request, res: Response) => {
       const { data: lists } = await supabaseAdmin
         .from('lists')
         .select('id, name, space_id, folder_id')
+        .eq('workspace_id', workspaceId)
         .in('id', listIds)
         .eq('status', 'active')
         .is('deleted_at', null);
@@ -92,6 +98,7 @@ router.get('/shared-with-me', async (req: Request, res: Response) => {
       const { data: folders } = await supabaseAdmin
         .from('folders')
         .select('id, name, space_id')
+        .eq('workspace_id', workspaceId)
         .in('id', folderIds)
         .eq('status', 'active')
         .is('deleted_at', null);
@@ -132,7 +139,9 @@ router.get('/shared-with-me', async (req: Request, res: Response) => {
 // (and orphan shared design spaces) carry their accessible lists.
 router.get('/shared-tree', async (req: Request, res: Response) => {
   try {
-    const workspaceId = req.query.workspace_id as string;
+    // requireAuth verified ?workspace_id membership and bound it as the active
+    // workspace; every query below is pinned to it.
+    const workspaceId = req.workspaceId as string;
     if (!workspaceId) {
       res.status(400).json({ success: false, error: 'workspace_id is required' });
       return;
@@ -148,8 +157,9 @@ router.get('/shared-tree', async (req: Request, res: Response) => {
         .eq('workspace_id', workspaceId)
         .is('deleted_at', null),
       supabaseAdmin
-        .from('resource_memberships') // tenant-scope: caller's own rows (user_id = caller)
+        .from('resource_memberships')
         .select('resource_id')
+        .eq('workspace_id', workspaceId)
         .eq('resource_type', 'space')
         .eq('user_id', userId),
     ]);
@@ -163,13 +173,15 @@ router.get('/shared-tree', async (req: Request, res: Response) => {
     // 2. Direct folder + list memberships.
     const [{ data: folderMemberships }, { data: listMemberships }] = await Promise.all([
       supabaseAdmin
-        .from('resource_memberships') // tenant-scope: caller's own rows (user_id = caller)
+        .from('resource_memberships')
         .select('resource_id, access_level')
+        .eq('workspace_id', workspaceId)
         .eq('resource_type', 'folder')
         .eq('user_id', userId),
       supabaseAdmin
-        .from('resource_memberships') // tenant-scope: caller's own rows (user_id = caller)
+        .from('resource_memberships')
         .select('resource_id, access_level')
+        .eq('workspace_id', workspaceId)
         .eq('resource_type', 'list')
         .eq('user_id', userId),
     ]);
@@ -186,6 +198,7 @@ router.get('/shared-tree', async (req: Request, res: Response) => {
       const { data: folders } = await supabaseAdmin
         .from('folders')
         .select('id, name, space_id, folder_type, parent_folder_id, client_space_template_id, is_locked, is_private, position, group_tasks, client_id')
+        .eq('workspace_id', workspaceId)
         .in('id', folderIds)
         .eq('status', 'active')
         .is('deleted_at', null);
@@ -202,6 +215,7 @@ router.get('/shared-tree', async (req: Request, res: Response) => {
       const { data: folderLists } = await supabaseAdmin
         .from('lists')
         .select('id, name, space_id, folder_id, is_locked, is_private, position, group_tasks')
+        .eq('workspace_id', workspaceId)
         .in('folder_id', sharedFolders.map((f: any) => f.id))
         .eq('status', 'active')
         .is('deleted_at', null)
@@ -250,6 +264,7 @@ router.get('/shared-tree', async (req: Request, res: Response) => {
       const { data: rows } = await supabaseAdmin
         .from('lists')
         .select('id, name, space_id, folder_id, is_locked, is_private, position, group_tasks')
+        .eq('workspace_id', workspaceId)
         .in('id', listIds)
         .eq('status', 'active')
         .is('deleted_at', null)
