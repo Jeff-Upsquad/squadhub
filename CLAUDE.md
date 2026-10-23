@@ -14,9 +14,10 @@ multi-tenant model added. It is a SEPARATE product with its own Supabase project
 - Hub-owned data (client cards, job cards, assignments, partner payouts,
   payments, support tickets) is NOT stored here. It comes from the Hub over the
   server-to-server bridge: **[docs/bridge-contract.md](docs/bridge-contract.md)**.
-  Screens that show it are shells marked `TODO(bridge)`; their server routes
-  answer 501 until the bridge client lands. Signing helper:
-  `server/src/utils/bridgeSign.ts` (must stay identical in both repos).
+  Inbound: `server/src/routes/bridge/` (+ `services/bridge/`); outbound:
+  `server/src/utils/hubBridgeClient.ts`, used by `routes/hub-data.ts`. Hub
+  unreachable → 503 `hub_unavailable` → the web shows "temporarily
+  unavailable". Signing helper: `server/src/utils/bridgeSign.ts`.
 
 ## WAT framework
 

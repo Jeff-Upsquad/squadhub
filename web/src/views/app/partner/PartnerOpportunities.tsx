@@ -1,8 +1,6 @@
-// TODO(bridge): Hub-owned data. In the SaaS this screen is served by Squad Hub
-// over the server-to-server bridge (docs/bridge-contract.md: business cards,
-// talent opportunities/assignments, partner payouts, support tickets). Until the
-// SaaS server proxies those /bridge/v1 calls, its routes answer 501 and this
-// screen shows its empty/error state.
+// Opportunities come live from Squad Hub over the bridge (GET
+// /partner/opportunities → /bridge/v1/talent/:id/opportunities). Responding is
+// not part of bridge v1 yet: the server answers 409 "respond from SquadHire".
 import { useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import type {
@@ -13,6 +11,7 @@ import type {
 } from '@squadhub/shared';
 import { formatPrice, formatDeliverableCadence } from '@squadhub/shared';
 import api from '../../../services/api';
+import HubUnavailable, { isHubUnavailable } from '../../../components/HubUnavailable';
 
 const TABS: { key: RecipientStatus; label: string }[] = [
   { key: 'pending', label: 'Pending' },
@@ -24,7 +23,7 @@ export default function PartnerOpportunities() {
   const queryClient = useQueryClient();
   const [tab, setTab] = useState<RecipientStatus>('pending');
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, error, refetch } = useQuery({
     queryKey: ['partner-opportunities', tab],
     queryFn: () =>
       api.get(`/partner/opportunities?status=${tab}`).then((r) => r.data),
@@ -75,7 +74,9 @@ export default function PartnerOpportunities() {
       </div>
 
       <div className="flex-1 overflow-y-auto px-6 py-4">
-        {isLoading ? (
+        {isHubUnavailable(error) ? (
+          <HubUnavailable what="Opportunities" onRetry={() => refetch()} />
+        ) : isLoading ? (
           <p className="text-sm text-[var(--sh-ink-3)]">Loading…</p>
         ) : recipients.length === 0 ? (
           <p className="mt-8 text-center text-sm text-[var(--sh-ink-4)]">

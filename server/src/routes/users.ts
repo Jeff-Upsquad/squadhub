@@ -219,8 +219,7 @@ router.put('/me', requireAuth, async (req: Request, res: Response) => {
   }
 });
 
-// Hub-owned per-user data (client links, client subscription/job cards) used to
-// live here. In the SaaS it is served by Squad Hub over the bridge.
-// TODO(bridge): see docs/bridge-contract.md (GET /bridge/v1/business/:hubClientId/cards).
+// Hub-owned per-user data (client subscription/job cards, payments) is served
+// live from Squad Hub over the bridge: see routes/hub-data.ts.
 
 export default router;

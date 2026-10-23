@@ -1,11 +1,10 @@
-// TODO(bridge): Hub-owned data. In the SaaS this screen is served by Squad Hub
-// over the server-to-server bridge (docs/bridge-contract.md: business cards,
-// talent opportunities/assignments, partner payouts, support tickets). Until the
-// SaaS server proxies those /bridge/v1 calls, its routes answer 501 and this
-// screen shows its empty/error state.
+// Support tickets live on Squad Hub's help desk and are reached over the
+// server-to-server bridge (docs/bridge-contract.md). Agent replies arrive as
+// in-app notifications. When Squad Hub can't be reached this view says so;
+// the rest of the app keeps working.
 import { useMemo, useState } from 'react';
-import type { SupportTicket } from '@squadhub/shared';
-import { useSupportOverview, useMarkTicketRead } from '../../../hooks/useSupport';
+import { useSupportOverview, useMarkTicketRead, type BridgeTicket } from '../../../hooks/useSupport';
+import HubUnavailable from '../../../components/HubUnavailable';
 import CreateTicketModal from './CreateTicketModal';
 import SupportTicketThread from './SupportTicketThread';
 import { CATEGORY_META, PriorityDot, StatusPill, relativeTime, ticketCode } from './supportUi';
@@ -16,7 +15,7 @@ function hashGradient(id: string) {
   return `linear-gradient(135deg, hsl(${h} 70% 55%), hsl(${(h + 40) % 360} 65% 45%))`;
 }
 
-function TicketCard({ t, active, onOpen }: { t: SupportTicket; active: boolean; onOpen: () => void }) {
+function TicketCard({ t, active, onOpen }: { t: BridgeTicket; active: boolean; onOpen: () => void }) {
   const cat = CATEGORY_META[t.category];
   const assignee = t.assignee;
   return (
@@ -38,15 +37,9 @@ function TicketCard({ t, active, onOpen }: { t: SupportTicket; active: boolean; 
         </div>
         <div className="mt-1 truncate text-[14px] font-semibold text-[var(--sh-ink)]">{t.subject}</div>
         <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11.5px] text-[var(--sh-ink-3)]">
-          <span>Opened by {t.creator?.display_name || t.creator?.email || 'user'}</span>
+          <span>Opened {relativeTime(t.created_at)}</span>
           <span>·</span>
-          <span>{relativeTime(t.last_activity_at)}</span>
-          {typeof t.reply_count === 'number' && t.reply_count > 0 && (
-            <>
-              <span>·</span>
-              <span>{t.reply_count} {t.reply_count === 1 ? 'reply' : 'replies'}</span>
-            </>
-          )}
+          <span>Last activity {relativeTime(t.last_activity_at)}</span>
         </div>
       </div>
       <div className="flex shrink-0 flex-col items-end gap-2">
@@ -54,14 +47,10 @@ function TicketCard({ t, active, onOpen }: { t: SupportTicket; active: boolean; 
         {assignee ? (
           <span
             className="flex h-6 w-6 items-center justify-center overflow-hidden rounded-md text-[10px] font-bold text-white"
-            title={`Assigned to ${assignee.display_name || assignee.email}`}
-            style={{ background: assignee.avatar_url ? undefined : hashGradient(assignee.id) }}
+            title={`Assigned to ${assignee.display_name}`}
+            style={{ background: hashGradient(assignee.display_name || assignee.id) }}
           >
-            {assignee.avatar_url ? (
-              <img src={assignee.avatar_url} alt="" className="h-full w-full object-cover" />
-            ) : (
-              (assignee.display_name?.[0] || '?').toUpperCase()
-            )}
+            {(assignee.display_name?.[0] || '?').toUpperCase()}
           </span>
         ) : (
           <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-700">
@@ -74,7 +63,7 @@ function TicketCard({ t, active, onOpen }: { t: SupportTicket; active: boolean; 
 }
 
 export default function SupportChannelView({ workspaceId }: { workspaceId: string | null }) {
-  const { data, isLoading } = useSupportOverview(workspaceId);
+  const { data, isLoading, isError, refetch } = useSupportOverview(workspaceId);
   const [showCreate, setShowCreate] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [tab, setTab] = useState<'open' | 'closed'>('open');
@@ -85,7 +74,7 @@ export default function SupportChannelView({ workspaceId }: { workspaceId: strin
   const allTickets = useMemo(() => [...open, ...closed], [open, closed]);
   const selected = allTickets.find((t) => t.id === selectedId) || null;
 
-  const openTicket = (t: SupportTicket) => {
+  const openTicket = (t: BridgeTicket) => {
     setSelectedId(t.id);
     setTab(t.status);
     markRead.mutate(t.id);
@@ -158,7 +147,9 @@ export default function SupportChannelView({ workspaceId }: { workspaceId: strin
         {/* List */}
         <div className="flex-1 overflow-y-auto px-5 py-5">
           <div className="mx-auto max-w-3xl space-y-2">
-            {isLoading ? (
+            {data?.unavailable || isError ? (
+              <HubUnavailable what="Support" onRetry={() => refetch()} />
+            ) : isLoading ? (
               [0, 1, 2].map((i) => <div key={i} className="h-[76px] animate-pulse rounded-xl bg-[var(--sh-hair-3)]" />)
             ) : allTickets.length === 0 ? (
               <div className="rounded-2xl border border-dashed border-[var(--sh-hair)] px-6 py-12 text-center">
@@ -189,12 +180,7 @@ export default function SupportChannelView({ workspaceId }: { workspaceId: strin
 
       {/* Right: ticket thread — opens like a chat thread panel */}
       {selected && (
-        <SupportTicketThread
-          ticket={selected}
-          workspaceId={workspaceId}
-          isAgent={!!data?.is_agent}
-          onClose={() => setSelectedId(null)}
-        />
+        <SupportTicketThread ticket={selected} workspaceId={workspaceId} onClose={() => setSelectedId(null)} />
       )}
 
       {showCreate && (

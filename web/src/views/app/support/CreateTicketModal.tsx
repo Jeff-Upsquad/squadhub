@@ -1,12 +1,9 @@
-// TODO(bridge): Hub-owned data. In the SaaS this screen is served by Squad Hub
-// over the server-to-server bridge (docs/bridge-contract.md: business cards,
-// talent opportunities/assignments, partner payouts, support tickets). Until the
-// SaaS server proxies those /bridge/v1 calls, its routes answer 501 and this
-// screen shows its empty/error state.
+// Tickets are created on Squad Hub's help desk over the bridge (POST /support/tickets).
 import { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { SUPPORT_TICKET_CATEGORIES, type SupportTicketCategory } from '@squadhub/shared';
 import { useCreateTicket } from '../../../hooks/useSupport';
+import { isHubUnavailable } from '../../../components/HubUnavailable';
 
 const PRIORITIES: { value: 'low' | 'normal' | 'high' | 'urgent'; label: string }[] = [
   { value: 'low', label: 'Low' },
@@ -133,7 +130,9 @@ export default function CreateTicketModal({
 
             {create.isError && (
               <p className="rounded-lg bg-red-50 px-3 py-2 text-[12px] text-red-600">
-                Could not create the ticket. Please try again.
+                {isHubUnavailable(create.error)
+                  ? 'Support is temporarily unavailable — please try again in a few minutes.'
+                  : 'Could not create the ticket. Please try again.'}
               </p>
             )}
           </div>

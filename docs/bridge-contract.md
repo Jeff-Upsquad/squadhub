@@ -84,3 +84,18 @@ Support tickets created over the bridge land in the existing support desk (suppo
 - Business "first payment" = client activation on the Hub (invoices live in SquadBooks; `payments` returns `invoices: null`).
 
 Default mini apps for talent accounts: `check-ins`, `partner-payments`. Cashbook never offered.
+
+## SaaS implementation notes (saas/bridge)
+
+Where the Hub code and this contract differ, the SaaS follows what the Hub actually sends/reads:
+
+- **Shared workspaces are one per Hub card.** Lifecycle calls (`pause/resume/close`, `members/remove`) carry only the workspace id, so one workspace per card keeps them unambiguous. The host link (`participant_role='host'`) carries `hub_card_id`; `supersedes_hub_card_id` moves that link to the new card. Talent = `guest` + `member` access on the category space only (space named from the slug or service-type label, e.g. `designer`/`Designers` → "Designer"); account managers = `admin` with `is_upsquad_staff`. Ensure replies `{shared_workspace_id, created, space_id, space_name, talent_added, talent_pending_reason, staff_added, staff_pending}`.
+- `POST /accounts`: the Hub sends no business name; an optional `name` is accepted, else `owner.name` names the account. Talent owners get `users.hub_user_id = hub_partner_user_id`.
+- Admin list endpoints (accounts, audit, plans, mini-apps, checkins, staff workspaces) all reply `{items,total,page,page_size}`. Impersonate/SSO reply `{url, login_url, expires_at}`. Audit entries expose `actor{hub_user_id,email,name}`, `actor_email`, `target`, `reason` (stored in `platform_audit_log.details`). Check-ins have no mood/note on the SaaS: `mood: null`, `note` summarises completed items, `completed_items` included.
+- `PUT /admin/plans` takes `id` in the body (alias `PUT /admin/plans/:id` also works); `is_default:false` on the current default plan is ignored (there is always one default). Mini-app catalog never includes `cashbook`/`cash-book`; toggling them is a 400.
+- Support (Hub requires these, not listed above): thread `GET …/messages?saas_user_id=`, reply body `{saas_user_id, content}`, close/reopen body `{saas_user_id}`. `support/notify` writes a `support_reply` notification in the account the ticket was raised from (`bridge_support_tickets`); the notifications poller pushes it.
+- Opportunities: v1 has no "respond" endpoint, so SaaS respond/offer actions answer 409 "respond from SquadHire".
+- Outbound failures (bridge off, network, timeout, 5xx, 401 secret mismatch, 503) → SaaS answers 503 `{code:'hub_unavailable'}` and the web shows "temporarily unavailable"; Hub 4xx pass through.
+- One-time links: `login_tokens` (SHA-256, 10 min, single use) → `GET /auth/one-time?token=` mints a Supabase session and redirects to `/signin/one-time#…` (session in the fragment), landing on `workspace_id` when given. Impersonated sessions are tied to the Supabase `session_id`; `GET /auth/impersonation` drives a banner for the whole session.
+- Time totals: daily 00:20 IST, pushes yesterday and the day before; minutes = the talent account owner's `task_time_entries` in the card's shared workspace (IST day), capped at 1440.
+- Seats: non-owner admin/member members + pending admin/member invitations count; guests and Upsquad staff are free. Over the limit → 403 `{code:'seat_limit_reached'}`.

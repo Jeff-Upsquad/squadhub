@@ -4,6 +4,7 @@ import { requireAuth } from '../middleware/auth';
 import { supabaseAdmin } from '../supabase';
 import { getMembership, getUserWorkspaceIds } from '../middleware/workspace';
 import { addWorkspaceMember, createAccount, audit } from '../utils/accounts';
+import { assertSeatAvailable, SeatLimitError } from '../utils/seats';
 
 // Workspaces are the SaaS ACCOUNTS (business / talent / shared / internal_staff).
 // A user can belong to many; shared workspaces resolve through
@@ -51,7 +52,7 @@ router.get('/', requireAuth, async (req: Request, res: Response) => {
     const [{ data: rows, error }, { data: memberships }] = await Promise.all([
       supabaseAdmin
         .from('workspaces')
-        .select('id, name, slug, kind, status, owner_user_id, plan_id, host_workspace_id, created_at')
+        .select('id, name, slug, kind, status, owner_user_id, plan_id, host_workspace_id, engagement_status, created_at')
         .in('id', ids), // tenant-scope: ids come from getUserWorkspaceIds (membership-verified)
       supabaseAdmin
         .from('workspace_members')
@@ -190,6 +191,38 @@ router.post('/:id/members', requireAuth, async (req: Request, res: Response) => 
       .ilike('email', email)
       .maybeSingle();
 
+    // Plan seat limit (admins/members; guests and Upsquad staff are free).
+    const { data: already } = user
+      ? await supabaseAdmin
+          .from('workspace_members')
+          .select('id')
+          .eq('workspace_id', wsId)
+          .eq('user_id', user.id)
+          .maybeSingle()
+      : { data: null };
+    if (!already) {
+      try {
+        await assertSeatAvailable(wsId, role);
+      } catch (e) {
+        if (e instanceof SeatLimitError) {
+          const { data: samePending } = user
+            ? { data: null }
+            : await supabaseAdmin
+                .from('invitations')
+                .select('id, role')
+                .eq('workspace_id', wsId)
+                .ilike('email', email)
+                .eq('status', 'pending')
+                .maybeSingle();
+          // Re-sending an existing admin/member invitation doesn't take a new seat.
+          if (!samePending || ((samePending as any).role !== 'admin' && (samePending as any).role !== 'member')) {
+            res.status(403).json({ success: false, code: e.code, error: e.message, seats_used: e.used, seat_limit: e.limit });
+            return;
+          }
+        } else throw e;
+      }
+    }
+
     if (!user) {
       const { data: pending } = await supabaseAdmin
         .from('invitations')
@@ -208,7 +241,7 @@ router.post('/:id/members', requireAuth, async (req: Request, res: Response) => 
             .single()
         : await supabaseAdmin
             .from('invitations')
-            .insert({ workspace_id: wsId, email, role, invited_by: req.userId! })
+            .insert({ workspace_id: wsId, email, role, invited_by: req.userId!, status: 'pending' })
             .select()
             .single();
       if (error) {

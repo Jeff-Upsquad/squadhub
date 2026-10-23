@@ -1,15 +1,13 @@
-// TODO(bridge): Hub-owned data. In the SaaS this screen is served by Squad Hub
-// over the server-to-server bridge (docs/bridge-contract.md: business cards,
-// talent opportunities/assignments, partner payouts, support tickets). Until the
-// SaaS server proxies those /bridge/v1 calls, its routes answer 501 and this
-// screen shows its empty/error state.
+// Job cards come live from Squad Hub over the bridge (GET /job-cards/mine →
+// GET /bridge/v1/business/:hubClientId/cards, `job_cards`).
 import { useQuery } from '@tanstack/react-query';
 import api from '../../../services/api';
+import HubUnavailable, { isHubUnavailable } from '../../../components/HubUnavailable';
 import type { JobCard, JobCardStage } from '@squadhub/shared';
 
-// Client-facing Job Cards — the hiring sibling of ClientSubscriptionCards.
-// GET /job-cards/mine resolves the logged-in client by email against both the
-// converted clients rows and the lead submissions (direct FKs on job_cards).
+// Client-facing Job Cards — the hiring sibling of ClientSubscriptionCards. The
+// bridge sends {id, title, stage, state, created_at, job_profile,
+// business_profile, brand_profile}; the richer funnel counts are optional.
 
 const STAGE_PILL: Record<JobCardStage, { bg: string; fg: string; label: string }> = {
   new: { bg: 'rgba(100,116,139,0.1)', fg: '#64748B', label: 'New' },
@@ -52,9 +50,10 @@ function packageLabel(card: JobCard): string {
 }
 
 export default function ClientJobCards() {
-  const { data: res, isLoading, error } = useQuery({
+  const { data: res, isLoading, error, refetch } = useQuery({
     queryKey: ['my-job-cards'],
     queryFn: () => api.get('/job-cards/mine').then((r) => r.data),
+    retry: (count, err) => !isHubUnavailable(err) && count < 1,
   });
 
   const cards: JobCard[] = res?.data || [];
@@ -73,7 +72,11 @@ export default function ClientJobCards() {
           {isLoading ? (
             <p className="text-sm text-foreground-muted">Loading…</p>
           ) : error ? (
-            <p className="text-sm text-red-500">Failed to load job cards.</p>
+            isHubUnavailable(error) ? (
+              <HubUnavailable what="Job cards" onRetry={() => refetch()} />
+            ) : (
+              <p className="text-sm text-red-500">Failed to load job cards.</p>
+            )
           ) : cards.length === 0 ? (
             <div className="rounded-lg border border-divider bg-surface-alt p-8 text-center">
               <p className="text-sm text-foreground-muted">
@@ -99,9 +102,9 @@ export default function ClientJobCards() {
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-2">
                             <h3 className="truncate font-medium text-foreground">
-                              {c.job_profile?.title || c.role_service_type || 'Job opening'}
+                              {c.job_profile?.title || (c as any).title || c.role_service_type || 'Job opening'}
                             </h3>
-                            {c.openings_count > 1 && (
+                            {(c.openings_count ?? 0) > 1 && (
                               <span className="rounded-full bg-indigo-500/10 px-2 py-0.5 text-[10px] font-medium text-indigo-600">
                                 {c.openings_count} openings
                               </span>
@@ -122,7 +125,7 @@ export default function ClientJobCards() {
                         </span>
                       </div>
                       <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-foreground-muted">
-                        {c.published_at ? <span>Published {formatRelative(c.published_at)}</span> : <span>Not published yet</span>}
+                        {c.published_at ? <span>Published {formatRelative(c.published_at)}</span> : <span>Started {formatRelative(c.created_at)}</span>}
                         {funnel.length > 0 && (
                           <>
                             <span>·</span>

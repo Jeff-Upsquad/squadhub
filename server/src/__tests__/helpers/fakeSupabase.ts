@@ -84,9 +84,11 @@ class Query implements PromiseLike<any> {
     this.payload = payload;
     return this;
   }
-  upsert(payload: any) {
+  private upsertOpts: { onConflict?: string; ignoreDuplicates?: boolean } = {};
+  upsert(payload: any, opts?: { onConflict?: string; ignoreDuplicates?: boolean }) {
     this.mode = 'upsert';
     this.payload = payload;
+    this.upsertOpts = opts || {};
     return this;
   }
   update(payload: any) {
@@ -156,9 +158,25 @@ class Query implements PromiseLike<any> {
   private run(): { data: any; error: any; count?: number } {
     const all = this.rows();
     const hit = all.filter((r) => this.filters.every((f) => f(r)));
+    if (this.mode === 'upsert' && this.upsertOpts.onConflict) {
+      const keys = this.upsertOpts.onConflict.split(',').map((k) => k.trim());
+      const out: Row[] = [];
+      for (const r of Array.isArray(this.payload) ? this.payload : [this.payload]) {
+        const existing = all.find((x) => keys.every((k) => x[k] === r[k]));
+        if (existing) {
+          if (!this.upsertOpts.ignoreDuplicates) Object.assign(existing, r);
+          out.push(existing);
+        } else {
+          const row = { id: r.id ?? globalThis.crypto.randomUUID(), ...r };
+          all.push(row);
+          out.push(row);
+        }
+      }
+      return this.finish(out);
+    }
     if (this.mode === 'insert' || this.mode === 'upsert') {
       const list = (Array.isArray(this.payload) ? this.payload : [this.payload]).map((r: Row) => ({
-        id: r.id ?? `${this.table}-${all.length + 1}-${Math.random().toString(36).slice(2, 8)}`,
+        id: r.id ?? globalThis.crypto.randomUUID(),
         ...r,
       }));
       all.push(...list);
