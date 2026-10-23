@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import { supabaseAdmin } from '../../supabase';
 import { requireAuth } from '../../middleware/auth';
+import { reachableWorkspaceIds } from '../../middleware/workspace';
 import { requireUserType } from '../../middleware/userType';
 import { PARTNER_USER_TYPES } from '@squadhub/shared';
 import { addDailyWorkSeconds } from '../../utils/taskTime';
@@ -37,21 +38,21 @@ async function taskInContainer(
   container: { type: 'list' | 'folder' | 'space'; id: string },
 ): Promise<boolean> {
   const { data: task } = await supabaseAdmin
-    .from('tasks').select('list_id').eq('id', taskId).maybeSingle();
+    .from('tasks').select('list_id').in('workspace_id', await reachableWorkspaceIds()).eq('id', taskId).maybeSingle();
   const listId = (task as any)?.list_id;
   if (!listId) return false;
   const { data: list } = await supabaseAdmin
-    .from('lists').select('id, space_id, folder_id, group_tasks').eq('id', listId).maybeSingle();
+    .from('lists').select('id, space_id, folder_id, group_tasks').in('workspace_id', await reachableWorkspaceIds()).eq('id', listId).maybeSingle();
   if (!list) return false;
   const l = list as any;
   let folder: any = null;
   let space: any = null;
   if (l.folder_id) {
-    const { data } = await supabaseAdmin.from('folders').select('id, group_tasks').eq('id', l.folder_id).maybeSingle();
+    const { data } = await supabaseAdmin.from('folders').select('id, group_tasks').in('workspace_id', await reachableWorkspaceIds()).eq('id', l.folder_id).maybeSingle();
     folder = data;
   }
   if (l.space_id) {
-    const { data } = await supabaseAdmin.from('spaces').select('id, group_tasks').eq('id', l.space_id).maybeSingle();
+    const { data } = await supabaseAdmin.from('spaces').select('id, group_tasks').in('workspace_id', await reachableWorkspaceIds()).eq('id', l.space_id).maybeSingle();
     space = data;
   }
   const nearest = l.group_tasks
@@ -80,7 +81,7 @@ async function taskOutsideRunGroup(
 async function workspaceForList(listId: string | null | undefined): Promise<string | null> {
   if (!listId) return null;
   const { data: list } = await supabaseAdmin
-    .from('lists').select('space_id').eq('id', listId).maybeSingle();
+    .from('lists').select('space_id').in('workspace_id', await reachableWorkspaceIds()).eq('id', listId).maybeSingle();
   const spaceId = (list as any)?.space_id;
   if (!spaceId) return null;
   const { data: space } = await supabaseAdmin
@@ -123,6 +124,7 @@ async function closeGroupRun(
   const { data, error } = await supabaseAdmin
     .from('group_runs')
     .update({ ended_at: endedAt.toISOString(), duration_seconds: duration })
+    .in('workspace_id', await reachableWorkspaceIds())
     .eq('id', run.id)
     .select('ended_at, duration_seconds')
     .single();
@@ -144,7 +146,7 @@ async function closeGroupRun(
     const taskId = (anyCompletion as any)?.completed_task_id;
     if (taskId) {
       const { data: t } = await supabaseAdmin
-        .from('tasks').select('list_id').eq('id', taskId).maybeSingle();
+        .from('tasks').select('list_id').in('workspace_id', await reachableWorkspaceIds()).eq('id', taskId).maybeSingle();
       workspaceId = await workspaceForList((t as any)?.list_id);
     }
   }
@@ -321,6 +323,7 @@ router.get('/group-runs/history', async (req: Request, res: Response) => {
       const { data: ts } = await supabaseAdmin
         .from('tasks')
         .select('id, title, priority, status, list_id')
+        .in('workspace_id', await reachableWorkspaceIds())
         .in('id', referencedTaskIds);
       taskMap = new Map((ts || []).map((t: any) => [t.id, t]));
     }
@@ -358,6 +361,7 @@ router.post('/group-runs/runs/:run_id/completions', async (req: Request, res: Re
     const { data: run } = await supabaseAdmin
       .from('group_runs')
       .select('id, user_id, ended_at, group_key')
+      .in('workspace_id', await reachableWorkspaceIds())
       .eq('id', runId)
       .single();
     if (!run || (run as any).user_id !== req.userId) {
@@ -406,6 +410,7 @@ export async function recordGroupRunCompletionIfActive(userId: string, completed
     const { data: activeRuns } = await supabaseAdmin
       .from('group_runs')
       .select('id, user_id, ended_at, group_key')
+      .in('workspace_id', await reachableWorkspaceIds())
       .eq('user_id', userId)
       .is('ended_at', null);
 
@@ -447,6 +452,7 @@ router.post('/group-runs/runs/:run_id/task-times', async (req: Request, res: Res
     const { data: run } = await supabaseAdmin
       .from('group_runs')
       .select('id, user_id, ended_at, group_key')
+      .in('workspace_id', await reachableWorkspaceIds())
       .eq('id', runId)
       .single();
     if (!run || (run as any).user_id !== req.userId) {

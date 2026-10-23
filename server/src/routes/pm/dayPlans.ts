@@ -3,6 +3,8 @@ import { hydrateLists } from './tasks';
 import { z } from 'zod';
 import { supabaseAdmin } from '../../supabase';
 import { requireAuth } from '../../middleware/auth';
+import { reachableWorkspaceIds } from '../../middleware/workspace';
+import { checkResourceAccess } from '../../middleware/permissions';
 import { requireUserType } from '../../middleware/userType';
 import { PARTNER_USER_TYPES } from '@squadhub/shared';
 import { taskRecurrenceOccursOn, type TaskRecurrence } from '@squadhub/shared';
@@ -101,6 +103,7 @@ async function hydrate(plans: any[]): Promise<any[]> {
   const { data: tasks, error: tasksErr } = await supabaseAdmin
     .from('tasks')
     .select('id, title, priority, status, time_estimate, list_id, recurrence, recurring_parent_id, recurrence_instance_date, task_type_id, task_types(key, color)')
+    .in('workspace_id', await reachableWorkspaceIds())
     .in('id', taskIds);
   if (tasksErr) {
     console.error('[dayPlans] tasks lookup failed:', tasksErr);
@@ -133,6 +136,7 @@ async function hydrate(plans: any[]): Promise<any[]> {
       const { data: linkedTasks, error: linkedErr } = await supabaseAdmin
         .from('tasks')
         .select('id, title, status')
+        .in('workspace_id', await reachableWorkspaceIds())
         .in('id', linkedIds);
       if (linkedErr) {
         console.error('[dayPlans] linked-tasks lookup failed:', linkedErr);
@@ -167,6 +171,7 @@ async function loadGroupBlocks(userId: string, date: string): Promise<any[]> {
   const { data: rows, error } = await supabaseAdmin
     .from('group_day_plans')
     .select('*')
+    .in('workspace_id', await reachableWorkspaceIds())
     .eq('user_id', userId)
     .eq('plan_date', date);
   if (error) {
@@ -242,6 +247,7 @@ router.get('/day-plans', async (req: Request, res: Response) => {
       .select(
         'task_id, start_minute, end_minute, recurrence, notify_before_min, notify_on_start, notify_on_end, tasks!inner(id, assignee_ids)',
       )
+      .in('workspace_id', await reachableWorkspaceIds())
       .contains('tasks.assignee_ids', [req.userId!]);
 
     const virtualPlans: any[] = [];
@@ -287,6 +293,7 @@ router.get('/day-plans', async (req: Request, res: Response) => {
       const { data: dateTasks, error: dateErr } = await supabaseAdmin
         .from('tasks')
         .select('id, work_date, due_date, start_date, time_estimate, snoozed_until, recurring_parent_id')
+        .in('workspace_id', await reachableWorkspaceIds())
         .contains('assignee_ids', [req.userId!])
         // Routine templates are expanded separately below — their own stale
         // work/due dates must not leak in as one-off occurrences here.
@@ -354,6 +361,7 @@ router.get('/day-plans', async (req: Request, res: Response) => {
       const { data: templates, error: tmplErr } = await supabaseAdmin
         .from('tasks')
         .select('id, work_date, due_date, start_date, time_estimate, snoozed_until, recurrence, recurrence_paused')
+        .in('workspace_id', await reachableWorkspaceIds())
         .contains('assignee_ids', [req.userId!])
         .not('recurrence', 'is', null)
         .not('status', 'in', '(done,closed,cancelled,Done,Closed,Cancelled)');
@@ -372,6 +380,7 @@ router.get('/day-plans', async (req: Request, res: Response) => {
           const { data: instances } = await supabaseAdmin
             .from('tasks')
             .select('recurring_parent_id')
+            .in('workspace_id', await reachableWorkspaceIds())
             .in('recurring_parent_id', parentIds)
             .eq('recurrence_instance_date', date);
           const hasInstance = new Set<string>(
@@ -450,6 +459,18 @@ router.post('/day-plans', async (req: Request, res: Response) => {
       return;
     }
     const { task_id, plan_date, start_minute, duration_minutes } = parsed.data;
+
+    // Only tasks the caller can open may be planned (tenant wall + list access).
+    const { data: task } = await supabaseAdmin
+      .from('tasks')
+      .select('list_id')
+      .in('workspace_id', await reachableWorkspaceIds())
+      .eq('id', task_id)
+      .maybeSingle();
+    if (!task || !(await checkResourceAccess(req.userId!, 'list', (task as any).list_id))) {
+      res.status(404).json({ success: false, error: 'Task not found' });
+      return;
+    }
 
     const { data, error } = await supabaseAdmin
       .from('task_day_plans')
@@ -575,6 +596,12 @@ router.post('/group-day-plans', async (req: Request, res: Response) => {
       return;
     }
     const { container_type, container_id, plan_date, start_minute, duration_minutes } = parsed.data;
+    // The container must be one the caller can open (checkResourceAccess also
+    // enforces the tenant wall on its workspace).
+    if (!(await checkResourceAccess(req.userId!, container_type, container_id))) {
+      res.status(404).json({ success: false, error: 'Container not found' });
+      return;
+    }
     const { data, error } = await supabaseAdmin
       .from('group_day_plans')
       .upsert(

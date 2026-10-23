@@ -2,6 +2,7 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { supabaseAdmin } from '../../supabase';
 import { requireAuth } from '../../middleware/auth';
+import { reachableWorkspaceIds } from '../../middleware/workspace';
 import { requireUserType } from '../../middleware/userType';
 import { PARTNER_USER_TYPES } from '@squadhub/shared';
 import { logTaskTimeEntry } from '../../utils/taskTime';
@@ -37,6 +38,7 @@ async function assertWorkBlockTask(taskId: string): Promise<{ ok: boolean; error
   const { data: task, error } = await supabaseAdmin
     .from('tasks')
     .select('id, task_type_id, task_types(key)')
+    .in('workspace_id', await reachableWorkspaceIds())
     .eq('id', taskId)
     .single();
   if (error || !task) return { ok: false, error: 'Task not found' };
@@ -123,6 +125,7 @@ router.get('/work-blocks/:task_id', async (req: Request, res: Response, next: Ne
       const { data: ts } = await supabaseAdmin
         .from('tasks')
         .select('id, title, priority, status, list_id')
+        .in('workspace_id', await reachableWorkspaceIds())
         .in('id', referencedTaskIds);
       taskMap = new Map((ts || []).map((t: any) => [t.id, t]));
     }
@@ -220,6 +223,7 @@ router.patch('/work-blocks/:task_id', async (req: Request, res: Response) => {
     const { data, error } = await supabaseAdmin
       .from('work_blocks')
       .update(patch)
+      .in('workspace_id', await reachableWorkspaceIds())
       .eq('task_id', taskId)
       .select('*')
       .single();
@@ -242,7 +246,7 @@ router.patch('/work-blocks/:task_id', async (req: Request, res: Response) => {
 router.delete('/work-blocks/:task_id', async (req: Request, res: Response) => {
   try {
     const taskId = req.params.task_id as string;
-    const { error } = await supabaseAdmin.from('work_blocks').delete().eq('task_id', taskId);
+    const { error } = await supabaseAdmin.from('work_blocks').delete().in('workspace_id', await reachableWorkspaceIds()).eq('task_id', taskId);
     if (error) {
       res.status(500).json({ success: false, error: error.message });
       return;
@@ -296,6 +300,7 @@ async function closeRun(
   const { data, error } = await supabaseAdmin
     .from('work_block_runs')
     .update({ ended_at: endedAt.toISOString(), duration_seconds: duration })
+    .in('workspace_id', await reachableWorkspaceIds())
     .eq('id', run.id)
     .select('ended_at, duration_seconds')
     .single();
@@ -415,6 +420,7 @@ router.get('/work-blocks/active', async (req: Request, res: Response) => {
     const { data: task } = await supabaseAdmin
       .from('tasks')
       .select('id, title, list_id, task_type_id')
+      .in('workspace_id', await reachableWorkspaceIds())
       .eq('id', (run as any).task_id)
       .single();
     res.json({ success: true, data: { run, task } });
@@ -446,6 +452,7 @@ router.post('/work-blocks/runs/:run_id/completions', async (req: Request, res: R
     const { data: run } = await supabaseAdmin
       .from('work_block_runs')
       .select('id, user_id, ended_at')
+      .in('workspace_id', await reachableWorkspaceIds())
       .eq('id', runId)
       .single();
     if (!run || (run as any).user_id !== req.userId) {
@@ -488,6 +495,7 @@ export async function recordWorkBlockCompletionIfActive(userId: string, complete
     const { data: activeRuns } = await supabaseAdmin
       .from('work_block_runs')
       .select('id, task_id')
+      .in('workspace_id', await reachableWorkspaceIds())
       .eq('user_id', userId)
       .is('ended_at', null);
 
@@ -533,6 +541,7 @@ router.post('/work-blocks/runs/:run_id/task-times', async (req: Request, res: Re
     const { data: run } = await supabaseAdmin
       .from('work_block_runs')
       .select('id, user_id, ended_at')
+      .in('workspace_id', await reachableWorkspaceIds())
       .eq('id', runId)
       .single();
     if (!run || (run as any).user_id !== req.userId) {
