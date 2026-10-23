@@ -17,7 +17,7 @@ import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import { requireAuth } from '../middleware/auth';
 import { supabaseAdmin } from '../supabase';
-import { hub, sendHubError } from '../utils/hubBridgeClient';
+import { hub, HubUnavailableError, sendHubError } from '../utils/hubBridgeClient';
 import { workspaceHasMiniApp } from '../utils/miniAppAccess';
 
 type Kind = 'business' | 'talent';
@@ -242,22 +242,38 @@ function ticketShape(t: any) {
   };
 }
 
+/**
+ * The web keys its Support rail/view on a channel id; tickets live on the Hub,
+ * so the SaaS answers with a fixed sentinel "channel". The overview never
+ * fails on a Hub outage — it reports `unavailable` so the rail stays and the
+ * view can say "temporarily unavailable".
+ */
+export const SUPPORT_CHANNEL_SENTINEL = '00000000-0000-4000-8000-000000005000';
+
 supportRouter.get('/overview', async (req, res) => {
   try {
-    const list = await hub.listTickets(req.userId!);
-    const tickets = (Array.isArray(list) ? list : []).map(ticketShape);
     const { count } = await supabaseAdmin
       .from('notifications')
       .select('id', { count: 'exact', head: true })
       .eq('user_id', req.userId!)
       .eq('type', 'support_reply')
       .eq('is_read', false); // tenant-scope: caller's own notifications across their accounts
+    let tickets: ReturnType<typeof ticketShape>[] = [];
+    let unavailable: string | null = null;
+    try {
+      const list = await hub.listTickets(req.userId!);
+      tickets = (Array.isArray(list) ? list : []).map(ticketShape);
+    } catch (err) {
+      if (!(err instanceof HubUnavailableError)) throw err;
+      unavailable = err.message;
+    }
     res.json({
       success: true,
       data: {
-        channel: null,
+        channel: { id: SUPPORT_CHANNEL_SENTINEL, name: 'Support', channel_kind: 'support' },
         is_agent: false,
         unread: count ?? 0,
+        unavailable,
         tickets: { open: tickets.filter((t) => t.status !== 'closed'), closed: tickets.filter((t) => t.status === 'closed') },
       },
     });

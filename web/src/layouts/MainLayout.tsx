@@ -22,6 +22,7 @@ import HuddleDock from '../views/app/huddles/HuddleDock';
 import HuddleHeaderButton from '../views/app/huddles/HuddleHeaderButton';
 import SupportChannelView from '../views/app/support/SupportChannelView';
 import { useSupportOverview } from '../hooks/useSupport';
+import ImpersonationBanner from '../components/ImpersonationBanner';
 import ChatSearch from '../views/app/chat/ChatSearch';
 import CreateChannelModal from '../views/app/chat/CreateChannelModal';
 import GlobalCreateTaskModal from '../views/app/pm/GlobalCreateTaskModal';
@@ -290,7 +291,7 @@ export default function MainLayout() {
   const pmReset = usePMStore((s) => s.reset);
   // The special Support help-desk channel renders the ticket UI, not chat.
   const { data: supportOverview } = useSupportOverview(currentWorkspace?.id ?? null);
-  const supportChannelId = supportOverview?.channel.id ?? null;
+  const supportChannelId = supportOverview?.channel?.id ?? null;
   const supportUnread = supportOverview?.unread ?? 0;
   const activeSpaceId = usePMStore((s) => s.activeSpaceId);
   const activeListId = usePMStore((s) => s.activeListId);
@@ -1642,6 +1643,7 @@ export default function MainLayout() {
 
   return (
     <div className="flex h-[100dvh] bg-canvas text-foreground">
+      <ImpersonationBanner />
       {/* Mobile top bar — only renders below md breakpoint. */}
       <div className="fixed inset-x-0 top-0 z-[60] flex h-12 items-center justify-between border-b border-[var(--sh-hair)] bg-[var(--icon-bar)] px-3 md:hidden">
         <button

@@ -1,11 +1,10 @@
-// TODO(bridge): Hub-owned data. In the SaaS this screen is served by Squad Hub
-// over the server-to-server bridge (docs/bridge-contract.md: business cards,
-// talent opportunities/assignments, partner payouts, support tickets). Until the
-// SaaS server proxies those /bridge/v1 calls, its routes answer 501 and this
-// screen shows its empty/error state.
+// Payouts come live from Squad Hub over the bridge (/partner-payments/* →
+// /bridge/v1/talent/:hubPartnerUserId/payouts[/history]) — the same calculator
+// as the Hub's Partner Payments mini app. A talent only ever sees their own.
 import { useMemo, useState, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import api from '../../../services/api';
+import HubUnavailable, { apiErrorCode, isHubUnavailable } from '../../../components/HubUnavailable';
 
 // Partner Payments mini app — assigned clients, monthly payouts and
 // commission status for the signed-in partner. Internal admins get a
@@ -201,6 +200,9 @@ export default function PartnerPaymentsPage() {
   const currentMonth = history.data?.current_month || currentMonthKey();
 
   if (me.isLoading) return <Loading what="the app" />;
+  if (me.isError && apiErrorCode(me.error) === 'not_linked') {
+    return <EmptyState title="Not linked yet" body="Your talent account isn\u2019t linked to Squad Hub yet. Payouts appear here once you\u2019re assigned to a client." />;
+  }
   if (me.isError) {
     const msg =
       (me.error as { response?: { data?: { error?: string } } }).response?.data?.error ||
@@ -234,6 +236,10 @@ export default function PartnerPaymentsPage() {
             </select>
           )}
         </div>
+
+        {(isHubUnavailable(month.error) || isHubUnavailable(history.error)) && (
+          <HubUnavailable what="Payouts" onRetry={() => { month.refetch(); history.refetch(); }} />
+        )}
 
         {!recipientId ? (
           <EmptyState
