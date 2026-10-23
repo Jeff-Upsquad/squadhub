@@ -20,13 +20,13 @@ Validate, stage, and commit the current changes on a feature branch. Do not push
 
    ```bash
    npx tsc --noEmit -p server/tsconfig.json
-   npm run check:shared-imports
+   npm run check:tenant-scope && npm test -w server
    ```
 
    For web/admin-heavy changes, also verify:
 
    ```bash
-   npm run build -w shared && npm run build -w web --if-present && npm run build -w admin --if-present
+   npm run build -w shared && npm run build -w web --if-present
    ```
 
    Stop on validation failure and fix it before committing.
@@ -38,4 +38,4 @@ Validate, stage, and commit the current changes on a feature branch. Do not push
 - Never commit directly on `main`. If `main` itself is dirty, stop and ask for scope instead of committing there.
 - Never add `.env`, `.env.production`, `credentials.json`, `token.json`, APKs, or other ignored secrets/artifacts.
 - If unrelated changes overlap the intended commit, stop and ask for scope.
-- If `npx tsc` or `check:shared-imports` fails, do not commit — fix first.
+- If `npx tsc` or `check:tenant-scope` or the server tests fails, do not commit — fix first.

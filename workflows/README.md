@@ -1,45 +1,23 @@
 # Workflows
 
-This directory contains Markdown SOPs (Standard Operating Procedures) that define how to accomplish objectives.
+Markdown SOPs (the instruction layer of the WAT framework) for **Squad Hub SaaS**.
 
-## Purpose
-
-Workflows are the instruction layer of the WAT framework. Each workflow defines a clear objective, required inputs, which tools to use and in what sequence, and how to handle edge cases.
-
-## Keyword workflows (mandatory)
-
-When the user invokes `CM`, `PD`, `CMPD`, or `CU` (case-insensitive, with or without a leading slash or words like `run`), read `workflows/README.md` and the matching workflow file completely, then execute it. Do not ask what the keyword means.
+## Keyword workflows
 
 | Keyword | File | Meaning |
 |---|---|---|
 | **CM** | [cm.md](cm.md) | Validate and commit on a feature branch. No push, PR, or deployment. |
-| **PD** | [pd.md](pd.md) | Sync `main` after a merged PR; deploy only when the PR touched deployable code. |
-| **CMPD** | [cmpd.md](cmpd.md) | Complete code pipeline: branch → PR → merge → PD. Never publishes a desktop release. |
 | **CU** | [cu.md](cu.md) | Safely clean a merged worktree/branch and temporary files. |
 
-**GitHub CI is paused by user instruction (2026-10-17) for this and future CMPD runs.** Keep local validation; merge through a PR without waiting for GitHub checks, then deploy manually. Do not re-enable CI until the user asks. See [cmpd.md](cmpd.md) and [pd.md](pd.md).
-
-The critical boundary is deliberate: `CM`, `PD`, and `CMPD` can move source code, but only a tagged `desktop-app-v*` push or manual dispatch of `desktop-app-release.yml` may publish a desktop release. `main` only moves via PR merges — direct commits/pushes to `main` are not allowed in this pipeline. (Automated Greptile review is paused as of 2026-09-23; see [cmpd.md](cmpd.md) for how to restore it.)
-
-If a workflow exposes a recurring failure or a safer method, update its SOP. Never silently weaken its validation, branch-safety, or deployment checks.
+`PD` / `CMPD` are **not set up** in this repo yet: there is no GitHub repo, no
+deploy pipeline and no production environment for app.squadhub.in. Do not push,
+deploy, or run migrations against any remote database until the user sets those
+up and writes the SOPs.
 
 ## Other SOPs
 
 | File | Purpose |
 |---|---|
-| [deploy.md](deploy.md) | VPS Docker deployment details (`tools/deploy.sh`) |
-| [agent-build.md](agent-build.md) | Build-agent pipeline: READY TO CODE task → implement → CMPD/CU → report back (executor-agnostic; Mac today, VPS later) |
-| [rollback.md](rollback.md) | Rolling back a bad deploy via timestamp tags |
-| [test-handoff.md](test-handoff.md) | Post-deploy plain-language handoff to the user |
-| [push.md](push.md) | Legacy direct-push SOP (retired — use CMPD) |
-
-## Workflow Template
-
-Each workflow should include:
-- **Objective**: What this workflow accomplishes
-- **Inputs**: What data or configuration is needed before starting
-- **Tools Used**: Which scripts from `../tools/` are called
-- **Estimated Time**: How long this typically takes
-- **Steps**: Numbered, clear instructions for the agent
-- **Outputs**: What gets produced and where
-- **Edge Cases**: Troubleshooting and recovery
+| [test-handoff.md](test-handoff.md) | Plain-language handoff after something becomes testable (adapt URLs once app.squadhub.in exists) |
+| [google-meet-setup.md](google-meet-setup.md) | Meeting-link provider setup (inherited from Squad Hub) |
+| [huddles-setup.md](huddles-setup.md) | LiveKit huddles setup (inherited from Squad Hub) |

@@ -1,99 +1,94 @@
-# Agent Instructions
+# Agent Instructions — Squad Hub SaaS
 
-You're working inside the **WAT framework** (Workflows, Agents, Tools). This architecture separates concerns so that probabilistic AI handles reasoning while deterministic code handles execution. That separation is what makes this system reliable.
+This is **Squad Hub SaaS** (app.squadhub.in): a Slack-style product for
+SquadHire **businesses** and **talents**. It is a fork of the internal Squad Hub
+app (`~/squadhub web`) with every internal-only module removed and a
+multi-tenant model added. It is a SEPARATE product with its own Supabase project.
 
-## The WAT Architecture
+- Git remote **`hub`** points at the internal Squad Hub repo (`~/squadhub web`)
+  so fixes can be cherry-picked (`git fetch hub && git cherry-pick <sha>`).
+  Expect conflicts in anything touching workspaces, permissions or removed modules.
+- **No GitHub repo, no deploy pipeline, no production environment yet.** Never
+  push, deploy, create Supabase projects, or apply migrations to a remote
+  database unless the user explicitly sets that up.
+- Hub-owned data (client cards, job cards, assignments, partner payouts,
+  payments, support tickets) is NOT stored here. It comes from the Hub over the
+  server-to-server bridge: **[docs/bridge-contract.md](docs/bridge-contract.md)**.
+  Screens that show it are shells marked `TODO(bridge)`; their server routes
+  answer 501 until the bridge client lands. Signing helper:
+  `server/src/utils/bridgeSign.ts` (must stay identical in both repos).
 
-**Layer 1: Workflows (The Instructions)**
-- Markdown SOPs stored in `workflows/`
-- Each workflow defines the objective, required inputs, which tools to use, expected outputs, and how to handle edge cases
-- Written in plain language, the same way you'd brief someone on your team
+## WAT framework
 
-**Layer 2: Agents (The Decision-Maker)**
-- This is your role. You're responsible for intelligent coordination.
-- Read the relevant workflow, run tools in the correct sequence, handle failures gracefully, and ask clarifying questions when needed
-- You connect intent to execution without trying to do everything yourself
-- Example: If you need to pull data from a website, don't attempt it directly. Read `workflows/scrape_website.md`, figure out the required inputs, then execute `tools/scrape_single_site.py`
+Workflows (`workflows/`) → Agents (you) → Tools (`tools/`). Read the relevant
+SOP, run tools in order, fix and document failures, keep SOPs current (ask before
+creating/overwriting one unless told to). Secrets live in `.env` files only.
 
-**Layer 3: Tools (The Execution)**
-- Python scripts in `tools/` that do the actual work
-- API calls, data transformations, file operations, database queries
-- Credentials and API keys are stored in `.env`
-- These scripts are consistent, testable, and fast
+## Monorepo
 
-**Why this matters:** When AI tries to handle every step directly, accuracy drops fast. If each step is 90% accurate, you're down to 59% success after just five steps. By offloading execution to deterministic scripts, you stay focused on orchestration and decision-making where you excel.
+npm workspaces: `shared/` (types), `server/` (Express + Socket.IO), `web/`
+(Next.js). `admin/`, the desktop apps, partner portal, Squad Bots, Cashbook,
+CRM/Leads/Sales, Candidates, LMS/Resources, SOP breaches, HR/timesheets and all
+Hub admin routes were removed — don't reintroduce them.
 
-## How to Operate
+## Tenancy (read before touching the server)
 
-**1. Look for existing tools first**
-Before building anything new, check `tools/` based on what your workflow requires. Only create new scripts when nothing exists for that task.
+- A `workspaces` row **is the account**: `kind` = business | talent | shared |
+  internal_staff, `status` = active | suspended, external ids
+  (`hub_client_id`, `hub_partner_user_id`, `squadhire_business_id`,
+  `squadhire_talent_id`), `host_workspace_id` for shared workspaces.
+  Helpers: `server/src/utils/accounts.ts` (createAccount / ensureAccount / audit).
+- `workspace_members.role` = owner | admin | member | guest (+ `is_upsquad_staff`).
+  Shared workspaces also resolve for owners/admins of participant accounts
+  linked through active `shared_workspace_links`.
+- `requireAuth` resolves the active workspace from `X-Workspace-Id` (and any
+  `workspace_id` query/body param — they must agree), verifies membership and
+  binds it for the request (`req.workspaceId`, `currentWorkspaceId()`).
+  `middleware/workspace.ts` is the single source of membership truth.
+- `checkResourceAccess` resolves the resource's OWN workspace and refuses users
+  who can't reach it — admin/role/permission lookups are per workspace.
+- The server uses the service-role key: **RLS protects nothing. Every query on
+  a tenant table must filter by `workspace_id` or carry a
+  `// tenant-scope: <reason>` comment.** `npm run check:tenant-scope`
+  enforces this with a ratcheting baseline
+  (`server/scripts/tenant-scope-baseline.json`); never raise the baseline —
+  scope the query or justify it. `--list` prints the remaining TODO chains.
+- My Tasks, Inbox/notifications, meetings and calendar views aggregate across
+  every workspace the user belongs to (`getUserWorkspaceIds`).
+- Mini apps are per workspace (`workspace_mini_apps`); talent accounts start
+  with `check-ins` + `partner-payments`. Cashbook is never offered.
 
-**2. Learn and adapt when things fail**
-When you hit an error:
-- Read the full error message and trace
-- Fix the script and retest (if it uses paid API calls or credits, check with me before running again)
-- Document what you learned in the workflow (rate limits, timing quirks, unexpected behavior)
-- Example: You get rate-limited on an API, so you dig into the docs, discover a batch endpoint, refactor the tool to use it, verify it works, then update the workflow so this never happens again
+## Database
 
-**3. Keep workflows current**
-Workflows should evolve as you learn. When you find better methods, discover constraints, or encounter recurring issues, update the workflow. That said, don't create or overwrite workflows without asking unless I explicitly tell you to. These are your instructions and need to be preserved and refined, not tossed after one use.
+- `supabase/migrations/0001_saas_baseline.sql` is a fresh consolidated baseline
+  (NOT a replay of Hub migrations; those are archived in
+  `supabase/migrations_hub_archive/` for reference only and are never applied).
+- Collaboration tables carry `workspace_id NOT NULL`; child rows get it from
+  their parent via `saas_fill_workspace_id()` triggers, which also REJECT a
+  mismatching workspace (cross-tenant links can't be written).
+- Validate locally without Docker:
+  `PGHOST=127.0.0.1 PGPORT=5432 PGUSER=postgres bash supabase/validate/validate_baseline.sh`
+  (applies stubs + migrations to a throwaway DB and runs `tenancy_smoke.sql`).
+- New migrations: `supabase/migrations/NNNN_name.sql`, grants for
+  `service_role` only, RLS enabled, `workspace_id` on every tenant table.
 
-## The Self-Improvement Loop
+## Checks before committing
 
-Every failure is a chance to make the system stronger:
-1. Identify what broke
-2. Fix the tool
-3. Verify the fix works
-4. Update the workflow with the new approach
-5. Move on with a more robust system
-
-This loop is how the framework improves over time.
-
-## File Structure
-
-**What goes where:**
-- **Deliverables**: Final outputs go to cloud services (Google Sheets, Slides, etc.) where I can access them directly
-- **Intermediates**: Temporary processing files that can be regenerated
-
-**Directory layout:**
+```bash
+npm run build -w shared
+npx tsc --noEmit -p server/tsconfig.json
+npm run check:tenant-scope
+npm test -w server            # includes tenantIsolation.test.ts
+npm run build -w web          # when web changed
 ```
-.tmp/           # Temporary files (scraped data, intermediate exports). Regenerated as needed.
-tools/          # Python scripts for deterministic execution
-workflows/      # Markdown SOPs defining what to do and how
-.env            # API keys and environment variables (NEVER store secrets anywhere else)
-credentials.json, token.json  # Google OAuth (gitignored)
-```
 
-**Core principle:** Local files are just for processing. Anything I need to see or use lives in cloud services. Everything in `.tmp/` is disposable.
+## Keyword workflows
 
-## Keyword workflows (mandatory)
+`CM` and `CU` exist (see `workflows/README.md`). `PD`/`CMPD` are not set up —
+there is nothing to deploy to yet.
 
-When the user invokes `CM`, `PD`, `CMPD`, or `CU` (case-insensitive, with or without a leading slash or words like `run`), read `workflows/README.md` and the matching workflow file completely, then execute it. Do not ask what the keyword means.
+## Test handoff
 
-These meanings are intentionally distinct:
-
-- `CM` validates and commits on a feature branch; it does not push, open PRs, or deploy.
-- `PD` syncs `main` after a merged PR and deploys only when relevant.
-- `CMPD` runs the full code pipeline — branch, PR, merge — but never publishes a desktop app release. (Greptile review is paused as of 2026-09-23.)
-- `CU` performs safe post-merge cleanup and requires confirmation before deleting a worktree or branch.
-
-The authoritative SOPs live in `workflows/`. If a workflow is improved, update the corresponding file so the behavior remains durable across sessions.
-
-## Automation and local fallbacks
-
-GitHub Actions now provides:
-
-- `.github/workflows/ci.yml` — shared-import checks, server type-check, and full monorepo builds on pushes to `main` and pull requests.
-- `.github/workflows/deploy.yml` — auto-deploys production (runs `tools/deploy.sh`) after CI passes on `main`; stops if unapplied `supabase/migrations/` are in the range. See `workflows/deploy.md`.
-- `.github/workflows/desktop-app-release.yml` — manual/tag-triggered build of the desktop app (macOS + Windows) and draft GitHub release.
-
-Source-code movement must go through `CMPD` (branch → PR → merge). Never commit+push source directly to `main` — that bypasses the PR gate.
-
-- **"push"** → retired as a direct-to-main shortcut. Use `CMPD`.
-- **"deploy"** → requires the code to already be on `origin/main` via a merged, reviewed PR, then `bash tools/deploy.sh`.
-
-## Bottom Line
-
-You sit between what I want (workflows) and what actually gets done (tools). Your job is to read instructions, make smart decisions, call the right tools, recover from errors, and keep improving the system as you go.
-
-Stay pragmatic. Stay reliable. Keep learning.
+After anything becomes testable (a localhost link today; a deploy later), give
+a short plain-language summary: where to go, what changed for the user, how to
+test it. If nothing user-facing changed, say so.
