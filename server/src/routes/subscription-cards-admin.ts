@@ -29,6 +29,7 @@ import {
 import { promoteCardLeadToClient } from '../utils/submissionPipeline';
 import { logCardEvent } from '../utils/cardEvents';
 import { copyCardToNewDraft } from '../utils/duplicateCard';
+import { fireSaasHook, saasCardLifecycle } from '../utils/saasBridgeClient';
 import {
   hydrateCardAssigneeUsers,
   normalizeCardAssignees,
@@ -1761,6 +1762,10 @@ export async function cancelCardCore(cardId: string, actor: CardActor): Promise<
       actorLabel: actor.userName ?? null,
       metadata: { had_acceptances: hasAcceptances, is_secondary: isSecondary, was_assigned: card.state === 'assigned' },
     });
+
+    // Squad Hub SaaS: close the card's shared workspace (best-effort,
+    // flag-gated; no-op when the card was never provisioned there).
+    fireSaasHook('card-close', () => saasCardLifecycle(cardId, 'close'));
 
     return {
       httpStatus: 200,

@@ -2,6 +2,7 @@ import { SERVICE_TYPE_TO_SLUG } from '@squadhub/shared';
 import { supabaseAdmin } from '../supabase';
 import { copyExternalLinksToClient } from './clientExternalLinks';
 import { ensureClientPortalAccess } from './ensureClientPortalAccess';
+import { fireSaasHook, saasProvisionBusinessForClient } from './saasBridgeClient';
 import { findSubmissionByContact } from './leadLookup';
 
 export const PIPELINE_STATUSES = [
@@ -260,6 +261,9 @@ async function materialiseClientFromSubmission(submission: any, stagedSubs: any[
     email: submission.email,
     displayName: submission.contact_person,
   });
+  // Squad Hub SaaS: business activated → ensure its SaaS account (best-effort;
+  // no-op unless SAAS_PROVISIONING_ENABLED).
+  fireSaasHook('business-account', () => saasProvisionBusinessForClient(client.id));
 
   return { clientId: client.id as string, created: true };
 }
@@ -452,6 +456,8 @@ export async function attachSubmissionToExistingClient(
     email: submission.email,
     displayName: submission.contact_person,
   });
+  // Squad Hub SaaS: ensure the business account (best-effort, flag-gated).
+  fireSaasHook('business-account', () => saasProvisionBusinessForClient(clientId));
 
   if (submission.status !== 'converted') {
     const { error: updErr } = await supabaseAdmin

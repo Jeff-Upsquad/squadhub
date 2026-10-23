@@ -18,6 +18,7 @@
 // ============================================================
 import { supabaseAdmin } from '../supabase';
 import { sharePartnerWithCardClient } from './sharePartnerWithClient';
+import { fireSaasHook, saasRemoveCardTalent } from './saasBridgeClient';
 
 type RecipientType = 'talent' | 'partner' | null;
 
@@ -92,6 +93,9 @@ export async function handOffSpaceToNewTalent(input: HandoffInput): Promise<void
       await sharePartnerWithCardClient(newUserId, cardId);
     }
     if (oldUserId && oldUserId !== newUserId) {
+      // Squad Hub SaaS: drop the outgoing talent from the card's shared
+      // workspace (best-effort; no-op unless SAAS_PROVISIONING_ENABLED).
+      fireSaasHook('remove-talent', () => saasRemoveCardTalent(cardId, oldUserId));
       const clientId = await resolveCardClientId(cardId);
       if (clientId) {
         await supabaseAdmin
