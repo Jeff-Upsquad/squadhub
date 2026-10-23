@@ -1,5 +1,4 @@
 import { startTaskRemindersCron } from './cron/task-reminders-cron';
-import { startContentBriefCrmCron } from './cron/content-brief-crm-cron';
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
@@ -12,16 +11,12 @@ import { setupSocketIO } from './sockets';
 import authRoutes from './routes/auth';
 import workspaceRoutes from './routes/workspaces';
 import channelRoutes from './routes/channels';
-import botChannelRoutes from './routes/squad-bot-channels';
-import supportRoutes from './routes/support';
 import messageRoutes from './routes/messages';
 import scheduledMessageRoutes from './routes/scheduled-messages';
 import dmRoutes from './routes/dms';
 import uploadChatWsRoutes from './routes/upload-chat-ws';
 import uploadRoutes from './routes/upload';
 import userRoutes from './routes/users';
-import adminRoutes from './routes/admin';
-import rolesRoutes from './routes/roles';
 import pmSpaceRoutes from './routes/pm/spaces';
 import pmFolderRoutes from './routes/pm/folders';
 import pmListRoutes from './routes/pm/lists';
@@ -29,8 +24,6 @@ import pmWhiteboardRoutes from './routes/pm/whiteboards';
 import pmViewRoutes from './routes/pm/views';
 import pmTaskRoutes from './routes/pm/tasks';
 import pmLabelsRoutes from './routes/pm/labels';
-import labelsAdminRoutes from './routes/labels-admin';
-import skillsAdminRoutes from './routes/skills-admin';
 import pmDayPlansRoutes from './routes/pm/dayPlans';
 import pmWorkBlocksRoutes from './routes/pm/workBlocks';
 import pmGroupRunsRoutes from './routes/pm/groupRuns';
@@ -44,120 +37,26 @@ import appFavoritesRoutes from './routes/app-favorites';
 import notesRoutes from './routes/notes';
 import membershipsRoutes from './routes/memberships';
 import checkinRoutes from './routes/checkin';
-import checkinAdminRoutes from './routes/checkin-admin';
-import timesheetRoutes from './routes/timesheet';
-import timesheetAdminRoutes from './routes/timesheet-admin';
-import offDaysRoutes from './routes/off-days';
-import offDaysAdminRoutes from './routes/off-days-admin';
-import officeTimingAdminRoutes from './routes/office-timing-admin';
 import miniAppsRoutes from './routes/mini-apps';
-import miniAppsAdminRoutes from './routes/mini-apps-admin';
-import squadbooksAdminRoutes from './routes/squadbooks-admin';
-import squadbooksIntegrationRoutes from './routes/squadbooks-integration';
-import clientsPublicRoutes from './routes/clients-public';
-import leadsPublicRoutes from './routes/leads-public';
-import designSharePublicRoutes from './routes/design-share-public';
-import clientsAdminRoutes from './routes/clients-admin';
-import onboardingLinksRoutes from './routes/onboarding-links';
-import onboardingLinksAdminRoutes from './routes/onboarding-links-admin';
-import subscriptionCardsRoutes from './routes/subscription-cards';
-import subscriptionCardsAdminRoutes from './routes/subscription-cards-admin';
-import subscriptionCardsAdminRequestsRoutes from './routes/subscription-cards-admin-requests';
-import subscriptionCardsAdminAssignRoutes from './routes/subscription-cards-admin-assign';
-import subscriptionCardsAdminSelectRoutes from './routes/subscription-cards-admin-select';
-import subscriptionCardsAdminOffersRoutes from './routes/subscription-cards-admin-offers';
-import subscriptionCardsAdminClientViewRoutes from './routes/subscription-cards-admin-client-view';
-import subscriptionCardsPartnerRoutes from './routes/subscription-cards-partner';
-import discoverPartnerRoutes from './routes/discover-partner';
-import partnerTalentRoutes from './routes/partner-talent';
-import subscriptionCardsLinkingRoutes from './routes/subscription-cards-linking';
-import subscriptionsAdminRoutes from './routes/subscriptions-admin';
-import assignmentCatalogAdminRoutes from './routes/assignments-admin';
-import subscriptionAssignmentsAdminRoutes from './routes/subscription-assignments-admin';
-import partnerPaymentsMiniAppRoutes from './routes/partner-payments-miniapp';
-import crmTeamchatRoutes from './routes/crm-teamchat';
-import countriesAdminRoutes from './routes/countries-admin';
-import grossProfitAdminRoutes from './routes/gross-profit-admin';
-import salesDashboardAdminRoutes from './routes/sales-dashboard-admin';
 import timerRoutes from './routes/timer';
-import timerAdminRoutes from './routes/timer-admin';
-import invitationsRoutes from './routes/invitations';
-import adminPartnersRoutes from './routes/admin-partners';
-import customProfilesRoutes from './routes/custom-profiles';
-import customProfilesAdminRoutes from './routes/custom-profiles-admin';
-import resourceManagementAdminRoutes from './routes/resource-management-admin';
-import cashbookRoutes from './routes/cashbook';
-import cashbookAdminRoutes from './routes/cashbook-admin';
-import cashbookPartnerRoutes from './routes/cashbook-partner';
-import clientSpacesRoutes from './routes/client-spaces';
-import clientSpacesAdminRoutes from './routes/client-spaces-admin';
-import clientAccessAdminRoutes from './routes/client-access-admin';
-import adminCrmAccessRoutes from './routes/admin-crm-access';
-import candidatesRoutes from './routes/candidates';
-import candidateAccessAdminRoutes from './routes/candidate-access-admin';
-import taskTypesAdminRoutes from './routes/task-types-admin';
-import statusGroupsAdminRoutes from './routes/status-groups-admin';
 import pmStatusGroupsRoutes from './routes/pm/status-groups';
-import taskTypeGroupsAdminRoutes from './routes/task-type-groups-admin';
 import pmTaskTypeGroupsRoutes from './routes/pm/task-type-groups';
-import departmentsAdminRoutes from './routes/departments-admin';
 import pmChecklistsRoutes from './routes/pm/checklists';
 import pmTaskAttachmentsRoutes from './routes/pm/task-attachments';
 import notificationsRoutes from './routes/notifications';
-import partnerAppRoutes from './routes/partner-app';
-import internalAppRoutes from './routes/internal-app';
-import businessAppRoutes from './routes/business-app';
-import lmsRoutes from './routes/lms';
-import lmsAdminRoutes from './routes/lms-admin';
-import lmsCollabRoutes from './routes/lms-collab';
-import sopBreachesRoutes from './routes/sop-breaches';
-import clipsRecoveryRoutes from './routes/clips-recovery';
-import chatAppRoutes from './routes/chat/app';
-import chatGroupsRoutes from './routes/chat/groups';
-import chatMessagesRoutes from './routes/chat/messages';
-import chatDmsRoutes from './routes/chat/dms';
-import chatReceiptsRoutes from './routes/chat/receipts';
-import chatPushRoutes from './routes/chat/push';
-import chatUploadRoutes from './routes/chat/upload';
 import partnerPushRoutes from './routes/push';
-import adminChatGroupsRoutes from './routes/admin/chat-groups';
-import adminChatBroadcastsRoutes from './routes/admin/chat-broadcasts';
-import adminChatAppConfigRoutes from './routes/admin/chat-app-config';
-import jobProfilesAdminRoutes from './routes/job-profiles-admin';
-import jobCardsAdminRoutes from './routes/job-cards-admin';
-import cardsAttentionRoutes from './routes/cards-attention';
-import jobCardsAdminCandidatesRoutes from './routes/job-cards-admin-candidates';
-import jobOfferTemplatesAdminRoutes from './routes/job-offer-templates-admin';
-import jobCardsRoutes from './routes/job-cards';
-import squadhireJobCallbacksRoutes from './routes/integrations/squadhire-job-callbacks';
-import squadhireCallbacksRoutes from './routes/integrations/squadhire-callbacks';
-import squadBotsIntegrationRoutes from './routes/integrations/squad-bots';
-import squadBotsAdminRoutes from './routes/squad-bots-admin';
-import squadhireCategoriesRoutes from './routes/integrations/squadhire-categories';
 import ssoSquadhireRoutes from './routes/sso-squadhire';
-import subscriptionSquadhireProfilesAdminRoutes from './routes/subscription-squadhire-profiles-admin';
-import profileAccessRoutes from './routes/profile-access';
-import profileAccessAdminRoutes from './routes/profile-access-admin';
 import viewPreferencesRoutes from './routes/view-preferences';
 import meetingsRoutes from './routes/meetings';
 import meetingEventsRoutes from './routes/meetings_events';
 import huddlesRoutes from './routes/huddles';
 import featureTipsRoutes from './routes/feature-tips';
-import adminFeatureTipsRoutes from './routes/admin/feature-tips';
-import agentRoutes from './routes/agent';
 import { startCheckInCron } from './cron/checkin-cron';
-import { startTimesheetCron } from './cron/timesheet-cron';
 import { startTimerCron } from './cron/timer-cron';
 import { startScheduledMessagesSweeper } from './cron/scheduled-messages-cron';
 import { startHuddleSweeper } from './cron/huddle-cron';
 import { startRoutineCron } from './cron/routine-cron';
 import { startTaskMirrorCron } from './cron/task-mirror-cron';
-import { startElapsedTimeCron } from './cron/elapsed-time-cron';
-import { startHoursCompletionCron } from './cron/hours-completion-cron';
-import { startSquadhireSyncSweeper, startManualAssignmentSweeper, startSelectionNotifySweeper, startActivationNotifySweeper, startTalentAcceptedNotifySweeper } from './utils/squadhireWebhook';
-import { startJobSyncSweeper } from './utils/squadhireJobWebhook';
-import { startProfileAccessGrantsSyncSweeper } from './utils/squadhireGrantsWebhook';
-
 // Validate env vars before starting
 validateConfig();
 
@@ -171,7 +70,7 @@ app.set('io', io); // Make io accessible in route handlers
 // Middleware
 app.use(helmet());
 app.use(cors({
-  origin: [config.clientUrl, config.adminUrl, config.cashbookUrl, config.desktopUrl].filter(Boolean),
+  origin: [config.clientUrl].filter(Boolean),
   credentials: true,
 }));
 app.use(express.json({ limit: '10mb' }));
@@ -185,9 +84,7 @@ app.get('/health', (_req, res) => {
 // API routes
 app.use('/auth', authRoutes);
 app.use('/workspaces', workspaceRoutes);
-app.use('/bot-channels', botChannelRoutes);
 app.use('/channels', channelRoutes);
-app.use('/support', supportRoutes);
 // Scheduled-message routes mount first: their literal /scheduled paths must
 // win over messageRoutes' GET/PATCH/DELETE /:id params.
 app.use('/messages', scheduledMessageRoutes);
@@ -196,16 +93,12 @@ app.use('/messages', uploadChatWsRoutes); // adds POST /messages/upload-presign
 app.use('/dms', dmRoutes);
 app.use('/upload', uploadRoutes);
 app.use('/users', userRoutes);
-app.use('/admin', adminRoutes);
-app.use('/admin', rolesRoutes);
 app.use('/pm', pmSpaceRoutes);
 app.use('/pm', pmFolderRoutes);
 app.use('/pm', pmListRoutes);
 app.use('/pm', pmWhiteboardRoutes);
 app.use('/pm', pmViewRoutes);
 app.use('/pm', pmTaskRoutes);
-// Build Agent bridge — machine-to-machine, static token auth (routes/agent.ts)
-app.use('/agent', agentRoutes);
 app.use('/pm', pmLabelsRoutes);
 app.use('/pm', pmDayPlansRoutes);
 app.use('/pm', pmWorkBlocksRoutes);
@@ -215,130 +108,42 @@ app.use('/pm', pmSharedWithMeRoutes);
 app.use('/pm', pmSearchRoutes);
 app.use('/pm', pmGoalRoutes);
 app.use('/pm', pmPersonalRoutes);
+app.use('/pm', pmStatusGroupsRoutes);
+app.use('/pm', pmTaskTypeGroupsRoutes);
+app.use('/pm', pmChecklistsRoutes);
+app.use('/pm', pmTaskAttachmentsRoutes);
 app.use('/favorites', favoritesRoutes);
 app.use('/app-favorites', appFavoritesRoutes);
 app.use('/notes', notesRoutes);
 app.use('/memberships', membershipsRoutes);
 app.use('/checkin', checkinRoutes);
-app.use('/admin/checkin', checkinAdminRoutes);
-app.use('/timesheet', timesheetRoutes);
-app.use('/admin/timesheet', timesheetAdminRoutes);
-app.use('/off-days', offDaysRoutes);
-app.use('/admin/off-days', offDaysAdminRoutes);
-app.use('/admin/office-timing', officeTimingAdminRoutes);
 app.use('/mini-apps', miniAppsRoutes);
-app.use('/admin/mini-apps', miniAppsAdminRoutes);
-app.use('/admin/labels', labelsAdminRoutes);
-app.use('/admin/skills', skillsAdminRoutes);
-app.use('/admin/squadbooks-access', squadbooksAdminRoutes);
-app.use('/integrations/squadbooks', squadbooksIntegrationRoutes);
-app.use('/clients', clientsPublicRoutes);
-app.use('/leads', leadsPublicRoutes);
-app.use('/design-share', designSharePublicRoutes);
-app.use('/admin/clients', clientsAdminRoutes);
-app.use('/onboarding-links', onboardingLinksRoutes);
-app.use('/admin/onboarding-links', onboardingLinksAdminRoutes);
-app.use('/subscription-cards', subscriptionCardsRoutes);
-app.use('/admin/subscription-cards', subscriptionCardsAdminRoutes);
-app.use('/admin/subscription-cards', subscriptionCardsAdminOffersRoutes);
-app.use('/admin/subscription-cards', subscriptionCardsAdminClientViewRoutes);
-app.use('/admin', subscriptionCardsAdminRequestsRoutes);
-app.use('/admin', subscriptionCardsAdminAssignRoutes);
-app.use('/admin', subscriptionCardsAdminSelectRoutes);
-app.use('/admin', subscriptionCardsLinkingRoutes);
-app.use('/partner/opportunities', subscriptionCardsPartnerRoutes);
-app.use('/partner/discover', discoverPartnerRoutes);
-app.use('/partner/talent', partnerTalentRoutes);
-app.use('/admin/subscriptions', subscriptionsAdminRoutes);
-app.use('/admin/assignment-catalog', assignmentCatalogAdminRoutes);
-app.use('/admin/subscription-assignments', subscriptionAssignmentsAdminRoutes);
-app.use('/partner-payments', partnerPaymentsMiniAppRoutes);
-app.use('/crm-teamchat', crmTeamchatRoutes);
-app.use('/admin/subscriptions', subscriptionSquadhireProfilesAdminRoutes);
-// Job Cards (hiring service) — admin pipeline + onboarding profiles +
-// candidate proxies + offer templates, and the client-facing view.
-app.use('/admin/jobs', jobProfilesAdminRoutes);
-app.use('/admin/cards', cardsAttentionRoutes);
-app.use('/admin/job-cards', jobCardsAdminRoutes);
-app.use('/admin/job-cards', jobCardsAdminCandidatesRoutes);
-app.use('/admin/job-offer-templates', jobOfferTemplatesAdminRoutes);
-app.use('/job-cards', jobCardsRoutes);
-app.use('/admin/countries', countriesAdminRoutes);
-app.use('/admin/gross-profit', grossProfitAdminRoutes);
-app.use('/admin/sales-dashboard', salesDashboardAdminRoutes);
 app.use('/timer', timerRoutes);
-app.use('/admin/timer', timerAdminRoutes);
-app.use('/admin/invitations', invitationsRoutes);
-app.use('/admin/partners', adminPartnersRoutes);
-app.use('/pm/custom-profiles', customProfilesRoutes);
-app.use('/admin/custom-profiles', customProfilesAdminRoutes);
-app.use('/admin/resources', resourceManagementAdminRoutes);
-app.use('/cashbook', cashbookRoutes);
-app.use('/admin/cashbook', cashbookAdminRoutes);
-app.use('/partner/cashbook', cashbookPartnerRoutes);
-app.use('/client-spaces', clientSpacesRoutes);
-app.use('/admin/client-spaces', clientSpacesAdminRoutes);
-app.use('/admin/client-access', clientAccessAdminRoutes);
-app.use('/admin/crm-access', adminCrmAccessRoutes);
-app.use('/candidates', candidatesRoutes);
-app.use('/admin/candidate-access', candidateAccessAdminRoutes);
-app.use('/admin/task-types', taskTypesAdminRoutes);
-app.use('/admin/task-type-groups', taskTypeGroupsAdminRoutes);
-app.use('/admin/status-groups', statusGroupsAdminRoutes);
-app.use('/pm', pmStatusGroupsRoutes);
-app.use('/pm', pmTaskTypeGroupsRoutes);
-app.use('/admin/departments', departmentsAdminRoutes);
-app.use('/pm', pmChecklistsRoutes);
-app.use('/pm', pmTaskAttachmentsRoutes);
 app.use('/notifications', notificationsRoutes);
 app.use('/push', partnerPushRoutes);
-app.use('/partner-app', partnerAppRoutes);
-app.use('/internal-app', internalAppRoutes);
-app.use('/business-app', businessAppRoutes);
-app.use('/lms/collab', lmsCollabRoutes);
-app.use('/lms', lmsRoutes);
-app.use('/admin/lms', lmsAdminRoutes);
-app.use('/admin/squad-bots', squadBotsAdminRoutes);
-app.use('/sop-breaches', sopBreachesRoutes);
-app.use('/admin/clips-recovery', clipsRecoveryRoutes);
 app.use('/meetings', meetingsRoutes);
 app.use('/meeting-events', meetingEventsRoutes);
 app.use('/huddles', huddlesRoutes);
 
-// Squad Chat
-app.use('/chat/app', chatAppRoutes);
-app.use('/chat/groups', chatGroupsRoutes);
-app.use('/chat/messages', chatMessagesRoutes);
-app.use('/chat/dms', chatDmsRoutes);
-app.use('/chat/receipts', chatReceiptsRoutes);
-app.use('/chat/push', chatPushRoutes);
-app.use('/chat/upload', chatUploadRoutes);
-app.use('/admin/chat/groups', adminChatGroupsRoutes);
-app.use('/admin/chat/broadcasts', adminChatBroadcastsRoutes);
-app.use('/admin/chat/app-config', adminChatAppConfigRoutes);
-
-// Integrations — inbound callbacks from sister products (SquadHire etc.)
-// Jobs mounts first: its literal /jobs/* paths must win over any future
-// param routes on the generic callbacks router.
-app.use('/integrations/squadhire/jobs', squadhireJobCallbacksRoutes);
-app.use('/integrations/squadhire', squadhireCallbacksRoutes);
-// Squad Bots: each bot's home app reads its settings/knowledge and gets AI replies here.
-app.use('/integrations/squad-bots', squadBotsIntegrationRoutes);
-// Admin-facing read-through proxy for SquadHire metadata (categories etc.)
-app.use('/admin/integrations/squadhire', squadhireCategoriesRoutes);
-// "Sign in with SquadHub" SSO: authorize (browser) + token/directory (server-to-server)
+// "Sign in with SquadHub" SSO for SquadHire: authorize (browser) + token/directory (server-to-server)
 app.use('/sso/squadhire', ssoSquadhireRoutes);
-
-// Profile Access — local mirror of SquadHire's talent_access_grants.
-app.use('/profile-access', profileAccessRoutes);
-app.use('/admin/profile-access', profileAccessAdminRoutes);
 
 // User view preferences (filters, groupBy, sort — synced across browsers)
 app.use('/view-preferences', viewPreferencesRoutes);
 
-// Feature Tips (admin-triggered tooltips / coachmarks)
+// Feature Tips (tooltips / coachmarks). Authoring lives in the Hub admin.
 app.use('/feature-tips', featureTipsRoutes);
-app.use('/admin/feature-tips', adminFeatureTipsRoutes);
+
+// Hub-owned data (client cards, partner opportunities/assignments, partner
+// payments, support tickets) is served through the Hub bridge — see
+// docs/bridge-contract.md. Until the bridge client lands those surfaces answer
+// 501 so the kept UI shells render an empty/"coming soon" state.
+// TODO(bridge): replace with proxies to HUB_API_URL /bridge/v1/*.
+for (const prefix of ['/subscription-cards', '/job-cards', '/partner/opportunities', '/partner/discover', '/partner-payments', '/support']) {
+  app.use(prefix, (_req, res) => {
+    res.status(501).json({ success: false, error: 'Not available yet: served by Squad Hub via the bridge (docs/bridge-contract.md)' });
+  });
+}
 
 // 404 handler
 app.use((_req, res) => {
@@ -353,47 +158,27 @@ app.use((err: Error, _req: express.Request, res: express.Response, _next: expres
 
 // Start server
 server.listen(config.port, () => {
-  console.log(`SquadHub server running on http://localhost:${config.port}`);
+  console.log(`Squad Hub SaaS server running on http://localhost:${config.port}`);
   console.log(`Environment: ${config.nodeEnv}`);
 
   // Managed generic-task statuses: load the Task Workflow group into the
-  // shared override registry (non-blocking; static catalog is the fallback),
-  // then refresh every minute as a backstop for multi-instance deploys.
-  // Same-process admin edits reload immediately (see status-groups-admin).
+  // shared override registry (non-blocking; static catalog is the fallback).
   import('./utils/statusGroups').then((m) => {
     m.loadTaskStatusOverrides();
     setInterval(() => { m.loadTaskStatusOverrides(); }, 60 * 1000);
   }).catch((e) => console.error('[statusGroups] override loader failed:', e));
 
-  // Start cron jobs. Gated by DISABLE_CRONS so a secondary/local instance run
-  // against the shared database (e.g. a worktree dev server) doesn't
-  // double-fire sweeps that send messages, notifications, or spawn routines.
-  // Unset in production → crons run as before.
+  // Start cron jobs. Gated by DISABLE_CRONS so a secondary/local instance
+  // doesn't double-fire sweeps that send messages, notifications, or spawn routines.
   if (process.env.DISABLE_CRONS === 'true') {
     console.log('Cron jobs disabled (DISABLE_CRONS=true)');
   } else {
-    startContentBriefCrmCron();
     startCheckInCron();
-    startTimesheetCron();
     startTimerCron();
     startScheduledMessagesSweeper(io);
     startHuddleSweeper(io);
     startRoutineCron();
     startTaskRemindersCron();
     startTaskMirrorCron();
-    startElapsedTimeCron();
-    startHoursCompletionCron();
-
-    // Outbound SquadHire webhook retry sweeper. No-ops when SQUADHIRE_WEBHOOK_URL
-    // is unset, so dev environments without SquadHire configured are unaffected.
-    startSquadhireSyncSweeper();
-    // Job Cards retry sweeper — queries job_cards ONLY (its own sync
-    // columns), so it can never cross-leak with the subscription sweeper.
-    startJobSyncSweeper();
-    startManualAssignmentSweeper();
-    startSelectionNotifySweeper();
-    startActivationNotifySweeper();
-    startTalentAcceptedNotifySweeper();
-    startProfileAccessGrantsSyncSweeper();
   }
 });

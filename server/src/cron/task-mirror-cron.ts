@@ -1,35 +1,17 @@
-import { cleanupKnowledgeReviewOrphans, reconcileAllMirrors } from '../services/taskMirror';
-import { reconcileKnowledgeReviews } from '../services/knowledgeReviewTasks';
+import { reconcileAllMirrors } from '../services/taskMirror';
 
 /**
- * Task-mirror cron: keeps mirrored Course/Meeting tasks in step with their
- * sources (lms_assignments / meetings). The inline write-path hooks cover the
- * common cases; this is the safety net for changes made outside those paths
- * (direct DB edits, due-dates set out-of-band, deleted rows) plus the one-time
- * backfill that runs on every deploy. Fully idempotent.
+ * Task-mirror cron: keeps mirrored Meeting tasks in step with their sources.
+ * The inline write-path hooks cover the common cases; this is the safety net
+ * for changes made outside those paths plus a boot backfill. Fully idempotent.
  */
 export function startTaskMirrorCron(): void {
-  // Boot backfill — delayed a few seconds so startup isn't blocked.
   setTimeout(() => {
-    reconcileKnowledgeReviews()
-      .then(() => reconcileAllMirrors())
-      .then((r) =>
-        console.log(
-          `[Task Mirror Cron] Boot reconcile: ${r.meetings} meeting(s), ${r.courses} course(s)`,
-        ),
-      )
+    reconcileAllMirrors()
+      .then((r) => console.log(`[Task Mirror Cron] Boot reconcile: ${r.meetings} meeting(s)`))
       .catch((err) => console.error('[Task Mirror Cron] Boot reconcile failed:', err));
   }, 8000);
 
-  // Edits from either editor, bots, or direct database writes enter the same
-  // queue; a short sweep coalesces saves from an active editing session.
-  setInterval(() => {
-    reconcileKnowledgeReviews().then(() => cleanupKnowledgeReviewOrphans()).catch((err) =>
-      console.error('[Task Mirror Cron] Knowledge review reconcile failed:', err),
-    );
-  }, 30_000);
-
-  // Daily drift sweep.
   const DAY_MS = 24 * 60 * 60 * 1000;
   setInterval(() => {
     reconcileAllMirrors().catch((err) =>

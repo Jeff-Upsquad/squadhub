@@ -142,37 +142,14 @@ async function loadSquadManagerUserIds(roleId: string | null): Promise<Set<strin
   const ids = new Set<string>();
   if (!roleId) return ids;
   for (const id of await getUserIdsByRoleId(roleId)) ids.add(id);
-  const { data: grants } = await supabaseAdmin
-    .from('client_user_access')
-    .select('user_id')
-    .eq('role_id', roleId);
-  for (const row of grants || []) {
-    if (row.user_id) ids.add(row.user_id as string);
-  }
   return ids;
 }
 
-async function assignedSquadManagerIds(userId: string, roleId: string | null): Promise<Set<string>> {
-  const ids = new Set<string>();
-  if (!roleId) return ids;
-
-  const { data: mine } = await supabaseAdmin
-    .from('client_user_access')
-    .select('client_id')
-    .eq('user_id', userId);
-  const clientIds = [...new Set((mine || []).map((r: any) => r.client_id).filter(Boolean))];
-  if (clientIds.length === 0) return ids;
-
-  const { data: managers } = await supabaseAdmin
-    .from('client_user_access')
-    .select('user_id')
-    .eq('role_id', roleId)
-    .in('client_id', clientIds)
-    .neq('user_id', userId);
-  for (const row of managers || []) {
-    if (row.user_id) ids.add(row.user_id as string);
-  }
-  return ids;
+// The Hub assigned Squad Managers to clients through client_user_access. The
+// SaaS has no such table: Upsquad staff reach a business through the shared
+// workspace instead, so "shared work" covers them.
+async function assignedSquadManagerIds(_userId: string, _roleId: string | null): Promise<Set<string>> {
+  return new Set<string>();
 }
 
 export async function loadWorkSet(userId: string, workspaceId: string): Promise<WorkSet> {

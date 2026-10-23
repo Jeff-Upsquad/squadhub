@@ -27,78 +27,29 @@ import { randomBytes } from 'crypto';
 import { supabaseAdmin } from '../supabase';
 import { assertSignInAllowed, mintSession, SquadhireSsoError } from './squadhireSsoShared';
 import type { SquadhireSsoSession } from './squadhireSsoShared';
-import { getDefaultRoleIdForUserType } from './defaultRole';
 import type { SquadhireTalentSsoIdentity } from './squadhireTalentSso';
-import { syncTalentActivatedClientSpaces } from './activatedClientSpaces';
+import { ensureAccount } from './accounts';
 import { unlockPartnerWork } from './workAccess';
 
 /** The only account types a SquadHire talent may sign in as. */
 const PARTNER_USER_TYPES = new Set(['partner', 'partner_employee']);
 
 /**
- * SquadHire card category → SquadHub role. The combined "Designer + Editor"
- * role is created by migration 185; the rest predate this flow.
+ * Ensure the talent's own SaaS account (workspace kind 'talent'). Idempotent on
+ * squadhire_talent_id. Default mini apps (check-ins, partner-payments) are
+ * switched on when the account is first created (see utils/accounts).
  */
-const ROLE_BY_CATEGORY: Record<string, string> = {
-  designer: 'Designer',
-  'video-editor': 'Video Editor',
-  'designer-editor': 'Designer + Editor',
-  accountant: 'Accountant',
-  sales: 'Sales',
-};
-
-/** Resolve the role for a card category, falling back to the partner default. */
-async function resolveRoleId(categorySlug: string | null): Promise<string | null> {
-  const roleName = categorySlug ? ROLE_BY_CATEGORY[categorySlug] : undefined;
-  if (roleName) {
-    const { data } = await supabaseAdmin
-      .from('roles')
-      .select('id')
-      .eq('name', roleName)
-      .maybeSingle();
-    if (data?.id) return data.id;
-    // A renamed or missing role shouldn't block someone from signing in.
-    console.error(`[squadhire-talent-sso] role "${roleName}" not found — using partner default`);
-  }
-  return getDefaultRoleIdForUserType('partner');
-}
-
-/** Ensure the partner is a member of the main workspace. Existing roles win. */
-export async function ensurePartnerWorkspaceMembership(
+export async function ensureTalentAccount(
   userId: string,
-  categorySlug: string | null,
-): Promise<void> {
-  const { data: workspace, error: workspaceError } = await supabaseAdmin
-    .from('workspaces')
-    .select('id')
-    .limit(1)
-    .single();
-  if (workspaceError || !workspace) {
-    throw new SquadhireSsoError(500, 'Could not add your account to the SquadHub workspace.');
-  }
-
-  const { data: existing, error: existingError } = await supabaseAdmin
-    .from('workspace_members')
-    .select('id')
-    .eq('workspace_id', workspace.id)
-    .eq('user_id', userId)
-    .maybeSingle();
-  if (existingError) {
-    throw new SquadhireSsoError(500, 'Could not check your SquadHub workspace access.');
-  }
-  if (existing) return;
-
-  const roleId = await resolveRoleId(categorySlug);
-  const { error: memberError } = await supabaseAdmin.from('workspace_members').insert({
-    workspace_id: workspace.id,
-    user_id: userId,
-    role: 'member',
-    role_id: roleId,
+  identity: { talent_user_id?: string | null; name: string | null; email: string },
+): Promise<string> {
+  const { id } = await ensureAccount({
+    kind: 'talent',
+    name: identity.name || identity.email.split('@')[0],
+    ownerUserId: userId,
+    squadhire_talent_id: identity.talent_user_id ?? null,
   });
-  if (memberError) {
-    console.error('[squadhire-talent-sso] workspace member insert failed:', memberError.message);
-    throw new SquadhireSsoError(500, 'Could not add your account to the SquadHub workspace.');
-  }
+  return id;
 }
 
 /**
@@ -178,9 +129,8 @@ async function provisionPartner(identity: SquadhireTalentSsoIdentity): Promise<s
     throw new SquadhireSsoError(500, 'Could not set up your SquadHub account. Please try again.');
   }
 
-  // Workspace membership with the craft role — without this they sign in to an
-  // empty app. Same wiring applyAcceptedInvitation does for invited signups.
-  await ensurePartnerWorkspaceMembership(userId, identity.category_slug);
+  // Their own talent account — without this they sign in to an empty app.
+  await ensureTalentAccount(userId, identity);
 
   console.log(
     `[squadhire-talent-sso] provisioned partner account for ${identity.email} (${identity.category_slug ?? 'no category'})`,
@@ -223,7 +173,7 @@ export async function ensureSquadhireTalentProvisioned(
     }
     assertSignInAllowed(existing.status);
     await ensurePasswordAdoptionPending(existing.id);
-    await ensurePartnerWorkspaceMembership(existing.id, identity.category_slug);
+    await ensureTalentAccount(existing.id, identity);
     user = existing;
   } else {
     const userId = await provisionPartner(identity);
@@ -247,15 +197,9 @@ export async function ensureSquadhireTalentProvisioned(
   (user as Record<string, unknown>).work_unlocked_at =
     (user.work_unlocked_at as string | null) || new Date().toISOString();
 
-  const syncAccess = syncTalentActivatedClientSpaces({
-    talentUserId: identity.talent_user_id,
-    squadhubUserId: String(user.id),
-  });
-  if (options.strictAccessSync) {
-    await syncAccess;
-  } else {
-    await syncAccess.catch((err) => console.error('[squadhire-talent-sso] space access sync failed:', err));
-  }
+  // Shared (client ⇄ talent) workspaces are created by the Hub over the
+  // bridge (POST /bridge/v1/shared-workspaces/ensure), not here.
+  void options;
 
   return { user, created };
 }

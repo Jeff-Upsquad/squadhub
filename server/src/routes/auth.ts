@@ -16,7 +16,7 @@ import { requireAuth } from '../middleware/auth';
 import { rateLimit } from '../utils/rateLimit';
 import * as passwordReset from '../services/passwordReset';
 import type { UserType } from '@squadhub/shared';
-import { propagateIdentityNames } from '../utils/propagateIdentityNames';
+import { createAccount } from '../utils/accounts';
 import { mobileAppForUserType } from '../utils/mobileAppAccess';
 import { resolveWorkAccess } from '../utils/workAccess';
 
@@ -27,7 +27,9 @@ const registerSchema = z.object({
   email: z.string().email(),
   password: z.string().min(8, 'Password must be at least 8 characters'),
   display_name: z.string().min(1).max(50),
-  user_type: z.enum(['internal', 'client', 'client_staff', 'partner', 'partner_employee']).optional().default('internal'),
+  // SaaS: 'internal' is reserved for Upsquad staff linked from the Hub.
+  user_type: z.enum(['client', 'client_staff', 'partner', 'partner_employee']).optional().default('client'),
+  workspace_name: z.string().min(1).max(80).optional(),
 });
 
 const loginSchema = z.object({
@@ -64,25 +66,27 @@ router.post('/register', async (req: Request, res: Response) => {
       return;
     }
 
-    // Check if this email has a pending, non-expired invitation
-    const { data: invitation } = await supabaseAdmin
+    // Pending, non-expired invitations for this email (one per inviting workspace).
+    const { data: invitationRows } = await supabaseAdmin
       .from('invitations')
       .select(INVITATION_COLUMNS)
-      .eq('email', body.email)
-      .eq('status', 'pending')
-      .maybeSingle<PendingInvitation & { expires_at: string }>();
-
-    const isInvited = invitation && new Date(invitation.expires_at) > new Date();
+      .ilike('email', body.email)
+      .eq('status', 'pending'); // tenant-scope: invitee lookup by email across inviting workspaces
+    const invitations = ((invitationRows || []) as unknown as (PendingInvitation & { expires_at: string })[])
+      .filter((inv) => new Date(inv.expires_at) > new Date());
+    const invitation = invitations[0];
+    const isInvited = !!invitation;
 
     // User type comes from invitation (if invited) or request body
-    const userType = isInvited ? invitation.user_type : body.user_type;
+    const userType = (isInvited ? invitation.user_type : null) || body.user_type;
 
-    // Insert into our users table
+    // Insert into our users table. SaaS signup is self-serve: the account is
+    // active immediately (there is no in-app platform admin to approve it).
     const { error: dbError } = await supabaseAdmin.from('users').insert({
       id: authData.user.id,
       email: body.email,
       display_name: body.display_name,
-      status: isInvited ? 'active' : 'pending',
+      status: 'active',
       user_type: userType,
     });
 
@@ -90,32 +94,36 @@ router.post('/register', async (req: Request, res: Response) => {
       console.error('Failed to insert user row:', dbError);
     }
 
-    void propagateIdentityNames({
-      email: body.email,
-      personName: body.display_name,
-    });
-
-    // If invited: auto-approve, assign role, add to workspace
     if (isInvited) {
-      await applyAcceptedInvitation({
-        userId: authData.user.id,
-        userType: userType as UserType,
-        invitation,
-      });
-
+      // Invited: join the inviting workspace with the invited role.
+      for (const inv of invitations) {
+        await applyAcceptedInvitation({
+          userId: authData.user.id,
+          userType: userType as UserType,
+          invitation: inv,
+        });
+      }
       res.status(201).json({
         success: true,
         invited: true,
-        message: 'Your signup has been approved! You can now proceed to the login page.',
+        message: 'Your account is ready. You can now sign in.',
       });
-    } else {
-      // Standard flow — account needs admin approval
-      res.status(201).json({
-        success: true,
-        invited: false,
-        message: 'Account created. Awaiting admin approval.',
-      });
+      return;
     }
+
+    // Not invited: the creator owns a new account. Talents get a talent
+    // account; everyone else a business account.
+    const isTalent = userType === 'partner' || userType === 'partner_employee';
+    await createAccount({
+      kind: isTalent ? 'talent' : 'business',
+      name: body.workspace_name || body.display_name,
+      ownerUserId: authData.user.id,
+    });
+    res.status(201).json({
+      success: true,
+      invited: false,
+      message: 'Account created. You can now sign in.',
+    });
   } catch (err) {
     if (err instanceof z.ZodError) {
       res.status(400).json({ success: false, error: err.errors[0].message });

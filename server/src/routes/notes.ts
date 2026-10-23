@@ -3,7 +3,7 @@
 //
 // Pages nest via parent_id; each tree has a denormalized root_id
 // (trigger-maintained). Sharing lives on the ROOT page
-// (squad_note_shares: user / role / department grantees, read|edit) and
+// (squad_note_shares: user / role grantees, read|edit) and
 // is inherited by descendants. Access is validated here with the service
 // role via getNoteAccess(); RLS is enabled with no policies.
 //
@@ -40,14 +40,11 @@ async function getUserWorkspaceId(userId: string): Promise<string | null> {
   return (data?.workspace_id as string) || null;
 }
 
-async function getUserIdentities(userId: string): Promise<{ roleIds: string[]; deptIds: string[] }> {
+// Departments (an internal HR concept) are not part of the SaaS: notes are
+// shared with users or roles only.
+async function getUserIdentities(userId: string): Promise<{ roleIds: string[] }> {
   const roleIds = await getUserRoleIds(userId);
-  const { data: depts } = await supabaseAdmin
-    .from('department_members')
-    .select('department_id')
-    .eq('user_id', userId);
-  const deptIds = (depts || []).map((d: any) => d.department_id as string);
-  return { roleIds, deptIds };
+  return { roleIds };
 }
 
 async function loadNote(id: string): Promise<any | null> {
@@ -64,7 +61,7 @@ async function loadRoot(note: any): Promise<any> {
 }
 
 // Owner / admin → edit; otherwise the max share level on the ROOT that matches
-// the user's identities (user / role / department).
+// the user's identities (user / role).
 async function getNoteAccess(userId: string, note: any): Promise<NoteAccess> {
   if (!note) return 'none';
   if (note.owner_id === userId) return 'edit';
@@ -79,13 +76,12 @@ async function getNoteAccess(userId: string, note: any): Promise<NoteAccess> {
     .eq('note_id', root.id);
   if (!shares || shares.length === 0) return 'none';
 
-  const { roleIds, deptIds } = await getUserIdentities(userId);
+  const { roleIds } = await getUserIdentities(userId);
   let best: NoteAccess = 'none';
   for (const s of shares as any[]) {
     const match =
       (s.grantee_type === 'user' && s.grantee_id === userId) ||
-      (s.grantee_type === 'role' && roleIds.includes(s.grantee_id)) ||
-      (s.grantee_type === 'department' && deptIds.includes(s.grantee_id));
+      (s.grantee_type === 'role' && roleIds.includes(s.grantee_id));
     if (!match) continue;
     if (s.access_level === 'edit') return 'edit';
     best = 'read';
@@ -184,14 +180,11 @@ router.get('/unfurl', async (req: Request, res: Response) => {
   }
 });
 
-// GET /notes/grantee-options — roles + departments for the share picker.
+// GET /notes/grantee-options — roles for the share picker (departments always empty in the SaaS).
 router.get('/grantee-options', async (_req: Request, res: Response) => {
   try {
-    const [{ data: roles }, { data: departments }] = await Promise.all([
-      supabaseAdmin.from('roles').select('id, name').order('name'),
-      supabaseAdmin.from('departments').select('id, name').order('name'),
-    ]);
-    res.json({ success: true, data: { roles: roles || [], departments: departments || [] } });
+    const { data: roles } = await supabaseAdmin.from('roles').select('id, name').order('name'); // tenant-scope: roles are a global, seed-only catalog
+    res.json({ success: true, data: { roles: roles || [], departments: [] } });
   } catch (err) {
     console.error('GET /notes/grantee-options error:', err);
     res.status(500).json({ success: false, error: 'Internal server error' });
@@ -236,8 +229,8 @@ router.get('/', async (req: Request, res: Response) => {
     for (const n of owned || []) byId.set(n.id, n);
 
     // Shared roots that match my identities.
-    const { roleIds, deptIds } = await getUserIdentities(req.userId!);
-    const allIds = [req.userId!, ...roleIds, ...deptIds];
+    const { roleIds } = await getUserIdentities(req.userId!);
+    const allIds = [req.userId!, ...roleIds];
     const { data: shareRows } = await supabaseAdmin
       .from('squad_note_shares')
       .select('note_id, grantee_type, grantee_id')
@@ -247,8 +240,7 @@ router.get('/', async (req: Request, res: Response) => {
         (shareRows || [])
           .filter((s: any) =>
             (s.grantee_type === 'user' && s.grantee_id === req.userId) ||
-            (s.grantee_type === 'role' && roleIds.includes(s.grantee_id)) ||
-            (s.grantee_type === 'department' && deptIds.includes(s.grantee_id)),
+            (s.grantee_type === 'role' && roleIds.includes(s.grantee_id)),
           )
           .map((s: any) => s.note_id as string),
       ),
@@ -575,9 +567,6 @@ router.get('/:id/shares', async (req: Request, res: Response) => {
         } else if (s.grantee_type === 'role') {
           const { data } = await supabaseAdmin.from('roles').select('name').eq('id', s.grantee_id).maybeSingle();
           label = (data as any)?.name || 'Role';
-        } else if (s.grantee_type === 'department') {
-          const { data } = await supabaseAdmin.from('departments').select('name').eq('id', s.grantee_id).maybeSingle();
-          label = (data as any)?.name || 'Team';
         }
         return { ...s, label, avatar_url };
       }),
@@ -593,7 +582,7 @@ router.get('/:id/shares', async (req: Request, res: Response) => {
 const sharesSchema = z.object({
   shares: z.array(
     z.object({
-      grantee_type: z.enum(['user', 'role', 'department']),
+      grantee_type: z.enum(['user', 'role']),
       grantee_id: z.string().uuid(),
       access_level: z.enum(['read', 'edit']),
     }),

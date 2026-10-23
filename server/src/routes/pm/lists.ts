@@ -16,7 +16,6 @@ const createSchema = z.object({
   folder_id: z.string().uuid().optional(),
   name: z.string().min(1).max(100),
   default_view: z.enum(['list', 'board', 'whiteboard']).optional(),
-  profile_id: z.string().uuid().optional(),
   status_group_id: z.string().uuid().optional(),
   task_type_group_id: z.string().uuid().optional(),
   default_task_type_id: z.string().uuid().nullable().optional(),
@@ -271,24 +270,6 @@ router.post('/lists', requirePermission('can_create_lists'), async (req: Request
       }
     }
 
-    // If profile_id is provided, fetch the profile template
-    let profile: any = null;
-    if (body.profile_id) {
-      const { data: profileData } = await supabaseAdmin
-        .from('custom_profiles')
-        .select('*')
-        .eq('id', body.profile_id)
-        .eq('target_type', 'list')
-        .eq('is_enabled', true)
-        .single();
-
-      if (!profileData) {
-        res.status(400).json({ success: false, error: 'Invalid or disabled profile' });
-        return;
-      }
-      profile = profileData;
-    }
-
     const { count } = await supabaseAdmin
       .from('lists')
       .select('*', { count: 'exact', head: true })
@@ -304,15 +285,6 @@ router.post('/lists', requirePermission('can_create_lists'), async (req: Request
         position: count || 0,
       };
 
-    // Apply profile template defaults, then allow explicit overrides
-    if (profile) {
-      insertPayload.profile_id = profile.id;
-      insertPayload.profile_version = profile.version;
-      const template = profile.template as any;
-      if (template?.default_view) {
-        insertPayload.default_view = template.default_view;
-      }
-    }
     if (body.default_view) {
       insertPayload.default_view = body.default_view;
     }

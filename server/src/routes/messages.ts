@@ -5,12 +5,9 @@ import { requireAdmin } from '../middleware/admin';
 import { checkResourceAccess, meetsAccessLevel, isWorkspaceAdmin } from '../middleware/permissions';
 import { supabaseAdmin } from '../supabase';
 import { findFirstUrl, unfurl } from '../services/unfurl';
-import { isSupportChannel, isSupportAgent, userOwnsSupportTicketRoot } from '../utils/supportAccess';
 import { canActorDm, isDmParticipant, loadDmActor, otherDmParticipantIds } from '../utils/dmAccess';
 import { deleteR2Object } from '../r2';
 import { config } from '../config';
-import { BOT_COLUMNS, runBotReply } from '../services/squadBots';
-import { getOrCreateBotUser } from '../services/squadBotChannels';
 
 const router = Router();
 
@@ -75,15 +72,6 @@ router.get('/', requireAuth, async (req: Request, res: Response) => {
       if (!userLevel) {
         res.status(403).json({ success: false, error: 'You do not have access to this channel' });
         return;
-      }
-      // Support help-desk isolation: a member of the Support channel must not be
-      // able to read the whole ticket stream. Non-agents only reach their own
-      // tickets, and only via the scoped /support endpoints or the thread route.
-      if (await isSupportChannel(channelId)) {
-        if (!(await isSupportAgent(req.userId!))) {
-          res.status(403).json({ success: false, error: 'Use the Support tab to view your tickets' });
-          return;
-        }
       }
     } else if (dmConversationId) {
       if (!(await isDmParticipant(req.userId!, dmConversationId))) {
@@ -286,255 +274,6 @@ router.post('/', requireAuth, async (req: Request, res: Response) => {
       io.to(room).emit('new_message', message);
       if (body.parent_message_id) {
         io.to(room).emit('thread_reply', message);
-      }
-    }
-
-    // If replying in a bot doubt thread, have a conversation with the bot unless explicitly finalizing
-    if (body.parent_message_id) {
-      try {
-        const { data: parentMsg } = await supabaseAdmin
-          .from('messages')
-          .select('id, channel_id, content, metadata, sender_id')
-          .eq('id', body.parent_message_id)
-          .maybeSingle();
-
-        const parentMeta = parentMsg?.metadata as any;
-        // Closed threads stay silent (reopen to resume). Finalized/handed-off
-        // doubts also stay silent — guidance is already queued.
-        const threadClosed = !!parentMeta?.is_closed;
-        const doubtHandled = parentMeta?.status && parentMeta.status !== 'open';
-        if (
-          parentMsg &&
-          parentMeta?.kind === 'bot_doubt' &&
-          parentMeta.doubt_id &&
-          parentMeta.bot_id &&
-          !threadClosed &&
-          parentMsg.sender_id !== req.userId &&
-          body.content &&
-          body.content.trim()
-        ) {
-          const trimmed = body.content.trim();
-          const isExplicitFinalize = trimmed.startsWith('/finalize') || trimmed.startsWith('/instruct');
-
-          if (isExplicitFinalize && parentMeta.status === 'open') {
-            const finalInstruction = trimmed.replace(/^(\/finalize|\/instruct)\s*/i, '').trim();
-            if (finalInstruction) {
-              const { data: resolved, error: rpcErr } = await supabaseAdmin.rpc('resolve_squad_bot_doubt', {
-                p_id: parentMeta.doubt_id,
-                p_bot_id: parentMeta.bot_id,
-                p_user_id: req.userId,
-                p_mode: 'instruct',
-                p_instruction: finalInstruction,
-              });
-
-              if (!rpcErr && resolved) {
-                const updatedMeta = {
-                  ...parentMeta,
-                  status: 'instructed',
-                  instruction: finalInstruction,
-                };
-
-                const { data: updatedParent } = await supabaseAdmin
-                  .from('messages')
-                  .update({ metadata: updatedMeta })
-                  .eq('id', parentMsg.id)
-                  .select('*, sender:users!sender_id(id, display_name, avatar_url)')
-                  .single();
-
-                const room = body.channel_id || body.dm_conversation_id || parentMsg.channel_id;
-                if (io && updatedParent && room) {
-                  io.to(room).emit('message_updated', updatedParent);
-                }
-
-                // Post bot acknowledgment reply in the thread
-                const botReplyContent = "Got it! I've saved this guidance and queued the reply to send to the candidate.";
-                let ackBotSenderId = parentMsg.sender_id;
-                try {
-                  const { data: ackChannel } = await supabaseAdmin
-                    .from('channels')
-                    .select('workspace_id')
-                    .eq('id', parentMsg.channel_id)
-                    .maybeSingle();
-                  const { data: ackBot } = await supabaseAdmin
-                    .from('squad_bots')
-                    .select('id, slug, internal_name, public_name')
-                    .eq('id', parentMeta.bot_id)
-                    .maybeSingle();
-                  if (ackBot && ackChannel?.workspace_id) {
-                    const ackBotUser = await getOrCreateBotUser(ackBot as any, ackChannel.workspace_id);
-                    if (ackBotUser?.id) ackBotSenderId = ackBotUser.id;
-                  }
-                } catch {
-                  // fall back to the parent sender
-                }
-                const { data: botReply } = await supabaseAdmin
-                  .from('messages')
-                  .insert({
-                    channel_id: parentMsg.channel_id,
-                    parent_message_id: parentMsg.id,
-                    sender_id: ackBotSenderId,
-                    content: botReplyContent,
-                    type: 'text',
-                  })
-                  .select('*, sender:users!sender_id(id, display_name, avatar_url)')
-                  .single();
-
-                if (botReply) {
-                  await supabaseAdmin.from('message_threads').insert({
-                    parent_message_id: parentMsg.id,
-                    reply_message_id: botReply.id,
-                  });
-                  if (io && room) {
-                    io.to(room).emit('new_message', botReply);
-                    io.to(room).emit('thread_reply', botReply);
-                  }
-                }
-              } else if (rpcErr) {
-                console.error('[messages] resolve_squad_bot_doubt error:', rpcErr);
-              }
-            }
-          } else if (!doubtHandled) {
-            // Conversational mode: the user is having a discussion with the bot.
-            // Bot responds to questions, searches, or requests for more details.
-            // Skipped when the doubt is already instructed/taken over/completed.
-            const { data: bot } = await supabaseAdmin
-              .from('squad_bots')
-              .select(BOT_COLUMNS)
-              .eq('id', parentMeta.bot_id)
-              .maybeSingle();
-
-            let botReplyText = '';
-            if (bot) {
-              try {
-                // Fetch recent messages in this thread for conversational context
-                const { data: recentThreadMsgs } = await supabaseAdmin
-                  .from('messages')
-                  .select('id, sender_id, content')
-                  .eq('parent_message_id', parentMsg.id)
-                  .order('created_at', { ascending: true })
-                  .limit(30);
-
-                const chatMessages: Array<{ role: 'user' | 'assistant'; content: string }> = [
-                  {
-                    role: 'assistant',
-                    content: `I've raised a question/doubt from a candidate conversation:\nQuestion: ${parentMeta.question || parentMsg.content || ''}\nContext: ${parentMeta.context || 'None'}\nSource URL: ${parentMeta.source_url || 'None'}`,
-                  },
-                ];
-
-                if (recentThreadMsgs && recentThreadMsgs.length > 0) {
-                  for (const m of recentThreadMsgs) {
-                    if (!m.content) continue;
-                    chatMessages.push({
-                      role: m.sender_id === parentMsg.sender_id ? 'assistant' : 'user',
-                      content: m.content,
-                    });
-                  }
-                }
-
-                const aiResult = await runBotReply(
-                  bot as any,
-                  {
-                    messages: chatMessages,
-                    context: [
-                      `Original Question / Doubt: ${parentMeta.question || ''}`,
-                      `Conversation Context: ${parentMeta.context || ''}`,
-                      `Source: ${parentMeta.source_url || ''}`,
-                      'Internal teammate guidance: You are talking internally with a teammate in SquadHub. They are asking you questions, checking details, or helping formulate guidance. Answer concisely and practically. If they instruct you to search or ask the candidate something, explain what you found or confirm the next steps. When they agree on the final answer, remind them they can finalize guidance to queue the reply.',
-                    ]
-                      .filter(Boolean)
-                      .join('\n\n'),
-                  },
-                  { source: 'app', status: bot.status || 'live' }
-                );
-                botReplyText = aiResult.text;
-              } catch (aiErr: any) {
-                console.warn('[messages] bot AI conversation error, falling back:', aiErr?.message);
-                const lower = trimmed.toLowerCase();
-                if (lower.includes('search') || lower.includes('look up') || lower.includes('find') || lower.includes('check')) {
-                  botReplyText = `I'm checking our knowledge base and records for: "${trimmed}". Based on the context (${parentMeta.context ? parentMeta.context.slice(0, 120) + '…' : 'provided'}), let me know if you would like me to ask the candidate for more specifics, or click "Finalize guidance" to send the reply.`;
-                } else if (lower.includes('ask') || lower.includes('screenshot') || lower.includes('details') || lower.includes('question')) {
-                  botReplyText = `Understood. I can ask the candidate for those specifics or clarification. When you're ready to proceed with this guidance, click "Finalize guidance" to queue the reply.`;
-                } else {
-                  botReplyText = `Got your direction: "${trimmed}". We can continue refining this, or click "Finalize guidance" whenever you are ready to queue the reply to the candidate.`;
-                }
-              }
-            } else {
-              botReplyText = `Understood: "${trimmed}". When you are ready to send this instruction to the candidate, click "Finalize guidance".`;
-            }
-
-            if (botReplyText) {
-              let convoBotSenderId = parentMsg.sender_id;
-              try {
-                if (bot && (bot as any).slug) {
-                  const { data: convoChannel } = await supabaseAdmin
-                    .from('channels')
-                    .select('workspace_id')
-                    .eq('id', parentMsg.channel_id)
-                    .maybeSingle();
-                  if (convoChannel?.workspace_id) {
-                    const convoBotUser = await getOrCreateBotUser(bot as any, convoChannel.workspace_id);
-                    if (convoBotUser?.id) convoBotSenderId = convoBotUser.id;
-                  }
-                }
-              } catch {
-                // fall back to the parent sender
-              }
-              const { data: botReply } = await supabaseAdmin
-                .from('messages')
-                .insert({
-                  channel_id: parentMsg.channel_id,
-                  parent_message_id: parentMsg.id,
-                  sender_id: convoBotSenderId,
-                  content: botReplyText,
-                  type: 'text',
-                })
-                .select('*, sender:users!sender_id(id, display_name, avatar_url)')
-                .single();
-
-              if (botReply) {
-                await supabaseAdmin.from('message_threads').insert({
-                  parent_message_id: parentMsg.id,
-                  reply_message_id: botReply.id,
-                });
-                const room = body.channel_id || body.dm_conversation_id || parentMsg.channel_id;
-                if (io && room) {
-                  io.to(room).emit('new_message', botReply);
-                  io.to(room).emit('thread_reply', botReply);
-                }
-              }
-            }
-          }
-        }
-      } catch (botErr) {
-        console.error('[messages] bot doubt thread error:', botErr);
-      }
-    }
-
-    // CRM entity chats: a new message reopens the chat for everyone who closed it
-    // (delete close-state rows so it reappears under CRM Chats). Mentions also
-    // grant channel membership so @someone is brought into the CRM chat.
-    if (body.channel_id) {
-      await supabaseAdmin
-        .from('crm_chat_user_state')
-        .delete()
-        .eq('channel_id', body.channel_id);
-      if (body.mentions?.length) {
-        const { data: existing } = await supabaseAdmin
-          .from('resource_memberships')
-          .select('user_id')
-          .eq('resource_type', 'channel')
-          .eq('resource_id', body.channel_id)
-          .in('user_id', body.mentions);
-        const have = new Set((existing || []).map((r) => r.user_id as string));
-        const rows = body.mentions
-          .filter((id) => !have.has(id))
-          .map((user_id) => ({
-            resource_type: 'channel',
-            resource_id: body.channel_id!,
-            user_id,
-            access_level: 'member',
-          }));
-        if (rows.length) await supabaseAdmin.from('resource_memberships').insert(rows);
       }
     }
 
@@ -887,14 +626,6 @@ router.get('/:id/thread', requireAuth, async (req: Request, res: Response) => {
       if (!access) {
         res.status(403).json({ success: false, error: 'You do not have access to this message' });
         return;
-      }
-      // Support isolation: a non-agent may only open the thread of a ticket they
-      // opened, even though they're a member of the shared Support channel.
-      if (await isSupportChannel((msg as any).channel_id)) {
-        if (!(await isSupportAgent(req.userId!)) && !(await userOwnsSupportTicketRoot(req.userId!, rootId))) {
-          res.status(403).json({ success: false, error: 'You do not have access to this ticket' });
-          return;
-        }
       }
     }
 

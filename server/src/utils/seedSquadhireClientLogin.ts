@@ -42,13 +42,8 @@ import {
   verifySquadhireBusinessCredentials,
   verifySquadhireTalentCredentials,
 } from './squadhireCredentials';
-import {
-  applyAcceptedInvitation,
-  INVITATION_COLUMNS,
-  type PendingInvitation,
-} from './applyInvitation';
+import { ensureBusinessAccount } from './squadhireBusinessSession';
 import { provisionPreWorkTalentPartner } from './squadhireTalentSelfSignIn';
-import type { UserType } from '@squadhub/shared';
 
 const CLIENT_USER_TYPES = new Set(['client', 'client_staff']);
 const TALENT_USER_TYPES = new Set(['partner', 'partner_employee']);
@@ -87,46 +82,20 @@ export async function seedSquadhireClientLogin(input: {
       });
     }
 
-    // 1. Must have a pending, unexpired client invitation.
-    const { data: invitation } = await supabaseAdmin
-      .from('invitations')
-      .select(INVITATION_COLUMNS)
-      .eq('email', email)
-      .eq('status', 'pending')
-      .maybeSingle<PendingInvitation & { expires_at: string }>();
-
-    // No invitation is no longer the end of the line: a SquadHire talent with
-    // no work yet has nothing raised on our side, and the Partner app is where
-    // they go to find their first job. SquadHire vouches for the password; the
-    // account they get is Discover-only until a card is assigned.
-    if (!invitation) {
-      return await provisionPreWorkTalentPartner({ email, password: input.password });
-    }
-
-    const userType = (invitation.user_type || 'client') as UserType;
-    if (!SEEDABLE_USER_TYPES.has(userType)) return false;
-
-    // Client invitations raised at card assignment are allowed to be expired.
-    // ensureClientPortalAccess stamps a 30-day expiry, but the SquadHub tab that
-    // sends the business here appears the moment a card is assigned and never
-    // goes away — so a business that takes two months to come across is
-    // otherwise locked out of an engagement it is actively paying for. The
-    // 30-day window guards stale *staff* invites, where the invitation is the
-    // whole entitlement; here the entitlement is the assigned card, and the
-    // caller must still prove the SquadHire password for this exact email.
-    // Invitations with no client_id aren't engagement-backed, so they still expire.
-    if (new Date(invitation.expires_at) <= new Date() && !invitation.client_id) {
-      return false;
-    }
-
-    // 2. Ask SquadHire whether these really are their credentials.
+    // 1. SaaS: no invitation is required. SquadHire is the authority — if the
+    //    typed password is a valid SquadHire BUSINESS login, the business gets
+    //    a user + its business account (workspace kind 'business'). Otherwise
+    //    try it as a TALENT login (own talent account, Discover-only until a
+    //    shared workspace exists).
     const identity = await verifySquadhireBusinessCredentials({
       email,
       password: input.password,
     });
-    if (!identity) return false;
+    if (!identity) {
+      return await provisionPreWorkTalentPartner({ email, password: input.password });
+    }
 
-    // 3. Create the SquadHub auth user with the same password.
+    // 2. Create the auth user with the same password.
     const displayName = identity.name || identity.company_name || email.split('@')[0];
     const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
       email,
@@ -136,8 +105,6 @@ export async function seedSquadhireClientLogin(input: {
     });
 
     if (authError || !authData?.user) {
-      // Another request may have created it a moment ago; letting the caller
-      // retry the sign-in resolves that safely (and fails closed otherwise).
       const alreadyExists = /already|registered|exists/i.test(authError?.message || '');
       if (!alreadyExists) {
         console.error('[seed-squadhire-login] createUser failed:', authError?.message);
@@ -145,25 +112,21 @@ export async function seedSquadhireClientLogin(input: {
       return alreadyExists;
     }
 
-    // 4. Profile row. Active immediately — the invitation is the approval.
+    // 3. Profile row. Active immediately — SquadHire vouched for the login.
     const { error: dbError } = await supabaseAdmin.from('users').insert({
       id: authData.user.id,
       email,
       display_name: displayName,
       status: 'active',
-      user_type: userType,
+      user_type: 'client',
       phone: identity.phone,
     });
     if (dbError) {
       console.error('[seed-squadhire-login] user row insert failed:', dbError.message);
     }
 
-    // 5. Same wiring an invited signup gets (workspace, role, client access).
-    await applyAcceptedInvitation({
-      userId: authData.user.id,
-      userType,
-      invitation,
-    });
+    // 4. Their business account.
+    await ensureBusinessAccount(authData.user.id, { ...identity, email });
 
     console.log(`[seed-squadhire-login] provisioned SquadHub account for ${email}`);
     return true;

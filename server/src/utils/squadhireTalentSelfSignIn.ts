@@ -33,7 +33,7 @@
 
 import { supabaseAdmin } from '../supabase';
 import { verifySquadhireTalentCredentials } from './squadhireCredentials';
-import { ensurePartnerWorkspaceMembership } from './squadhireTalentSession';
+import { ensureTalentAccount } from './squadhireTalentSession';
 
 /** Verify attempts allowed per email per window. */
 const VERIFY_MAX = 8;
@@ -115,9 +115,9 @@ export async function provisionPreWorkTalentPartner(input: {
   // They get the default partner role and no resource memberships, so every
   // work surface is empty until an assignment grants them one.
   try {
-    await ensurePartnerWorkspaceMembership(userId, null);
+    await ensureTalentAccount(userId, { talent_user_id: identity.talent_user_id, name: identity.name, email });
   } catch (err: any) {
-    console.error('[talent-self-signin] workspace membership failed:', err?.message);
+    console.error('[talent-self-signin] talent account failed:', err?.message);
   }
 
   console.log(`[talent-self-signin] provisioned pre-work partner account for ${email}`);

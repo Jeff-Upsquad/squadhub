@@ -218,20 +218,21 @@ router.get('/directory', verifySquadhireSecret, async (req: Request, res: Respon
       return;
     }
 
-    // Best-effort org context for partner-side people (first assigned client).
+    // Best-effort org context: the name of the first account (workspace) each
+    // partner-side person belongs to.
     const partnerIds = (users || [])
       .filter((u: any) => u.user_type === 'partner' || u.user_type === 'partner_employee')
       .map((u: any) => u.id);
 
     const orgByUser: Record<string, string> = {};
     if (partnerIds.length > 0) {
-      const { data: assignments } = await supabaseAdmin
-        .from('partner_client_assignments')
-        .select('user_id, clients(business_name)')
-        .in('user_id', partnerIds);
-      (assignments || []).forEach((a: any) => {
-        if (!orgByUser[a.user_id] && a.clients?.business_name) {
-          orgByUser[a.user_id] = a.clients.business_name;
+      const { data: memberships } = await supabaseAdmin
+        .from('workspace_members')
+        .select('user_id, workspaces(name, kind)')
+        .in('user_id', partnerIds); // tenant-scope: secret-gated SquadHire directory, returns account names only
+      (memberships || []).forEach((m: any) => {
+        if (!orgByUser[m.user_id] && m.workspaces?.name && m.workspaces.kind !== 'shared') {
+          orgByUser[m.user_id] = m.workspaces.name;
         }
       });
     }
