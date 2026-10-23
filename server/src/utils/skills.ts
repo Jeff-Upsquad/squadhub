@@ -1,4 +1,5 @@
 import { supabaseAdmin } from '../supabase';
+import { currentWorkspaceId } from '../middleware/workspace';
 import {
   SKILL_CATALOG,
   getSkillDef,
@@ -33,14 +34,21 @@ async function loadPrincipals(userId: string): Promise<Principals> {
     .eq('id', userId)
     .maybeSingle();
 
-  const { data: membership } = await supabaseAdmin
-    .from('workspace_members')
-    .select('id, role, role_id')
-    .eq('user_id', userId)
-    .maybeSingle();
+  const wsId = currentWorkspaceId();
+  const { data: membership } = wsId
+    ? await supabaseAdmin
+        .from('workspace_members')
+        .select('id, role, role_id')
+        .eq('workspace_id', wsId)
+        .eq('user_id', userId)
+        .maybeSingle()
+    : { data: null };
 
+  // SaaS: users.is_admin (a Hub platform flag) grants nothing here — only the
+  // owner/admin role of the active workspace.
+  void user;
   const workspaceRole = (membership as any)?.role as string | undefined;
-  const isAdmin = (user as any)?.is_admin === true
+  const isAdmin = workspaceRole === 'owner'
     || workspaceRole === 'admin'
     || workspaceRole === 'super_admin';
 

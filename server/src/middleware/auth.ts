@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { supabaseAuth } from '../supabase';
 import { supabaseAdmin } from '../supabase';
 import type { UserType } from '@squadhub/shared';
+import { resolveActiveWorkspace, enterTenantContext } from './workspace';
 
 // Extend Express Request to include user info
 declare global {
@@ -55,16 +56,19 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
     req.userType = (profile?.user_type as UserType) || 'internal';
     req.userName = (profile?.display_name as string) || undefined;
 
-    next();
+    // Tenancy: verify X-Workspace-Id (if sent) against the user's memberships
+    // and bind the active workspace for the rest of the request.
+    if (!(await resolveActiveWorkspace(req, res))) return;
+    enterTenantContext(req, next);
   } catch {
     res.status(401).json({ success: false, error: 'Invalid or expired token' });
   }
 }
 
-// Check if user has super_admin role in the workspace
+// Owner of the active workspace (legacy name: the Hub's "super admin").
 export function requireSuperAdmin(req: Request, res: Response, next: NextFunction): void {
-  if ((req as any).workspaceRole !== 'super_admin') {
-    res.status(403).json({ success: false, error: 'Super admin access required' });
+  if (req.workspaceRole !== 'owner') {
+    res.status(403).json({ success: false, error: 'Workspace owner access required' });
     return;
   }
   next();

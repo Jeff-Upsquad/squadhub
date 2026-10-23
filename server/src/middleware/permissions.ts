@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { supabaseAdmin } from '../supabase';
 import type { RolePermissions, AccessLevel } from '@squadhub/shared';
+import { currentWorkspaceId, getMembership, workspaceIdOf } from './workspace';
 
 // All permission keys default to false (explicit-allow only)
 const ALL_FALSE_PERMISSIONS: RolePermissions = {
@@ -56,23 +57,32 @@ export function meetsAccessLevel(userLevel: AccessLevel, requiredLevel: AccessLe
  * are the UNION across primary + all secondaries. Default-role fallback applies only
  * when the primary is null (secondaries never trigger fallback).
  */
-export async function getUserPermissions(userId: string): Promise<{
+export async function getUserPermissions(userId: string, workspaceId?: string | null): Promise<{
   permissions: RolePermissions;
   workspaceRole: string;
 }> {
+  // SaaS: permissions are per workspace (account). Default to the request's
+  // active workspace; with none, the user has no workspace-level permissions.
+  const wsId = workspaceId || currentWorkspaceId();
+  if (!wsId) return { permissions: ALL_FALSE_PERMISSIONS, workspaceRole: 'guest' };
+
   const { data: membership } = await supabaseAdmin
     .from('workspace_members')
     .select('id, role, role_id, roles(permissions)')
+    .eq('workspace_id', wsId)
     .eq('user_id', userId)
-    .single();
+    .maybeSingle();
 
   if (!membership) {
-    return { permissions: ALL_FALSE_PERMISSIONS, workspaceRole: 'guest' };
+    // Shared-workspace access through a linked participant account.
+    const shared = await getMembership(userId, wsId);
+    if (!shared) return { permissions: ALL_FALSE_PERMISSIONS, workspaceRole: 'guest' };
+    return { permissions: { ...ALL_FALSE_PERMISSIONS, can_send_dms: true, can_create_lists: true, can_manage_tasks: true }, workspaceRole: 'member' };
   }
 
   const workspaceRole = membership.role as string;
 
-  if (workspaceRole === 'admin' || workspaceRole === 'super_admin') {
+  if (workspaceRole === 'owner' || workspaceRole === 'admin' || workspaceRole === 'super_admin') {
     return { permissions: ALL_TRUE_PERMISSIONS, workspaceRole };
   }
 
@@ -116,17 +126,20 @@ export async function getUserPermissions(userId: string): Promise<{
  *
  * Admins/super_admins still get all-true, matching the broader bypass pattern.
  */
-export async function getPrimaryRolePermissions(userId: string): Promise<RolePermissions> {
+export async function getPrimaryRolePermissions(userId: string, workspaceId?: string | null): Promise<RolePermissions> {
+  const wsId = workspaceId || currentWorkspaceId();
+  if (!wsId) return { ...ALL_FALSE_PERMISSIONS };
   const { data: membership } = await supabaseAdmin
     .from('workspace_members')
     .select('role, role_id, roles(permissions)')
+    .eq('workspace_id', wsId)
     .eq('user_id', userId)
-    .single();
+    .maybeSingle();
 
   if (!membership) return { ...ALL_FALSE_PERMISSIONS };
 
   const workspaceRole = (membership as any).role as string;
-  if (workspaceRole === 'admin' || workspaceRole === 'super_admin') {
+  if (workspaceRole === 'owner' || workspaceRole === 'admin' || workspaceRole === 'super_admin') {
     return { ...ALL_TRUE_PERMISSIONS };
   }
 
@@ -163,7 +176,19 @@ export function requirePermission(permissionKey: keyof RolePermissions) {
       return;
     }
 
-    const { permissions } = await getUserPermissions(req.userId);
+    // The workspace the action targets: the active one, or the one named by
+    // the body's container (space/folder/list/channel/workspace).
+    let wsId = req.workspaceId ?? null;
+    if (!wsId && req.body) {
+      const b = req.body as Record<string, unknown>;
+      if (typeof b.workspace_id === 'string') {
+        wsId = (await getMembership(req.userId, b.workspace_id)) ? b.workspace_id : null;
+      } else if (typeof b.space_id === 'string') wsId = await workspaceIdOf('space', b.space_id);
+      else if (typeof b.folder_id === 'string') wsId = await workspaceIdOf('folder', b.folder_id);
+      else if (typeof b.list_id === 'string') wsId = await workspaceIdOf('list', b.list_id);
+      else if (typeof b.channel_id === 'string') wsId = await workspaceIdOf('channel', b.channel_id);
+    }
+    const { permissions } = await getUserPermissions(req.userId, wsId);
 
     if (!permissions[permissionKey]) {
       res.status(403).json({
@@ -187,14 +212,15 @@ export async function checkResourceAccess(
   resourceType: string,
   resourceId: string,
 ): Promise<AccessLevel | null> {
-  // Check if user is admin (bypass)
-  const { data: membership } = await supabaseAdmin
-    .from('workspace_members')
-    .select('role')
-    .eq('user_id', userId)
-    .single();
+  // Tenant wall: the resource's workspace must be one the user can reach
+  // (directly or through a shared-workspace link). Nothing below runs otherwise.
+  const resourceWs = await workspaceIdOf(resourceType, resourceId);
+  if (!resourceWs) return null;
+  const membership = await getMembership(userId, resourceWs);
+  if (!membership) return null;
 
-  if (membership?.role === 'admin' || membership?.role === 'super_admin') {
+  // Owners/admins of THAT workspace manage everything in it.
+  if (membership.role === 'owner' || membership.role === 'admin') {
     return 'manager';
   }
 
@@ -297,13 +323,13 @@ export function requireResourceAccess(resourceType: string, minLevel: AccessLeve
 /**
  * Check if user is admin/super_admin (workspace-level)
  */
-export async function isWorkspaceAdmin(userId: string): Promise<boolean> {
-  const { data } = await supabaseAdmin
-    .from('workspace_members')
-    .select('role')
-    .eq('user_id', userId)
-    .single();
-  return data?.role === 'admin' || data?.role === 'super_admin';
+export async function isWorkspaceAdmin(userId: string, workspaceId?: string | null): Promise<boolean> {
+  // Owner/admin of the given workspace, defaulting to the request's active
+  // workspace (X-Workspace-Id). Never true without a workspace.
+  const wsId = workspaceId || currentWorkspaceId();
+  if (!wsId) return false;
+  const m = await getMembership(userId, wsId);
+  return m?.role === 'owner' || m?.role === 'admin';
 }
 
 /**

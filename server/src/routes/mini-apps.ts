@@ -1,64 +1,35 @@
 import { Router, Request, Response } from 'express';
 import { requireAuth } from '../middleware/auth';
+import { requireWorkspace } from '../middleware/workspace';
 import { supabaseAdmin } from '../supabase';
-import { getUserRoleIds } from '../utils/roles';
+import { BLOCKED_MINI_APPS } from '../utils/accounts';
 
 const router = Router();
 
 router.use(requireAuth);
 
-// GET /mini-apps/my — get mini apps the current user can access
-// Access = (role-based via any of the user's roles — primary or secondary) OR (direct user grant)
-// Only returns enabled mini apps
-router.get('/my', async (req: Request, res: Response) => {
+// GET /mini-apps/my — mini apps enabled for the ACTIVE workspace (account).
+// Entitlements live in workspace_mini_apps and are managed by the Hub's super
+// admin over the bridge (POST /bridge/v1/admin/accounts/:id/mini-apps).
+router.get('/my', requireWorkspace, async (req: Request, res: Response) => {
   try {
-    const userId = req.userId!;
-    const roleIds = await getUserRoleIds(userId);
-
-    const { data: allApps, error } = await supabaseAdmin
-      .from('mini_apps')
-      .select('id, slug, name, description, icon, is_enabled')
-      .eq('is_enabled', true)
-      .order('name');
+    const { data, error } = await supabaseAdmin
+      .from('workspace_mini_apps')
+      .select('slug, enabled, mini_apps!inner(id, slug, name, description, icon, is_enabled)')
+      .eq('workspace_id', req.workspaceId!)
+      .eq('enabled', true);
 
     if (error) {
       res.status(500).json({ success: false, error: error.message });
       return;
     }
 
-    if (!allApps || allApps.length === 0) {
-      res.json({ success: true, data: [] });
-      return;
-    }
+    const apps = (data || [])
+      .map((row: any) => row.mini_apps)
+      .filter((a: any) => a && a.is_enabled && !BLOCKED_MINI_APPS.has(a.slug))
+      .sort((a: any, b: any) => String(a.name).localeCompare(String(b.name)));
 
-    const appIds = allApps.map((a) => a.id);
-
-    let roleAccessAppIds = new Set<string>();
-    if (roleIds.length > 0) {
-      const { data: roleAccess } = await supabaseAdmin
-        .from('mini_app_role_access')
-        .select('mini_app_id')
-        .in('role_id', roleIds)
-        .in('mini_app_id', appIds);
-
-      (roleAccess || []).forEach((ra: any) => roleAccessAppIds.add(ra.mini_app_id));
-    }
-
-    // Get direct user access
-    const { data: userAccess } = await supabaseAdmin
-      .from('mini_app_user_access')
-      .select('mini_app_id')
-      .eq('user_id', userId)
-      .in('mini_app_id', appIds);
-
-    const userAccessAppIds = new Set((userAccess || []).map((ua: any) => ua.mini_app_id));
-
-    // Filter: user has access if role-based OR direct
-    const accessible = allApps.filter(
-      (app) => roleAccessAppIds.has(app.id) || userAccessAppIds.has(app.id)
-    );
-
-    res.json({ success: true, data: accessible });
+    res.json({ success: true, data: apps });
   } catch (err) {
     console.error('Get my mini apps error:', err);
     res.status(500).json({ success: false, error: 'Internal server error' });

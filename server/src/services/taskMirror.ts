@@ -1,4 +1,5 @@
 import { supabaseAdmin } from '../supabase';
+import { currentWorkspaceId, getMembership } from '../middleware/workspace';
 
 // Mirrors the Home "disappearing card" sources — Courses (lms_assignments) and
 // Meetings (meetings) — into real `tasks` rows so they behave like any other
@@ -51,15 +52,22 @@ async function getOpenStatusName(spaceId: string): Promise<string> {
   return name;
 }
 
+// The workspace a personal space lives in: the request's active workspace, or
+// (cron / no request) the user's own account — the first non-shared workspace
+// they own or belong to.
 async function resolveWorkspaceId(userId: string): Promise<string | null> {
+  const active = currentWorkspaceId();
+  if (active) return active;
   const { data } = await supabaseAdmin
     .from('workspace_members')
-    .select('workspace_id')
+    .select('workspace_id, role, workspaces!inner(kind, status)')
     .eq('user_id', userId)
-    .order('id')
-    .limit(1)
-    .maybeSingle();
-  return (data as any)?.workspace_id ?? null;
+    .neq('workspaces.kind', 'shared')
+    .eq('workspaces.status', 'active')
+    .order('role', { ascending: false }); // tenant-scope: user's own memberships
+  const rows = (data || []) as any[];
+  const owned = rows.find((r) => r.role === 'owner') || rows[0];
+  return owned?.workspace_id ?? null;
 }
 
 // ---- personal space / list provisioning (shared with GET /pm/personal) ------
@@ -184,8 +192,9 @@ export async function getOrCreatePersonalDefaultListId(
 // Resolve the (list, status) a mirror task for this user should be created in.
 async function personalTarget(
   userId: string,
+  workspaceId?: string,
 ): Promise<{ listId: string; status: string } | null> {
-  const spaceId = await getOrCreatePersonalSpaceId(userId);
+  const spaceId = await getOrCreatePersonalSpaceId(userId, workspaceId);
   if (!spaceId) return null;
   const listId = await getOrCreatePersonalDefaultListId(spaceId, userId);
   if (!listId) return null;
@@ -201,8 +210,9 @@ async function upsertMirrorTask(opts: {
   userId: string;
   title: string;
   dueDate: string | null;
+  workspaceId: string;
 }): Promise<void> {
-  const { kind, sourceId, userId, title, dueDate } = opts;
+  const { kind, sourceId, userId, title, dueDate, workspaceId } = opts;
 
   const { data: existing } = await supabaseAdmin
     .from('tasks')
@@ -224,7 +234,7 @@ async function upsertMirrorTask(opts: {
     return;
   }
 
-  const target = await personalTarget(userId);
+  const target = await personalTarget(userId, workspaceId);
   if (!target) return;
   const typeId = await getTypeId(kind);
 
@@ -275,7 +285,7 @@ async function pruneSourceOwners(
 export async function mirrorMeeting(meetingId: string): Promise<void> {
   const { data: meeting } = await supabaseAdmin
     .from('meetings')
-    .select('id, title, scheduled_at, status, attendee_ids, created_by')
+    .select('id, title, scheduled_at, status, attendee_ids, created_by, workspace_id')
     .eq('id', meetingId)
     .maybeSingle();
 
@@ -293,8 +303,16 @@ export async function mirrorMeeting(meetingId: string): Promise<void> {
     ),
   );
 
+  // Mirror tasks live in each attendee's personal space INSIDE the meeting's
+  // workspace; attendees who can't reach that workspace get none.
+  const workspaceId = (meeting as any).workspace_id as string;
+  const reachable: string[] = [];
   for (const uid of participants) {
+    if (await getMembership(uid, workspaceId)) reachable.push(uid);
+  }
+  for (const uid of reachable) {
     await upsertMirrorTask({
+      workspaceId,
       kind: 'meeting',
       sourceId: meetingId,
       userId: uid,
@@ -304,7 +322,7 @@ export async function mirrorMeeting(meetingId: string): Promise<void> {
   }
 
   // Attendee removed since last sync → remove their now-orphaned mirror task.
-  await pruneSourceOwners('meeting', meetingId, participants);
+  await pruneSourceOwners('meeting', meetingId, reachable);
 }
 
 // ---- full reconcile (boot backfill + drift correction) ----------------------

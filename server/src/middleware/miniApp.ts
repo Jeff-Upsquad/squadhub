@@ -1,5 +1,4 @@
 import { Request, Response, NextFunction } from 'express';
-import { supabaseAdmin } from '../supabase';
 import { userHasMiniApp } from '../utils/miniAppAccess';
 
 /**
@@ -24,20 +23,13 @@ export function requireAnyMiniAppOrAdmin(slugs: string[]) {
       return;
     }
 
-    // Internal admins always pass (mirrors requireAdmin).
-    if (!req.userType || req.userType === 'internal') {
-      const { data: user } = await supabaseAdmin
-        .from('users')
-        .select('is_admin')
-        .eq('id', req.userId)
-        .single();
-      if (user?.is_admin) {
-        next();
-        return;
-      }
+    if (!req.workspaceId) {
+      res.status(400).json({ success: false, error: 'X-Workspace-Id header is required' });
+      return;
     }
 
-    // Otherwise require a grant to at least one of the listed mini apps.
+    // SaaS: the ACTIVE workspace must have one of the listed apps enabled.
+    // (The Hub's platform-admin bypass does not exist here.)
     for (const slug of slugs) {
       if (await userHasMiniApp(req.userId, slug)) {
         next();

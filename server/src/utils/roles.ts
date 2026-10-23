@@ -1,4 +1,5 @@
 import { supabaseAdmin } from '../supabase';
+import { currentWorkspaceId } from '../middleware/workspace';
 
 /**
  * Returns the user's effective role IDs for their workspace membership:
@@ -8,10 +9,15 @@ import { supabaseAdmin } from '../supabase';
  * access/permissions across all of a user's roles (primary + secondary).
  * Returns [] if the user has no workspace membership.
  */
-export async function getUserRoleIds(userId: string): Promise<string[]> {
+export async function getUserRoleIds(userId: string, workspaceId?: string | null): Promise<string[]> {
+  // Roles are per membership, i.e. per workspace (account). Default to the
+  // request's active workspace; no workspace → no roles.
+  const wsId = workspaceId || currentWorkspaceId();
+  if (!wsId) return [];
   const { data: membership } = await supabaseAdmin
     .from('workspace_members')
     .select('id, role_id')
+    .eq('workspace_id', wsId)
     .eq('user_id', userId)
     .maybeSingle();
 
@@ -36,12 +42,15 @@ export async function getUserRoleIds(userId: string): Promise<string[]> {
  * Returns user IDs whose primary or secondary role matches the given role_id.
  * Used by eligibility queries (e.g. "who are all the sales people?").
  */
-export async function getUserIdsByRoleId(roleId: string): Promise<string[]> {
+export async function getUserIdsByRoleId(roleId: string, workspaceId?: string | null): Promise<string[]> {
   const ids = new Set<string>();
+  const wsId = workspaceId || currentWorkspaceId();
+  if (!wsId) return [];
 
   const { data: primary } = await supabaseAdmin
     .from('workspace_members')
     .select('user_id')
+    .eq('workspace_id', wsId)
     .eq('role_id', roleId);
 
   for (const row of primary || []) {
@@ -50,7 +59,8 @@ export async function getUserIdsByRoleId(roleId: string): Promise<string[]> {
 
   const { data: secondary } = await supabaseAdmin
     .from('workspace_member_secondary_roles')
-    .select('workspace_members!inner(user_id)')
+    .select('workspace_members!inner(user_id, workspace_id)')
+    .eq('workspace_members.workspace_id', wsId)
     .eq('role_id', roleId);
 
   for (const row of (secondary || []) as any[]) {

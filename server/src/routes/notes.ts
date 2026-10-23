@@ -13,16 +13,17 @@ import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import { supabaseAdmin } from '../supabase';
 import { requireAuth } from '../middleware/auth';
-import { requireMiniAppOrAdmin } from '../middleware/miniApp';
 import { isWorkspaceAdmin } from '../middleware/permissions';
+import { getMembership } from '../middleware/workspace';
 import { getUserRoleIds } from '../utils/roles';
 import { FILE_SIZE_LIMITS, generateNoteUploadUrl } from '../r2';
 import { unfurl } from '../services/unfurl';
 
 const router = Router();
 
+// Notes are a core SaaS module (not a mini app): every member can use them in
+// the workspaces they belong to.
 router.use(requireAuth);
-router.use(requireMiniAppOrAdmin('squad-notes'));
 
 type NoteAccess = 'none' | 'read' | 'edit';
 
@@ -31,19 +32,16 @@ const TREE_FIELDS = 'id, parent_id, root_id, title, icon, position, owner_id, vi
 
 // ---- helpers ---------------------------------------------------------------
 
-async function getUserWorkspaceId(userId: string): Promise<string | null> {
-  const { data } = await supabaseAdmin
-    .from('workspace_members')
-    .select('workspace_id')
-    .eq('user_id', userId)
-    .maybeSingle();
-  return (data?.workspace_id as string) || null;
+// Notes live in the ACTIVE workspace (X-Workspace-Id). There is no implicit
+// "the user's workspace" in the SaaS — a user can belong to many.
+function activeWorkspaceId(req: Request): string | null {
+  return req.workspaceId ?? null;
 }
 
 // Departments (an internal HR concept) are not part of the SaaS: notes are
 // shared with users or roles only.
-async function getUserIdentities(userId: string): Promise<{ roleIds: string[] }> {
-  const roleIds = await getUserRoleIds(userId);
+async function getUserIdentities(userId: string, workspaceId?: string | null): Promise<{ roleIds: string[] }> {
+  const roleIds = await getUserRoleIds(userId, workspaceId);
   return { roleIds };
 }
 
@@ -64,8 +62,10 @@ async function loadRoot(note: any): Promise<any> {
 // the user's identities (user / role).
 async function getNoteAccess(userId: string, note: any): Promise<NoteAccess> {
   if (!note) return 'none';
+  // Tenant wall: only members of the note's workspace can reach it at all.
+  if (!(await getMembership(userId, note.workspace_id))) return 'none';
   if (note.owner_id === userId) return 'edit';
-  if (await isWorkspaceAdmin(userId)) return 'edit';
+  if (await isWorkspaceAdmin(userId, note.workspace_id)) return 'edit';
 
   const root = await loadRoot(note);
   if (root.owner_id === userId) return 'edit';
@@ -76,7 +76,7 @@ async function getNoteAccess(userId: string, note: any): Promise<NoteAccess> {
     .eq('note_id', root.id);
   if (!shares || shares.length === 0) return 'none';
 
-  const { roleIds } = await getUserIdentities(userId);
+  const { roleIds } = await getUserIdentities(userId, note.workspace_id);
   let best: NoteAccess = 'none';
   for (const s of shares as any[]) {
     const match =
@@ -110,7 +110,7 @@ async function collectSubtreeIds(rootId: string): Promise<string[]> {
 // GET /notes/trash — deletion-roots owned by the user (admins: all in workspace).
 router.get('/trash', async (req: Request, res: Response) => {
   try {
-    const ws = await getUserWorkspaceId(req.userId!);
+    const ws = activeWorkspaceId(req);
     if (!ws) {
       res.json({ success: true, data: [] });
       return;
@@ -196,7 +196,7 @@ router.get('/grantee-options', async (_req: Request, res: Response) => {
 // GET /notes — the visible page tree (owned + shared-root subtrees).
 router.get('/', async (req: Request, res: Response) => {
   try {
-    const ws = await getUserWorkspaceId(req.userId!);
+    const ws = activeWorkspaceId(req);
     if (!ws) {
       res.json({ success: true, data: [] });
       return;
@@ -249,6 +249,7 @@ router.get('/', async (req: Request, res: Response) => {
       const { data: shared } = await supabaseAdmin
         .from('squad_notes')
         .select(TREE_FIELDS)
+        .eq('workspace_id', ws)
         .in('root_id', rootIds)
         .is('deleted_at', null);
       for (const n of shared || []) byId.set(n.id, n);
@@ -309,7 +310,7 @@ router.post('/', async (req: Request, res: Response) => {
       const root = await loadRoot(parent);
       parentVisibility = root.visibility;
     } else {
-      workspaceId = await getUserWorkspaceId(req.userId!);
+      workspaceId = activeWorkspaceId(req);
     }
     if (!workspaceId) {
       res.status(400).json({ success: false, error: 'No workspace' });

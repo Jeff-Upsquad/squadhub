@@ -1,41 +1,32 @@
 import { supabaseAdmin } from '../supabase';
-import { getUserRoleIds } from './roles';
+import { currentWorkspaceId, getMembership } from '../middleware/workspace';
+import { BLOCKED_MINI_APPS } from './accounts';
 
 /**
- * Returns true if the user can access the enabled mini app identified by `slug`.
- * Access = (role-based via any of the user's roles — primary or secondary)
- *          OR (direct user grant). Mirrors GET /mini-apps/my.
- * Returns false if the app is missing or disabled.
+ * SaaS mini-app entitlement is PER WORKSPACE (account): a workspace_mini_apps
+ * row with enabled = true, for a catalog app that is itself enabled. Every
+ * member of the workspace gets the app there. Cashbook is never offered.
+ *
+ * `workspaceId` defaults to the request's active workspace (X-Workspace-Id).
  */
-export async function userHasMiniApp(userId: string, slug: string): Promise<boolean> {
-  const { data: app } = await supabaseAdmin
-    .from('mini_apps')
-    .select('id, is_enabled')
+export async function workspaceHasMiniApp(workspaceId: string, slug: string): Promise<boolean> {
+  if (BLOCKED_MINI_APPS.has(slug)) return false;
+  const { data } = await supabaseAdmin
+    .from('workspace_mini_apps')
+    .select('enabled, mini_apps!inner(is_enabled)')
+    .eq('workspace_id', workspaceId)
     .eq('slug', slug)
     .maybeSingle();
+  return !!data?.enabled && !!(data as any).mini_apps?.is_enabled;
+}
 
-  if (!app || !app.is_enabled) return false;
-
-  // Direct user grant
-  const { data: userAccess } = await supabaseAdmin
-    .from('mini_app_user_access')
-    .select('id')
-    .eq('user_id', userId)
-    .eq('mini_app_id', app.id)
-    .maybeSingle();
-
-  if (userAccess) return true;
-
-  // Role-based grant (primary or secondary roles)
-  const roleIds = await getUserRoleIds(userId);
-  if (roleIds.length === 0) return false;
-
-  const { data: roleAccess } = await supabaseAdmin
-    .from('mini_app_role_access')
-    .select('id')
-    .eq('mini_app_id', app.id)
-    .in('role_id', roleIds)
-    .limit(1);
-
-  return !!(roleAccess && roleAccess.length > 0);
+export async function userHasMiniApp(
+  userId: string,
+  slug: string,
+  workspaceId?: string | null,
+): Promise<boolean> {
+  const wsId = workspaceId || currentWorkspaceId();
+  if (!wsId) return false;
+  if (!(await getMembership(userId, wsId))) return false;
+  return workspaceHasMiniApp(wsId, slug);
 }

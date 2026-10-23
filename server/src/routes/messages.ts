@@ -860,6 +860,7 @@ router.get('/:id/history', requireAuth, requireAdmin, async (req: Request, res: 
       .from('messages')
       .select('id, content, edited_at, sender_id')
       .eq('id', id)
+      .eq('workspace_id', req.workspaceId!) // admin of the active workspace only
       .maybeSingle();
     if (!msg) {
       res.status(404).json({ success: false, error: 'Message not found' });
@@ -894,6 +895,7 @@ router.post('/:id/restore', requireAuth, requireAdmin, async (req: Request, res:
       .from('messages')
       .select('id, channel_id, dm_conversation_id, is_deleted')
       .eq('id', id)
+      .eq('workspace_id', req.workspaceId!) // admin of the active workspace only
       .maybeSingle();
     if (!msg || (msg as any).is_deleted) {
       res.status(404).json({ success: false, error: 'Message not found' });
