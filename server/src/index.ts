@@ -57,6 +57,16 @@ import { startScheduledMessagesSweeper } from './cron/scheduled-messages-cron';
 import { startHuddleSweeper } from './cron/huddle-cron';
 import { startRoutineCron } from './cron/routine-cron';
 import { startTaskMirrorCron } from './cron/task-mirror-cron';
+import { startHubTimeTotalsCron } from './cron/hub-time-totals-cron';
+import bridgeRoutes from './routes/bridge';
+import authOneTimeRoutes from './routes/auth-one-time';
+import {
+  subscriptionCardsRouter,
+  jobCardsRouter,
+  partnerRouter,
+  partnerPaymentsRouter,
+  supportRouter,
+} from './routes/hub-data';
 // Validate env vars before starting
 validateConfig();
 
@@ -73,6 +83,10 @@ app.use(cors({
   origin: [config.clientUrl].filter(Boolean),
   credentials: true,
 }));
+// Hub → SaaS bridge: mounted BEFORE the app-wide JSON parser so its own parser
+// keeps the raw body for the HMAC signature (routes/bridge/index.ts).
+app.use('/bridge/v1', bridgeRoutes);
+
 app.use(express.json({ limit: '10mb' }));
 app.use(morgan('dev'));
 
@@ -82,6 +96,7 @@ app.get('/health', (_req, res) => {
 });
 
 // API routes
+app.use('/auth', authOneTimeRoutes); // GET /auth/one-time, /auth/impersonation
 app.use('/auth', authRoutes);
 app.use('/workspaces', workspaceRoutes);
 app.use('/channels', channelRoutes);
@@ -135,15 +150,15 @@ app.use('/view-preferences', viewPreferencesRoutes);
 app.use('/feature-tips', featureTipsRoutes);
 
 // Hub-owned data (client cards, partner opportunities/assignments, partner
-// payments, support tickets) is served through the Hub bridge — see
-// docs/bridge-contract.md. Until the bridge client lands those surfaces answer
-// 501 so the kept UI shells render an empty/"coming soon" state.
-// TODO(bridge): replace with proxies to HUB_API_URL /bridge/v1/*.
-for (const prefix of ['/subscription-cards', '/job-cards', '/partner/opportunities', '/partner/discover', '/partner-payments', '/support']) {
-  app.use(prefix, (_req, res) => {
-    res.status(501).json({ success: false, error: 'Not available yet: served by Squad Hub via the bridge (docs/bridge-contract.md)' });
-  });
-}
+// payments, support tickets) is fetched live from Squad Hub over the signed
+// bridge (docs/bridge-contract.md, utils/hubBridgeClient.ts). When the Hub is
+// unreachable these answer 503 { code: 'hub_unavailable' }; everything else
+// keeps working.
+app.use('/subscription-cards', subscriptionCardsRouter);
+app.use('/job-cards', jobCardsRouter);
+app.use('/partner', partnerRouter);
+app.use('/partner-payments', partnerPaymentsRouter);
+app.use('/support', supportRouter);
 
 // 404 handler
 app.use((_req, res) => {
@@ -180,5 +195,6 @@ server.listen(config.port, () => {
     startRoutineCron();
     startTaskRemindersCron();
     startTaskMirrorCron();
+    startHubTimeTotalsCron();
   }
 });

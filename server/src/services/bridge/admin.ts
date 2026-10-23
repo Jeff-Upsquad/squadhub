@@ -338,7 +338,8 @@ export async function updatePlan(input: PlanInput, actor: BridgeActor | null) {
   validatePlan(input, true);
   const { data: existing } = await supabaseAdmin.from('plans').select('id, is_default').eq('id', input.id).maybeSingle();
   if (!existing) throw new BridgeError(404, 'Plan not found');
-  if (input.is_default === false && existing.is_default) throw new BridgeError(409, 'Make another plan the default first');
+  // There is always exactly one default: un-defaulting happens only by making
+  // another plan the default (is_default:false on the default plan is ignored).
   const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
   if (input.name !== undefined) patch.name = input.name.trim();
   if (input.price_inr !== undefined) patch.price_inr = Math.round(input.price_inr);

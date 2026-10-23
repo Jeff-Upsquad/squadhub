@@ -98,7 +98,7 @@ export async function findOrCreateUser(input: {
     status: 'active',
     user_type: input.userType,
     phone: input.phone || null,
-    hub_user_id: hubIdFree ? input.hubUserId : null,
+    hub_user_id: hubIdFree ? input.hubUserId ?? null : null,
   };
   const { error: dbError } = await supabaseAdmin.from('users').insert(row);
   if (dbError) throw new Error(`Could not create the user profile: ${dbError.message}`);
