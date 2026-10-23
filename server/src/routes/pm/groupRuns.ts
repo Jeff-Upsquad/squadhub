@@ -196,7 +196,11 @@ router.post('/group-runs/runs', async (req: Request, res: Response) => {
       await closeGroupRun(existing as any, startedAt);
     }
 
-    const workspaceId = await workspaceForList(parsed.data.list_id ?? null);
+    const workspaceId = (await workspaceForList(parsed.data.list_id ?? null)) ?? req.workspaceId ?? null;
+    if (!workspaceId) {
+      res.status(400).json({ success: false, error: 'X-Workspace-Id header is required' });
+      return;
+    }
 
     const { data, error } = await supabaseAdmin
       .from('group_runs')

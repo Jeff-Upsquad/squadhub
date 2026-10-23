@@ -1,6 +1,7 @@
 import { PARTNER_USER_TYPES } from '@squadhub/shared';
 import { supabaseAdmin } from '../supabase';
 import { isWorkspaceAdmin } from '../middleware/permissions';
+import { getMembership } from '../middleware/workspace';
 import { getUserIdsByRoleId } from './roles';
 
 export const SQUAD_MANAGER_ROLE_NAME = 'Squad Manager';
@@ -267,7 +268,7 @@ export async function loadDmActor(userId: string, workspaceId: string): Promise<
 
   const roleId = await squadManagerRoleId();
   const [admin, assigned, work] = await Promise.all([
-    isWorkspaceAdmin(userId),
+    isWorkspaceAdmin(userId, workspaceId),
     assignedSquadManagerIds(userId, roleId),
     loadWorkSet(userId, workspaceId),
   ]);
@@ -295,6 +296,10 @@ export async function canActorDm(
     .maybeSingle();
   if (!other || other.status !== 'active') {
     return { ok: false, reason: "That person isn't available." };
+  }
+  // Tenancy: DMs live in one workspace; both people must belong to it.
+  if (!(await getMembership(otherUserId, actor.workspaceId))) {
+    return { ok: false, reason: DM_DENIED };
   }
 
   const roleId = await squadManagerRoleId();

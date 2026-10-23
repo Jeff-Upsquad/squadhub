@@ -1,4 +1,5 @@
 import { supabaseAdmin } from '../supabase';
+import { currentWorkspaceId } from '../middleware/workspace';
 import { getUserRoleIds } from './roles';
 
 /** Platform admin flag (users.is_admin) — the bypass used across label gating. */
@@ -55,21 +56,10 @@ export async function getWorkspaceIdForTask(taskId: string): Promise<string | nu
  * Mirrors the resolution used in client-spaces-admin.ts.
  */
 export async function getAdminWorkspaceId(userId: string): Promise<string | null> {
-  const { data: wm } = await supabaseAdmin
-    .from('workspace_members')
-    .select('workspace_id')
-    .eq('user_id', userId)
-    .order('created_at', { ascending: true })
-    .limit(1)
-    .maybeSingle();
-  if (wm?.workspace_id) return wm.workspace_id as string;
-  const { data: ws } = await supabaseAdmin
-    .from('workspaces')
-    .select('id')
-    .order('created_at', { ascending: true })
-    .limit(1)
-    .maybeSingle();
-  return (ws as any)?.id ?? null;
+  // SaaS: labels belong to the ACTIVE workspace — there is no "oldest
+  // workspace" fallback.
+  void userId;
+  return currentWorkspaceId() ?? null;
 }
 
 /**

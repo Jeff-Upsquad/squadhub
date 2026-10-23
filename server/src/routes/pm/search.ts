@@ -22,7 +22,7 @@ async function isAdminInWorkspace(userId: string, workspaceId: string): Promise<
     .eq('workspace_id', workspaceId)
     .maybeSingle();
   logStep('isAdminInWorkspace', error);
-  return data?.role === 'admin' || data?.role === 'super_admin';
+  return data?.role === 'owner' || data?.role === 'admin' || data?.role === 'super_admin';
 }
 
 // GET /pm/search?workspace_id=xxx&q=...&limit=25

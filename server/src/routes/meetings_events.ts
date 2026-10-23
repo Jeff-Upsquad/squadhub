@@ -3,6 +3,8 @@ import { z } from 'zod';
 import { requireAuth } from '../middleware/auth';
 import { checkResourceAccess, meetsAccessLevel } from '../middleware/permissions';
 import { supabaseAdmin } from '../supabase';
+import { workspaceIdOf } from '../middleware/workspace';
+import { isDmParticipant } from '../utils/dmAccess';
 import type {
   MeetingEventDetail,
   MeetingGuest,
@@ -311,6 +313,30 @@ router.post('/', async (req: Request, res: Response) => {
     const userId = req.userId!;
     const body = createSchema.parse(req.body);
 
+    // Tenancy: the event lives in its origin conversation's workspace, or in
+    // the active workspace when created from the Meetings app. The caller must
+    // be able to reach the origin.
+    let eventWorkspaceId: string | null = null;
+    if (body.origin_channel_id) {
+      if (!(await checkResourceAccess(userId, 'channel', body.origin_channel_id))) {
+        res.status(403).json({ success: false, error: 'You do not have access to this channel' });
+        return;
+      }
+      eventWorkspaceId = await workspaceIdOf('channel', body.origin_channel_id);
+    } else if (body.origin_dm_conversation_id) {
+      if (!(await isDmParticipant(userId, body.origin_dm_conversation_id))) {
+        res.status(403).json({ success: false, error: 'You do not have access to this conversation' });
+        return;
+      }
+      eventWorkspaceId = await workspaceIdOf('dm', body.origin_dm_conversation_id);
+    } else {
+      eventWorkspaceId = req.workspaceId ?? null;
+    }
+    if (!eventWorkspaceId) {
+      res.status(400).json({ success: false, error: 'X-Workspace-Id header is required' });
+      return;
+    }
+
     // Resolve the guest set (creator is added as host below).
     const guestSet = new Set<string>(body.guest_ids);
     if (body.include_all_channel && body.origin_channel_id) {
@@ -329,6 +355,16 @@ router.post('/', async (req: Request, res: Response) => {
       for (const p of (parts || []) as any[]) guestSet.add(p.user_id);
     }
     guestSet.delete(userId); // creator handled separately as host
+    // Guests must be members of the event's workspace.
+    if (guestSet.size) {
+      const { data: wm } = await supabaseAdmin
+        .from('workspace_members')
+        .select('user_id')
+        .eq('workspace_id', eventWorkspaceId)
+        .in('user_id', [...guestSet]);
+      const ok = new Set((wm || []).map((m: any) => m.user_id as string));
+      for (const g of [...guestSet]) if (!ok.has(g)) guestSet.delete(g);
+    }
     if (guestSet.size > MAX_GUESTS) {
       res.status(400).json({ success: false, error: `Too many guests (max ${MAX_GUESTS})` });
       return;
@@ -338,6 +374,7 @@ router.post('/', async (req: Request, res: Response) => {
     const { data: event, error: evErr } = await supabaseAdmin
       .from('meeting_events')
       .insert({
+        workspace_id: eventWorkspaceId,
         title: body.title,
         kind: body.kind,
         agenda: body.agenda ?? null,

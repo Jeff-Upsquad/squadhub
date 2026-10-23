@@ -5,6 +5,23 @@ import { installCompanionTimers } from './companionTimers';
 import { supabaseAdmin, supabaseAuth } from '../supabase';
 import { sendPartnerPush } from '../push/partnerPush';
 import { sendWebPush } from '../push/webPush';
+import { getMembership, getUserWorkspaceIds, workspaceIdOf } from '../middleware/workspace';
+import { checkResourceAccess } from '../middleware/permissions';
+import { isDmParticipant } from '../utils/dmAccess';
+
+// Tenancy: presence only travels between people who share a workspace.
+async function coworkerIds(userId: string): Promise<Set<string>> {
+  const wsIds = await getUserWorkspaceIds(userId);
+  const ids = new Set<string>();
+  if (!wsIds.length) return ids;
+  const { data } = await supabaseAdmin
+    .from('workspace_members')
+    .select('user_id')
+    .in('workspace_id', wsIds);
+  for (const r of data || []) ids.add(r.user_id as string);
+  ids.delete(userId);
+  return ids;
+}
 import type {
   ServerToClientEvents,
   ClientToServerEvents,
@@ -72,25 +89,31 @@ export function setupSocketIO(httpServer: HttpServer) {
       .maybeSingle();
 
     // Track online status
+    const coworkers = await coworkerIds(userId).catch(() => new Set<string>());
+    (socket as any).coworkers = coworkers;
     if (!onlineUsers.has(userId)) {
       onlineUsers.set(userId, new Set());
-      io.emit('user_online', { user_id: userId });
+      for (const id of coworkers) io.to(`chat_user:${id}`).emit('user_online', { user_id: userId });
     }
     onlineUsers.get(userId)!.add(socket.id);
 
     // Seed the connecting client with everyone currently online — the
     // user_online/user_offline deltas only cover changes after this point.
-    socket.emit('online_users', { user_ids: Array.from(onlineUsers.keys()) });
+    socket.emit('online_users', { user_ids: Array.from(onlineUsers.keys()).filter((id) => coworkers.has(id)) });
 
     // Always join a user-scoped room for cross-device fanout.
     socket.join(`chat_user:${userId}`);
 
     // ---- Existing workspace events ----
-    socket.on('join_workspace', (workspaceId: string) => {
-      socket.join(`workspace:${workspaceId}`);
+    // Room joins are verified: a socket only ever joins rooms of workspaces,
+    // channels, DMs and meetings its user can reach.
+    socket.on('join_workspace', async (workspaceId: string) => {
+      if (workspaceId && (await getMembership(userId, workspaceId))) socket.join(`workspace:${workspaceId}`);
     });
-    socket.on('join_channel', (channelId: string) => {
-      socket.join(channelId);
+    socket.on('join_channel', async (channelId: string) => {
+      if (!channelId) return;
+      const ok = (await checkResourceAccess(userId, 'channel', channelId)) || (await isDmParticipant(userId, channelId));
+      if (ok) socket.join(channelId);
     });
     socket.on('leave_channel', (channelId: string) => {
       socket.leave(channelId);
@@ -98,15 +121,18 @@ export function setupSocketIO(httpServer: HttpServer) {
     // Meeting poll cards + the mini-app detail view subscribe to live vote /
     // suggestion / status updates. The route handlers emit meeting_event_updated
     // to this room after any mutation.
-    socket.on('join_meeting', (meetingEventId: string) => {
-      if (meetingEventId) socket.join(`meeting:${meetingEventId}`);
+    socket.on('join_meeting', async (meetingEventId: string) => {
+      if (!meetingEventId) return;
+      const ws = await workspaceIdOf('meeting_event', meetingEventId);
+      if (ws && (await getMembership(userId, ws))) socket.join(`meeting:${meetingEventId}`);
     });
     socket.on('leave_meeting', (meetingEventId: string) => {
       if (meetingEventId) socket.leave(`meeting:${meetingEventId}`);
     });
     socket.on('typing', (data) => {
       const room = data.channel_id || data.dm_conversation_id;
-      if (room) {
+      // Only into rooms this socket was allowed to join (verified above).
+      if (room && socket.rooms.has(room)) {
         socket.to(room).emit('user_typing', {
           user_id: userId,
           display_name: socketUser?.display_name || 'Someone',
@@ -119,7 +145,7 @@ export function setupSocketIO(httpServer: HttpServer) {
     });
     socket.on('stop_typing', (data) => {
       const room = data.channel_id || data.dm_conversation_id;
-      if (room) {
+      if (room && socket.rooms.has(room)) {
         socket.to(room).emit('user_stop_typing', {
           user_id: userId,
           channel_id: data.channel_id,
@@ -137,7 +163,9 @@ export function setupSocketIO(httpServer: HttpServer) {
         userSockets.delete(socket.id);
         if (userSockets.size === 0) {
           onlineUsers.delete(userId);
-          io.emit('user_offline', { user_id: userId });
+          for (const id of ((socket as any).coworkers as Set<string>) || []) {
+            io.to(`chat_user:${id}`).emit('user_offline', { user_id: userId });
+          }
         }
       }
     });

@@ -79,14 +79,7 @@ export async function resolveAudience(
     }
   }
 
-  // departments
-  if (a.department_ids?.length) {
-    const { data } = await supabaseAdmin
-      .from('department_members')
-      .select('user_id')
-      .in('department_id', a.department_ids);
-    for (const m of (data ?? []) as any[]) if (activeIds.has(m.user_id)) matched.add(m.user_id);
-  }
+  // departments: an internal Hub concept with no SaaS equivalent — ignored.
 
   return [...matched];
 }
@@ -126,10 +119,7 @@ export async function getUserAudienceContext(userId: string): Promise<UserAudien
     for (const s of (sec ?? []) as any[]) if (s.role_id) roleIds.add(s.role_id);
   }
 
-  const { data: depts } = await supabaseAdmin
-    .from('department_members')
-    .select('department_id')
-    .eq('user_id', userId);
+  const depts: { department_id: string }[] = [];
 
   return {
     userId,
