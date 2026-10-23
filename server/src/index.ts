@@ -135,6 +135,8 @@ import squadBotsIntegrationRoutes from './routes/integrations/squad-bots';
 import squadBotsAdminRoutes from './routes/squad-bots-admin';
 import squadhireCategoriesRoutes from './routes/integrations/squadhire-categories';
 import ssoSquadhireRoutes from './routes/sso-squadhire';
+import saasAccountsAdminRoutes from './routes/saas-accounts-admin';
+import saasStaffRoutes from './routes/saas-staff';
 import subscriptionSquadhireProfilesAdminRoutes from './routes/subscription-squadhire-profiles-admin';
 import profileAccessRoutes from './routes/profile-access';
 import profileAccessAdminRoutes from './routes/profile-access-admin';
@@ -328,6 +330,9 @@ app.use('/integrations/squad-bots', squadBotsIntegrationRoutes);
 app.use('/admin/integrations/squadhire', squadhireCategoriesRoutes);
 // "Sign in with SquadHub" SSO: authorize (browser) + token/directory (server-to-server)
 app.use('/sso/squadhire', ssoSquadhireRoutes);
+// Squad Hub SaaS (app.squadhub.in) — super-admin accounts proxy + staff client workspaces, over the signed bridge.
+app.use('/admin/saas', saasAccountsAdminRoutes);
+app.use('/saas', saasStaffRoutes);
 
 // Profile Access — local mirror of SquadHire's talent_access_grants.
 app.use('/profile-access', profileAccessRoutes);
