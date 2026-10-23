@@ -272,6 +272,21 @@ describe('tenant isolation', () => {
     });
   });
 
+  describe('channel links', () => {
+    it("can't link another workspace's channel to your own container", async () => {
+      // Bob manages the Bolt space; linking Acme's #general to it would grant
+      // every Bolt-space member access to Acme's channel.
+      const r = await call('POST', '/channels/link', {
+        token: 'bob-token',
+        body: { resource_type: 'space', resource_id: id(11), channel_id: id(40) },
+      });
+      expect([403, 404]).toContain(r.status);
+      const { db } = await import('./helpers/tenantFixture');
+      expect(db.channels.find((c) => c.id === id(40))?.linked_resource_id).toBeUndefined();
+      expect(db.resource_memberships.some((m) => m.resource_id === id(40))).toBe(false);
+    });
+  });
+
   describe('admin lock bypass', () => {
     it("an owner of one workspace can't bypass a lock in another", async () => {
       // Tina owns her talent account (active workspace) but is a plain member

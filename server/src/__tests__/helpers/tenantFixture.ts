@@ -81,6 +81,7 @@ export const db: Tables = {
     // Ron was removed from S: these rows are stale and must grant nothing.
     { id: id(143), workspace_id: SHARED, resource_type: 'space', resource_id: id(12), user_id: RON, access_level: 'manager' },
     { id: id(144), workspace_id: SHARED, resource_type: 'channel', resource_id: id(42), user_id: RON, access_level: 'member' },
+    { id: id(146), workspace_id: SHARED, resource_type: 'list', resource_id: id(22), user_id: RON, access_level: 'member' },
     // A stale grant for Tina on a Bolt list she never belonged to.
     { id: id(145), workspace_id: BOLT, resource_type: 'list', resource_id: id(21), user_id: TINA, access_level: 'member' },
   ],
