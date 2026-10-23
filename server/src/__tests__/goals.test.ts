@@ -15,6 +15,19 @@ vi.mock('../middleware/auth', () => ({
   },
 }));
 vi.mock('../utils/taskActivity', () => ({ logTaskActivity: vi.fn() }));
+// Mirrors the DB's saas_fill_workspace_id triggers: child rows carry their
+// parent's workspace (space → folder/list/status → task → link/goal row).
+function wsOf(table: string, r: any): string | undefined {
+  if (r.workspace_id) return r.workspace_id;
+  const find = (t: string, rowId: string) => (store.tables[t] || []).find((x) => x.id === rowId);
+  const parent = (t: string, rowId: string) => { const x = find(t, rowId); return x ? wsOf(t, x) : undefined; };
+  if (['folders', 'lists', 'space_statuses'].includes(table)) return parent('spaces', r.space_id);
+  if (table === 'tasks') return parent('lists', r.list_id);
+  if (table === 'task_list_links') return parent('tasks', r.task_id);
+  if (table === 'goal_tasks') return parent('goals', r.goal_id);
+  if (table === 'resource_memberships') return parent(`${r.resource_type}s`, r.resource_id);
+  return undefined;
+}
 vi.mock('../supabase', () => ({
   supabaseAdmin: {
     from: (table: string) => {
@@ -56,7 +69,7 @@ vi.mock('../supabase', () => ({
       }
       const q: any = {
         select: () => q,
-        eq: (k: string, v: any) => { filters.push((r) => r[k] === v); return q; },
+        eq: (k: string, v: any) => { filters.push((r) => (k === 'workspace_id' ? wsOf(table, r) : r[k]) === v); return q; },
         in: (k: string, vs: any[]) => { filters.push((r) => vs.includes(r[k])); return q; },
         is: (k: string, v: any) => { filters.push((r) => (r[k] ?? null) === v); return q; },
         order: () => q,

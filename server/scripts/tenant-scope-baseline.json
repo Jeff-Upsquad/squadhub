@@ -6,7 +6,6 @@
   "server/src/routes/pm/checklists.ts": 16,
   "server/src/routes/pm/dayPlans.ts": 7,
   "server/src/routes/pm/folders.ts": 13,
-  "server/src/routes/pm/goals.ts": 23,
   "server/src/routes/pm/groupRuns.ts": 11,
   "server/src/routes/pm/labels.ts": 5,
   "server/src/routes/pm/lists.ts": 14,

@@ -14,6 +14,7 @@ import {
 } from '@squadhub/shared';
 import { supabaseAdmin as db } from '../../supabase';
 import { requireAuth } from '../../middleware/auth';
+import { getMembership } from '../../middleware/workspace';
 import { requireUserType } from '../../middleware/userType';
 import { logTaskActivity, type TaskActivityEvent } from '../../utils/taskActivity';
 import { validateWorkRange } from '../../utils/taskWorkRange';
@@ -103,8 +104,13 @@ interface ListRow { id: string; name: string; folder_id: string | null; space_id
 interface FolderRow { id: string; name: string; parent_folder_id: string | null; space_id: string; created_by: string | null; is_locked: boolean | null; deleted_at: string | null }
 interface SpaceRow { id: string; name: string; color: string | null; workspace_id: string; created_by: string | null; is_locked: boolean | null; deleted_at: string | null }
 
-/** Lazily-loaded slice of the space → folder → list tree. */
+/**
+ * Lazily-loaded slice of the space → folder → list tree of ONE workspace.
+ * Every query is pinned to that workspace, so ids from another tenant simply
+ * don't load (and then read as "not found" / no access).
+ */
 class Tree {
+  constructor(public workspaceId: string) {}
   lists = new Map<string, ListRow>();
   folders = new Map<string, FolderRow>();
   spaces = new Map<string, SpaceRow>();
@@ -112,7 +118,7 @@ class Tree {
   async load({ lists = [], folders = [] }: { lists?: Iterable<string>; folders?: Iterable<string> }) {
     const listIds = [...lists].filter((id) => !this.lists.has(id));
     for (const l of await rowsIn<ListRow>(listIds, (c) => db.from('lists')
-      .select('id, name, folder_id, space_id, created_by, is_locked, deleted_at').in('id', c).order('id'))) {
+      .select('id, name, folder_id, space_id, created_by, is_locked, deleted_at').eq('workspace_id', this.workspaceId).in('id', c).order('id'))) {
       this.lists.set(l.id, l);
     }
     // Walk folder parents until the chain is complete (usually 1–2 levels).
@@ -121,7 +127,7 @@ class Tree {
       const need = [...pending].filter((id) => !this.folders.has(id));
       pending = new Set();
       for (const f of await rowsIn<FolderRow>(need, (c) => db.from('folders')
-        .select('id, name, parent_folder_id, space_id, created_by, is_locked, deleted_at').in('id', c).order('id'))) {
+        .select('id, name, parent_folder_id, space_id, created_by, is_locked, deleted_at').eq('workspace_id', this.workspaceId).in('id', c).order('id'))) {
         this.folders.set(f.id, f);
         if (f.parent_folder_id && !this.folders.has(f.parent_folder_id)) pending.add(f.parent_folder_id);
       }
@@ -129,7 +135,7 @@ class Tree {
     const spaceIds = [...this.lists.values(), ...this.folders.values()]
       .map((r) => r.space_id).filter((id) => id && !this.spaces.has(id));
     for (const s of await rowsIn<SpaceRow>(spaceIds, (c) => db.from('spaces')
-      .select('id, name, color, workspace_id, created_by, is_locked, deleted_at').in('id', c).order('id'))) {
+      .select('id, name, color, workspace_id, created_by, is_locked, deleted_at').eq('workspace_id', this.workspaceId).in('id', c).order('id'))) {
       this.spaces.set(s.id, s);
     }
   }
@@ -180,14 +186,19 @@ class Access {
       .select('user_id, role').eq('workspace_id', this.workspaceId).in('user_id', c).order('user_id'));
     for (const u of users) this.roles.set(u, '');
     for (const m of members) this.roles.set(m.user_id, m.role || 'member');
+    // Shared workspaces also admit owners/admins of linked participant
+    // accounts (as plain members) — same rule as middleware/workspace.ts.
+    for (const u of users) {
+      if (!this.roles.get(u) && (await getMembership(u, this.workspaceId))?.viaShared) this.roles.set(u, 'member');
+    }
     const needGrants = users.filter((u) => this.roles.get(u) && !this.isAdmin(u));
     const grants = await rowsIn<any>(needGrants, (c) => db.from('resource_memberships')
-      .select('user_id, resource_type, resource_id, access_level').in('user_id', c).order('id'));
+      .select('user_id, resource_type, resource_id, access_level').eq('workspace_id', this.workspaceId).in('user_id', c).order('id'));
     for (const g of grants) this.grants.set(`${g.user_id}:${g.resource_type}:${g.resource_id}`, g.access_level);
   }
 
   isMember(user: string) { return !!this.roles.get(user); }
-  isAdmin(user: string) { return ['admin', 'super_admin'].includes(this.roles.get(user) || ''); }
+  isAdmin(user: string) { return ['owner', 'admin', 'super_admin'].includes(this.roles.get(user) || ''); }
 
   level(user: string, type: 'list' | 'folder' | 'space', id: string): AccessLevel | null {
     const key = `${user}:${type}:${id}`;
@@ -256,7 +267,7 @@ async function resolveSourceLists(sources: any[], tree: Tree): Promise<Map<strin
   await tree.load({ folders: folderSources.map((s) => s.resource_id) });
   const spaceIds = [...new Set(folderSources.map((s) => tree.folders.get(s.resource_id)?.space_id).filter(Boolean))] as string[];
   const allFolders = await rowsIn<FolderRow>(spaceIds, (c) => db.from('folders')
-    .select('id, name, parent_folder_id, space_id, created_by, is_locked, deleted_at').in('space_id', c).is('deleted_at', null).order('id'));
+    .select('id, name, parent_folder_id, space_id, created_by, is_locked, deleted_at').eq('workspace_id', tree.workspaceId).in('space_id', c).is('deleted_at', null).order('id'));
   for (const f of allFolders) tree.folders.set(f.id, f);
   const children = new Map<string, string[]>();
   for (const f of allFolders) {
@@ -272,7 +283,7 @@ async function resolveSourceLists(sources: any[], tree: Tree): Promise<Map<strin
   }
   const allFolderIds = new Set([...folderSets.values()].flatMap((s) => [...s]));
   const lists = await rowsIn<ListRow>(allFolderIds, (c) => db.from('lists')
-    .select('id, name, folder_id, space_id, created_by, is_locked, deleted_at').in('folder_id', c).is('deleted_at', null).order('id'));
+    .select('id, name, folder_id, space_id, created_by, is_locked, deleted_at').eq('workspace_id', tree.workspaceId).in('folder_id', c).is('deleted_at', null).order('id'));
   for (const l of lists) tree.lists.set(l.id, l);
   for (const [sourceId, folders] of folderSets) {
     bySource.set(sourceId, new Set(lists.filter((l) => l.folder_id && folders.has(l.folder_id)).map((l) => l.id)));
@@ -281,7 +292,7 @@ async function resolveSourceLists(sources: any[], tree: Tree): Promise<Map<strin
 }
 
 async function loadGoals(workspaceId: string, viewer: string, onlyGoalId?: string): Promise<Loaded> {
-  const tree = new Tree();
+  const tree = new Tree(workspaceId);
   const access = new Access(workspaceId, tree);
   await access.load([viewer]);
   if (!access.isMember(viewer)) fail(403, 'You do not have access to this workspace');
@@ -301,7 +312,7 @@ async function loadGoals(workspaceId: string, viewer: string, onlyGoalId?: strin
 
   const goalIds = visible.map((g) => g.id);
   const [links, sources, deps] = await Promise.all([
-    rowsIn<any>(goalIds, (c) => db.from('goal_tasks').select('goal_id, task_id, scheduled, is_direct').in('goal_id', c).order('task_id')),
+    rowsIn<any>(goalIds, (c) => db.from('goal_tasks').select('goal_id, task_id, scheduled, is_direct').eq('workspace_id', workspaceId).in('goal_id', c).order('task_id')),
     rowsIn<any>(goalIds, (c) => db.from('goal_sources').select('id, goal_id, resource_type, resource_id').in('goal_id', c).order('id')),
     rowsIn<any>(goalIds, (c) => db.from('goal_dependencies').select('id, goal_id, from_task_id, to_task_id, from_endpoint, to_endpoint').in('goal_id', c).order('id')),
   ]);
@@ -310,13 +321,13 @@ async function loadGoals(workspaceId: string, viewer: string, onlyGoalId?: strin
   const sourceLists = await resolveSourceLists(sources, tree);
   const allSourceListIds = new Set([...sourceLists.values()].flatMap((s) => [...s]));
   const [sourceTasks, secondary] = await Promise.all([
-    rowsIn<any>(allSourceListIds, (c) => db.from('tasks').select(TASK_COLS).in('list_id', c).is('recurrence', null).order('id')),
-    rowsIn<any>(allSourceListIds, (c) => db.from('task_list_links').select('task_id, list_id').in('list_id', c).order('id')),
+    rowsIn<any>(allSourceListIds, (c) => db.from('tasks').select(TASK_COLS).eq('workspace_id', workspaceId).in('list_id', c).is('recurrence', null).order('id')),
+    rowsIn<any>(allSourceListIds, (c) => db.from('task_list_links').select('task_id, list_id').eq('workspace_id', workspaceId).in('list_id', c).order('id')),
   ]);
   const taskById = new Map<string, any>(sourceTasks.map((t) => [t.id, t]));
   const directIds = links.filter((l) => l.is_direct).map((l) => l.task_id);
   const missing = [...directIds, ...secondary.map((s) => s.task_id)].filter((id) => !taskById.has(id));
-  for (const t of await rowsIn<any>(missing, (c) => db.from('tasks').select(TASK_COLS).in('id', c).order('id'))) {
+  for (const t of await rowsIn<any>(missing, (c) => db.from('tasks').select(TASK_COLS).eq('workspace_id', workspaceId).in('id', c).order('id'))) {
     if (!t.recurrence) taskById.set(t.id, t);
   }
   // list id → task ids in it (primary list or a secondary list membership)
@@ -330,7 +341,7 @@ async function loadGoals(workspaceId: string, viewer: string, onlyGoalId?: strin
   await access.load(visible.map((g) => g.created_by));
 
   const statusSpaceIds = [...new Set([...taskById.values()].map((t) => tree.lists.get(t.list_id)?.space_id).filter(Boolean))] as string[];
-  const statuses = await rowsIn<any>(statusSpaceIds, (c) => db.from('space_statuses').select('space_id, name, category').in('space_id', c).order('id'));
+  const statuses = await rowsIn<any>(statusSpaceIds, (c) => db.from('space_statuses').select('space_id, name, category').eq('workspace_id', workspaceId).in('space_id', c).order('id'));
   const categoryOf = new Map(statuses.map((s) => [`${s.space_id}::${s.name}`, s.category as string]));
 
   const sourceMeta = (s: any): GoalSource => {
@@ -445,7 +456,7 @@ async function goalFor(user: string, goalId: string) {
 async function projectFor(user: string, projectId: string, access?: Access) {
   const p = await one<GoalProject>(db.from('goal_projects').select('id, workspace_id, name, color, created_by, created_at').eq('id', uuid.parse(projectId)));
   if (!p) fail(404, 'Project not found');
-  const acc = access || new Access(p!.workspace_id, new Tree());
+  const acc = access || new Access(p!.workspace_id, new Tree(p!.workspace_id));
   await acc.load([user]);
   if (!acc.isMember(user)) fail(403, 'You do not have access to this workspace');
   return { project: p!, access: acc };
@@ -454,7 +465,7 @@ async function projectFor(user: string, projectId: string, access?: Access) {
 /** Owner/admin can always add goals; others only to projects they already work in. */
 async function assertCanUseProject(user: string, project: GoalProject, access: Access) {
   if (access.isAdmin(user) || project.created_by === user) return;
-  const goals = await rows<any>(db.from('goals').select('id, created_by, assignee_ids').eq('project_id', project.id).order('id'));
+  const goals = await rows<any>(db.from('goals').select('id, created_by, assignee_ids').eq('workspace_id', project.workspace_id).eq('project_id', project.id).order('id'));
   if (!goals.some((g) => g.created_by === user || (g.assignee_ids || []).includes(user))) {
     fail(403, 'You can only add goals to your own projects');
   }
@@ -505,7 +516,7 @@ router.get('/goals', route(async (req) => {
 // Folders and lists the viewer can open — choices for auto-including a container.
 router.get('/goals-containers', route(async (req) => {
   const workspaceId = uuid.parse(req.query.workspace_id);
-  const tree = new Tree();
+  const tree = new Tree(workspaceId);
   const access = new Access(workspaceId, tree);
   await access.load([req.userId!]);
   if (!access.isMember(req.userId!)) fail(403, 'You do not have access to this workspace');
@@ -514,8 +525,8 @@ router.get('/goals-containers', route(async (req) => {
   for (const s of spaces) tree.spaces.set(s.id, s);
   const spaceIds = spaces.map((s) => s.id);
   const [folders, lists] = await Promise.all([
-    rowsIn<FolderRow>(spaceIds, (c) => db.from('folders').select('id, name, parent_folder_id, space_id, created_by, is_locked, deleted_at').in('space_id', c).is('deleted_at', null).order('position')),
-    rowsIn<ListRow>(spaceIds, (c) => db.from('lists').select('id, name, folder_id, space_id, created_by, is_locked, deleted_at').in('space_id', c).is('deleted_at', null).order('position')),
+    rowsIn<FolderRow>(spaceIds, (c) => db.from('folders').select('id, name, parent_folder_id, space_id, created_by, is_locked, deleted_at').eq('workspace_id', workspaceId).in('space_id', c).is('deleted_at', null).order('position')),
+    rowsIn<ListRow>(spaceIds, (c) => db.from('lists').select('id, name, folder_id, space_id, created_by, is_locked, deleted_at').eq('workspace_id', workspaceId).in('space_id', c).is('deleted_at', null).order('position')),
   ]);
   for (const f of folders) tree.folders.set(f.id, f);
   for (const l of lists) tree.lists.set(l.id, l);
@@ -540,7 +551,7 @@ router.get('/goals/:id/context', route(async (req) => {
 
 router.post('/goal-projects', route(async (req) => {
   const body = z.object({ workspace_id: uuid, name: z.string().trim().min(1, 'Name your project').max(160), color: color.default('#7c5cff') }).parse(req.body);
-  const access = new Access(body.workspace_id, new Tree());
+  const access = new Access(body.workspace_id, new Tree(body.workspace_id));
   await access.load([req.userId!]);
   if (!access.isMember(req.userId!)) fail(403, 'You do not have access to this workspace');
   return one(db.from('goal_projects').insert({ ...body, created_by: req.userId }).select('id, workspace_id, name, color, created_by, created_at'));
@@ -556,7 +567,7 @@ router.patch('/goal-projects/:id', route(async (req) => {
 router.delete('/goal-projects/:id', route(async (req) => {
   const { project, access } = await projectFor(req.userId!, String(req.params.id));
   if (project.created_by !== req.userId && !access.isAdmin(req.userId!)) fail(403, 'Only the project owner can delete it');
-  await exec(db.from('goal_projects').delete().eq('id', project.id));
+  await exec(db.from('goal_projects').delete().eq('workspace_id', project.workspace_id).eq('id', project.id));
 }));
 
 router.post('/goals', route(async (req) => {
@@ -586,7 +597,7 @@ router.patch('/goals/:id', route(async (req) => {
   assertRange(next.work_start_date, next.work_end_date, 'Work');
   assertRange(next.start_date, next.due_date, 'Due date range');
   if (patch.assignee_ids) await assertMembers(patch.assignee_ids, goal.workspace_id);
-  await exec(db.from('goals').update({ ...patch, updated_at: new Date().toISOString() }).eq('id', goal.id));
+  await exec(db.from('goals').update({ ...patch, updated_at: new Date().toISOString() }).eq('workspace_id', goal.workspace_id).eq('id', goal.id));
   const { goals } = await loadGoals(goal.workspace_id, req.userId!, goal.id);
   return goals[0] ?? null;
 }));
@@ -597,17 +608,17 @@ router.delete('/goals/:id', route(async (req) => {
   if (![goal.created_by, projectOwner].includes(req.userId!) && !access.isAdmin(req.userId!)) {
     fail(403, 'Only the goal creator can delete it');
   }
-  await exec(db.from('goals').delete().eq('id', goal.id));
+  await exec(db.from('goals').delete().eq('workspace_id', goal.workspace_id).eq('id', goal.id));
 }));
 
 /** Link tasks the actor AND the goal creator can both open. Returns linked/skipped. */
 async function linkTasks(user: string, goalId: string, taskIds: string[]) {
   const g = await one<any>(db.from('goals').select('id, workspace_id, created_by').eq('id', goalId));
-  const tasks = await rowsIn<any>(taskIds, (c) => db.from('tasks').select(TASK_COLS).in('id', c).order('id'));
-  const tree = new Tree();
+  const tasks = await rowsIn<any>(taskIds, (c) => db.from('tasks').select(TASK_COLS).eq('workspace_id', g.workspace_id).in('id', c).order('id'));
+  const tree = new Tree(g.workspace_id);
   const access = new Access(g.workspace_id, tree);
   await Promise.all([tree.load({ lists: tasks.map((t) => t.list_id) }), access.load([user, g.created_by])]);
-  const existing = await rowsIn<any>(taskIds, (c) => db.from('goal_tasks').select('task_id, scheduled').eq('goal_id', goalId).in('task_id', c).order('task_id'));
+  const existing = await rowsIn<any>(taskIds, (c) => db.from('goal_tasks').select('task_id, scheduled').eq('workspace_id', g.workspace_id).eq('goal_id', goalId).in('task_id', c).order('task_id'));
   const skipped: { id: string; reason: string }[] = [];
   const upserts: any[] = [];
   for (const id of new Set(taskIds)) {
@@ -637,9 +648,9 @@ router.delete('/goals/:id/tasks/:taskId', route(async (req) => {
   const t = goal.tasks.find((x) => x.id === taskId);
   if (t?.source_ids.length) {
     // Still included by a container: keep the anchor row (placement/dependencies), drop the manual link.
-    await exec(db.from('goal_tasks').update({ is_direct: false }).eq('goal_id', goal.id).eq('task_id', taskId));
+    await exec(db.from('goal_tasks').update({ is_direct: false }).eq('workspace_id', goal.workspace_id).eq('goal_id', goal.id).eq('task_id', taskId));
   } else {
-    await exec(db.from('goal_tasks').delete().eq('goal_id', goal.id).eq('task_id', taskId));
+    await exec(db.from('goal_tasks').delete().eq('workspace_id', goal.workspace_id).eq('goal_id', goal.id).eq('task_id', taskId));
   }
 }));
 
@@ -663,7 +674,7 @@ router.patch('/goals/:id/tasks/:taskId/schedule', route(async (req) => {
   let updated: any = null;
   if (datesChanged) {
     if (!gt!.can_edit) fail(403, tree.locked(gt!.list_id) ? 'This task’s list is locked' : 'You need edit access to change this task’s dates');
-    const prior = await one<any>(db.from('tasks').select('work_date, start_date, due_date, metadata').eq('id', taskId));
+    const prior = await one<any>(db.from('tasks').select('work_date, start_date, due_date, metadata').eq('workspace_id', goal.workspace_id).eq('id', taskId));
     const nextWork = fields.work_date !== undefined ? fields.work_date : prior.work_date;
     const nextWorkEnd = work_end_date !== undefined ? work_end_date : prior.metadata?.work_end_date;
     try { validateWorkRange(nextWork, nextWorkEnd); } catch { fail(400, 'Work end must be on or after work start'); }
@@ -671,6 +682,7 @@ router.patch('/goals/:id/tasks/:taskId/schedule', route(async (req) => {
     const metadata = work_end_date !== undefined ? { ...(prior.metadata || {}), work_end_date } : undefined;
     updated = await one<any>(db.from('tasks')
       .update({ ...fields, ...(metadata ? { metadata } : {}), last_modified_by: req.userId })
+      .eq('workspace_id', goal.workspace_id)
       .eq('id', taskId)
       .select('id, work_date, start_date, due_date, metadata'));
     if (fields.work_date && fields.work_date !== prior.work_date) {
@@ -689,7 +701,7 @@ router.patch('/goals/:id/tasks/:taskId/schedule', route(async (req) => {
     }
     try { await logTaskActivity(taskId, req.userId!, events); } catch (e) { console.error('[pm/goals] activity log failed:', e); }
   }
-  const link = await one<any>(db.from('goal_tasks').select('is_direct, scheduled').eq('goal_id', goal.id).eq('task_id', taskId));
+  const link = await one<any>(db.from('goal_tasks').select('is_direct, scheduled').eq('workspace_id', goal.workspace_id).eq('goal_id', goal.id).eq('task_id', taskId));
   await exec(db.from('goal_tasks').upsert({
     goal_id: goal.id,
     task_id: taskId,
