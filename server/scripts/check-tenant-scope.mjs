@@ -16,16 +16,16 @@
 // `workspace_id uuid NOT NULL` (supabase/migrations/0001_saas_baseline.sql), so
 // the list can't drift from the schema.
 //
-// Existing, not-yet-reviewed chains are recorded per file in
-// tenant-scope-baseline.json (a ratchet): the check FAILS when a file gains
-// unscoped chains or a new file appears, and tells you to tighten the baseline
-// when a file improves. Usage:
+// There is no baseline: every finding fails the check. Usage:
 //   node server/scripts/check-tenant-scope.mjs            # check (CI)
 //   node server/scripts/check-tenant-scope.mjs --list     # print every unscoped chain
-//   node server/scripts/check-tenant-scope.mjs --update   # rewrite the baseline
+//
+// `workspace_id` inside a .select(...) column list does NOT count as scoping —
+// reading the column is not filtering by it. Resolve a resource's workspace
+// with workspaceIdOf() (middleware/workspace.ts) instead of an ad-hoc lookup.
 // ============================================================
 
-import { readFileSync, readdirSync, statSync, writeFileSync, existsSync } from 'node:fs';
+import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -34,7 +34,6 @@ const SERVER = resolve(HERE, '..');
 const ROOT = resolve(SERVER, '..');
 const ROUTES = join(SERVER, 'src', 'routes');
 const BASELINE_SQL = join(ROOT, 'supabase', 'migrations', '0001_saas_baseline.sql');
-const BASELINE_JSON = join(HERE, 'tenant-scope-baseline.json');
 
 const args = new Set(process.argv.slice(2));
 
@@ -78,6 +77,28 @@ function chainAt(src, idx) {
   return src.slice(idx);
 }
 
+/** The chain with every `.select(...)` argument list removed. */
+function stripSelects(chain) {
+  let out = '';
+  let i = 0;
+  while (i < chain.length) {
+    const j = chain.indexOf('.select(', i);
+    if (j < 0) {
+      out += chain.slice(i);
+      break;
+    }
+    out += chain.slice(i, j);
+    let depth = 0;
+    let k = j + '.select'.length;
+    for (; k < chain.length; k++) {
+      if (chain[k] === '(') depth++;
+      else if (chain[k] === ')' && --depth === 0) break;
+    }
+    i = k + 1;
+  }
+  return out;
+}
+
 function lineOf(src, idx) {
   return src.slice(0, idx).split('\n').length;
 }
@@ -92,7 +113,7 @@ export function scanFile(file, { tables, triggerFilled }) {
     const table = m[1];
     if (!tables.has(table)) continue;
     const chain = chainAt(src, m.index);
-    if (/workspace_id/.test(chain)) continue;
+    if (/workspace_id/.test(stripSelects(chain))) continue;
     if (/tenant-scope:/.test(chain)) continue;
     const line = lineOf(src, m.index);
     const endLine = lineOf(src, m.index + chain.length);
@@ -107,44 +128,24 @@ export function scanFile(file, { tables, triggerFilled }) {
 function main() {
   const schema = tenantTables();
   const findings = walk(ROUTES).flatMap((f) => scanFile(f, schema));
-  const perFile = {};
-  for (const f of findings) perFile[f.file] = (perFile[f.file] || 0) + 1;
+  const files = new Set(findings.map((f) => f.file));
 
   if (args.has('--list')) {
     for (const f of findings) console.log(`${f.file}:${f.line}  ${f.table}`);
-    console.log(`\n${findings.length} unscoped chain(s) in ${Object.keys(perFile).length} file(s)`);
+    console.log(`\n${findings.length} unscoped chain(s) in ${files.size} file(s)`);
     return;
   }
 
-  if (args.has('--update')) {
-    const sorted = Object.fromEntries(Object.entries(perFile).sort(([a], [b]) => a.localeCompare(b)));
-    writeFileSync(BASELINE_JSON, JSON.stringify(sorted, null, 2) + '\n');
-    console.log(`Baseline updated: ${findings.length} unscoped chain(s) recorded.`);
-    return;
-  }
-
-  const baseline = existsSync(BASELINE_JSON) ? JSON.parse(readFileSync(BASELINE_JSON, 'utf8')) : {};
-  let failed = false;
-  for (const [file, count] of Object.entries(perFile)) {
-    const allowed = baseline[file] ?? 0;
-    if (count > allowed) {
-      failed = true;
-      console.error(`✗ ${file}: ${count} unscoped tenant-table chain(s) (baseline ${allowed})`);
-      for (const f of findings.filter((x) => x.file === file)) console.error(`    ${f.file}:${f.line}  .from('${f.table}')`);
-    }
-  }
-  const improved = Object.entries(baseline).filter(([file, n]) => (perFile[file] ?? 0) < n);
-  if (failed) {
+  if (findings.length) {
+    for (const f of findings) console.error(`✗ ${f.file}:${f.line}  .from('${f.table}')`);
     console.error(
-      '\nEvery query on a tenant table must filter by workspace_id or carry a\n' +
-        '`// tenant-scope: <reason>` comment explaining why it is safe (see server/scripts/check-tenant-scope.mjs).',
+      `\n${findings.length} unscoped tenant-table chain(s). Every query on a tenant table must filter by\n` +
+        'workspace_id or carry a `// tenant-scope: <reason>` comment explaining why it is safe\n' +
+        '(see server/scripts/check-tenant-scope.mjs).',
     );
     process.exit(1);
   }
-  if (improved.length) {
-    console.log(`Tighten the baseline (npm run check:tenant-scope -- --update): ${improved.map(([f]) => f).join(', ')}`);
-  }
-  console.log(`tenant-scope: OK (${findings.length} known unscoped chain(s) remain in the baseline)`);
+  console.log('tenant-scope: OK (0 unscoped chains)');
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) main();

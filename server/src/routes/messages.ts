@@ -4,6 +4,7 @@ import { requireAuth } from '../middleware/auth';
 import { requireAdmin } from '../middleware/admin';
 import { checkResourceAccess, meetsAccessLevel, isWorkspaceAdmin } from '../middleware/permissions';
 import { supabaseAdmin } from '../supabase';
+import { workspaceIdOf } from '../middleware/workspace';
 import { findFirstUrl, unfurl } from '../services/unfurl';
 import { canActorDm, isDmParticipant, loadDmActor, otherDmParticipantIds } from '../utils/dmAccess';
 import { deleteR2Object } from '../r2';
@@ -182,11 +183,7 @@ router.post('/', requireAuth, async (req: Request, res: Response) => {
         res.status(403).json({ success: false, error: 'You do not have access to this conversation' });
         return;
       }
-      const { data: conv } = await supabaseAdmin
-        .from('dm_conversations')
-        .select('workspace_id')
-        .eq('id', body.dm_conversation_id)
-        .maybeSingle();
+      const conv = { workspace_id: await workspaceIdOf('dm', body.dm_conversation_id) };
       if (!conv?.workspace_id) {
         res.status(404).json({ success: false, error: 'Conversation not found' });
         return;

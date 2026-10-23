@@ -56,32 +56,7 @@ router.get('/', async (req: Request, res: Response) => {
 
     // Resolve the resource's workspace_id so we can attach each user's
     // workspace-scoped role (workspace_members.role + custom_role).
-    let workspaceId: string | null = null;
-    if (resourceType === 'channel') {
-      const { data: ch } = await supabaseAdmin
-        .from('channels').select('workspace_id').eq('id', resourceId).single();
-      workspaceId = (ch as any)?.workspace_id ?? null;
-    } else if (resourceType === 'space') {
-      const { data: sp } = await supabaseAdmin
-        .from('spaces').select('workspace_id').eq('id', resourceId).single();
-      workspaceId = (sp as any)?.workspace_id ?? null;
-    } else if (resourceType === 'folder') {
-      const { data: f } = await supabaseAdmin
-        .from('folders').select('space_id').eq('id', resourceId).single(); // tenant-scope: resource access (manager) checked via checkResourceAccess in this handler
-      if ((f as any)?.space_id) {
-        const { data: sp } = await supabaseAdmin
-          .from('spaces').select('workspace_id').eq('id', (f as any).space_id).single();
-        workspaceId = (sp as any)?.workspace_id ?? null;
-      }
-    } else if (resourceType === 'list') {
-      const { data: l } = await supabaseAdmin
-        .from('lists').select('space_id').eq('id', resourceId).single(); // tenant-scope: resource access (manager) checked via checkResourceAccess in this handler
-      if ((l as any)?.space_id) {
-        const { data: sp } = await supabaseAdmin
-          .from('spaces').select('workspace_id').eq('id', (l as any).space_id).single();
-        workspaceId = (sp as any)?.workspace_id ?? null;
-      }
-    }
+    const workspaceId: string | null = await workspaceIdOf(resourceType, resourceId);
 
     const userIds = (data || []).map((m: any) => m.user_id);
     const roleByUserId = new Map<string, { workspace_role: string; custom_role: { id: string; name: string; color: string } | null }>();

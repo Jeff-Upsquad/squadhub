@@ -199,6 +199,7 @@ export async function hydrateLabels<T extends { id: string }>(
     const { data: tags } = await supabaseAdmin
       .from('task_tags')
       .select('id, workspace_id, group_id, name, color')
+      .in('workspace_id', await reachableWorkspaceIds())
       .in('id', tagIds);
     (tags || []).forEach((t: any) => tagsById.set(t.id, t as TaskTag));
   }
@@ -1440,6 +1441,7 @@ router.delete('/tasks/:id/time-entries/:entryId', async (req: Request, res: Resp
     const { data: entry } = await supabaseAdmin
       .from('task_time_entries')
       .select('id, task_id, user_id, workspace_id, started_at, duration_seconds, source, work_block_run_id')
+      .in('workspace_id', await reachableWorkspaceIds())
       .eq('id', entryId)
       .eq('task_id', taskId)
       .maybeSingle();
@@ -1567,6 +1569,7 @@ router.patch('/tasks/:id/time-entries/:entryId', async (req: Request, res: Respo
     const { data: entry } = await supabaseAdmin
       .from('task_time_entries')
       .select('id, task_id, user_id, workspace_id, started_at, stopped_at, duration_seconds, source, note')
+      .in('workspace_id', await reachableWorkspaceIds())
       .eq('id', entryId)
       .eq('task_id', taskId)
       .maybeSingle();
@@ -3003,14 +3006,7 @@ router.put('/tasks/:id', async (req: Request, res: Response) => {
     if (body.time_estimate !== undefined && (body.time_estimate ?? null) !== (priorEstimate ?? null)) {
       try {
         let workspaceId: string | null = null;
-        if (estimateListId) {
-          const { data: list } = await supabaseAdmin
-            .from('lists').select('space_id').in('workspace_id', await reachableWorkspaceIds()).eq('id', estimateListId).single();
-          const { data: space } = (list as any)?.space_id
-            ? await supabaseAdmin.from('spaces').select('workspace_id').eq('id', (list as any).space_id).single()
-            : { data: null as any };
-          workspaceId = (space as any)?.workspace_id ?? null;
-        }
+        if (estimateListId) workspaceId = await workspaceIdOf('list', estimateListId);
         await supabaseAdmin.from('task_estimate_changes').insert({
           task_id: id,
           user_id: req.userId!,
@@ -3472,12 +3468,7 @@ router.patch('/tasks/:id/time-tracked', async (req: Request, res: Response) => {
         old_value: oldTotal, new_value: time_tracked,
       }]);
 
-      const { data: list } = await supabaseAdmin
-        .from('lists').select('space_id').in('workspace_id', await reachableWorkspaceIds()).eq('id', (existing as any).list_id).single();
-      const { data: space } = list?.space_id
-        ? await supabaseAdmin.from('spaces').select('workspace_id').eq('id', (list as any).space_id).single()
-        : { data: null as any };
-      const workspaceId = (space as any)?.workspace_id;
+      const workspaceId = (existing as any).list_id ? await workspaceIdOf('list', (existing as any).list_id) : null;
       if (workspaceId) {
         const now = new Date().toISOString();
         await supabaseAdmin.from('task_time_entries').insert({

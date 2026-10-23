@@ -5,7 +5,7 @@ import { supabaseAdmin } from '../supabase';
 import { isUserWorkLocked, resolveWorkAccess } from '../utils/workAccess';
 import { getUserSkills } from '../utils/skills';
 import { checkResourceAccess } from '../middleware/permissions';
-import { getMembership, getUserWorkspaceIds } from '../middleware/workspace';
+import { getMembership, getUserWorkspaceIds, workspaceIdOf } from '../middleware/workspace';
 import { isDmParticipant } from '../utils/dmAccess';
 
 const router = Router();
@@ -38,6 +38,7 @@ router.get('/search', requireAuth, async (req: Request, res: Response) => {
       const { data: ch } = await supabaseAdmin
         .from('channels')
         .select('created_by, workspace_id, is_private')
+        .eq('workspace_id', await workspaceIdOf('channel', channelId))
         .eq('id', channelId)
         .single();
       if ((ch as any)?.is_private === false) {

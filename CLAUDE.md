@@ -50,11 +50,21 @@ Hub admin routes were removed — don't reintroduce them.
 - The server uses the service-role key: **RLS protects nothing. Every query on
   a tenant table must filter by `workspace_id` or carry a
   `// tenant-scope: <reason>` comment.** `npm run check:tenant-scope`
-  enforces this with a ratcheting baseline
-  (`server/scripts/tenant-scope-baseline.json`); never raise the baseline —
-  scope the query or justify it. `--list` prints the remaining TODO chains.
-- My Tasks, Inbox/notifications, meetings and calendar views aggregate across
-  every workspace the user belongs to (`getUserWorkspaceIds`).
+  enforces this with NO baseline — any unscoped chain fails CI. A
+  `workspace_id` inside `.select(...)` does not count; resolve a resource's
+  workspace with `workspaceIdOf()`. Patterns:
+  - by-id lookups / hydration of ids from an authorised read:
+    `.in('workspace_id', await reachableWorkspaceIds())` (memoised per request,
+    fail-closed outside one);
+  - work on a known resource: `.eq('workspace_id', <resource's workspace>)`;
+  - workspace listings: the verified active workspace (`req.workspaceId`).
+- Admin bypasses (locks, archived items, delete-anyone's) use the RESOURCE's
+  workspace: `isAdminOfResource()` / `isWorkspaceAdmin(user, resourceWs)` —
+  never the active workspace. `requirePermission` evaluates in the target
+  container's workspace.
+- My Tasks, Inbox/notifications, meetings and calendar/day-plan views aggregate
+  across every workspace the user belongs to (`getUserWorkspaceIds` /
+  `reachableWorkspaceIds`).
 - Mini apps are per workspace (`workspace_mini_apps`); talent accounts start
   with `check-ins` + `partner-payments`. Cashbook is never offered.
 

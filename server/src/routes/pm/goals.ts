@@ -14,7 +14,7 @@ import {
 } from '@squadhub/shared';
 import { supabaseAdmin as db } from '../../supabase';
 import { requireAuth } from '../../middleware/auth';
-import { getMembership } from '../../middleware/workspace';
+import { getMembership, reachableWorkspaceIds } from '../../middleware/workspace';
 import { requireUserType } from '../../middleware/userType';
 import { logTaskActivity, type TaskActivityEvent } from '../../utils/taskActivity';
 import { validateWorkRange } from '../../utils/taskWorkRange';
@@ -445,7 +445,7 @@ async function loadGoals(workspaceId: string, viewer: string, onlyGoalId?: strin
 // ── Guards ─────────────────────────────────────────────────────────────────
 
 async function goalFor(user: string, goalId: string) {
-  const g = await one<any>(db.from('goals').select('id, workspace_id, project_id, created_by, assignee_ids, work_start_date, work_end_date, start_date, due_date').eq('id', uuid.parse(goalId)));
+  const g = await one<any>(db.from('goals').select('id, workspace_id, project_id, created_by, assignee_ids, work_start_date, work_end_date, start_date, due_date').in('workspace_id', await reachableWorkspaceIds()).eq('id', uuid.parse(goalId)));
   if (!g) fail(404, 'Goal not found');
   const loaded = await loadGoals(g.workspace_id, user, g.id);
   const goal = loaded.goals[0];
@@ -454,7 +454,7 @@ async function goalFor(user: string, goalId: string) {
 }
 
 async function projectFor(user: string, projectId: string, access?: Access) {
-  const p = await one<GoalProject>(db.from('goal_projects').select('id, workspace_id, name, color, created_by, created_at').eq('id', uuid.parse(projectId)));
+  const p = await one<GoalProject>(db.from('goal_projects').select('id, workspace_id, name, color, created_by, created_at').in('workspace_id', await reachableWorkspaceIds()).eq('id', uuid.parse(projectId)));
   if (!p) fail(404, 'Project not found');
   const acc = access || new Access(p!.workspace_id, new Tree(p!.workspace_id));
   await acc.load([user]);
@@ -554,14 +554,14 @@ router.post('/goal-projects', route(async (req) => {
   const access = new Access(body.workspace_id, new Tree(body.workspace_id));
   await access.load([req.userId!]);
   if (!access.isMember(req.userId!)) fail(403, 'You do not have access to this workspace');
-  return one(db.from('goal_projects').insert({ ...body, created_by: req.userId }).select('id, workspace_id, name, color, created_by, created_at'));
+  return one(db.from('goal_projects').insert({ ...body, workspace_id: body.workspace_id, created_by: req.userId }).select('id, workspace_id, name, color, created_by, created_at'));
 }));
 
 router.patch('/goal-projects/:id', route(async (req) => {
   const { project, access } = await projectFor(req.userId!, String(req.params.id));
   if (project.created_by !== req.userId && !access.isAdmin(req.userId!)) fail(403, 'Only the project owner can change it');
   const body = z.object({ name: z.string().trim().min(1).max(160).optional(), color: color.optional() }).parse(req.body);
-  return one(db.from('goal_projects').update({ ...body, updated_at: new Date().toISOString() }).eq('id', project.id).select('id, workspace_id, name, color, created_by, created_at'));
+  return one(db.from('goal_projects').update({ ...body, updated_at: new Date().toISOString() }).eq('workspace_id', project.workspace_id).eq('id', project.id).select('id, workspace_id, name, color, created_by, created_at'));
 }));
 
 router.delete('/goal-projects/:id', route(async (req) => {
@@ -613,7 +613,7 @@ router.delete('/goals/:id', route(async (req) => {
 
 /** Link tasks the actor AND the goal creator can both open. Returns linked/skipped. */
 async function linkTasks(user: string, goalId: string, taskIds: string[]) {
-  const g = await one<any>(db.from('goals').select('id, workspace_id, created_by').eq('id', goalId));
+  const g = await one<any>(db.from('goals').select('id, workspace_id, created_by').in('workspace_id', await reachableWorkspaceIds()).eq('id', goalId));
   const tasks = await rowsIn<any>(taskIds, (c) => db.from('tasks').select(TASK_COLS).eq('workspace_id', g.workspace_id).in('id', c).order('id'));
   const tree = new Tree(g.workspace_id);
   const access = new Access(g.workspace_id, tree);

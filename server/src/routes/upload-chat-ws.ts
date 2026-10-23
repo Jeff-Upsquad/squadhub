@@ -9,6 +9,7 @@ import { z } from 'zod';
 import { requireAuth } from '../middleware/auth';
 import { checkResourceAccess } from '../middleware/permissions';
 import { supabaseAdmin } from '../supabase';
+import { workspaceIdOf } from '../middleware/workspace';
 import { FILE_SIZE_LIMITS, generatePresignedUploadUrl } from '../r2';
 
 const router = Router();
@@ -35,9 +36,7 @@ router.post('/upload-presign', requireAuth, async (req: Request, res: Response) 
         res.status(403).json({ success: false, error: 'No access to this channel' });
         return;
       }
-      const { data: ch } = await supabaseAdmin
-        .from('channels').select('workspace_id').eq('id', body.scope_id).maybeSingle();
-      workspaceId = ch?.workspace_id || null;
+      workspaceId = await workspaceIdOf('channel', body.scope_id);
     } else {
       const { data: participant } = await supabaseAdmin
         .from('dm_participants')
@@ -49,9 +48,7 @@ router.post('/upload-presign', requireAuth, async (req: Request, res: Response) 
         res.status(403).json({ success: false, error: 'Not a participant in this DM' });
         return;
       }
-      const { data: conv } = await supabaseAdmin
-        .from('dm_conversations').select('workspace_id').eq('id', body.scope_id).maybeSingle();
-      workspaceId = conv?.workspace_id || null;
+      workspaceId = await workspaceIdOf('dm', body.scope_id);
     }
 
     if (!workspaceId) {

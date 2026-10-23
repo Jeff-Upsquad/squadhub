@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import { supabaseAdmin } from '../../supabase';
 import { requireAuth } from '../../middleware/auth';
-import { reachableWorkspaceIds } from '../../middleware/workspace';
+import { reachableWorkspaceIds, workspaceIdOf } from '../../middleware/workspace';
 import { requireUserType } from '../../middleware/userType';
 import { PARTNER_USER_TYPES } from '@squadhub/shared';
 import { addDailyWorkSeconds } from '../../utils/taskTime';
@@ -80,13 +80,9 @@ async function taskOutsideRunGroup(
 // Resolve a list's workspace (list -> space -> workspace). Best-effort.
 async function workspaceForList(listId: string | null | undefined): Promise<string | null> {
   if (!listId) return null;
-  const { data: list } = await supabaseAdmin
-    .from('lists').select('space_id').in('workspace_id', await reachableWorkspaceIds()).eq('id', listId).maybeSingle();
-  const spaceId = (list as any)?.space_id;
-  if (!spaceId) return null;
-  const { data: space } = await supabaseAdmin
-    .from('spaces').select('workspace_id').eq('id', spaceId).maybeSingle();
-  return (space as any)?.workspace_id ?? null;
+  const ws = await workspaceIdOf('list', listId);
+  // Only a workspace the caller can reach may receive the run's time.
+  return ws && (await reachableWorkspaceIds()).includes(ws) ? ws : null;
 }
 
 // Close a group run: stop open per-task overlaps, stamp ended_at/duration, and
@@ -189,7 +185,7 @@ router.post('/group-runs/runs', async (req: Request, res: Response) => {
     // Close any pre-existing active run for this user — keeps the unique
     // partial index from rejecting the insert if a prior stop was lost.
     const { data: existing } = await supabaseAdmin
-      .from('group_runs')
+      .from('group_runs') // tenant-scope: caller's own active run (user_id = caller) — closing it is housekeeping on their own row, whichever workspace it was in
       .select('id, user_id, started_at, workspace_id')
       .eq('user_id', req.userId!)
       .is('ended_at', null)

@@ -4,6 +4,7 @@ import { requireAuth } from '../middleware/auth';
 import { requireUserType } from '../middleware/userType';
 import { getPrimaryRolePermissions } from '../middleware/permissions';
 import { supabaseAdmin } from '../supabase';
+import { reachableWorkspaceIds } from '../middleware/workspace';
 import { nowIST, todayIST, IST_OFFSET_MS } from '../utils/ist';
 import { PARTNER_USER_TYPES } from '@squadhub/shared';
 
@@ -20,6 +21,7 @@ async function stopSession(sessionId: string): Promise<void> {
   const { data: session } = await supabaseAdmin
     .from('timer_sessions')
     .select('*')
+    .in('workspace_id', await reachableWorkspaceIds())
     .eq('id', sessionId)
     .is('end_time', null)
     .single();
@@ -32,6 +34,7 @@ async function stopSession(sessionId: string): Promise<void> {
   await supabaseAdmin
     .from('timer_sessions')
     .update({ end_time: now.toISOString(), duration_seconds: durationSeconds })
+    .eq('workspace_id', session.workspace_id)
     .eq('id', sessionId);
 
   // Update daily summary
@@ -98,9 +101,9 @@ async function rebuildDailySummary(
   };
 
   if (existing) {
-    await supabaseAdmin.from('daily_time_summaries').update(payload).eq('id', existing.id);
+    await supabaseAdmin.from('daily_time_summaries').update(payload).eq('workspace_id', workspaceId).eq('id', existing.id);
   } else if (rows.length > 0) {
-    await supabaseAdmin.from('daily_time_summaries').insert(payload);
+    await supabaseAdmin.from('daily_time_summaries').insert({ ...payload, workspace_id: workspaceId });
   }
 }
 
@@ -111,21 +114,17 @@ async function upsertDailySummary(
   timerType: string,
   durationSeconds: number,
   stopTime: Date,
-  workspaceId?: string,
+  workspaceId: string,
   context: string = 'default',
 ): Promise<void> {
-  let query = supabaseAdmin
-    .from('daily_time_summaries') // tenant-scope: caller's own rows (user_id = caller)
+  const { data: existing } = await supabaseAdmin
+    .from('daily_time_summaries')
     .select('*')
+    .eq('workspace_id', workspaceId)
     .eq('user_id', userId)
     .eq('date', date)
-    .eq('context', context);
-
-  if (workspaceId) {
-    query = query.eq('workspace_id', workspaceId);
-  }
-
-  const { data: existing } = await query.single();
+    .eq('context', context)
+    .single();
 
   if (existing) {
     const updates: Record<string, any> = { updated_at: new Date().toISOString(), last_stop: stopTime.toISOString() };
@@ -137,6 +136,7 @@ async function upsertDailySummary(
     await supabaseAdmin
       .from('daily_time_summaries')
       .update(updates)
+      .eq('workspace_id', existing.workspace_id)
       .eq('id', existing.id);
   } else {
     const row: Record<string, any> = {
@@ -155,7 +155,7 @@ async function upsertDailySummary(
     else if (timerType === 'break') row.total_break_seconds = durationSeconds;
     else row.total_no_work_seconds = durationSeconds;
 
-    await supabaseAdmin.from('daily_time_summaries').insert(row);
+    await supabaseAdmin.from('daily_time_summaries').insert({ ...row, workspace_id: workspaceId });
   }
 }
 
@@ -277,6 +277,7 @@ router.post('/stop', async (req: Request, res: Response) => {
     const { data: updated } = await supabaseAdmin
       .from('timer_sessions')
       .select('*')
+      .eq('workspace_id', session.workspace_id)
       .eq('id', session.id)
       .single();
 
@@ -454,7 +455,7 @@ router.get('/stats', async (req: Request, res: Response) => {
       .order('start_time', { ascending: true });
 
     // Edit permission from the user's PRIMARY role
-    const primary = await getPrimaryRolePermissions(userId);
+    const primary = await getPrimaryRolePermissions(userId, workspace_id);
     const timeLogEdit = {
       can_edit: primary.can_edit_time_logs === true,
       window_hours: typeof primary.time_edit_window_hours === 'number' ? primary.time_edit_window_hours : 0,
@@ -542,6 +543,7 @@ router.patch('/sessions/:id', async (req: Request, res: Response) => {
     const { data: session } = await supabaseAdmin
       .from('timer_sessions')
       .select('*')
+      .in('workspace_id', await reachableWorkspaceIds())
       .eq('id', sessionId)
       .single();
 
@@ -556,7 +558,7 @@ router.patch('/sessions/:id', async (req: Request, res: Response) => {
       return;
     }
 
-    const primary = await getPrimaryRolePermissions(userId);
+    const primary = await getPrimaryRolePermissions(userId, session.workspace_id);
     if (primary.can_edit_time_logs !== true) {
       res.status(403).json({ success: false, error: 'Your role cannot edit time logs' });
       return;
@@ -619,6 +621,7 @@ router.patch('/sessions/:id', async (req: Request, res: Response) => {
           ?? session.duration_seconds
           ?? Math.round((new Date(session.end_time).getTime() - new Date(session.start_time).getTime()) / 1000),
       })
+      .eq('workspace_id', session.workspace_id)
       .eq('id', sessionId)
       .select()
       .single();
@@ -649,6 +652,7 @@ router.delete('/sessions/:id', async (req: Request, res: Response) => {
     const { data: session } = await supabaseAdmin
       .from('timer_sessions')
       .select('*')
+      .in('workspace_id', await reachableWorkspaceIds())
       .eq('id', sessionId)
       .single();
 
@@ -662,7 +666,7 @@ router.delete('/sessions/:id', async (req: Request, res: Response) => {
       return;
     }
 
-    const primary = await getPrimaryRolePermissions(userId);
+    const primary = await getPrimaryRolePermissions(userId, session.workspace_id);
     if (primary.can_edit_time_logs !== true) {
       res.status(403).json({ success: false, error: 'Your role cannot edit time logs' });
       return;
@@ -677,7 +681,7 @@ router.delete('/sessions/:id', async (req: Request, res: Response) => {
       }
     }
 
-    const { error } = await supabaseAdmin.from('timer_sessions').delete().eq('id', sessionId);
+    const { error } = await supabaseAdmin.from('timer_sessions').delete().eq('workspace_id', session.workspace_id).eq('id', sessionId);
     if (error) {
       res.status(500).json({ success: false, error: error.message });
       return;

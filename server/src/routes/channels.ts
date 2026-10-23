@@ -10,10 +10,6 @@ const router = Router();
 type ContainerType = 'space' | 'folder' | 'list';
 // Resolve the workspace a container belongs to (for channel creation).
 async function getContainerWorkspaceId(type: ContainerType, id: string): Promise<string | null> {
-  if (type === 'space') {
-    const { data } = await supabaseAdmin.from('spaces').select('workspace_id').eq('id', id).single();
-    return data?.workspace_id ?? null;
-  }
   return workspaceIdOf(type, id);
 }
 

@@ -7,13 +7,17 @@ import { effectiveGoalStatus, goalProgress, wouldCreateGoalCycle } from '@squadh
 // validation, access resolution, source expansion and progress all run as-is.
 const store = vi.hoisted(() => ({ tables: {} as Record<string, any[]> }));
 
-vi.mock('../middleware/auth', () => ({
-  requireAuth: (req: any, _res: any, next: any) => {
-    req.userId = req.headers['x-test-user'];
-    req.userType = req.headers['x-test-type'] || 'internal';
-    next();
-  },
-}));
+vi.mock('../middleware/auth', async () => {
+  const { runWithTenant } = await import('../middleware/workspace');
+  return {
+    requireAuth: (req: any, _res: any, next: any) => {
+      req.userId = req.headers['x-test-user'];
+      req.userType = req.headers['x-test-type'] || 'internal';
+      // Same tenant context the real requireAuth binds (reachableWorkspaceIds).
+      runWithTenant({ userId: req.userId }, () => next());
+    },
+  };
+});
 vi.mock('../utils/taskActivity', () => ({ logTaskActivity: vi.fn() }));
 // Mirrors the DB's saas_fill_workspace_id triggers: child rows carry their
 // parent's workspace (space → folder/list/status → task → link/goal row).
