@@ -2,6 +2,7 @@ import { useReminderAlerts } from '../components/ReminderAlerts';
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import api from '../services/api';
+import { rememberedActiveWorkspace } from '../components/WorkspaceSwitcher';
 
 const ADMIN_APP_URL = process.env.NEXT_PUBLIC_ADMIN_URL || (process.env.NODE_ENV === 'production' ? '/admin' : 'http://localhost:3001');
 import { useWorkspaceStore, type ChatKind } from '../stores/workspaceStore';
@@ -829,9 +830,14 @@ export default function MainLayout() {
   // pick up role changes.
   useEffect(() => {
     if (workspaces.length === 0) return;
-    const next = currentWorkspace
-      ? (workspaces.find((w) => w.id === currentWorkspace.id) ?? workspaces[0])
-      : workspaces[0];
+    // SaaS: start in the remembered workspace, else the user's own account
+    // (not a shared one); a workspace the user lost access to falls back too.
+    const remembered = rememberedActiveWorkspace();
+    const ownFirst = workspaces.find((w) => w.kind !== 'shared') ?? workspaces[0];
+    const next =
+      (currentWorkspace && workspaces.find((w) => w.id === currentWorkspace.id)) ||
+      (remembered && workspaces.find((w) => w.id === remembered)) ||
+      ownFirst;
     if (
       !currentWorkspace ||
       currentWorkspace.id !== next.id ||

@@ -70,19 +70,33 @@ export interface User {
 }
 
 // ---- Workspaces ----
+// SaaS: a workspace IS an account. `shared` workspaces are Slack-Connect style
+// spaces between a business and its talent; they're listed with the host
+// account's name so the sidebar can group them.
+export type WorkspaceKind = 'business' | 'talent' | 'shared' | 'internal_staff';
+export type WorkspaceRole = 'owner' | 'admin' | 'member' | 'guest';
+
 export interface Workspace {
   id: string;
   name: string;
   slug: string;
-  owner_id: string;
+  kind: WorkspaceKind;
+  status: 'active' | 'suspended';
+  owner_user_id: string | null;
+  plan_id?: string | null;
+  host_workspace_id?: string | null;
   created_at: string;
+  /** Present on GET /workspaces. */
+  my_role?: WorkspaceRole | string;
+  host_name?: string | null;
+  via_shared_link?: boolean;
 }
 
 export interface WorkspaceMember {
   id: string;
   workspace_id: string;
   user_id: string;
-  role: 'super_admin' | 'admin' | 'member' | 'guest';
+  role: 'owner' | 'admin' | 'member' | 'guest';
   role_id: string | null;
   // Joined fields
   custom_role?: Role;

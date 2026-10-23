@@ -1,5 +1,6 @@
 import axios, { AxiosError, AxiosRequestConfig } from 'axios';
 import { useAuthStore } from '../stores/authStore';
+import { useWorkspaceStore } from '../stores/workspaceStore';
 
 // API client configured to talk to our backend
 const api = axios.create({
@@ -25,9 +26,35 @@ api.interceptors.request.use((config) => {
     config.headers.Authorization = `Bearer ${token}`;
   }
   config.headers['X-Client-Source'] = getClientSource();
+  // Tenancy: every call names the workspace (account) it acts in. A request
+  // that already names one (?workspace_id= / body.workspace_id — e.g. the
+  // sidebar loading a shared workspace's channels) uses that, so header and
+  // parameter never disagree; otherwise the active workspace.
+  const explicit = explicitWorkspaceId(config);
+  const active = useWorkspaceStore.getState().currentWorkspace?.id;
+  const wsId = explicit || active;
+  if (wsId) config.headers['X-Workspace-Id'] = wsId;
   config.headers['X-Timezone-Offset'] = String(-new Date().getTimezoneOffset());
   return config;
 });
+
+function explicitWorkspaceId(config: AxiosRequestConfig): string | null {
+  const fromParams = (config.params as any)?.workspace_id;
+  if (typeof fromParams === 'string' && fromParams) return fromParams;
+  const m = /[?&]workspace_id=([0-9a-f-]{36})/i.exec(config.url || '');
+  if (m) return m[1];
+  const data = config.data;
+  if (data && typeof data === 'object' && !(data instanceof FormData) && typeof (data as any).workspace_id === 'string') {
+    return (data as any).workspace_id;
+  }
+  if (typeof data === 'string') {
+    try {
+      const parsed = JSON.parse(data);
+      if (parsed && typeof parsed.workspace_id === 'string') return parsed.workspace_id;
+    } catch { /* not JSON */ }
+  }
+  return null;
+}
 
 type RetriableConfig = AxiosRequestConfig & { _retried?: boolean };
 

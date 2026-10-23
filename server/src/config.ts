@@ -23,25 +23,21 @@ export const config = {
   r2BucketName: process.env.R2_BUCKET_NAME || 'squadhub-files',
   r2PublicUrl: process.env.R2_PUBLIC_URL || '',
 
-  // CORS
-  clientUrl: process.env.CLIENT_URL || 'http://localhost:5173',
-  adminUrl: process.env.ADMIN_URL || 'http://localhost:5174',
-  cashbookUrl: process.env.CASHBOOK_URL || 'https://cashbook.squadhub.in',
-  desktopUrl: process.env.DESKTOP_URL || 'tauri://localhost',
+  // CORS / public web origin. Production: https://app.squadhub.in (set
+  // CLIENT_URL); nothing here hardcodes a production host.
+  clientUrl: process.env.CLIENT_URL || 'http://localhost:3000',
+  webAppUrl: process.env.WEB_APP_URL || process.env.CLIENT_URL || 'http://localhost:3000',
 
-  // SquadBooks integration (sibling app at books.squadhub.in, its own Supabase project).
-  squadbooksUrl: process.env.SQUADBOOKS_URL || 'https://books.squadhub.in',
-  squadbooksAdminApiKey: process.env.SQUADBOOKS_ADMIN_API_KEY || '',
-
-  // Cash Book App Versioning
-  cashbookMinVersion: process.env.CASHBOOK_MIN_VERSION || '1.0.0',
-  cashbookDownloadUrl: process.env.CASHBOOK_DOWNLOAD_URL || '',
+  // Squad Hub (internal) bridge — see docs/bridge-contract.md. Bridge is
+  // disabled (routes 503 / outbound no-op) while SAAS_BRIDGE_SECRET is unset.
+  hubApiUrl: process.env.HUB_API_URL || '',
+  saasBridgeSecret: process.env.SAAS_BRIDGE_SECRET || '',
 
   // Partner App Versioning
   // The legacy RN/Expo app ended at 1.1.0. Keep the migration metadata on
   // the native 2.x line and point users at the canonical download page.
   partnerAppMinVersion: process.env.PARTNER_APP_MIN_VERSION || '2.0.0',
-  partnerAppDownloadUrl: process.env.PARTNER_APP_DOWNLOAD_URL || 'https://squadhub.in/partner-app',
+  partnerAppDownloadUrl: process.env.PARTNER_APP_DOWNLOAD_URL || '',
 
   // SquadHire (Profiles) integration — all optional; when unset the outbound
   // webhook logs a no-op and the inbound callback endpoint returns 503, so
@@ -88,7 +84,7 @@ export const config = {
   // Generate a keypair with: npx web-push generate-vapid-keys
   webPushVapidPublicKey: process.env.WEB_PUSH_VAPID_PUBLIC_KEY || '',
   webPushVapidPrivateKey: process.env.WEB_PUSH_VAPID_PRIVATE_KEY || '',
-  webPushVapidSubject: process.env.WEB_PUSH_VAPID_SUBJECT || 'mailto:support@squadhub.in',
+  webPushVapidSubject: process.env.WEB_PUSH_VAPID_SUBJECT || 'mailto:support@example.com',
 
   // Meeting-link providers for the Meetings mini app. Jitsi needs no secret
   // (deterministic room URL) and is always available. Google Meet and Zoom are

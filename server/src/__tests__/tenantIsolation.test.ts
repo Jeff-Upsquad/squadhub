@@ -44,7 +44,7 @@ async function get(path: string, opts: { token?: string; workspace?: string } = 
   const headers: Record<string, string> = { Authorization: `Bearer ${opts.token ?? 'alice-token'}` };
   if (opts.workspace) headers['X-Workspace-Id'] = opts.workspace;
   const res = await fetch(base + path, { headers });
-  const body = await res.json().catch(() => null);
+  const body: any = await res.json().catch(() => null);
   return { status: res.status, body };
 }
 

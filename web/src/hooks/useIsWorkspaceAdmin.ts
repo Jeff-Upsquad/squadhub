@@ -15,5 +15,5 @@ export function useIsWorkspaceAdmin(): boolean {
   });
   const workspaces: WorkspaceWithRole[] = data?.data || [];
   const current = workspaces.find((w) => w.id === currentWorkspaceId);
-  return current?.my_role === 'admin' || current?.my_role === 'super_admin';
+  return current?.my_role === 'owner' || current?.my_role === 'admin' || current?.my_role === 'super_admin';
 }

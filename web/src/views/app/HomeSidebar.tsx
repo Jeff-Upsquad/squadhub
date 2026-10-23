@@ -21,6 +21,8 @@ import { useAppFavorites, useMigrateLocalAppFavorites } from '../../hooks/useApp
 import { AppIcon, type AppDef } from '../../config/apps';
 import { useUnreadCount } from '../../hooks/useUnreadCount';
 import { useUnreadSummary } from '../../hooks/useUnreadSummary';
+import WorkspaceSwitcher from '../../components/WorkspaceSwitcher';
+import SharedWorkspacesSidebar from '../../components/SharedWorkspacesSidebar';
 import { useWorkspaceStore } from '../../stores/workspaceStore';
 import { useIsClient, useIsPartner } from '../../hooks/useUserType';
 import { useDms } from '../../hooks/useDms';
@@ -663,7 +665,7 @@ export default function HomeSidebar({
         <div className="flex items-center gap-[10px]">
           <BotFace />
           <div className="flex flex-col leading-tight">
-            <span className="sb-wordmark text-[var(--sh-ink)]">SquadHub</span>
+            <span className="sb-wordmark text-[var(--sh-ink)]">Squad Hub</span>
             <span className="sb-tagline text-[var(--sh-ink-4)]">Powered by UpSquad</span>
           </div>
         </div>
@@ -709,6 +711,7 @@ export default function HomeSidebar({
         </div>
       </div>
 
+      <WorkspaceSwitcher />
       {/* Everything below the brand row scrolls as one — search, tiles, apps,
           Work/Chat switch and the tree all move together. */}
       <div className="min-h-0 flex-1 overflow-y-auto pb-3">
@@ -1067,6 +1070,7 @@ export default function HomeSidebar({
             )}
 
             {/* ---- Channels ---- */}
+            <SharedWorkspacesSidebar onOpenChannel={(id) => onSelectChannel(id)} />
             <SectionLabel title="Channels" action={canCreateChannels ? addButton('Create channel', onCreateChannel) : undefined} />
             <div className="px-2">
               {visibleChannels.length === 0 ? (

@@ -6,8 +6,9 @@ import { useAuthStore } from '../../../stores/authStore';
 import { stagesFromDefs } from '../../../lib/stages';
 import './stage-row.css';
 
-const ADMIN_URL = process.env.NEXT_PUBLIC_ADMIN_URL
-  || (process.env.NODE_ENV === 'production' ? 'https://admin.squadhub.in' : 'http://localhost:3001');
+// Status groups are managed by Squad Hub staff (Hub admin); the SaaS links out
+// only when NEXT_PUBLIC_ADMIN_URL is configured.
+const ADMIN_URL = process.env.NEXT_PUBLIC_ADMIN_URL || '';
 
 const mix = (c: string, p: number) => `color-mix(in oklch, ${c} ${p}%, transparent)`;
 
@@ -413,7 +414,7 @@ export default function StageStatusRow({
           <div className="stg-pop-foot">
             <span>Stage group</span>
             <span className="stg-pop-group">{groupName || 'Workspace default'}</span>
-            {isAdmin && (
+            {isAdmin && ADMIN_URL && (
               <a className="stg-pop-manage" href={`${ADMIN_URL}/admin/status-groups`} target="_blank" rel="noreferrer">Manage</a>
             )}
           </div>
