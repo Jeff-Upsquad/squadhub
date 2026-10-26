@@ -370,6 +370,20 @@ export async function buildSquadhirePayloadForCard(
     leadContactName = (contentSource as any).customer_name ?? null;
     leadCompany = (contentSource as any).customer_company ?? null;
 
+    // Brief cards keep their customer on lead_submission_id rather than a
+    // staged subscription. Use that customer's country to select the frozen
+    // margin when the brief has no single target country.
+    const leadSubmissionId = (contentSource as any).lead_submission_id;
+    if (leadSubmissionId) {
+      const { data: submission, error } = await supabaseAdmin
+        .from('client_submissions')
+        .select('country_id')
+        .eq('id', leadSubmissionId)
+        .maybeSingle();
+      if (error) throw new Error(`Cannot resolve card pricing country: ${error.message}`);
+      leadCountryId = (submission?.country_id as string | undefined) ?? null;
+    }
+
     // Resolve the matching subscription_plan and read its deliverables so the
     // talent sees the actual configured hours/items instead of the hardcoded
     // PLAN_HOURS fallback. Falls back gracefully when no plan matches (typo'd
