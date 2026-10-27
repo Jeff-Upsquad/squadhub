@@ -42,7 +42,11 @@ export function installCompanionTimers(io: Server<any, any>, commandTimeoutMs = 
   io.on('connection', (socket: Socket) => {
     const userId = (socket as Socket & { userId: string }).userId;
     if (!userId) return;
-    socket.on('companion_timer_watch', () => { void socket.join(room(userId)); publish(userId); });
+    socket.on('companion_timer_watch', () => {
+      void socket.join(room(userId));
+      console.log(`[companion] watcher joined: user ${userId} socket ${socket.id}`);
+      publish(userId);
+    });
     socket.on('companion_timer_publish', (raw: unknown) => {
       const parsed = timersSchema.safeParse(raw);
       if (!parsed.success) {
@@ -57,6 +61,7 @@ export function installCompanionTimers(io: Server<any, any>, commandTimeoutMs = 
         return;
       }
       if (!publishers.has(userId)) publishers.set(userId, new Map());
+      const hadPublisher = !!owner(userId);
       const prior = owner(userId);
       const seen = seenSessions.get(userId) || new Set<string>();
       const hasNewSession = parsed.data.some(timer => !seen.has(timer.sessionId));
@@ -65,11 +70,18 @@ export function installCompanionTimers(io: Server<any, any>, commandTimeoutMs = 
       while (seen.size > 200) seen.delete(seen.values().next().value!);
       seenSessions.set(userId, seen);
       publishers.get(userId)!.set(socket.id, { socket, timers: parsed.data, at: Date.now() });
+      if (!hadPublisher) {
+        console.log(`[companion] publisher online: user ${userId} socket ${socket.id} (${parsed.data.length} timers)`);
+      }
       publish(userId);
     });
     const unpublish = () => {
+      const hadPublisher = !!owner(userId);
       publishers.get(userId)?.delete(socket.id);
       if (!publishers.get(userId)?.size) { publishers.delete(userId); owners.delete(userId); seenSessions.delete(userId); replies.delete(userId); }
+      if (hadPublisher && !owner(userId)) {
+        console.log(`[companion] publisher offline: user ${userId} (last socket ${socket.id} left)`);
+      }
       publish(userId);
     };
     socket.on('companion_timer_unpublish', unpublish);
