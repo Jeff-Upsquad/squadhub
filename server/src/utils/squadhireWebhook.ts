@@ -96,6 +96,7 @@ const NON_STAGED_SOURCES = new Set([
 ]);
 
 export interface SquadhireCardPayload {
+  notify_talents?: boolean;
   external_id: string;
   content: Record<string, unknown>;
   match_rules: Record<string, unknown>;

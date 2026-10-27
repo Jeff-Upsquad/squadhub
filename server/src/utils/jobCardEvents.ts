@@ -4,6 +4,8 @@ import { supabaseAdmin } from '../supabase';
 // Mirrors utils/cardEvents.ts; the union is broader because the inbound
 // SquadHire events webhook also logs per-candidate funnel activity here.
 export type JobCardEventType =
+  | 'broadcast'
+  | 'reviewed'
   | 'created'
   | 'updated'
   | 'profile_attached'

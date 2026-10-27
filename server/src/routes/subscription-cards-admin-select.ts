@@ -1,3 +1,4 @@
+import { canManuallyBroadcast } from '@squadhub/shared';
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import { requireAuth } from '../middleware/auth';
@@ -844,11 +845,12 @@ router.post('/subscription-cards/:id/rebroadcast', async (req: Request, res: Res
 
     const { data: card, error: cardErr } = await supabaseAdmin
       .from('subscription_cards')
-      .select('id, state, distribution, squadhire_synced_at')
+      .select('id, state, distribution, squadhire_synced_at, source, business_submitted_at')
       .eq('id', cardId)
       .maybeSingle();
     if (cardErr) { res.status(500).json({ success: false, error: cardErr.message }); return; }
     if (!card) { res.status(404).json({ success: false, error: 'Card not found' }); return; }
+    if (!canManuallyBroadcast(card)) { res.status(409).json({success:false,error:'Business submissions broadcast automatically.'}); return; }
     if (card.state !== 'published') {
       res.status(409).json({ success: false, error: 'Card must be published to broadcast' });
       return;

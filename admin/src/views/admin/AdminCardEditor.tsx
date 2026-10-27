@@ -1,5 +1,8 @@
 'use client';
 
+import { canManuallyBroadcast } from '@squadhub/shared';
+import type { RequirementReview } from '@squadhub/shared';
+import RequirementReviewBar from './RequirementReviewBar';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import api from '@/services/api';
@@ -151,7 +154,7 @@ function parseAdditionalRequirements(
   return out;
 }
 
-interface CardData {
+interface CardData extends RequirementReview {
   id: string;
   state: string;
   source: string;
@@ -971,7 +974,7 @@ export default function AdminCardEditor({
     mutationFn: async () => {
       await saveMutation.mutateAsync();
       await targetsMutation.mutateAsync();
-      return api.post(`/admin/subscription-cards/${cardId}/publish`, { distribution });
+      return api.post(canManuallyBroadcast(card ?? {}) && distribution === 'broadcast' ? `/admin/cards/subscription/${cardId}/broadcast-all` : `/admin/subscription-cards/${cardId}/publish`, { distribution });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-subscription-cards'] });
@@ -1072,6 +1075,7 @@ export default function AdminCardEditor({
     // Root takes remaining space (flex-1/min-h-0), not h-full, so on desktop it
     // fits beside the still-visible New Deals list header instead of overflowing.
     <div className="flex min-h-0 flex-1 flex-col sh-surface">
+      {!forceReadOnly && <RequirementReviewBar kind="subscription" cards={[card]} />}
       {/* Header + form share ONE scroll region so they scroll together, contained
           within the content area — the outer app shell/sidebar never scrolls. */}
       <div className="flex-1 min-h-0 overflow-y-auto">
@@ -1209,7 +1213,7 @@ export default function AdminCardEditor({
                     ? 'Publishing…'
                     : distribution === 'manual'
                       ? 'Soft publish'
-                      : 'Publish'}
+                      : canManuallyBroadcast(card) ? 'Broadcast to all' : 'Publish corrections'}
                 </button>
               )}
             </>
@@ -2427,6 +2431,7 @@ interface CardEvent {
 const EVENT_META: Record<string, { color: string; label: string }> = {
   created: { color: '#9ca3af', label: 'Card created' },
   draft_saved: { color: '#9ca3af', label: 'Saved as draft' },
+  reviewed: { color: '#15803d', label: 'Reviewed' },
   published: { color: '#22c55e', label: 'Published (broadcast)' },
   soft_published: { color: '#84cc16', label: 'Soft-published (hand-pick)' },
   broadcast: { color: '#3b82f6', label: 'Broadcast' },

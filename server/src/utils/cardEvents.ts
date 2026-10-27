@@ -2,6 +2,7 @@ import { supabaseAdmin } from '../supabase';
 
 // Lifecycle events recorded in subscription_card_events (migration 145).
 export type CardEventType =
+  | 'reviewed'
   | 'created'
   | 'draft_saved'
   | 'published'

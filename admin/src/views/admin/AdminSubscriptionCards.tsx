@@ -1,4 +1,6 @@
 'use client';
+import type { RequirementReview } from '@squadhub/shared';
+import RequirementReviewBar from './RequirementReviewBar';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
@@ -18,7 +20,7 @@ import ClientBriefForm, { BRIEF_LAUNCHERS, type BriefType, type BriefProduct } f
 import CardAssigneePicker from './CardAssigneePicker';
 import { cardScopeKey, cardScopeParams, isScoped, type CardScope } from './cardScope';
 
-export type AdminSubscriptionCard = {
+export type AdminSubscriptionCard = RequirementReview & {
   id: string;
   state: 'published' | 'assigned' | 'closed';
   distribution: 'broadcast' | 'manual';
@@ -261,9 +263,10 @@ export function categorize(card: AdminSubscriptionCard): Bucket {
   // memory for resume), so it must be pulled out before the assigned check or
   // it would sit in the Assigned tab looking live.
   if (card.paused_at) return 'paused';
+  if (!card.requirement_reviewed_at) return 'published';
   if (card.selected_recipient_id) return 'assigned';
   if (card.state === 'assigned') return 'selected';
-  // state === 'published'
+  // Reviewed cards that still await manual delivery stay in the review queue.
   return card.needs_broadcast ? 'published' : 'broadcaster';
 }
 
@@ -303,8 +306,7 @@ type Tab = 'requests' | 'published' | 'broadcaster' | 'selected' | 'assigned' | 
 const CARD_LIST_TABS = ['published', 'broadcaster', 'selected', 'assigned', 'paused', 'cancelled', 'lost', 'archive'] as const;
 
 const TABS: { key: Tab; label: string }[] = [
-  { key: 'requests', label: 'New deals' },
-  { key: 'published', label: 'Published' },
+  { key: 'requests', label: 'New for Review' },
   { key: 'broadcaster', label: 'Broadcasted' },
   { key: 'selected', label: 'Selected' },
   { key: 'assigned', label: 'Assigned' },
@@ -317,8 +319,8 @@ const TABS: { key: Tab; label: string }[] = [
 
 const HEADER_META: Record<Tab, { title: string; subtitle: string }> = {
   requests: {
-    title: 'New Deals',
-    subtitle: 'Incoming briefs and drafts. Fill in the details, save as a draft, then publish.',
+    title: 'New for Review',
+    subtitle: 'Review incoming requirements, including cards already broadcast automatically. Recall a live card if it needs corrections.',
   },
   published: {
     title: 'Published',
@@ -422,6 +424,7 @@ export default function AdminSubscriptionCards({
   const scopeKey = useMemo(() => cardScopeKey(scope), [scope]);
   const scoped = isScoped(scope);
 
+  const [draftCardId, setDraftCardId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<Tab>('requests');
   const [publishedBy, setPublishedBy] = useState<string>('');
   const [search, setSearch] = useState<string>('');
@@ -488,6 +491,7 @@ export default function AdminSubscriptionCards({
     placeholderData: keepPreviousData,
     // Re-opening the tab within 30s reuses cached cards instantly.
     staleTime: 30_000,
+    refetchInterval:15_000,
   });
   const activeCards: AdminSubscriptionCard[] = activeCardsRes?.data || [];
 
@@ -517,15 +521,8 @@ export default function AdminSubscriptionCards({
   });
   const salesPeople: SalesPerson[] = peopleRes?.data || [];
 
-  // Pending-request count drives the badge on the "New deals" tab.
-  // Four sources feed the queue: upsquad subscription_requests + draft
-  // subscription_cards from the public Shared Form (/connect), from the
-  // embedded Landing Page form, and from internal client briefs.
-  //
-  // All of these are scoped to this module's product line and use the exact
-  // query keys AdminRequestsList uses, so the badge counts the same rows the
-  // tab actually lists (an unscoped badge made Assignments claim a new deal
-  // that belonged to Subscriptions) and its mutations invalidate these too.
+  // Drafts and unreviewed live cards share New for Review. Legacy requests
+  // are included only until they have a local card of their own.
   const { data: pendingReqsRes } = useQuery({
     queryKey: ['admin-subscription-requests', ''],
     queryFn: () => api.get('/admin/subscription-requests').then((r) => r.data),
@@ -535,56 +532,15 @@ export default function AdminSubscriptionCards({
     // module leaves it out entirely rather than showing the whole org's queue.
     enabled: productLine === 'subscription' && !scoped,
   });
-  const { data: pendingSharedRes } = useQuery({
-    queryKey: ['admin-shared-form-submissions', productLine, '', scopeKey],
-    queryFn: () =>
-      api
-        .get('/admin/subscription-cards', {
-          params: { source: 'shared_form', state: 'new,draft', card_type: productLine, ...scopeParams },
-        })
-        .then((r) => r.data),
+  const { data: draftCardsRes } = useQuery({
+    queryKey: ['admin-review-drafts',productLine,scopeKey,debouncedSearch],
+    queryFn:()=>api.get('/admin/subscription-cards',{params:{state:'new,draft',card_type:productLine,search:debouncedSearch,...scopeParams}}).then(r=>r.data),
+    refetchInterval:15_000,
   });
-  const { data: pendingLandingRes } = useQuery({
-    queryKey: ['admin-landing-page-submissions', productLine, '', scopeKey],
-    queryFn: () =>
-      api
-        .get('/admin/subscription-cards', {
-          params: { source: 'landing_page_form', state: 'new,draft', card_type: productLine, ...scopeParams },
-        })
-        .then((r) => r.data),
-  });
-  // Internal client briefs (Workflow 1) also land in the New Deals queue.
-  const { data: pendingBriefRes } = useQuery({
-    queryKey: ['admin-internal-brief-submissions', productLine, '', scopeKey],
-    queryFn: () =>
-      api
-        .get('/admin/subscription-cards', {
-          params: { source: 'internal_brief', state: 'new,draft', card_type: productLine, ...scopeParams },
-        })
-        .then((r) => r.data),
-  });
-  // The upsquad endpoint returns every status, so narrow it to the two the
-  // New deals tab actually lists. The other three queues already fetch only
-  // state='new,draft' rows, which are pending by definition.
-  //
-  // The upsquad status is external and doesn't track local archival, so a
-  // request can stay 'pending' after its card is archived. AdminRequestsList
-  // hides those rows (they belong in Archive), so the badge must subtract them
-  // too or it over-counts (e.g. badge 6 while the list shows 1). The three
-  // card-backed queues already fetch only non-archived rows server-side.
-  const archivedCardIdSet = useMemo(
-    () => new Set(archivedCards.map((c) => c.id)),
-    [archivedCards],
-  );
-  const pendingRequestCount =
-    (pendingReqsRes?.data || []).filter(
-      (r: { status?: string; card_id?: string | null }) =>
-        (r.status === 'pending' || r.status === 'in_review') &&
-        !(r.card_id && archivedCardIdSet.has(r.card_id)),
-    ).length +
-    (pendingSharedRes?.data || []).length +
-    (pendingLandingRes?.data || []).length +
-    (pendingBriefRes?.data || []).length;
+  const draftCards: Array<Omit<AdminSubscriptionCard, 'state'> & {state:'new'|'draft'}> = draftCardsRes?.data ?? [];
+  const archivedCardIdSet = new Set(archivedCards.map(c=>c.id));
+  const legacyRequests = (pendingReqsRes?.data ?? []).filter((r:{status?:string;card_id?:string|null})=>(r.status==='pending'||r.status==='in_review') && !(r.card_id && archivedCardIdSet.has(r.card_id)) && !r.card_id);
+  const pendingRequestCount = draftCards.length + legacyRequests.length;
 
   const bucketed = useMemo(() => {
     const out: Record<Bucket, AdminSubscriptionCard[]> = { published: [], broadcaster: [], selected: [], assigned: [], paused: [], cancelled: [], lost: [] };
@@ -703,7 +659,7 @@ export default function AdminSubscriptionCards({
   // A deep link — e.g. "View card" from the Clients module, which opens in a new
   // tab and mounts fresh on the default 'requests' tab — must still open the
   // detail, so this can't be gated on isCardListTab.
-  const showDetailView = !!selectedCard;
+  const showDetailView = !!selectedCard || !!draftCardId;
 
   // When switching primary tabs, drop any stale ?card= so the detail view
   // doesn't unexpectedly re-open when the user comes back to this tab.
@@ -723,7 +679,7 @@ export default function AdminSubscriptionCards({
   // Header copy per tab. `count` is the small metric chip beside the title; for
   // the card-list tabs it's a live card count, otherwise a short descriptor.
   const headerCount = activeTab === 'requests'
-    ? 'Inbound queue'
+    ? `${pendingRequestCount + tabCounts.published} awaiting review`
     : activeTab === 'custom'
       ? 'Admin-created'
       : (() => {
@@ -786,7 +742,7 @@ export default function AdminSubscriptionCards({
                     >
                       {label}
                       {count != null && <span className="opacity-70"> ({count})</span>}
-                      {key === 'requests' && pendingRequestCount > 0 && (
+                      {key === 'requests' && pendingRequestCount + tabCounts.published > 0 && (
                         <span
                           className="ml-1 inline-flex h-[14px] min-w-[14px] items-center justify-center rounded-full px-1 text-[9px] font-bold leading-none"
                           style={{
@@ -797,9 +753,9 @@ export default function AdminSubscriptionCards({
                             color: '#0a0a0a',
                             boxShadow: 'inset 0 0 0 1px #0a0a0a',
                           }}
-                          title={`${pendingRequestCount} pending review`}
+                          title={`${pendingRequestCount + tabCounts.published} pending review`}
                         >
-                          {pendingRequestCount}
+                          {pendingRequestCount + tabCounts.published}
                         </span>
                       )}
                       {((key === 'assigned' && unreviewedAssignedCount > 0) ||
@@ -888,7 +844,8 @@ export default function AdminSubscriptionCards({
         </div>
       )}
 
-      {selectedCard ? (
+      {selectedCard && <RequirementReviewBar kind="subscription" cards={selectedGroupCards.length ? selectedGroupCards : [selectedCard]} />}
+      {draftCardId ? <AdminCardEditor cardId={draftCardId} onClose={()=>setDraftCardId(null)} /> : selectedCard ? (
         cardViewMode === 'client' ? (
           <AdminCardClientPreview
             key={`client-${selectedCard.id}`}
@@ -969,7 +926,11 @@ export default function AdminSubscriptionCards({
       ) : null}
 
       {!showDetailView && activeTab === 'requests' && (
-        <AdminRequestsList cardType={productLine} scope={scope} />
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          {bucketed.published.length > 0 && <div className="px-6 py-4"><CardList items={bucketed.published} onOpen={setSelectedCardId} canShowCancelled={false} canShowArchived={false} /></div>}
+          <div className="space-y-3 px-6 py-4">{draftCards.map(c=><button type="button" key={c.id} className="sh-card w-full p-4 text-left" onClick={()=>setDraftCardId(c.id)}><span className="block font-semibold">{c.brand_name || c.customer_company || c.customer_name || 'Requirement card'}</span><span className="text-xs text-foreground-muted">{c.service_type || c.plan_name || 'Requirement'} · {c.recalled_at ? 'Recalled for corrections' : 'Draft'} · {c.requirement_reviewed_at ? 'Reviewed' : 'Awaiting review'}</span></button>)}</div>
+          {legacyRequests.length > 0 && <AdminRequestsList cardType={productLine} scope={scope} legacyOnly />}
+        </div>
       )}
       {!showDetailView && activeTab === 'custom' && <AdminCustomCardsList cardType={productLine} />}
 

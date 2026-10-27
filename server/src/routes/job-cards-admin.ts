@@ -1,3 +1,5 @@
+import { requirementDeliveryStatus } from '../utils/requirementDeliveryStatus';
+import { publishJobRequirement } from '../utils/publishJobRequirement';
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import { normalizeStoredPhone } from '@squadhub/shared';
@@ -106,10 +108,12 @@ async function hydrateJobCards(cards: any[]): Promise<any[]> {
     (brands ?? []).forEach((b: any) => { brandById[b.id] = b; });
   }
 
+  const deliveryStatus=await requirementDeliveryStatus('job_cards',cards.map(c=>c.id));
   const withProfiles = cards.map((card) => {
     const profile = card.job_profile_id ? profileById[card.job_profile_id] ?? null : null;
     return {
       ...card,
+      ...deliveryStatus.get(card.id),
       stage: categorizeJobCard(card),
       job_profile: profile,
       business_profile: profile?.business_profile_id ? businessById[profile.business_profile_id] ?? null : null,
@@ -559,79 +563,8 @@ const publishSchema = z.object({
 router.post('/:id/publish', async (req: Request, res: Response) => {
   try {
     const body = publishSchema.parse(req.body ?? {});
-    const card = await loadCard(req.params.id as string);
-    if (!card || card.deleted_at) {
-      res.status(404).json({ success: false, error: 'Job card not found' });
-      return;
-    }
-    if (card.state !== 'onboarding') {
-      res.status(409).json({
-        success: false,
-        error: card.state === 'new'
-          ? 'Complete onboarding (attach a job profile) before publishing'
-          : 'Card is already published or closed',
-      });
-      return;
-    }
-    if (!card.job_profile_id) {
-      res.status(400).json({ success: false, error: 'Attach a job profile before publishing' });
-      return;
-    }
-    // Completeness gate — fail closed at publish time so a broken card never
-    // reaches SquadHire (mirrors the subscription tier-required gate).
-    const { data: profile } = await supabaseAdmin
-      .from('job_profiles')
-      .select('id, title, status, deleted_at, squadhire_category_ids, business_profile_id')
-      .eq('id', card.job_profile_id)
-      .maybeSingle();
-    if (!profile || profile.deleted_at || profile.status !== 'active') {
-      res.status(400).json({ success: false, error: 'The linked job profile is missing or archived' });
-      return;
-    }
-    const categoryIds = Array.isArray(profile.squadhire_category_ids)
-      ? (profile.squadhire_category_ids as string[])
-      : [];
-    if (categoryIds.length === 0) {
-      res.status(400).json({
-        success: false,
-        error: 'Pick at least one SquadHire category on the job profile — without it the card cannot be broadcast.',
-      });
-      return;
-    }
-    const { data: business } = await supabaseAdmin
-      .from('business_profiles')
-      .select('id, deleted_at')
-      .eq('id', profile.business_profile_id)
-      .maybeSingle();
-    if (!business || business.deleted_at) {
-      res.status(400).json({ success: false, error: 'The linked business profile is missing' });
-      return;
-    }
-
-    const distribution = body.distribution ?? card.distribution ?? 'broadcast';
-    const { data: updated, error: updErr } = await supabaseAdmin
-      .from('job_cards')
-      .update({
-        state: 'published',
-        distribution,
-        published_at: new Date().toISOString(),
-        published_by: req.userId!,
-        recalled_at: null,
-        ...SYNC_RESET,
-      })
-      .eq('id', req.params.id)
-      .eq('state', 'onboarding')
-      .select('*')
-      .maybeSingle();
-    if (updErr) {
-      res.status(500).json({ success: false, error: updErr.message });
-      return;
-    }
-    if (!updated) {
-      res.status(409).json({ success: false, error: 'Card state changed — refresh and try again' });
-      return;
-    }
-
+    const updated = await publishJobRequirement(req.params.id as string, req.userId ?? null, body.distribution);
+    const distribution = updated.distribution;
     // Deliver inline (fire-and-forget with retries; the sweeper is the net).
     deliverInBackground(updated.id, 'publish');
 
@@ -649,7 +582,7 @@ router.post('/:id/publish', async (req: Request, res: Response) => {
       return;
     }
     console.error('Publish job card error:', err);
-    res.status(500).json({ success: false, error: err?.message || 'Internal server error' });
+    res.status(err.status || 500).json({ success: false, error: err?.message || 'Internal server error' });
   }
 });
 

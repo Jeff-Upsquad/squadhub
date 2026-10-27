@@ -1,3 +1,5 @@
+import { requirementDeliveryStatus } from '../utils/requirementDeliveryStatus';
+import { canManuallyBroadcast } from '@squadhub/shared';
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import { SERVICE_TYPE_TO_SLUG } from '@squadhub/shared';
@@ -360,6 +362,7 @@ router.get('/', async (req: Request, res: Response) => {
     // 4 queries (not 4 per card). All rows here are primary cards
     // (parent_card_id IS NULL), so batch hydration is valid — see hydrateCardsBatch.
     const batchHydrated = await hydrateCardsBatch(list);
+    const deliveryStatus = await requirementDeliveryStatus('subscription_cards', list.map((c:any)=>c.id));
 
     let hydrated = list.map((card: any) => {
       const staged = stagedById[card.submission_subscription_id] || null;
@@ -417,6 +420,7 @@ router.get('/', async (req: Request, res: Response) => {
       return {
         ...card,
         ...base,
+        ...deliveryStatus.get(card.id),
         submission: submission ? { ...submission, country } : null,
         submission_subscription: staged
           ? {
@@ -876,7 +880,7 @@ router.post('/:id/broadcast-pending', async (req: Request, res: Response) => {
 
     const { data: card, error: cardErr } = await supabaseAdmin
       .from('subscription_cards')
-      .select('id, state, distribution, squadhire_synced_at, squadhire_category_ids')
+      .select('id, state, distribution, squadhire_synced_at, squadhire_category_ids, source, business_submitted_at')
       .eq('id', cardId)
       .maybeSingle();
     if (cardErr) {
@@ -885,6 +889,10 @@ router.post('/:id/broadcast-pending', async (req: Request, res: Response) => {
     }
     if (!card) {
       res.status(404).json({ success: false, error: 'Card not found' });
+      return;
+    }
+    if (!canManuallyBroadcast(card)) {
+      res.status(409).json({ success:false,error:'Business submissions broadcast automatically. Recall the card to make corrections.' });
       return;
     }
     if (card.state !== 'published') {
@@ -1108,11 +1116,15 @@ router.post('/:id/broadcast-now', async (req: Request, res: Response) => {
 
     const { data: card } = await supabaseAdmin
       .from('subscription_cards')
-      .select('id, state, distribution, publish_targets')
+      .select('id, state, distribution, publish_targets, source, business_submitted_at')
       .eq('id', cardId)
       .maybeSingle();
     if (!card) {
       res.status(404).json({ success: false, error: 'Card not found' });
+      return;
+    }
+    if (!canManuallyBroadcast(card)) {
+      res.status(409).json({ success:false,error:'Business submissions broadcast automatically. Recall the card to make corrections.' });
       return;
     }
     if (card.state !== 'published') {
@@ -1148,7 +1160,7 @@ router.post('/:id/broadcast-now', async (req: Request, res: Response) => {
     if (publishTargets.includes('talent')) {
       if (card.distribution === 'broadcast') {
         const payload = await buildSquadhirePayloadForCard(cardId);
-        if (payload) await deliverCardToSquadhire(cardId, payload);
+        if (payload) await deliverCardToSquadhire(cardId, { ...payload, notify_talents:true });
         const { data: recheck } = await supabaseAdmin
           .from('subscription_cards')
           .select('squadhire_synced_at')
@@ -1496,6 +1508,7 @@ router.post('/:id/recall', async (req: Request, res: Response) => {
     if (returnsToDraft) {
       updatePayload = {
         state: 'draft' as const,
+        recalled_at: now,
         published_at: null,
         published_by: null,
         squadhire_synced_at: null,

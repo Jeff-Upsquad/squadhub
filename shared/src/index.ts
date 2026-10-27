@@ -1,3 +1,4 @@
+import type { RequirementReview } from './requirementWorkflow';
 export * from './taskTimerBridge';
 import type { CompanionTaskTimer, CompanionTimerSnapshot, CompanionTimerCommand, CompanionTimerReply } from './taskTimerBridge';
 import { SPECIALIST_ROLES } from './contentRoles';
@@ -5043,7 +5044,7 @@ export interface CardAssigneeUser {
   avatar_url: string | null;
 }
 
-export interface JobCard {
+export interface JobCard extends RequirementReview {
   id: string;
   lead_submission_id: string | null;
   client_id: string | null;
@@ -5460,3 +5461,5 @@ export * from './goals';
 export * from './contentRoles';
 
 export { REMINDER_TYPE_KEY, hasReminderIntent, parseReminderTitle, reminderDescription } from './reminders';
+
+export * from './requirementWorkflow';

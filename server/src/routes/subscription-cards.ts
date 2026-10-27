@@ -1,3 +1,5 @@
+import { canManuallyBroadcast } from '@squadhub/shared';
+import { submitBusinessRequirement } from '../utils/requirementDelivery';
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import { requireAuth } from '../middleware/auth';
@@ -333,7 +335,7 @@ router.post(
       // assign-partner / assign-talent endpoints.
       const matched =
         distribution === 'broadcast'
-          ? await matchPartnersForCard(req.params.id as string)
+          ? await matchPartnersForCard(req.params.id as string, { staged: true })
           : [];
 
       // Freeze plan-side data (hours, deliverables, pricing) onto the card so
@@ -364,21 +366,10 @@ router.post(
         return;
       }
 
-      // Fan out to SquadHire only on broadcast. Soft-published (manual) cards
-      // stay local; SquadHire learns about them lazily when an admin manually
-      // assigns a talent (see assign-talent endpoint). Fire-and-forget — the
-      // admin sees "published" immediately; delivery runs in the background
-      // with inline retries and the sweeper as the safety net.
-      if (distribution === 'broadcast') {
-        buildSquadhirePayloadForCard(updated.id)
-          .then((payload) => {
-            if (payload) {
-              return deliverCardToSquadhire(updated.id, payload);
-            }
-          })
-          .catch((err) => {
-            console.error('[publish] squadhire delivery threw unexpectedly', err);
-          });
+      // Internal cards stage here and use Broadcast to all in the review queue.
+      // Business-origin corrections return to automatic delivery.
+      if (!canManuallyBroadcast(updated)) {
+        await submitBusinessRequirement(updated.id);
       }
 
       res.json({
