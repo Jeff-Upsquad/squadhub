@@ -26,6 +26,7 @@ export function installCompanionTimers(io: Server<any, any>, commandTimeoutMs = 
   const owners = new Map<string, string>();
   const seenSessions = new Map<string, Set<string>>();
   const dropLoggedAt = new Map<string, number>();
+  const ownerCounts = new Map<string, number>();
   const room = (userId: string) => `companion_timers:${userId}`;
   const owner = (userId: string) => {
     const pinned = publishers.get(userId)?.get(owners.get(userId) || '');
@@ -36,6 +37,15 @@ export function installCompanionTimers(io: Server<any, any>, commandTimeoutMs = 
   };
   const publish = (userId: string) => {
     const current = owner(userId);
+    // Log relay-state transitions only: publisher appearing/leaving or its
+    // timer count changing. A steady 10s publish stream must not spam logs.
+    const count = current ? current.timers.length : -1;
+    if (count !== ownerCounts.get(userId)) {
+      ownerCounts.set(userId, count);
+      console.log(`[companion] relay state: user ${userId} → ${current
+        ? `${current.timers.length} timer(s) from socket ${current.socket.id}`
+        : 'no publisher'}`);
+    }
     io.to(room(userId)).emit('companion_timer_state', { available: !!current, timers: current?.timers || [] });
   };
 
@@ -61,7 +71,6 @@ export function installCompanionTimers(io: Server<any, any>, commandTimeoutMs = 
         return;
       }
       if (!publishers.has(userId)) publishers.set(userId, new Map());
-      const hadPublisher = !!owner(userId);
       const prior = owner(userId);
       const seen = seenSessions.get(userId) || new Set<string>();
       const hasNewSession = parsed.data.some(timer => !seen.has(timer.sessionId));
@@ -70,18 +79,11 @@ export function installCompanionTimers(io: Server<any, any>, commandTimeoutMs = 
       while (seen.size > 200) seen.delete(seen.values().next().value!);
       seenSessions.set(userId, seen);
       publishers.get(userId)!.set(socket.id, { socket, timers: parsed.data, at: Date.now() });
-      if (!hadPublisher) {
-        console.log(`[companion] publisher online: user ${userId} socket ${socket.id} (${parsed.data.length} timers)`);
-      }
       publish(userId);
     });
     const unpublish = () => {
-      const hadPublisher = !!owner(userId);
       publishers.get(userId)?.delete(socket.id);
       if (!publishers.get(userId)?.size) { publishers.delete(userId); owners.delete(userId); seenSessions.delete(userId); replies.delete(userId); }
-      if (hadPublisher && !owner(userId)) {
-        console.log(`[companion] publisher offline: user ${userId} (last socket ${socket.id} left)`);
-      }
       publish(userId);
     };
     socket.on('companion_timer_unpublish', unpublish);

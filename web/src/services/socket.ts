@@ -36,6 +36,20 @@ export function connectSocket(): TypedSocket {
     transports: ['polling', 'websocket'],
   }) as TypedSocket;
 
+  // A backgrounded tab can leave socket.io sleeping in its reconnect backoff
+  // indefinitely (e.g. after a server restart) while plain HTTP calls keep
+  // working — the tab looks healthy but carries no live events. Reconnect the
+  // moment the tab becomes visible or the network returns. Same treatment the
+  // desktop companion already applies on notch show/expand.
+  const wake = () => {
+    if (socket && !socket.connected) {
+      socket.disconnect();
+      socket.connect();
+    }
+  };
+  document.addEventListener('visibilitychange', wake);
+  window.addEventListener('online', wake);
+
   socket.on('connect', () => {
     console.log('Socket connected');
     // Socket.IO rooms are server-side connection state and disappear whenever
