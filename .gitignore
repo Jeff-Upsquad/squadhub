@@ -10,9 +10,8 @@ build/
 .next/
 *.tsbuildinfo
 
-# Next.js
-.next/
-.next-ui-preview/
+# Next.js (.next plus every SQUADHUB_NEXT_DIST_DIR variant)
+.next*/
 out/
 
 # Vite
@@ -60,6 +59,9 @@ out/
 
 # Testing
 coverage/
+
+# ZCode local session data
+.zcode/
 
 # Claude
 .claude/scheduled_tasks.lock
