@@ -80,6 +80,29 @@ describe('authenticated companion task timer relay', () => {
     await publish(first, []);
     expect(await publish(peer)).toEqual({ available: true, timers: [] });
   });
+  it('keeps a timer on a list-less task visible instead of dropping the publish', async () => {
+    // The web sends `listId: task.list_id || ''`; one invalid timer used to
+    // invalidate the whole array and unregister the browser as publisher.
+    const owner = await client('alice');
+    await publish(owner);
+    const update = state(owner);
+    owner.emit('companion_timer_publish', [{ ...timer, listId: '' }]);
+    const snapshot = await update;
+    expect(snapshot.available).toBe(true);
+    expect(snapshot.timers).toEqual([{ ...timer, listId: '' }]);
+  });
+  it('still rejects structurally invalid publishes without registering the socket', async () => {
+    const owner = await client('alice');
+    const next = state(owner);
+    owner.emit('companion_timer_watch');
+    expect(await next).toEqual({ available: false, timers: [] });
+    const afterInvalid = state(owner);
+    owner.emit('companion_timer_publish', [{ ...timer, taskId: 'not-a-uuid' }]);
+    // A dropped publish emits nothing; give the server a beat to prove it.
+    const silence = await Promise.race([afterInvalid, new Promise(r => setTimeout(() => r('silence'), 250))]);
+    expect(silence).toBe('silence');
+    expect((await control(owner)).success).toBe(false);
+  });
   it('rejects stale task selections without sending a command', async () => {
     const owner = await client('alice');
     await publish(owner);

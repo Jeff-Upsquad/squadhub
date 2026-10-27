@@ -3,7 +3,11 @@ import { z } from 'zod';
 import type { CompanionTaskTimer, CompanionTimerCommand, CompanionTimerReply } from '@squadhub/shared';
 
 const timersSchema = z.array(z.object({
-  taskId: z.string().uuid(), taskTitle: z.string().max(500), listId: z.string().uuid(),
+  // Tasks can live outside any list; the web sends `task.list_id || ''` then.
+  // Requiring a UUID here silently dropped the whole publish, leaving the
+  // companion stuck on "Connect your task timers" for list-less tasks.
+  taskId: z.string().uuid(), taskTitle: z.string().max(500),
+  listId: z.string().uuid().or(z.literal('')),
   listName: z.string().max(500).optional(), estimateSeconds: z.number().finite().nonnegative().optional(),
   status: z.enum(['running', 'paused']), elapsedSeconds: z.number().finite().nonnegative(),
   sampledAt: z.number().finite().nonnegative(), sessionId: z.string().max(100),
@@ -21,6 +25,7 @@ export function installCompanionTimers(io: Server<any, any>, commandTimeoutMs = 
   const busy = new Set<string>();
   const owners = new Map<string, string>();
   const seenSessions = new Map<string, Set<string>>();
+  const dropLoggedAt = new Map<string, number>();
   const room = (userId: string) => `companion_timers:${userId}`;
   const owner = (userId: string) => {
     const pinned = publishers.get(userId)?.get(owners.get(userId) || '');
@@ -40,7 +45,17 @@ export function installCompanionTimers(io: Server<any, any>, commandTimeoutMs = 
     socket.on('companion_timer_watch', () => { void socket.join(room(userId)); publish(userId); });
     socket.on('companion_timer_publish', (raw: unknown) => {
       const parsed = timersSchema.safeParse(raw);
-      if (!parsed.success) return;
+      if (!parsed.success) {
+        // A dropped publish makes the user's companion claim the browser is
+        // closed. Surface why, rate-limited — publishes retry every 10s.
+        const at = Date.now();
+        if (at - (dropLoggedAt.get(userId) || 0) > 60_000) {
+          dropLoggedAt.set(userId, at);
+          console.warn(`[companion] dropped invalid timer publish from ${userId}:`,
+            parsed.error.issues[0]?.path.join('.') || 'payload', parsed.error.issues[0]?.message);
+        }
+        return;
+      }
       if (!publishers.has(userId)) publishers.set(userId, new Map());
       const prior = owner(userId);
       const seen = seenSessions.get(userId) || new Set<string>();
