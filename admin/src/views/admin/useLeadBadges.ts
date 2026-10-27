@@ -37,18 +37,6 @@ function badge(entries: [count: number, label: string][]): LeadBadge {
 /** Poll often enough that a new form submission shows up without a reload. */
 const LIVE = { staleTime: 30_000, refetchInterval: 60_000 } as const;
 
-/** One of the three inbound-form queues that feed the New Deals tab. */
-function fetchInbound(
-  source: 'shared_form' | 'landing_page_form' | 'internal_brief',
-  cardType: 'subscription' | 'assignment',
-) {
-  return api
-    .get('/admin/subscription-cards', {
-      params: { source, state: 'new,draft', card_type: cardType },
-    })
-    .then((r) => r.data);
-}
-
 /**
  * Subscription-style pipelines (Subscription Cards and Assignments share one
  * module, split by `card_type`).
@@ -73,19 +61,9 @@ function useCardPipelineBadge(productLine: 'subscription' | 'assignment'): LeadB
   // The three inbound-form queues. Keys match AdminRequestsList exactly (which
   // scopes them by card type — unlike the admin module's own tab badge, which
   // counts both product lines together).
-  const { data: sharedRes } = useQuery({
-    queryKey: ['admin-shared-form-submissions', productLine, ''],
-    queryFn: () => fetchInbound('shared_form', productLine),
-    ...LIVE,
-  });
-  const { data: landingRes } = useQuery({
-    queryKey: ['admin-landing-page-submissions', productLine, ''],
-    queryFn: () => fetchInbound('landing_page_form', productLine),
-    ...LIVE,
-  });
-  const { data: briefRes } = useQuery({
-    queryKey: ['admin-internal-brief-submissions', productLine, ''],
-    queryFn: () => fetchInbound('internal_brief', productLine),
+  const { data: draftRes } = useQuery({
+    queryKey:['admin-review-drafts',productLine,'all'],
+    queryFn:()=>api.get('/admin/subscription-cards',{params:{state:'new,draft',card_type:productLine}}).then(r=>r.data),
     ...LIVE,
   });
 
@@ -98,24 +76,6 @@ function useCardPipelineBadge(productLine: 'subscription' | 'assignment'): LeadB
     ...LIVE,
   });
 
-  // upsquad status is external and doesn't track local archival, so a request
-  // can stay 'pending' after its card is archived. AdminRequestsList hides
-  // those rows (they belong in Archive), so this badge must too or it
-  // over-counts. Same key as AdminSubscriptionCards' archived query so the
-  // cache is shared; subscription-only, mirroring the upsquad scope above.
-  const { data: archivedRes } = useQuery({
-    queryKey: ['admin-subscription-cards', productLine, '', '', 'archived', null],
-    queryFn: () =>
-      api
-        .get('/admin/subscription-cards', { params: { archived: 'true', card_type: productLine } })
-        .then((r) => r.data),
-    enabled: productLine === 'subscription',
-    ...LIVE,
-  });
-  const archivedCardIds = new Set(
-    ((archivedRes?.data || []) as { id: string }[]).map((c) => c.id),
-  );
-
   const cards: AdminSubscriptionCard[] = activeRes?.data || [];
   let awaitingBroadcast = 0;
   let awaitingAssign = 0;
@@ -127,22 +87,19 @@ function useCardPipelineBadge(productLine: 'subscription' | 'assignment'): LeadB
 
   // That endpoint returns every status, so narrow it to the two the New deals
   // tab lists. The other three queues fetch only state='new,draft' rows.
-  // Archived-linked requests are dropped — see archivedCardIds above.
+  // Requests already linked to a local card are counted by the card queues.
   const upsquadPending = (reqRes?.data || []).filter(
     (r: { status?: string; card_id?: string | null }) =>
       (r.status === 'pending' || r.status === 'in_review') &&
-      !(r.card_id && archivedCardIds.has(r.card_id)),
+      !r.card_id,
   ).length;
 
   const newDeals =
-    (sharedRes?.data || []).length +
-    (landingRes?.data || []).length +
-    (briefRes?.data || []).length +
+    (draftRes?.data || []).length +
     (productLine === 'subscription' ? upsquadPending : 0);
 
   return badge([
-    [newDeals, 'new'],
-    [awaitingBroadcast, 'to broadcast'],
+    [newDeals + awaitingBroadcast, 'for review'],
     [awaitingAssign, 'to assign'],
   ]);
 }

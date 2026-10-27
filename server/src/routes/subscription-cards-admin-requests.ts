@@ -1,10 +1,13 @@
+import { submitBusinessRequirement } from '../utils/requirementDelivery';
+import { canManuallyBroadcast } from '@squadhub/shared';
+import { publishRequirementCard } from '../utils/publishRequirementCard';
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import { SERVICE_TYPE_TO_SLUG, sanitizeAdditionalRequirements } from '@squadhub/shared';
 import { requireAuth } from '../middleware/auth';
 import { requireMiniAppOrAdmin } from '../middleware/miniApp';
 import { supabaseAdmin } from '../supabase';
-import { fanOutTierCards, hydrateCard, matchPartnersForCard } from '../utils/subscriptionCards';
+import { hydrateCard, matchPartnersForCard } from '../utils/subscriptionCards';
 import {
   buildSquadhirePayloadForCard,
   deliverCardToSquadhire,
@@ -22,9 +25,7 @@ import { generateBriefVoiceUploadUrl } from '../r2';
 import {
   buildCatalogTierPricing,
   coerceProposedPrice,
-  expandBroadcastTiersForPublish,
   resolveScalarClientBudget,
-  tierHasPublishablePrice,
 } from '../utils/subscriptionFormPricing';
 
 const router = Router();
@@ -1059,223 +1060,11 @@ router.post('/subscription-cards/:id/publish', async (req: Request, res: Respons
       return;
     }
 
-    const { data: card } = await supabaseAdmin
-      .from('subscription_cards')
-      .select('*')
-      .eq('id', cardId)
-      .maybeSingle();
-    if (!card) {
-      res.status(404).json({ success: false, error: 'Card not found' });
-      return;
+    const { card: updated, cardIds } = await publishRequirementCard(cardId, req.userId ?? null, parsed.data.distribution, req.userName ?? null);
+    if (updated?.subscription_request_id) {
+      updateSubscriptionRequestStatus(updated.subscription_request_id, 'published').catch(() => {});
     }
-    if (card.state !== 'draft') {
-      res.status(409).json({ success: false, error: 'Only draft cards can be published' });
-      return;
-    }
-
-    // Ensure squadhire_category_ids are synced to the current service_type
-    const currentServiceType = card.service_type as string | null | undefined;
-    const subscriptionSlug = currentServiceType ? SERVICE_TYPE_TO_SLUG[currentServiceType] : null;
-    if (subscriptionSlug) {
-      const { data: subRow } = await supabaseAdmin
-        .from('subscriptions')
-        .select('id')
-        .eq('slug', subscriptionSlug)
-        .maybeSingle();
-      if (subRow?.id) {
-        const { data: profileRows } = await supabaseAdmin
-          .from('subscription_squadhire_profiles')
-          .select('squadhire_category_id')
-          .eq('subscription_id', subRow.id);
-        if (profileRows && profileRows.length > 0) {
-          await supabaseAdmin
-            .from('subscription_cards')
-            .update({ squadhire_category_ids: profileRows.map((r: any) => r.squadhire_category_id) })
-            .eq('id', cardId);
-        }
-      }
-    }
-
-    const publishTargets: string[] = card.publish_targets || ['partner', 'talent'];
-    const distribution = parsed.data.distribution;
-
-    if (publishTargets.length === 0) {
-      res.status(400).json({ success: false, error: 'At least one publish target required' });
-      return;
-    }
-
-    // Both card types expand to all three standard tiers on publish.
-    // Subscription: selected levels keep their set Final price; unselected
-    // levels go out as "request quote" (no fixed price, talent quotes).
-    // Assignment: same — unpriced tiers are "inviting bids" (proposed_price 0).
-    // Expand before fan-out so one card per level reaches talent.
-    const selectedTiers: string[] = Array.isArray(card.target_tiers)
-      ? (card.target_tiers as string[]).filter(Boolean)
-      : [];
-    const rawTierPricing: Record<
-      string,
-      {
-        proposed_price?: number | null;
-        markup?: number | null;
-        subscription_price?: number | null;
-        client_budget?: number | null;
-      }
-    > =
-      card.tier_pricing && typeof card.tier_pricing === 'object'
-        ? (card.tier_pricing as any)
-        : {};
-
-    // Country for catalog seed (card targeting join, else null → India fallback).
-    const { data: countryRows } = await supabaseAdmin
-      .from('subscription_card_target_countries')
-      .select('country_id')
-      .eq('card_id', cardId)
-      .limit(1);
-    const countryId =
-      Array.isArray(countryRows) && countryRows[0]?.country_id
-        ? String(countryRows[0].country_id)
-        : null;
-
-    let targetTiers: string[];
-    let tierPricing: Record<
-      string,
-      {
-        proposed_price?: number | null;
-        markup?: number | null;
-        subscription_price?: number | null;
-        client_budget?: number | null;
-      }
-    >;
-
-    if (card.card_type === 'assignment') {
-      // Assignments broadcast to ALL three standard tiers, just like
-      // subscription cards.  Tiers the client/admin set a budget for keep
-      // their price; tiers without a budget go out as "inviting bids"
-      // (proposed_price 0 = no fixed price, talent is invited to quote).
-      // Agencies is a delivery option alongside talent tiers — also auto-broadcasts as request-quote when not selected.
-      const ALL_TIERS = ['Top Talents', 'Pro', 'Junior', 'Agencies'];
-      const ordered: string[] = [];
-      for (const t of selectedTiers) {
-        if (!ordered.includes(t)) ordered.push(t);
-      }
-      for (const t of ALL_TIERS) {
-        if (!ordered.includes(t)) ordered.push(t);
-      }
-      targetTiers = ordered;
-      tierPricing = {};
-      for (const t of targetTiers) {
-        const existing = rawTierPricing[t];
-        if (existing && (existing.proposed_price ?? 0) > 0) {
-          tierPricing[t] = existing;
-        } else {
-          // Inviting bids — no fixed price.
-          tierPricing[t] = {
-            proposed_price: 0,
-            markup: null,
-            subscription_price: null,
-            ...(existing?.client_budget != null ? { client_budget: existing.client_budget } : {}),
-          };
-        }
-      }
-    } else {
-      const expanded = await expandBroadcastTiersForPublish({
-        serviceType: card.service_type,
-        planName: card.plan_name,
-        countryId,
-        selectedTiers,
-        existingPricing: rawTierPricing,
-      });
-      targetTiers = expanded.targetTiers;
-      tierPricing = expanded.tierPricing;
-      console.info('[publish] expanded broadcast tiers', {
-        cardId,
-        selectedTiers,
-        broadcastTiers: targetTiers,
-      });
-    }
-
-    if (targetTiers.length === 0) {
-      res.status(400).json({
-        success: false,
-        error: 'No levels to broadcast — set a plan and pricing, or pick a level.',
-      });
-      return;
-    }
-
-    for (const tier of targetTiers) {
-      // Request-quote tiers (proposed_price 0, no Final) are publishable
-      // for both subscriptions and assignments — allowInvite true.
-      const allowInvite = true;
-      if (!tierHasPublishablePrice(tierPricing[tier], allowInvite)) {
-        res.status(400).json({
-          success: false,
-          error: `Missing pricing for tier "${tier}"`,
-        });
-        return;
-      }
-    }
-
-    // Persist expanded target_tiers + tier_pricing so fan-out creates one
-    // sibling card per level (selected at set price, others as request quote).
-    {
-      const { error: expandErr } = await supabaseAdmin
-        .from('subscription_cards')
-        .update({
-          target_tiers: targetTiers,
-          tier_pricing: tierPricing,
-        })
-        .eq('id', cardId)
-        .eq('state', 'draft');
-      if (expandErr) {
-        res.status(500).json({ success: false, error: expandErr.message });
-        return;
-      }
-    }
-
-    // Fan out — one published card per broadcast tier.
-    let cardIds: string[];
-    try {
-      cardIds = await fanOutTierCards(cardId, (req as any).userId, distribution);
-    } catch (err: any) {
-      res.status(500).json({ success: false, error: err?.message ?? 'Fan-out failed' });
-      return;
-    }
-
-    // Publish builds the staged recipient list but SENDS NOTHING. The separate
-    // "Broadcast" action releases partners (broadcast_at) and delivers to
-    // SquadHire. Broadcast mode auto-matches every qualifying partner into the
-    // staged list (broadcast_at = NULL, invisible until broadcast); soft-publish
-    // (manual) starts empty and the admin hand-picks recipients.
-    if (publishTargets.includes('partner') && distribution === 'broadcast') {
-      for (const cid of cardIds) {
-        await matchPartnersForCard(cid, { staged: true });
-      }
-    }
-
-    // Notify upsquad once — only the original carries subscription_request_id.
-    if (card.subscription_request_id) {
-      updateSubscriptionRequestStatus(card.subscription_request_id, 'published').catch(() => {});
-    }
-
-    const { data: updated } = await supabaseAdmin
-      .from('subscription_cards')
-      .select('*')
-      .eq('id', cardId)
-      .single();
-
-    await logCardEvent({
-      cardId,
-      eventType: distribution === 'manual' ? 'soft_published' : 'published',
-      actorId: (req as any).userId ?? null,
-      actorType: 'admin',
-      actorLabel: (req as any).userName ?? null,
-      metadata: {
-        distribution,
-        publish_targets: publishTargets,
-        child_card_ids: cardIds.slice(1),
-      },
-    });
-
+    if (updated?.business_submitted_at || !canManuallyBroadcast(updated)) await submitBusinessRequirement(cardId);
     const hydrated = await hydrateCard(updated);
     res.json({
       success: true,
@@ -1284,7 +1073,7 @@ router.post('/subscription-cards/:id/publish', async (req: Request, res: Respons
     });
   } catch (err: any) {
     console.error('Publish request/custom card error:', err);
-    res.status(500).json({ success: false, error: err?.message || 'Internal server error' });
+    res.status(err.status || 500).json({ success: false, error: err?.message || 'Internal server error' });
   }
 });
 
@@ -1303,6 +1092,10 @@ router.post('/subscription-cards/:id/broadcast', async (req: Request, res: Respo
       .maybeSingle();
     if (!card) {
       res.status(404).json({ success: false, error: 'Card not found' });
+      return;
+    }
+    if (!canManuallyBroadcast(card)) {
+      res.status(409).json({ success:false,error:'Business submissions broadcast automatically. Recall the card to make corrections.' });
       return;
     }
     if (card.state !== 'published') {
@@ -1342,7 +1135,7 @@ router.post('/subscription-cards/:id/broadcast', async (req: Request, res: Respo
 
     if (publishTargets.includes('talent')) {
       buildSquadhirePayloadForCard(cardId)
-        .then((payload) => payload && deliverCardToSquadhire(cardId, payload))
+        .then((payload) => payload && deliverCardToSquadhire(cardId, { ...payload, notify_talents:true }))
         .catch((err) =>
           console.error('[broadcast-card] squadhire delivery error', err),
         );

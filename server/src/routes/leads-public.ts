@@ -1,3 +1,4 @@
+import { submitBusinessRequirement } from '../utils/requirementDelivery';
 import { Router, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { SPECIALIST_ROLES, SERVICE_TYPE_TO_SLUG, SLUG_TO_SERVICE_TYPE, isValidStoredPhone, normalizeStoredPhone, sanitizeAdditionalRequirements } from '@squadhub/shared';
@@ -773,12 +774,13 @@ router.post('/landing', ipRateLimit, async (req: Request, res: Response) => {
 
       // Country/region targeting lives in join tables, mirroring from-request.
       if (countryId) {
-        await supabaseAdmin
+        const { error: targetingError } = await supabaseAdmin
           .from('subscription_card_target_countries')
           .insert({ card_id: (card as any).id, country_id: countryId });
+        if (targetingError) throw targetingError;
       }
       if (targetRegions.length > 0) {
-        await supabaseAdmin
+        const { error: targetingError } = await supabaseAdmin
           .from('subscription_card_target_regions')
           .insert(
             targetRegions.map((r) => ({
@@ -787,7 +789,9 @@ router.post('/landing', ipRateLimit, async (req: Request, res: Response) => {
               region: r.region,
             })),
           );
+        if (targetingError) throw targetingError;
       }
+      await submitBusinessRequirement(card.id);
     }
 
     // Don't return card ids from a public endpoint.
@@ -1097,14 +1101,17 @@ router.post('/card-link/:token/submit', ipRateLimit, async (req: Request, res: R
     }
 
     // 2. Replace card target country + regions (mirror the /targets handler).
-    await supabaseAdmin.from('subscription_card_target_countries').delete().eq('card_id', card.id);
-    await supabaseAdmin.from('subscription_card_target_regions').delete().eq('card_id', card.id);
+    const clearedCountries = await supabaseAdmin.from('subscription_card_target_countries').delete().eq('card_id', card.id);
+    if (clearedCountries.error) throw clearedCountries.error;
+    const clearedRegions = await supabaseAdmin.from('subscription_card_target_regions').delete().eq('card_id', card.id);
+    if (clearedRegions.error) throw clearedRegions.error;
     if (countryId) {
-      await supabaseAdmin
+      const { error: countryError } = await supabaseAdmin
         .from('subscription_card_target_countries')
         .insert({ card_id: card.id, country_id: countryId });
+      if (countryError) throw countryError;
       if (body.state_regions.length > 0) {
-        await supabaseAdmin
+        const { error: regionError } = await supabaseAdmin
           .from('subscription_card_target_regions')
           .insert(
             body.state_regions.map((region) => ({
@@ -1113,6 +1120,7 @@ router.post('/card-link/:token/submit', ipRateLimit, async (req: Request, res: R
               region,
             })),
           );
+        if (regionError) throw regionError;
       }
     }
 
@@ -1155,6 +1163,8 @@ router.post('/card-link/:token/submit', ipRateLimit, async (req: Request, res: R
     } catch (linkErr) {
       console.error('Card share submit lead/brand link error (non-fatal):', linkErr);
     }
+
+    await submitBusinessRequirement(card.id);
 
     // 4. Mark the link used (single-use). Idempotent guard on completed_at.
     await supabaseAdmin

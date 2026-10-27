@@ -86,7 +86,7 @@ async function subscriptionAttention(
   let awaitingBroadcast = 0;
   let awaitingAssign = 0;
   for (const card of cards) {
-    const bucket = attentionBucket(card, hydrated.get(card.id)?.needs_broadcast ?? false);
+    const bucket = !card.requirement_reviewed_at && !card.cancelled_at && card.state !== 'closed' && !card.paused_at ? 'to-broadcast' : attentionBucket(card, hydrated.get(card.id)?.needs_broadcast ?? false);
     if (bucket === 'to-broadcast') awaitingBroadcast++;
     else if (bucket === 'to-assign') awaitingAssign++;
   }
@@ -99,8 +99,7 @@ async function subscriptionAttention(
       .is('parent_card_id', null)
       .is('deleted_at', null)
       .is('archived_at', null)
-      .in('state', ['new', 'draft'])
-      .in('source', ['shared_form', 'landing_page_form', 'internal_brief']),
+      .in('state', ['new', 'draft']),
   );
 
   let newDeals = inboundCount || 0;
@@ -121,28 +120,26 @@ async function subscriptionAttention(
       // link is subscription_cards.subscription_request_id, same as the list's
       // own enrichment.
       const requestIds = pending.map((r: any) => r.id).filter(Boolean);
-      const archivedRequestIds = new Set<number>();
+      const linkedRequestIds = new Set<number>();
       if (requestIds.length > 0) {
         const { data: archivedCards } = await supabaseAdmin
           .from('subscription_cards')
           .select('subscription_request_id')
           .in('subscription_request_id', requestIds)
-          .is('deleted_at', null)
-          .not('archived_at', 'is', null);
+          .is('deleted_at', null);
         (archivedCards || []).forEach((c: any) =>
-          archivedRequestIds.add(c.subscription_request_id as number),
+          linkedRequestIds.add(c.subscription_request_id as number),
         );
       }
 
-      newDeals += pending.filter((r: any) => !archivedRequestIds.has(r.id)).length;
+      newDeals += pending.filter((r: any) => !linkedRequestIds.has(r.id)).length;
     } catch (err: any) {
       console.warn('[cardAttention] upsquad queue unavailable:', err?.message);
     }
   }
 
   return badge([
-    [newDeals, 'new'],
-    [awaitingBroadcast, 'to broadcast'],
+    [newDeals + awaitingBroadcast, 'for review'],
     [awaitingAssign, 'to assign'],
   ]);
 }

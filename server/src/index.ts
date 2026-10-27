@@ -1,3 +1,4 @@
+import { startRequirementDeliveryWorker } from './utils/requirementDelivery';
 import { startTaskRemindersCron } from './cron/task-reminders-cron';
 import { startContentBriefCrmCron } from './cron/content-brief-crm-cron';
 import express from 'express';
@@ -390,6 +391,7 @@ server.listen(config.port, () => {
     // Job Cards retry sweeper — queries job_cards ONLY (its own sync
     // columns), so it can never cross-leak with the subscription sweeper.
     startJobSyncSweeper();
+    startRequirementDeliveryWorker();
     startManualAssignmentSweeper();
     startSelectionNotifySweeper();
     startActivationNotifySweeper();

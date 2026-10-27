@@ -18,6 +18,7 @@ export { JOB_CARD_STAGES };
 
 export interface JobStageSource {
   state: string;
+  requirement_reviewed_at?: string | null;
   deleted_at?: string | null;
   archived_at?: string | null;
   cancelled_at?: string | null;
@@ -38,6 +39,8 @@ export function categorizeJobCard(card: JobStageSource): JobCardStage {
   if (card.deleted_at) return 'trash';
   if (card.archived_at) return 'archive';
   if (card.cancelled_at) return 'cancelled';
+
+  if (!card.requirement_reviewed_at && card.state !== 'closed') return 'new';
 
   // A recalled card is off the market — it files under Onboarding (its
   // stored state) until re-published, even when its funnel has progress.

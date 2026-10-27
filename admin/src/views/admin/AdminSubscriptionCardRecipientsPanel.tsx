@@ -1,4 +1,5 @@
 'use client';
+import { canManuallyBroadcast } from '@squadhub/shared';
 
 import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -481,7 +482,7 @@ function CardPanelContent({
   // only the hand-picked queued ones for a Soft-published card.
   const broadcastNow = useMutation({
     mutationFn: () =>
-      api.post(`/admin/subscription-cards/${activeCardId}/broadcast-now`),
+      api.post(`/admin/subscription-cards/${activeCardId}/${activeCard.distribution === 'manual' ? 'broadcast' : 'broadcast-now'}`),
     onSuccess: (res: any) => {
       const d = res?.data ?? {};
       const parts: string[] = [];
@@ -543,15 +544,15 @@ function CardPanelContent({
           <div className="flex flex-wrap items-center gap-2 px-5 py-3">
             <button
               onClick={() => setConfirmAction({ kind: 'broadcastNow' })}
-              disabled={broadcastNow.isPending}
+              disabled={!canManuallyBroadcast(activeCard) || broadcastNow.isPending}
               className="sh-btn-primary sh-btn-primary-sm"
               title={
-                activeCard.distribution === 'manual'
+                !canManuallyBroadcast(activeCard) ? 'Business submissions broadcast automatically.' : activeCard.distribution === 'manual'
                   ? 'Send the card to the talents/partners you hand-picked'
                   : 'Release the matched list — send to all matching partners and talents'
               }
             >
-              {broadcastNow.isPending ? 'Broadcasting…' : 'Broadcast'}
+              {broadcastNow.isPending ? 'Broadcasting…' : 'Broadcast to all'}
             </button>
             <button
               onClick={() => setConfirmAction({ kind: 'recall' })}
@@ -578,7 +579,7 @@ function CardPanelContent({
             {activeCard.distribution === 'manual' && (
               <button
                 onClick={() => setConfirmAction({ kind: 'broadcast' })}
-                disabled={broadcastCard.isPending}
+                disabled={!canManuallyBroadcast(activeCard) || broadcastCard.isPending}
                 className="sh-btn-ghost sh-btn-ghost-sm"
                 title="Override soft-publish: switch to broadcast and auto-match everyone that fits the targeting"
               >
@@ -599,7 +600,7 @@ function CardPanelContent({
                 </button>
                 <button
                   onClick={() => setConfirmAction({ kind: 'rebroadcastAll' })}
-                  disabled={offerPreviousTalent.isPending || rebroadcastAll.isPending}
+                  disabled={!canManuallyBroadcast(activeCard) || offerPreviousTalent.isPending || rebroadcastAll.isPending}
                   className="sh-btn-ghost sh-btn-ghost-sm"
                   title="Invite the full matching pool"
                 >

@@ -1,4 +1,5 @@
 'use client';
+import { canManuallyBroadcast } from '@squadhub/shared';
 
 import { useEffect, useMemo, useState } from 'react';
 import { useQuery, useQueries, useQueryClient, useMutation } from '@tanstack/react-query';
@@ -322,6 +323,17 @@ export default function AdminSubscriptionCardRecipientsView({
   const [activeTab, setActiveTab] = useState<StatusTab>('all');
   const [checkedIds, setCheckedIds] = useState<Set<string>>(new Set());
   const queryClient = useQueryClient();
+  const recallForCorrections = useMutation({
+    mutationFn: () => api.post(`/admin/subscription-cards/${card.id}/recall`),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['admin-subscription-cards'] });
+      void queryClient.invalidateQueries({ queryKey: ['admin-review-drafts'] });
+      showToast('Recalled. Correct the draft and publish it again when ready.', 'success');
+      onBack();
+    },
+    onError: (error: any) => showToast(error?.response?.data?.error || 'Could not recall the card', 'error'),
+  });
+
   const { adminUrl, configured: shConfigured } = useSquadhireConfig();
 
   // Fetch local recipients (partners from SquadHub + talents who responded via callback)
@@ -481,7 +493,7 @@ export default function AdminSubscriptionCardRecipientsView({
   const broadcastAllMutation = useMutation({
     mutationFn: async () => {
       const results = await Promise.allSettled(
-        broadcastableTiers.map((c) => api.post(`/admin/subscription-cards/${c.id}/broadcast-now`)),
+        broadcastableTiers.map((c) => api.post(`/admin/subscription-cards/${c.id}/${c.distribution === 'manual' ? 'broadcast' : 'broadcast-now'}`)),
       );
       return results;
     },
@@ -574,7 +586,7 @@ export default function AdminSubscriptionCardRecipientsView({
 
   const broadcastToTalentsMutation = useMutation({
     mutationFn: () =>
-      api.post(`/admin/subscription-cards/${card.id}/rebroadcast`),
+      api.post(`/admin/subscription-cards/${card.id}/${card.distribution === 'manual' ? 'broadcast' : card.needs_broadcast ? 'broadcast-now' : 'rebroadcast'}`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-card-recipients', card.id] });
       queryClient.invalidateQueries({ queryKey: ['admin-card-squadhire-recipients', card.id] });
@@ -1105,7 +1117,7 @@ export default function AdminSubscriptionCardRecipientsView({
       <div className="flex-1 min-h-0 overflow-y-auto">
         {/* Header */}
         <div className="px-6 pt-6 pb-4 space-y-4">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <button
             onClick={onBack}
             className="sh-btn-ghost sh-btn-ghost-sm"
@@ -1115,7 +1127,7 @@ export default function AdminSubscriptionCardRecipientsView({
             </svg>
             Back to Subscription Cards
           </button>
-          <div className="flex items-center gap-2">
+          <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2">
             {viewMode && onSetViewMode && (
               <CardViewToggle
                 viewMode={viewMode}
@@ -1219,10 +1231,17 @@ export default function AdminSubscriptionCardRecipientsView({
                 onClick={() => {
                   if (window.confirm(hasFormerAssignees ? 'Broadcast to all matching talents?\n\nInvites the full matching pool — not just the previous talent.' : 'Broadcast this card to matching talents?')) broadcastToTalentsMutation.mutate();
                 }}
-                disabled={offerPreviousTalentMutation.isPending || broadcastToTalentsMutation.isPending}
+                disabled={!canManuallyBroadcast(card) || offerPreviousTalentMutation.isPending || broadcastToTalentsMutation.isPending}
                 className={hasFormerAssignees ? 'sh-btn-ghost' : 'sh-btn-primary'}
+                title={!canManuallyBroadcast(card) ? 'Business submissions broadcast automatically.' : 'Broadcast to all matching recipients.'}
               >
-                {broadcastToTalentsMutation.isPending ? 'Broadcasting…' : hasFormerAssignees ? 'Broadcast to all matching' : 'Broadcast to talents'}
+                {broadcastToTalentsMutation.isPending ? 'Broadcasting…' : 'Broadcast to all'}
+              </button>
+            )}
+            {bucket === 'active' && (
+              <button type="button" className="sh-btn-warning" disabled={recallForCorrections.isPending}
+                onClick={() => { if (window.confirm('Recall this requirement for corrections? It will be taken off the market and return to an editable draft.')) recallForCorrections.mutate(); }}>
+                {recallForCorrections.isPending ? 'Recalling…' : 'Recall for corrections'}
               </button>
             )}
             {/* Sales outcome: file this card under Deal Lost instead of
@@ -1430,11 +1449,11 @@ export default function AdminSubscriptionCardRecipientsView({
                 <button
                   type="button"
                   onClick={() => broadcastAllMutation.mutate()}
-                  disabled={broadcastableTiers.length === 0 || broadcastAllMutation.isPending}
+                  disabled={!canManuallyBroadcast(card) || broadcastableTiers.length === 0 || broadcastAllMutation.isPending}
                   className="sh-btn-primary sh-btn-primary-sm"
-                  title="Broadcast every tier whose recipients haven't been sent yet"
+                  title={!canManuallyBroadcast(card) ? 'Business submissions broadcast automatically.' : 'Broadcast every tier whose recipients have not been sent yet'}
                 >
-                  {broadcastAllMutation.isPending ? 'Broadcasting…' : 'Broadcast all tiers'}
+                  {broadcastAllMutation.isPending ? 'Broadcasting…' : 'Broadcast to all'}
                 </button>
               </div>
             )}

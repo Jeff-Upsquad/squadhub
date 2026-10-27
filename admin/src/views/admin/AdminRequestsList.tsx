@@ -56,11 +56,13 @@ const REQUEST_LIST_KEYS = [
 export default function AdminRequestsList({
   cardType = 'subscription',
   scope = null,
+  legacyOnly = false,
 }: {
-  // Product line this New Deals queue is scoped to. The Assignments module
+  // Product line this New for Review queue is scoped to. The Assignments module
   // passes 'assignment' so only assignment briefs show; the legacy upsquad
   // subscription-request source is subscription-only and hidden for assignments.
   cardType?: 'subscription' | 'assignment';
+  legacyOnly?: boolean;
   // Narrow the queue to one customer (Squad CRM's Requirement Cards panel, the
   // Hub's Contact detail panel). null = the org-wide queue.
   scope?: CardScope | null;
@@ -93,7 +95,7 @@ export default function AdminRequestsList({
     : (res?.data || []).map((r: any) => ({ ...r, source: 'request' as const }));
 
   // Form submissions (Shared Form via /connect, plus Landing Page entries
-  // from the marketing site) live in subscription_cards. New Deals only shows
+  // from the marketing site) live in subscription_cards. New for Review only shows
   // the live inbound queue, so we fetch just the 'new'/'draft' cards; once a
   // card is published it moves to the Published/Broadcaster tabs, and once it's
   // closed it moves to Archive.
@@ -157,7 +159,7 @@ export default function AdminRequestsList({
       return api.get('/admin/subscription-cards', { params }).then((r) => r.data);
     },
   });
-  // Internal client briefs (Workflow 1) also land in the New Deals queue.
+  // Internal client briefs (Workflow 1) also land in the New for Review queue.
   const { data: briefRes, isLoading: briefLoading } = useQuery({
     queryKey: ['admin-internal-brief-submissions', cardType, search, scopeKey],
     queryFn: () => {
@@ -180,9 +182,7 @@ export default function AdminRequestsList({
 
   const allRequests: SubscriptionRequest[] = [
     ...upsquadRequests,
-    ...sharedFormRequests,
-    ...landingPageRequests,
-    ...internalBriefRequests,
+    ...(legacyOnly ? [] : [...sharedFormRequests, ...landingPageRequests, ...internalBriefRequests]),
   ];
 
   // Archived cards stay in the Archive tab — hide their originating
@@ -213,7 +213,7 @@ export default function AdminRequestsList({
     [allRequests, archivedCardIds],
   );
 
-  // New deals only surfaces the live inbound queue — freshly-submitted briefs
+  // New for Review only surfaces the live inbound queue — freshly-submitted briefs
   // and admin-saved drafts (both status 'pending'), plus any upsquad requests
   // still pending review. Published cards live in the Published/Broadcaster
   // tabs and closed/declined ones in Archive.

@@ -38,6 +38,7 @@ const SWEEPER_BATCH_SIZE = 20;
 const JOBS_UPSTREAM_BASE_PATH = '/api/webhooks/squadhub/jobs';
 
 export interface SquadhireJobCardPayload {
+  notify_talents?: boolean;
   external_id: string;
   content: Record<string, unknown>;
   match_rules: Record<string, unknown>;
@@ -324,6 +325,7 @@ export async function buildSquadhireJobPayload(
     published_at: publishedAt,
     ...(card.expires_at ? { expires_at: new Date(card.expires_at as string).toISOString() } : {}),
     status,
+    notify_talents: card.state === 'published',
     distribution: card.distribution === 'manual' ? 'manual' : 'broadcast',
     is_secondary: false,
     group_id: null,

@@ -13,6 +13,8 @@ import OnboardingPanel from './onboarding/OnboardingPanel';
 import JobCandidatesView from './candidates/JobCandidatesView';
 import JobCardQnA from './qa/JobCardQnA';
 import CloseJobCardDialog from './dialogs/CloseJobCardDialog';
+import RequirementReviewBar from '../RequirementReviewBar';
+import { canManuallyBroadcast } from '@squadhub/shared';
 import CardAssigneePicker from '../CardAssigneePicker';
 
 // Job Cards — the hiring pipeline, sibling of Subscription Cards. Stored card
@@ -32,6 +34,8 @@ export function categorizeJobCard(card: AdminJobCard): JobCardStage {
   if (card.deleted_at) return 'trash';
   if (card.archived_at) return 'archive';
   if (card.cancelled_at) return 'cancelled';
+
+  if (!card.requirement_reviewed_at && card.state !== 'closed') return 'new';
 
   // Off the market: recalled cards file under Onboarding until re-published
   // (publish clears recalled_at). Mirrors server utils/jobStage.ts.
@@ -57,7 +61,7 @@ export function categorizeJobCard(card: AdminJobCard): JobCardStage {
 type Tab = Exclude<JobCardStage, 'trash'>;
 
 const TABS: { key: Tab; label: string }[] = [
-  { key: 'new', label: 'New Deals' },
+  { key: 'new', label: 'New for Review' },
   { key: 'onboarding', label: 'Onboarding' },
   { key: 'broadcasted', label: 'Broadcasted' },
   { key: 'screening', label: 'Applicant Screening' },
@@ -71,7 +75,7 @@ const TABS: { key: Tab; label: string }[] = [
 ];
 
 const HEADER_META: Record<Tab, { title: string; subtitle: string }> = {
-  new: { title: 'New Deals', subtitle: 'Incoming hiring briefs. Start onboarding to build the business, brand and job profiles.' },
+  new: { title: 'New for Review', subtitle: 'Review incoming and automatically broadcast hiring requirements. Recall a live card to make corrections.' },
   onboarding: { title: 'Onboarding', subtitle: 'Profiles being built. Attach a job profile and publish to broadcast the card to SquadHire talents.' },
   broadcasted: { title: 'Broadcasted', subtitle: 'Live on SquadHire — matched talents are applying. Click Start Screening when applications are in.' },
   screening: { title: 'Applicant Screening', subtitle: 'Screening started — review applicants and shortlist the promising ones.' },
@@ -85,7 +89,7 @@ const HEADER_META: Record<Tab, { title: string; subtitle: string }> = {
 };
 
 const STAGE_PILL: Record<JobCardStage, { bg: string; color: string; label: string }> = {
-  new: { bg: '#EEF2F6', color: '#475569', label: 'New Deal' },
+  new: { bg: '#EEF2F6', color: '#475569', label: 'New for Review' },
   onboarding: { bg: '#FEF3C7', color: '#92400E', label: 'Onboarding' },
   broadcasted: { bg: '#DCFCE7', color: '#15803D', label: 'Broadcasted' },
   screening: { bg: '#E0F2FE', color: '#075985', label: 'Screening' },
@@ -567,11 +571,12 @@ function JobCardDetailView({
   };
 
   const lifecycle = useMutation({
-    mutationFn: ({ action }: { action: 'publish' | 'recall' | 'pause' | 'resume' | 'cancel' | 'archive' | 'unarchive' | 'duplicate' }) =>
-      api.post(`/admin/job-cards/${cardId}/${action}`, {}),
+    mutationFn: ({ action }: { action: 'publish' | 'broadcast-all' | 'recall' | 'pause' | 'resume' | 'cancel' | 'archive' | 'unarchive' | 'duplicate' }) =>
+      api.post(action === 'broadcast-all' ? `/admin/cards/job/${cardId}/broadcast-all` : `/admin/job-cards/${cardId}/${action}`, {}),
     onSuccess: (res, vars) => {
       invalidate();
       const messages: Record<string, string> = {
+        'broadcast-all': 'Requirement broadcast to matching candidates.',
         publish: 'Card published — delivering to SquadHire in the background.',
         recall: 'Card recalled to Onboarding — edit and re-publish when ready.',
         pause: 'Card paused — hidden from talents until you resume.',
@@ -672,6 +677,7 @@ function JobCardDetailView({
             </p>
           </div>
 
+          <RequirementReviewBar kind="job" cards={[card]} />
           {/* Lifecycle actions per state */}
           <div className="flex flex-wrap items-center gap-1.5">
             {isDraft && (
@@ -682,18 +688,23 @@ function JobCardDetailView({
                 {card.state === 'onboarding' && card.job_profile_id && (
                   <button
                     type="button"
-                    disabled={busy}
+                    disabled={busy || (!canManuallyBroadcast(card) && !card.recalled_at)}
                     onClick={() => {
                       if (window.confirm('Publish this card?\n\nIt delivers to SquadHire and matched talents are notified.')) {
-                        lifecycle.mutate({ action: 'publish' });
+                        lifecycle.mutate({ action: canManuallyBroadcast(card) ? 'broadcast-all' : 'publish' });
                       }
                     }}
                     className="rounded-md bg-green-700 px-3 py-1.5 text-xs font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
                   >
-                    Publish
+                    {canManuallyBroadcast(card) ? 'Broadcast to all' : 'Publish corrections'}
                   </button>
                 )}
               </>
+            )}
+            {isPublished && !card.paused_at && (
+              <button type="button" disabled={busy || !canManuallyBroadcast(card)} className={actionBtn}
+                title={!canManuallyBroadcast(card) ? 'Business submissions broadcast automatically.' : 'Share this requirement with all matching candidates.'}
+                onClick={() => lifecycle.mutate({ action: 'broadcast-all' })}>Broadcast to all</button>
             )}
             {isPublished && !card.paused_at && (
               <button type="button" disabled={busy} onClick={() => lifecycle.mutate({ action: 'pause' })} className={actionBtn} title="Hide the card from talents until you resume">
