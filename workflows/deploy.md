@@ -1,5 +1,7 @@
 # SquadHub Deployment
 
+> **Database target:** Read [supabase-production.md](supabase-production.md) before migrations. Current production: `hvcpoxgkdybyscaebtik`. Run `python3 tools/supabase-production.py status`; deploy does not apply SQL.
+
 ## Overview
 Deploy SquadHub to the Hostinger VPS running Docker Compose. The stack is: Caddy (reverse proxy) + Server (Express) + Web (Next.js) + Admin (Next.js).
 
