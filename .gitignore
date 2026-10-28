@@ -76,3 +76,8 @@ supabase/.temp/
 
 # Build Agent executor-local settings (contains the agent API token)
 tools/agent/runtime.json
+
+# Private production connection and generated Supabase CLI cache
+/supabase/.env
+/supabase/.ca.crt
+/supabase/.temp/

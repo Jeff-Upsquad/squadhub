@@ -1,5 +1,7 @@
 # CMPD — Commit, Merge, Push, Deploy
 
+> **Database target:** Read [supabase-production.md](supabase-production.md) before migrations. Current production: `hvcpoxgkdybyscaebtik`. Run `python3 tools/supabase-production.py status`; deploy does not apply SQL.
+
 ## Objective
 
 Run the complete source-code pipeline: branch, commit, open a PR, merge, then `PD`. CMPD gets code onto `origin/main` via a PR and deploys when relevant. Direct pushes to `main` are not allowed in this pipeline — `main` only moves through a PR merge.

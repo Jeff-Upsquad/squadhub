@@ -1,5 +1,7 @@
 # PD — Sync, Deploy
 
+> **Database target:** Read [supabase-production.md](supabase-production.md) before migrations. Current production: `hvcpoxgkdybyscaebtik`. Run `python3 tools/supabase-production.py status`; deploy does not apply SQL.
+
 ## Objective
 
 Sync an already merged `main` and deploy to production only when the merged change touched deployable code. PD never publishes a desktop app release. Code reaches `origin/main` exclusively through merged PRs; PD does not push feature work.
@@ -37,7 +39,7 @@ Sync an already merged `main` and deploy to production only when the merged chan
 4. Verify local `main` matches `origin/main`. There is normally nothing to push — code reaches `origin/main` through the merged PR, not through PD.
 
 5. If there are new DB migrations in `supabase/migrations/`, apply them **before** deploying. Two ways (same durable procedure as [deploy.md](deploy.md)):
-   - **Supabase CLI** (machine is logged in): stage the migration as a timestamped file (`YYYYMMDDHHMMSS_name.sql`) in `supabase/migrations/`, then `supabase db push --dry-run` → confirm it lists ONLY your file → `supabase db push`. Gotcha: prod history uses timestamped versions while most repo files use the `NNN_` convention, so a plain push fails or replays old files. If the dry-run lists more than your file, stash the `NNN_` files, add empty placeholder files named after each remote version (`supabase migration list` → JSON), re-dry-run until exactly yours remains, push, then restore everything.
+   - **Supabase CLI:** use the explicit connection and history checks in [supabase-production.md](supabase-production.md). Dry-run must contain only the intended changes; reconcile legacy/shared history without bulk replay or fabricated placeholders.
    - **SQL Editor paste** (dashboard) — fallback when the CLI isn't available.
 
    Then, if the recorded paths include deployable code **or** `supabase/migrations/`, run the deploy:

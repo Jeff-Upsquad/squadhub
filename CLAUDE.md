@@ -1,5 +1,15 @@
 # Agent Instructions
 
+## Supabase production (updated 28 October 2026)
+
+Current project: **`hvcpoxgkdybyscaebtik`**, shared by SquadHub / Squad CRM. Read
+[workflows/supabase-production.md](workflows/supabase-production.md) before
+migrations, database commands or CMPD/PD. Use
+`python3 tools/supabase-production.py status` to verify the destination.
+The old project `kfxdbhwxzvptzzcuzlal` is retired. Local CLI login/cache must not override
+the checked-in `supabase/production-target.json`. New worktrees use the helper's
+primary-checkout credential fallback. Deploy scripts do not apply migrations.
+
 You're working inside the **WAT framework** (Workflows, Agents, Tools). This architecture separates concerns so that probabilistic AI handles reasoning while deterministic code handles execution. That separation is what makes this system reliable.
 
 ## The WAT Architecture
