@@ -215,19 +215,44 @@ class Backup:
             table['digest'] = xml.findtext('.//digest') or None
         return tables
 
-    def bundle(self, folder):
+    def _capture_database(self, folder, compact):
         env = folder / 'client.env'
         with self.snapshot(env) as (snap, query):
             info = json.loads(query("SELECT json_build_object('server_version',current_setting('server_version'),'database_bytes',pg_database_size(current_database()),'vault_secrets',(SELECT count(*) FROM vault.secrets),'roles',(SELECT json_agg(json_build_object('name',rolname,'bypass_rls',rolbypassrls)) FROM pg_roles WHERE rolname NOT LIKE 'pg_%'))"))
             if info['vault_secrets']:
                 raise RuntimeError('Vault secrets found: encryption-root-key recovery must be configured first')
             info['tables'] = self.inventory(query)
-            atomic_json(folder / 'inventory.json', info)
             log('dumping', tables=len(info['tables']))
-            self.run(self.docker_client(env, 'pg_dump', '--format=custom', '--compress=6', '--snapshot', snap,
-                                       '--file', '/backup/database.dump', mounts=[(folder, '/backup')]))
-        # Measure the uncompressed logical data stream, not compressed file size:
-        # compression on this VPS does not reduce Supabase -> VPS traffic.
+            if compact:
+                from compact_transport import compact_dump
+                info['transport'] = {'mode': 'compact', **compact_dump(self, folder, env, snap, query, info)}
+            else:
+                self.run(self.docker_client(env, 'pg_dump', '--format=custom', '--compress=6', '--snapshot', snap,
+                                           '--file', '/backup/database.dump', mounts=[(folder, '/backup')]))
+                info['transport'] = {'mode': 'native'}
+            atomic_json(folder / 'inventory.json', info)
+        return info
+
+    def capture_database(self, folder):
+        transport = self.c.get('BACKUP_TRANSPORT', 'native')
+        if transport not in ('native', 'compact'):
+            raise ValueError('Unknown backup transport')
+        try:
+            return self._capture_database(folder, transport == 'compact')
+        except Exception:
+            if transport != 'compact':
+                raise
+            # A SQL/connection failure may have aborted the source transaction.
+            # Start a fresh snapshot and inventory; never combine two snapshots.
+            log('compact_transport_fallback', destination='native_full_dump')
+            return self._capture_database(folder, False)
+
+    def bundle(self, folder):
+        env = folder / 'client.env'
+        info = self.capture_database(folder)
+
+        # Keep the full logical size comparable across transports. Compact mode
+        # separately records compressed COPY bytes; metadata/overhead is extra.
         cmd = self.docker_client(env, 'pg_restore', '--data-only', '--file=-', '/backup/database.dump', mounts=[(folder, '/backup')])
         with (self.root / 'measure-private-error.log').open('w') as errors:
             proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=errors)
@@ -363,7 +388,7 @@ class Backup:
                 raise RuntimeError('Offsite decryption mismatch')
             manifest = {'run_id': run_id, 'created_at': stamp.isoformat(), 'object_key': object_key,
                         'sha256': checksum, 'encrypted_bytes': encrypted.stat().st_size,
-                        'logical_data_bytes': logical_bytes, 'verified': True}
+                        'logical_data_bytes': logical_bytes, 'transport': info['transport'], 'verified': True}
             s3.put_object(Bucket=bucket, Key=self.prefix + run_id + '/manifest.json',
                           Body=json.dumps(manifest).encode(), ContentType='application/json')
             atomic_json(self.root / (run_id + '.verified.json'), manifest)
