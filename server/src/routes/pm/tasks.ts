@@ -713,22 +713,7 @@ router.get('/tasks/my', async (req: Request, res: Response) => {
     const tz = (req.query.tz as string) || 'Asia/Kolkata';
     const includeDone = req.query.include_done === 'true';
 
-    let query = supabaseAdmin
-      .from('tasks')
-      .select('*')
-      .contains('assignee_ids', [req.userId!])
-      // Hide routine templates — their spawned copies carry the real work.
-      .is('recurrence', null);
-
-    if (!includeDone) {
-      query = query.not('status', 'in', '(done,closed,cancelled,Done,Closed,Cancelled)');
-    }
-
-    const { data, error } = await query.order('due_date', { ascending: true, nullsFirst: false });
-    if (error) {
-      res.status(500).json({ success: false, error: error.message });
-      return;
-    }
+    const data = await getHomeTaskCandidates(req.userId!, 'assigned', { includeDone });
 
     const withAssignees = await hydrateAssignees(data || []);
     const withLists = await hydrateLists(withAssignees);
@@ -899,10 +884,7 @@ router.get('/tasks/my', async (req: Request, res: Response) => {
       if (missingWorked.length > 0) {
         // The user has time entries on these, so they had access — no created_by
         // gate here (unlike the focus bucket). Still hide done/closed unless asked.
-        const { data: extraRows } = await supabaseAdmin
-          .from('tasks')
-          .select('*')
-          .in('id', missingWorked);
+        const extraRows = await getHomeTaskCandidates(req.userId!, 'worked', { includeDone, taskIds: missingWorked });
         let preFiltered = (extraRows ?? []);
         if (!includeDone) {
           preFiltered = preFiltered.filter((t: any) => {
