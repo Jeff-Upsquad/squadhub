@@ -2,20 +2,17 @@
 // Goals — outcomes tracked through existing workspace tasks
 // ============================================================
 
+import type { Project } from './index';
+
 /** Stored statuses. `achieved` is derived: every included task is complete. */
 export type GoalStoredStatus = 'planned' | 'in_progress' | 'on_hold';
 export type GoalStatus = GoalStoredStatus | 'achieved';
 export type GoalPriority = 'emergency' | 'top' | 'urgent' | 'high' | 'normal' | 'low' | 'none';
 export type GoalEndpoint = 'start' | 'end';
 
-export interface GoalProject {
-  id: string;
-  workspace_id: string;
-  name: string;
-  color: string;
-  created_by: string;
-  created_at: string;
-}
+/** Goals share the PM project entity (`projects` table) — the goals-only
+ * goal_projects rows were migrated into it with ids preserved. */
+export type GoalProject = Project;
 
 export interface GoalDependency {
   id: string;

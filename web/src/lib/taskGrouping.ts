@@ -7,7 +7,7 @@ import { getTaskStatusCategory, getTaskStatusDef, TASK_BUCKETS, TASK_PLANS, task
 // keep a task in its pre-fade bucket while the slide-out animation plays.
 export const EMPTY_FADING_MAP: ReadonlyMap<string, string> = new Map();
 
-export type GroupBy = 'none' | 'status' | 'work_date' | 'due_date' | 'priority' | 'task_type' | 'space' | 'folder' | 'list' | 'label' | 'bucket' | 'plan' | 'stage' | 'assignee';
+export type GroupBy = 'none' | 'status' | 'work_date' | 'due_date' | 'priority' | 'task_type' | 'space' | 'folder' | 'list' | 'label' | 'bucket' | 'plan' | 'stage' | 'assignee' | 'project';
 
 export const GROUP_BY_OPTIONS: { value: GroupBy; label: string }[] = [
   { value: 'none', label: 'None' },
@@ -16,6 +16,7 @@ export const GROUP_BY_OPTIONS: { value: GroupBy; label: string }[] = [
   { value: 'priority', label: 'Priority' },
   { value: 'status', label: 'Status' },
   { value: 'task_type', label: 'Task type' },
+  { value: 'project', label: 'Project' },
   { value: 'space', label: 'Space' },
   { value: 'folder', label: 'Folder' },
   { value: 'list', label: 'List' },
@@ -29,6 +30,7 @@ export const LIST_GROUP_BY_OPTIONS: { value: GroupBy; label: string }[] = [
   { value: 'due_date', label: 'Due date' },
   { value: 'priority', label: 'Priority' },
   { value: 'task_type', label: 'Task type' },
+  { value: 'project', label: 'Project' },
   { value: 'space', label: 'Space' },
   { value: 'folder', label: 'Folder' },
   { value: 'list', label: 'List' },
@@ -554,6 +556,8 @@ export function groupTasks(
       );
     case 'list':
       return groupByNamedRef(tasks, (t) => t.list ?? null, 'No list');
+    case 'project':
+      return groupByNamedRef(tasks, (t) => t.project ?? null, 'No project');
     case 'label':
       return groupByLabel(tasks);
     case 'bucket':

@@ -77,6 +77,7 @@ vi.mock('../supabase', () => ({
 }));
 
 import router from '../routes/pm/goals';
+import projectsRouter from '../routes/pm/projects';
 
 const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const W = id(1), ME = id(2), OTHER = id(3), SPACE = id(4), FOLDER = id(5), LIST = id(6), P = id(7), G = id(8);
@@ -103,6 +104,7 @@ beforeAll(async () => {
   const app = express();
   app.use(express.json());
   app.use(router);
+  app.use('/projects', projectsRouter);
   app.get('/unrelated-pm-route', (_req, res) => res.json({ success: true }));
   await new Promise<void>((resolve) => { server = app.listen(0, '127.0.0.1', () => resolve()); });
   base = `http://127.0.0.1:${(server.address() as any).port}`;
@@ -133,7 +135,7 @@ beforeEach(() => {
     task_list_links: [],
     resource_memberships: [],
     space_statuses: [{ id: id(50), space_id: SPACE, name: 'Delivered', category: 'closed' }],
-    goal_projects: [{ id: P, workspace_id: W, name: 'Launch', color: '#7c5cff', created_by: ME, created_at: '2026-10-01T00:00:00Z' }],
+    projects: [{ id: P, workspace_id: W, name: 'Launch', color: '#7c5cff', description: '', status: 'active', created_by: ME, created_at: '2026-10-01T00:00:00Z', updated_at: '2026-10-01T00:00:00Z', deleted_at: null }],
     goals: [{
       id: G, workspace_id: W, project_id: P, name: 'Ship the launch', description: '', status: 'in_progress', priority: 'high',
       assignee_ids: [], labels: [], work_start_date: null, work_end_date: null, start_date: null, due_date: null,
@@ -230,7 +232,7 @@ describe('creating and editing', () => {
   it('only lets owners and admins delete projects and goals', async () => {
     store.tables.goals[0].assignee_ids = [OTHER];
     expect((await call(`/goals/${G}`, 'DELETE', undefined, OTHER)).status).toBe(403);
-    expect((await call(`/goal-projects/${P}`, 'DELETE', undefined, OTHER)).status).toBe(403);
+    expect((await call(`/projects/${P}`, 'DELETE', undefined, OTHER)).status).toBe(403);
     expect((await call(`/goals/${G}`, 'DELETE', undefined, ADMIN)).status).toBe(200);
   });
 });

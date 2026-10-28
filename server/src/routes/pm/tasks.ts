@@ -333,15 +333,16 @@ export async function hydrateSubtasks<T extends { id: string }>(
   return tasks.map(t => ({ ...t, subtasks: byParent.get(t.id) || [] }));
 }
 
-// Attach `list: { id, name }`, `folder: { id, name }`, and `space: { id, name }`
-// to each task so the frontend can show the task's parent list/folder/space
-// without a second round-trip.
+// Attach `list: { id, name }`, `folder: { id, name }`, `space: { id, name }`,
+// and `project: { id, name }` to each task so the frontend can show the task's
+// parent list/folder/space and project without a second round-trip.
 type GroupContainer = { type: 'list' | 'folder' | 'space'; id: string; name: string } | null;
 
 // For each given list id, resolve its full list/folder/space chain plus the
-// nearest ancestor with Group Tasks ON (innermost-first: list → folder → space).
-// Shared by hydrateLists (a task's primary list) and hydrateMultiHomeGroups
-// (a task's secondary "ALSO IN" lists).
+// nearest ancestor with Group Tasks ON (innermost-first: list → folder → space)
+// and the nearest container assigned to a project. Shared by hydrateLists (a
+// task's primary list) and hydrateMultiHomeGroups (a task's secondary "ALSO IN"
+// lists).
 async function resolveListContainers(
   listIds: string[],
 ): Promise<Map<string, {
@@ -349,34 +350,53 @@ async function resolveListContainers(
   folder: { id: string; name: string } | null;
   space: { id: string; name: string } | null;
   group_container: GroupContainer;
+  project: { id: string; name: string } | null;
 }>> {
   const out = new Map<string, {
     list: { id: string; name: string };
     folder: { id: string; name: string } | null;
     space: { id: string; name: string } | null;
     group_container: GroupContainer;
+    project: { id: string; name: string } | null;
   }>();
   if (listIds.length === 0) return out;
   const { data: lists } = await supabaseAdmin
     .from('lists')
-    .select('id, name, space_id, folder_id, group_tasks')
+    .select('id, name, space_id, folder_id, group_tasks, project_id')
     .in('id', listIds);
   const spaceIds = Array.from(new Set((lists || []).map((l: any) => l.space_id).filter(Boolean)));
   const folderIds = Array.from(new Set((lists || []).map((l: any) => l.folder_id).filter(Boolean)));
   const [{ data: spaces }, { data: folders }] = await Promise.all([
     spaceIds.length
-      ? supabaseAdmin.from('spaces').select('id, name, group_tasks').in('id', spaceIds)
+      ? supabaseAdmin.from('spaces').select('id, name, group_tasks, project_id').in('id', spaceIds)
       : Promise.resolve({ data: [] as any[] }),
     folderIds.length
-      ? supabaseAdmin.from('folders').select('id, name, group_tasks').in('id', folderIds)
+      ? supabaseAdmin.from('folders').select('id, name, group_tasks, project_id').in('id', folderIds)
       : Promise.resolve({ data: [] as any[] }),
   ]);
-  const spaceById = new Map<string, { id: string; name: string; group_tasks?: boolean }>(
+  const spaceById = new Map<string, { id: string; name: string; group_tasks?: boolean; project_id?: string | null }>(
     (spaces || []).map((s: any) => [s.id, s]),
   );
-  const folderById = new Map<string, { id: string; name: string; group_tasks?: boolean }>(
+  const folderById = new Map<string, { id: string; name: string; group_tasks?: boolean; project_id?: string | null }>(
     (folders || []).map((f: any) => [f.id, f]),
   );
+  // Nearest-wins: a list's own project, else its folder's, else the space's.
+  const projectOf = (l: any, f: { project_id?: string | null } | null | undefined, s: { project_id?: string | null } | null | undefined) =>
+    l.project_id || f?.project_id || s?.project_id || null;
+  const projectIds = new Set<string>();
+  for (const l of lists || []) {
+    const pid = projectOf(l, l.folder_id ? folderById.get(l.folder_id) : null, l.space_id ? spaceById.get(l.space_id) : null);
+    if (pid) projectIds.add(pid);
+  }
+  const projectById = new Map<string, { id: string; name: string }>();
+  if (projectIds.size) {
+    const { data: projectRows } = await supabaseAdmin
+      .from('projects')
+      .select('id, name')
+      .in('id', [...projectIds])
+      .is('deleted_at', null);
+    for (const p of (projectRows || []) as any[]) projectById.set(p.id, p);
+  }
   for (const l of lists || []) {
     const s = l.space_id ? spaceById.get(l.space_id) : null;
     const f = l.folder_id ? folderById.get(l.folder_id) : null;
@@ -387,11 +407,14 @@ async function resolveListContainers(
         : s?.group_tasks
           ? { type: 'space', id: s.id, name: s.name }
           : null;
+    const pid = projectOf(l, f, s);
+    const project = pid ? projectById.get(pid) : null;
     out.set(l.id, {
       list: { id: l.id, name: l.name },
       folder: f ? { id: f.id, name: f.name } : null,
       space: s ? { id: s.id, name: s.name } : null,
       group_container,
+      project: project ? { id: project.id, name: project.name } : null,
     });
   }
   return out;
@@ -404,10 +427,11 @@ export async function hydrateLists<T extends { list_id: string }>(
   folder: { id: string; name: string } | null;
   space: { id: string; name: string } | null;
   group_container: GroupContainer;
+  project: { id: string; name: string } | null;
 })[]> {
   const listIds = Array.from(new Set(tasks.map(t => t.list_id).filter(Boolean)));
   if (listIds.length === 0) {
-    return tasks.map(t => ({ ...t, list: null, folder: null, space: null, group_container: null }));
+    return tasks.map(t => ({ ...t, list: null, folder: null, space: null, group_container: null, project: null }));
   }
   const byList = await resolveListContainers(listIds);
   return tasks.map(t => {
@@ -420,6 +444,7 @@ export async function hydrateLists<T extends { list_id: string }>(
       folder: c?.folder ?? null,
       space: c?.space ?? null,
       group_container: c?.group_container ?? null,
+      project: c?.project ?? null,
     };
   });
 }

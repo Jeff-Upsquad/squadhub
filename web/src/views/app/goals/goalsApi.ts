@@ -162,7 +162,8 @@ export function useGoalActions() {
 
   return {
     async createProject(name: string, color: string): Promise<GoalProject> {
-      const project: GoalProject = (await api.post('/pm/goal-projects', { workspace_id: workspaceId, name, color })).data.data;
+      const project: GoalProject = (await api.post('/pm/projects', { workspace_id: workspaceId, name, color })).data.data;
+      void qc.invalidateQueries({ queryKey: ['projects', workspaceId] });
       qc.setQueryData<GoalsData>(key, (d) => ({ ...(d || EMPTY), projects: [...(d || EMPTY).projects, project] }));
       return project;
     },
@@ -170,15 +171,15 @@ export function useGoalActions() {
     updateProject(id: string, patch: Partial<Pick<GoalProject, 'name' | 'color'>>) {
       return optimistic(
         (d) => ({ ...d, projects: d.projects.map((p) => (p.id === id ? { ...p, ...patch } : p)) }),
-        () => api.patch(`/pm/goal-projects/${id}`, patch),
-      );
+        () => api.patch(`/pm/projects/${id}`, patch),
+      ).finally(() => void qc.invalidateQueries({ queryKey: ['projects', workspaceId] }));
     },
 
     deleteProject(id: string) {
       return optimistic(
         (d) => ({ projects: d.projects.filter((p) => p.id !== id), goals: d.goals.filter((g) => g.project_id !== id) }),
-        () => api.delete(`/pm/goal-projects/${id}`),
-      );
+        () => api.delete(`/pm/projects/${id}`),
+      ).finally(() => void qc.invalidateQueries({ queryKey: ['projects', workspaceId] }));
     },
 
     async createGoal(input: GoalInput & { task_ids?: string[] }): Promise<Goal> {

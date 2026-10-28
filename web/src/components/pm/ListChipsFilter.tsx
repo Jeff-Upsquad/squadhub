@@ -429,6 +429,7 @@ export default function ListChipsFilter({
               groupTasks={settingsList.group_tasks}
               autoAssigneeIds={settingsList.auto_assignee_ids}
               defaultTaskTypeId={settingsList.default_task_type_id}
+              projectId={settingsList.project_id}
               myAccess={myAccess}
               onClose={() => {
                 setSettingsList(null);

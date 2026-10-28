@@ -6,6 +6,7 @@ import { requireAuth } from '../../middleware/auth';
 import { requireUserType } from '../../middleware/userType';
 import { requirePermission, checkResourceAccess, meetsAccessLevel, isWorkspaceAdmin, isResourceLocked } from '../../middleware/permissions';
 import { PARTNER_USER_TYPES } from '@squadhub/shared';
+import { containerWorkspaceId, projectAssignmentError } from '../../utils/projects';
 
 const router = Router();
 router.use(requireAuth);
@@ -403,6 +404,18 @@ router.put('/lists/:id', async (req: Request, res: Response) => {
     if (typeof req.body.group_tasks === 'boolean') updates.group_tasks = req.body.group_tasks;
     if (Array.isArray(req.body.auto_assignee_ids)) updates.auto_assignee_ids = req.body.auto_assignee_ids;
     if (req.body.default_task_type_id !== undefined) updates.default_task_type_id = req.body.default_task_type_id || null;
+    if (req.body.project_id !== undefined) {
+      const projectId = req.body.project_id || null;
+      if (projectId) {
+        const workspaceId = await containerWorkspaceId('list', id);
+        const projectError = await projectAssignmentError(projectId, workspaceId);
+        if (projectError) {
+          res.status(400).json({ success: false, error: projectError });
+          return;
+        }
+      }
+      updates.project_id = projectId;
+    }
 
     // Validate destination when moving (space_id or folder_id changed)
     if ('space_id' in updates || 'folder_id' in updates) {
