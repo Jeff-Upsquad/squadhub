@@ -27,6 +27,16 @@ backup; its independent protection remains a separate task.
 
 ## Operations
 
+For the approved migration, this utility accepts the original project and
+`hvcpoxgkdybyscaebtik`. The database host (or pooler username suffix) must match
+`PROJECT_REF`. Destination state must be separate, for example
+`STATE_DIR=/var/lib/squadhub-backup-hvcpoxgkdybyscaebtik`; do not carry over a
+pinned `PGHOSTADDR`. R2 retention uses the configured project's own namespace,
+so destination backups cannot prune the original project's archives. Keep the
+old configuration and key, and switch the live timer configuration only as part
+of the coordinated application cutover. Frequency and freshness limits remain
+unchanged.
+
 After provisioning the root-only configuration and read-only database role:
 
 ```sh

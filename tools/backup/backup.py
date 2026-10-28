@@ -28,6 +28,7 @@ import xml.etree.ElementTree as ET
 MAGIC = b'SQHBACK1'
 UTC = dt.timezone.utc
 PROJECT = 'kfxdbhwxzvptzzcuzlal'
+SUPPORTED_PROJECTS = {PROJECT, 'hvcpoxgkdybyscaebtik'}
 DEFAULT_CONFIG = '/etc/squadhub-backup/.env'
 
 
@@ -109,16 +110,27 @@ class Backup:
     def __init__(self, config_path=DEFAULT_CONFIG):
         self.config_path = Path(config_path)
         self.c = env_file(config_path)
-        if self.c['PROJECT_REF'] != PROJECT:
+        self.project = self.c['PROJECT_REF']
+        if self.project not in SUPPORTED_PROJECTS:
             raise ValueError('Unexpected source project')
+        host = self.c['PGHOST'].lower()
+        direct = host == f'db.{self.project}.supabase.co'
+        pooler = host.endswith('.pooler.supabase.com') and self.c['PGUSER'].endswith('.' + self.project)
+        if not (direct or pooler):
+            raise ValueError('Database connection does not match the configured project')
         self.root = Path(self.c.get('STATE_DIR', '/var/lib/squadhub-backup'))
+        if self.project != PROJECT:
+            if self.project not in self.root.name:
+                raise ValueError('Destination backup state must use a separate directory containing its project ref')
+            if self.c.get('PGHOSTADDR'):
+                raise ValueError('Do not carry a pinned source database address into the destination config')
         self.root.mkdir(mode=0o700, parents=True, exist_ok=True)
         self.image = self.c['POSTGRES_IMAGE']
         self.key = bytes.fromhex(self.c['BACKUP_ENCRYPTION_KEY'])
         if len(self.key) != 32:
             raise ValueError('A 256-bit backup key is required')
         self.app = env_file(self.c['APP_ENV_FILE'])
-        self.prefix = f'backups/supabase/{PROJECT}/'
+        self.prefix = f'backups/supabase/{self.project}/'
 
     def s3(self):
         import boto3
