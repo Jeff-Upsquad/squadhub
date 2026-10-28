@@ -15,12 +15,33 @@ declare global {
   }
 }
 
+type VerifiedRequestIdentity = {
+  authorization: string;
+  userId: string;
+  userEmail: string | undefined;
+  userType: UserType;
+  userName: string | undefined;
+};
+// Sibling routers can all run this middleware for one HTTP request. Keep its
+// verified identity on that request only; every new request still contacts Auth.
+const verifiedRequests = new WeakMap<Request, VerifiedRequestIdentity>();
+
 // Verify token using Supabase's own auth verification
 export async function requireAuth(req: Request, res: Response, next: NextFunction): Promise<void> {
   const authHeader = req.headers.authorization;
 
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     res.status(401).json({ success: false, error: 'Missing or invalid authorization header' });
+    return;
+  }
+
+  const verified = verifiedRequests.get(req);
+  if (verified?.authorization === authHeader) {
+    req.userId = verified.userId;
+    req.userEmail = verified.userEmail;
+    req.userType = verified.userType;
+    req.userName = verified.userName;
+    next();
     return;
   }
 
@@ -54,6 +75,8 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
 
     req.userType = (profile?.user_type as UserType) || 'internal';
     req.userName = (profile?.display_name as string) || undefined;
+    verifiedRequests.set(req, { authorization: authHeader, userId: req.userId,
+      userEmail: req.userEmail, userType: req.userType, userName: req.userName });
 
     next();
   } catch {
