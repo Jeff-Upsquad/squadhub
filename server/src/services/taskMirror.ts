@@ -450,13 +450,9 @@ async function cleanupOrphans(kind: string, validIds: string[]): Promise<number>
 
 /** Remove page-review tasks whose send disappeared with a deleted page/doc. */
 export async function cleanupKnowledgeReviewOrphans(): Promise<number> {
-  const { data: recipients, error } = await supabaseAdmin
-    .from('lms_task_send_recipients')
-    .select('id, send:lms_task_sends(source_kind)');
+  const { data, error } = await supabaseAdmin.rpc('cleanup_knowledge_review_orphans');
   if (error) throw error;
-  return cleanupOrphans('knowledge', (recipients || [])
-    .filter((row: any) => row.send?.source_kind === 'knowledge')
-    .map((row: any) => row.id));
+  return Number(data ?? 0);
 }
 
 export async function reconcileAllMirrors(): Promise<{ meetings: number; courses: number; resources: number }> {
