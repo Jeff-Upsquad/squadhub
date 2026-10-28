@@ -16,11 +16,12 @@ export function planDateKey(d = new Date(), tz = tzNow()): string {
   return fmt.format(d);
 }
 
-// Snooze targets: Tomorrow / This Saturday / Next Monday, returned as ISO
-// timestamps representing 00:00 local time on the target date (UTC ISO).
+// Snooze targets: Today / Tomorrow / This Saturday / Next Monday, returned as
+// ISO timestamps representing 00:00 local time on the target date (UTC ISO).
 // "This Saturday" rolls to next Saturday if today is already Saturday.
 // "Next Monday" is the Monday of the next week (skipping any Monday today).
 export interface SnoozeTargets {
+  today: { label: string; date: string; iso: string };
   tomorrow: { label: string; date: string; iso: string };
   saturday: { label: string; date: string; iso: string };
   nextMonday: { label: string; date: string; iso: string };
@@ -54,6 +55,7 @@ export function computeSnoozeTargets(now = new Date()): SnoozeTargets {
   });
 
   return {
+    today:      pack(startOfDay(now), 'Today'),
     tomorrow:   pack(tomorrow,   'Tomorrow'),
     saturday:   pack(saturday,   'This Saturday'),
     nextMonday: pack(nextMonday, 'Next Monday'),

@@ -285,8 +285,9 @@ function DashboardTaskRowInner({
     if (menuPos) { setMenuPos(null); return; }
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
     const MENU_W = 210;
-    // The Evening / Night entries add a separator and two rows.
-    const MENU_H = showBucketMove ? 250 : 150;
+    // The Today/Tomorrow/Weekend/Monday rows plus the Evening / Night entries
+    // (separator and two rows) when shown.
+    const MENU_H = showBucketMove ? 281 : 181;
     const MARGIN = 6;
     const flipUp = rect.bottom + MARGIN + MENU_H > window.innerHeight;
     setMenuPos({
@@ -438,6 +439,10 @@ function DashboardTaskRowInner({
         style={{ left: menuPos.left, top: menuPos.top }}
         onClick={(e) => e.stopPropagation()}
       >
+        <button type="button" role="menuitem" className="hm-bucket-menu-item" onClick={(e) => moveWorkDate(e, targets.today.iso)}>
+          <span>Today</span>
+          <span className="dim">{targets.today.date}</span>
+        </button>
         <button type="button" role="menuitem" className="hm-bucket-menu-item" onClick={(e) => moveWorkDate(e, targets.tomorrow.iso)}>
           <span>To tomorrow</span>
           <span className="dim">{targets.tomorrow.date}</span>

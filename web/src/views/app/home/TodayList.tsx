@@ -705,7 +705,7 @@ function TodayRow({ task: t, onOpen, secondsToday = 0, liveSecs = 0, isInProgres
     if (menuPos) { setMenuPos(null); return; }
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
     const MENU_W = 188;
-    const MENU_H = 300;
+    const MENU_H = 331;
     const MARGIN = 6;
     const flipUp = rect.bottom + MARGIN + MENU_H > window.innerHeight;
     setMenuPos({
@@ -997,6 +997,10 @@ function TodayRow({ task: t, onOpen, secondsToday = 0, liveSecs = 0, isInProgres
             <span className="dim">after 7 PM</span>
           </button>
           <div className="hm-bucket-menu-sep" role="separator" />
+          <button type="button" role="menuitem" className="hm-bucket-menu-item" onClick={(e) => moveWorkDate(e, snoozeTargets.today.iso)}>
+            <span>Today</span>
+            <span className="dim">{snoozeTargets.today.date}</span>
+          </button>
           <button type="button" role="menuitem" className="hm-bucket-menu-item" onClick={(e) => moveWorkDate(e, snoozeTargets.tomorrow.iso)}>
             <span>To tomorrow</span>
             <span className="dim">{snoozeTargets.tomorrow.date}</span>
