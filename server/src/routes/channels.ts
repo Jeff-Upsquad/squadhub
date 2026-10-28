@@ -766,12 +766,14 @@ router.get('/crm', requireAuth, async (req: Request, res: Response) => {
     const closedMap = new Map((closedRows || []).map((r) => [r.channel_id as string, r.closed_at as string]));
 
     // Latest message per channel (preview + last_message_at).
-    const { data: latestMsgs } = await supabaseAdmin
-      .from('messages')
-      .select('channel_id, content, created_at, is_deleted')
-      .in('channel_id', channelIds)
-      .eq('is_deleted', false)
-      .order('created_at', { ascending: false });
+    const visibleChannels = channels.filter((c) => memberSet.has(c.id) && !closedMap.has(c.id));
+    const { data: latestMsgs, error: previewError } = visibleChannels.length
+      ? await supabaseAdmin.rpc('crm_chat_latest_messages', { p_channel_ids: visibleChannels.map((c) => c.id) })
+      : { data: [], error: null };
+    if (previewError) {
+      res.status(500).json({ success: false, error: 'Could not load chat previews' });
+      return;
+    }
 
     const lastByChannel = new Map<string, { content: string | null; created_at: string }>();
     for (const m of latestMsgs || []) {
@@ -781,8 +783,7 @@ router.get('/crm', requireAuth, async (req: Request, res: Response) => {
       }
     }
 
-    const items = channels
-      .filter((c) => memberSet.has(c.id) && !closedMap.has(c.id))
+    const items = visibleChannels
       .map((c) => {
         const last = lastByChannel.get(c.id);
         return {
@@ -897,20 +898,21 @@ router.get('/crm/group', requireAuth, async (req: Request, res: Response) => {
       .in('resource_id', ids);
     const memberSet = new Set((memberships || []).map((m) => m.resource_id as string));
 
-    const { data: latestMsgs } = await supabaseAdmin
-      .from('messages')
-      .select('channel_id, created_at')
-      .in('channel_id', ids)
-      .eq('is_deleted', false)
-      .order('created_at', { ascending: false });
+    const visibleChannels = channels.filter((c) => memberSet.has(c.id as string));
+    const { data: latestMsgs, error: previewError } = visibleChannels.length
+      ? await supabaseAdmin.rpc('crm_chat_latest_messages', { p_channel_ids: visibleChannels.map((c) => c.id) })
+      : { data: [], error: null };
+    if (previewError) {
+      res.status(500).json({ success: false, error: 'Could not load chat previews' });
+      return;
+    }
     const lastAt = new Map<string, string>();
     for (const m of latestMsgs || []) {
       const cid = m.channel_id as string;
       if (!lastAt.has(cid)) lastAt.set(cid, m.created_at as string);
     }
 
-    const group = channels
-      .filter((c) => memberSet.has(c.id as string))
+    const group = visibleChannels
       .map((c) => ({
         channel_id: c.id,
         channel_name: c.name,
