@@ -438,6 +438,21 @@ export function groupByNamedRef(
   return [...map.values()].sort((a, b) => (a.sort as string).localeCompare(b.sort as string));
 }
 
+// Group by folder, with a list fallback: tasks whose list sits directly under
+// a space (no folder) each get their own group named after the list, instead
+// of collapsing into one anonymous "No folder" bucket. Folder groups come
+// first, then folder-less list groups — the same order the sidebar renders
+// (folders, then a space's direct lists). Tasks with no list ref at all land
+// in a trailing "No list" group.
+export function groupByFolder(tasks: Task[]): Group[] {
+  const inFolder = tasks.filter((t) => t.folder);
+  const folderless = tasks.filter((t) => !t.folder);
+  return [
+    ...groupByNamedRef(inFolder, (t) => t.folder ?? null, 'No folder'),
+    ...groupByNamedRef(folderless, (t) => t.list ?? null, 'No list'),
+  ];
+}
+
 // A task can carry several labels, so (unlike space/folder/list) it appears
 // under EVERY label it has — mirroring how multi-homing renders a task inside
 // each of its groups. Untagged tasks collect under "No label" (sorted last).
@@ -549,11 +564,7 @@ export function groupTasks(
     case 'space':
       return groupByNamedRef(tasks, (t) => t.space ?? null, 'No space');
     case 'folder':
-      return groupByNamedRef(
-        tasks,
-        (t) => (t as unknown as { folder?: { id: string; name: string } | null }).folder ?? null,
-        'No folder',
-      );
+      return groupByFolder(tasks);
     case 'list':
       return groupByNamedRef(tasks, (t) => t.list ?? null, 'No list');
     case 'project':
