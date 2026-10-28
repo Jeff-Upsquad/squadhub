@@ -103,7 +103,7 @@ export default function GroupedTaskRow({
     if (menuPos) { setMenuPos(null); return; }
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
     const MENU_W = 200;
-    const MENU_H = 300;
+    const MENU_H = 331;
     const MARGIN = 6;
     const flipUp = rect.bottom + MARGIN + MENU_H > window.innerHeight;
     setMenuPos({
@@ -319,6 +319,10 @@ export default function GroupedTaskRow({
           <button type="button" role="menuitem" className="hm-bucket-menu-item" onClick={openDatePicker}>
             <span>Set work date…</span>
             <span className="dim">all {row.count} tasks</span>
+          </button>
+          <button type="button" role="menuitem" className="hm-bucket-menu-item" onClick={(e) => moveWorkDate(e, snoozeTargets.today.iso)}>
+            <span>Today</span>
+            <span className="dim">{snoozeTargets.today.date}</span>
           </button>
           <button type="button" role="menuitem" className="hm-bucket-menu-item" onClick={(e) => moveWorkDate(e, snoozeTargets.tomorrow.iso)}>
             <span>To tomorrow</span>
