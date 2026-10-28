@@ -20,6 +20,8 @@ import ManageMembersModal from '../views/app/pm/ManageMembersModal';
 import MoveModal from '../views/app/pm/MoveModal';
 import TaskTypeDropdown, { TaskTypeGlyph } from './pm/TaskTypeDropdown';
 import { useTaskTypes } from '../hooks/useTaskTypes';
+import { useProjects, useCreateProject } from '../hooks/useProjects';
+import { PROJECT_COLORS } from '../views/app/goals/goalUtils';
 import type { ResourceType, AccessLevel, ResourceMembership, User } from '@squadhub/shared';
 
 type SettingsSliderProps = {
@@ -32,6 +34,7 @@ type SettingsSliderProps = {
   groupTasks?: boolean;
   autoAssigneeIds?: string[];
   defaultTaskTypeId?: string | null;
+  projectId?: string | null;
   myAccess?: AccessLevel | null;
   onClose: () => void;
   onDeleted?: () => void;
@@ -51,7 +54,7 @@ const ACCESS_ITEM_LABELS: Record<AccessLevel, string> = {
   viewer: 'Viewer',
 };
 
-export default function SettingsSlider({ type, id, name, description, spaceId, folderId, groupTasks, autoAssigneeIds, defaultTaskTypeId, myAccess, onClose, onDeleted }: SettingsSliderProps) {
+export default function SettingsSlider({ type, id, name, description, spaceId, folderId, groupTasks, autoAssigneeIds, defaultTaskTypeId, projectId, myAccess, onClose, onDeleted }: SettingsSliderProps) {
   const qc = useQueryClient();
   const workspaceId = useWorkspaceStore((s) => s.currentWorkspace?.id);
   const currentUserId = useAuthStore((s) => s.user?.id);
@@ -107,6 +110,12 @@ export default function SettingsSlider({ type, id, name, description, spaceId, f
         qc.invalidateQueries({ queryKey: ['list', id] });
         qc.invalidateQueries({ queryKey: ['space', spaceId] });
       }
+      // Task rows carry a hydrated project ref, so any settings save that can
+      // change it (e.g. project assignment) refreshes the task views too.
+      qc.invalidateQueries({ queryKey: ['tasks'] });
+      qc.invalidateQueries({ queryKey: ['folder-tasks'] });
+      qc.invalidateQueries({ queryKey: ['space-tasks'] });
+      qc.invalidateQueries({ queryKey: ['my-tasks'] });
     },
     onError: (err: any) => {
       setSaving(false);
@@ -145,6 +154,15 @@ export default function SettingsSlider({ type, id, name, description, spaceId, f
     const prev = selectedTaskTypeId;
     setSelectedTaskTypeId(typeId);
     updateMutation.mutate({ default_task_type_id: typeId }, { onError: () => setSelectedTaskTypeId(prev) });
+  };
+
+  // "Project" — the project this container's tasks belong to (nearest-wins).
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(projectId || null);
+  useEffect(() => { setSelectedProjectId(projectId || null); }, [projectId]);
+  const updateProject = (nextId: string | null) => {
+    const prev = selectedProjectId;
+    setSelectedProjectId(nextId);
+    updateMutation.mutate({ project_id: nextId }, { onError: () => setSelectedProjectId(prev) });
   };
 
   const deleteMutation = useMutation({
@@ -265,6 +283,11 @@ export default function SettingsSlider({ type, id, name, description, spaceId, f
         {/* Default task type — auto-selected for tasks created in this container */}
         {supportsGroupTasks && canManage && (type === 'list' || type === 'folder' || type === 'space') && (
           <DefaultTaskTypeRow type={type} value={selectedTaskTypeId} onChange={updateDefaultTaskType} />
+        )}
+
+        {/* Project — the project this container's tasks belong to */}
+        {supportsGroupTasks && canManage && (type === 'list' || type === 'folder' || type === 'space') && (
+          <ProjectRow type={type} value={selectedProjectId} onChange={updateProject} />
         )}
 
         {/* Move — lists and folders only */}
@@ -595,6 +618,192 @@ function DefaultTaskTypeRow({
           </button>
         }
       />
+    </div>
+  );
+}
+
+// Project picker — assigns this container to a workspace project (nearest-wins
+// down the tree). Includes inline "New project" creation, mirroring the Goals
+// project picker.
+function ProjectRow({
+  type,
+  value,
+  onChange,
+}: {
+  type: 'list' | 'folder' | 'space';
+  value: string | null;
+  onChange: (projectId: string | null) => void;
+}) {
+  const workspaceId = useWorkspaceStore((s) => s.currentWorkspace?.id);
+  const { data: projects = [] } = useProjects(workspaceId);
+  const createProject = useCreateProject(workspaceId);
+  const [open, setOpen] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [newName, setNewName] = useState('');
+  const [newColor, setNewColor] = useState(PROJECT_COLORS[0]);
+  const [error, setError] = useState('');
+  const btnRef = useRef<HTMLButtonElement>(null);
+  const [rect, setRect] = useState<DOMRect | null>(null);
+  const current = value ? projects.find((p) => p.id === value) || null : null;
+  const typeName = type === 'space' ? 'area' : type;
+
+  const openPicker = () => {
+    const r = btnRef.current?.getBoundingClientRect();
+    if (r) setRect(r);
+    setCreating(false);
+    setError('');
+    setOpen(true);
+  };
+
+  const pick = (id: string | null) => {
+    onChange(id);
+    setOpen(false);
+  };
+
+  const submitNew = () => {
+    const name = newName.trim();
+    if (!name) return setError('Name your project');
+    createProject.mutate(
+      { name, color: newColor },
+      {
+        onSuccess: (project) => {
+          if (project) pick(project.id);
+          setNewName('');
+          setCreating(false);
+        },
+        onError: () => setError('Could not create the project'),
+      },
+    );
+  };
+
+  // Active projects are the choices; the current value stays visible even when
+  // archived so the assignment never renders as a mystery id.
+  const choices = projects.filter((p) => p.status !== 'inactive' || p.id === value);
+  const width = 280;
+  const left = rect ? Math.min(rect.left, window.innerWidth - width - 16) : 0;
+  const top = rect ? Math.min(rect.bottom + 4, window.innerHeight - 320) : 0;
+
+  return (
+    <div>
+      <button
+        ref={btnRef}
+        type="button"
+        onClick={openPicker}
+        className="flex w-full items-center justify-between gap-3 rounded-md border border-[#CAD5E2] bg-white px-3 py-2 text-left text-xs font-medium text-[#0F172B] transition hover:bg-[#F1F5F9]"
+      >
+        <span className="flex flex-col">
+          <span>Project</span>
+          <span className="mt-0.5 text-[10px] font-normal text-[#999999]">
+            Tasks in this {typeName} belong to this project
+          </span>
+        </span>
+        {current ? (
+          <span
+            className="flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-medium shrink-0"
+            style={{
+              backgroundColor: `color-mix(in srgb, ${current.color} 16%, transparent)`,
+              color: current.color,
+            }}
+          >
+            <span className="h-2 w-2 rounded-full" style={{ background: current.color }} />
+            <span className="truncate max-w-[110px]">{current.name}</span>
+          </span>
+        ) : (
+          <span className="shrink-0 text-[#999999]">None</span>
+        )}
+      </button>
+      {open &&
+        createPortal(
+          <>
+            <div className="fixed inset-0 z-[70]" onClick={() => setOpen(false)} />
+            <div
+              className="fixed z-[71] rounded-lg border border-[#E2E8F0] bg-white p-2 shadow-xl"
+              style={{ left, top, width }}
+            >
+              {!creating ? (
+                <>
+                  <div className="max-h-56 overflow-y-auto">
+                    {choices.length === 0 && (
+                      <p className="px-2 py-3 text-center text-xs text-[#999999]">No projects yet</p>
+                    )}
+                    {choices.map((p) => (
+                      <button
+                        key={p.id}
+                        type="button"
+                        onClick={() => pick(p.id)}
+                        className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs font-medium text-[#0F172B] hover:bg-[#F1F5F9]"
+                      >
+                        <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: p.color }} />
+                        <span className="flex-1 truncate">{p.name}</span>
+                        {p.status === 'inactive' && <span className="text-[10px] text-[#999999]">Archived</span>}
+                        {p.id === value && (
+                          <svg className="h-3.5 w-3.5 shrink-0 text-[#0F172B]" fill="none" stroke="currentColor" strokeWidth={2.4} viewBox="0 0 24 24">
+                            <path d="M20 6L9 17l-5-5" strokeLinecap="round" strokeLinejoin="round" />
+                          </svg>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => { setCreating(true); setError(''); }}
+                    className="mt-1 flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs font-medium text-[#0F172B] hover:bg-[#F1F5F9]"
+                  >
+                    <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                      <path d="M12 5v14M5 12h14" strokeLinecap="round" />
+                    </svg>
+                    New project
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => pick(null)}
+                    className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-[#666666] hover:bg-[#F1F5F9]"
+                  >
+                    {type === 'space' ? 'No project' : 'None (inherit from parent)'}
+                  </button>
+                </>
+              ) : (
+                <div className="p-1">
+                  <input
+                    autoFocus
+                    value={newName}
+                    onChange={(e) => { setNewName(e.target.value); setError(''); }}
+                    onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); submitNew(); } }}
+                    placeholder="Project name"
+                    className="w-full rounded-md border border-[#CAD5E2] px-2 py-1.5 text-xs text-[#0F172B] outline-none focus:border-[#0F172B]"
+                  />
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {PROJECT_COLORS.map((c: string) => (
+                      <button
+                        key={c}
+                        type="button"
+                        aria-label={c}
+                        onClick={() => setNewColor(c)}
+                        className={`h-5 w-5 rounded-full transition ${newColor === c ? 'ring-2 ring-[#0F172B] ring-offset-1' : ''}`}
+                        style={{ background: c }}
+                      />
+                    ))}
+                  </div>
+                  {error && <p className="mt-1.5 text-[11px] text-[#EF4444]">{error}</p>}
+                  <div className="mt-2 flex justify-end gap-2">
+                    <button type="button" onClick={() => setCreating(false)} className="rounded-md px-2 py-1 text-xs text-[#666666] hover:bg-[#F1F5F9]">
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={submitNew}
+                      disabled={createProject.isPending}
+                      className="rounded-md bg-[#0F172B] px-3 py-1 text-xs font-medium text-white disabled:opacity-50"
+                    >
+                      {createProject.isPending ? 'Creating…' : 'Create'}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </>,
+          document.body,
+        )}
     </div>
   );
 }

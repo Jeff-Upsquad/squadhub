@@ -567,6 +567,24 @@ export function getTaskStatusCategory(key: string | null | undefined): StatusCat
   return def ? def.category : null;
 }
 
+// A workspace-scoped project. Areas (spaces), Spaces (folders), and lists can
+// each be assigned to one; a task belongs to the nearest assigned container's
+// project (list -> folder -> space). Goals also group by project — the old
+// goals-only `goal_projects` rows were migrated in with ids preserved.
+export interface Project {
+  id: string;
+  workspace_id: string;
+  name: string;
+  color: string;
+  description?: string;
+  /** 'inactive' = archived (hidden from pickers). */
+  status?: ResourceStatus;
+  created_by: string;
+  created_at: string;
+  updated_at?: string;
+  deleted_at?: string | null;
+}
+
 export interface Space {
   id: string;
   workspace_id: string;
@@ -590,6 +608,8 @@ export interface Space {
   auto_assignee_ids?: string[];
   /** Default task type automatically selected for tasks created under this space. */
   default_task_type_id?: string | null;
+  /** Project this area's tasks belong to (nearest-wins down the tree). */
+  project_id?: string | null;
   my_access_level?: AccessLevel;
   // Joined
   statuses?: SpaceStatus[];
@@ -971,6 +991,8 @@ export interface Folder {
   auto_assignee_ids?: string[];
   /** Default task type automatically selected for tasks created under this folder. */
   default_task_type_id?: string | null;
+  /** Project this space's tasks belong to (nearest-wins down the tree). */
+  project_id?: string | null;
   // Joined
   lists?: List[];
   profile?: CustomProfile;
@@ -1000,6 +1022,8 @@ export interface List {
   auto_assignee_ids?: string[];
   /** Default task type automatically selected for tasks created under this list. */
   default_task_type_id?: string | null;
+  /** Project this list's tasks belong to (nearest-wins down the tree). */
+  project_id?: string | null;
   // Joined
   task_count?: number;
   profile?: CustomProfile;
@@ -1447,6 +1471,10 @@ export interface Task {
   list?: { id: string; name: string } | null;
   folder?: { id: string; name: string } | null;
   space?: { id: string; name: string } | null;
+  // Resolved by hydrateLists: the nearest ancestor container's (list → folder →
+  // space) project, used for grouping and display. Null when no ancestor is
+  // assigned to a project (or the project was deleted).
+  project?: { id: string; name: string } | null;
   // Resolved by hydrateLists: the nearest ancestor container (list → folder →
   // space) with group_tasks ON, used to collapse this task into a single
   // "Grouped tasks under {name}" row on Home. Null when no ancestor is grouped.

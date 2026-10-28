@@ -4,6 +4,7 @@ import { supabaseAdmin } from '../../supabase';
 import { requireAuth } from '../../middleware/auth';
 import { requireUserType } from '../../middleware/userType';
 import { requirePermission, isWorkspaceAdmin, checkResourceAccess, meetsAccessLevel, isResourceLocked, getAccessibleDescendants, accessLevelRank } from '../../middleware/permissions';
+import { containerWorkspaceId, projectAssignmentError } from '../../utils/projects';
 import { PARTNER_USER_TYPES } from '@squadhub/shared';
 import type { AccessLevel, User } from '@squadhub/shared';
 
@@ -471,6 +472,18 @@ router.put('/spaces/:id', async (req: Request, res: Response) => {
     if (typeof req.body.group_tasks === 'boolean') updates.group_tasks = req.body.group_tasks;
     if (Array.isArray(req.body.auto_assignee_ids)) updates.auto_assignee_ids = req.body.auto_assignee_ids;
     if (req.body.default_task_type_id !== undefined) updates.default_task_type_id = req.body.default_task_type_id || null;
+    if (req.body.project_id !== undefined) {
+      const projectId = req.body.project_id || null;
+      if (projectId) {
+        const workspaceId = await containerWorkspaceId('space', id);
+        const projectError = await projectAssignmentError(projectId, workspaceId);
+        if (projectError) {
+          res.status(400).json({ success: false, error: projectError });
+          return;
+        }
+      }
+      updates.project_id = projectId;
+    }
 
     const { data, error } = await supabaseAdmin
       .from('spaces')

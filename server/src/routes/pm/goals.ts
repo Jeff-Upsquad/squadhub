@@ -26,7 +26,7 @@ const router = Router();
 router.use(requireAuth);
 // Mounted at /pm before personal tasks, checklists and attachments. Keep this
 // gate scoped to our own paths so Goals cannot block those other routers.
-router.use(['/goals', '/goal-projects', '/goals-containers'],
+router.use(['/goals', '/goals-containers'],
   requireUserType('internal', ...PARTNER_USER_TYPES, 'client', 'client_staff'));
 
 class HttpError extends Error {
@@ -287,8 +287,8 @@ async function loadGoals(workspaceId: string, viewer: string, onlyGoalId?: strin
   if (!access.isMember(viewer)) fail(403, 'You do not have access to this workspace');
 
   const [projectRows, goalRows] = await Promise.all([
-    rows<GoalProject>(db.from('goal_projects').select('id, workspace_id, name, color, created_by, created_at')
-      .eq('workspace_id', workspaceId).order('created_at')),
+    rows<GoalProject>(db.from('projects').select('id, workspace_id, name, color, created_by, created_at')
+      .eq('workspace_id', workspaceId).is('deleted_at', null).order('created_at')),
     rows<any>((onlyGoalId
       ? db.from('goals').select('*').eq('workspace_id', workspaceId).eq('id', onlyGoalId)
       : db.from('goals').select('*').eq('workspace_id', workspaceId)).order('created_at', { ascending: false })),
@@ -443,7 +443,7 @@ async function goalFor(user: string, goalId: string) {
 }
 
 async function projectFor(user: string, projectId: string, access?: Access) {
-  const p = await one<GoalProject>(db.from('goal_projects').select('id, workspace_id, name, color, created_by, created_at').eq('id', uuid.parse(projectId)));
+  const p = await one<GoalProject>(db.from('projects').select('id, workspace_id, name, color, created_by, created_at').eq('id', uuid.parse(projectId)).is('deleted_at', null));
   if (!p) fail(404, 'Project not found');
   const acc = access || new Access(p!.workspace_id, new Tree());
   await acc.load([user]);
@@ -493,7 +493,6 @@ const goalInput = z.object({
   start_date: day.nullable().default(null),
   due_date: day.nullable().default(null),
 });
-const color = z.string().regex(/^#[0-9a-f]{6}$/i, 'Choose a valid color');
 
 // ── Routes ─────────────────────────────────────────────────────────────────
 
@@ -536,27 +535,6 @@ router.get('/goals-containers', route(async (req) => {
 router.get('/goals/:id/context', route(async (req) => {
   const { goal } = await goalFor(req.userId!, String(req.params.id));
   return one(db.from('workspaces').select('*').eq('id', goal.workspace_id));
-}));
-
-router.post('/goal-projects', route(async (req) => {
-  const body = z.object({ workspace_id: uuid, name: z.string().trim().min(1, 'Name your project').max(160), color: color.default('#7c5cff') }).parse(req.body);
-  const access = new Access(body.workspace_id, new Tree());
-  await access.load([req.userId!]);
-  if (!access.isMember(req.userId!)) fail(403, 'You do not have access to this workspace');
-  return one(db.from('goal_projects').insert({ ...body, created_by: req.userId }).select('id, workspace_id, name, color, created_by, created_at'));
-}));
-
-router.patch('/goal-projects/:id', route(async (req) => {
-  const { project, access } = await projectFor(req.userId!, String(req.params.id));
-  if (project.created_by !== req.userId && !access.isAdmin(req.userId!)) fail(403, 'Only the project owner can change it');
-  const body = z.object({ name: z.string().trim().min(1).max(160).optional(), color: color.optional() }).parse(req.body);
-  return one(db.from('goal_projects').update({ ...body, updated_at: new Date().toISOString() }).eq('id', project.id).select('id, workspace_id, name, color, created_by, created_at'));
-}));
-
-router.delete('/goal-projects/:id', route(async (req) => {
-  const { project, access } = await projectFor(req.userId!, String(req.params.id));
-  if (project.created_by !== req.userId && !access.isAdmin(req.userId!)) fail(403, 'Only the project owner can delete it');
-  await exec(db.from('goal_projects').delete().eq('id', project.id));
 }));
 
 router.post('/goals', route(async (req) => {

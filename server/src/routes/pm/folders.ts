@@ -4,6 +4,7 @@ import { supabaseAdmin } from '../../supabase';
 import { requireAuth } from '../../middleware/auth';
 import { requireUserType } from '../../middleware/userType';
 import { requirePermission, checkResourceAccess, meetsAccessLevel, isWorkspaceAdmin, isResourceLocked, getPrimaryRolePermissions } from '../../middleware/permissions';
+import { containerWorkspaceId, projectAssignmentError } from '../../utils/projects';
 import { PARTNER_USER_TYPES } from '@squadhub/shared';
 import type { User } from '@squadhub/shared';
 import {
@@ -111,7 +112,7 @@ router.get('/folders/by-client/:clientId', async (req: Request, res: Response) =
 
     const { data: folderRows, error } = await supabaseAdmin
       .from('folders')
-      .select('id, name, space_id, position, client_id, client_space_template_id, client_space_template_version, deleted_at')
+      .select('id, name, space_id, position, client_id, client_space_template_id, client_space_template_version, deleted_at, project_id')
       .eq('client_id', clientId)
       .order('position');
 
@@ -585,6 +586,18 @@ router.put('/folders/:id', async (req: Request, res: Response) => {
     if (typeof req.body.group_tasks === 'boolean') updates.group_tasks = req.body.group_tasks;
     if (Array.isArray(req.body.auto_assignee_ids)) updates.auto_assignee_ids = req.body.auto_assignee_ids;
     if (req.body.default_task_type_id !== undefined) updates.default_task_type_id = req.body.default_task_type_id || null;
+    if (req.body.project_id !== undefined) {
+      const projectId = req.body.project_id || null;
+      if (projectId) {
+        const workspaceId = await containerWorkspaceId('folder', id);
+        const projectError = await projectAssignmentError(projectId, workspaceId);
+        if (projectError) {
+          res.status(400).json({ success: false, error: projectError });
+          return;
+        }
+      }
+      updates.project_id = projectId;
+    }
 
     // If moving to a new space, validate destination access + lock, then
     // cascade the space_id change to this folder's child lists so the

@@ -42,7 +42,7 @@ import './stage-row.css';
 // progress ring. Clicking a row opens the full task detail panel; completing
 // a task strikes it through and slides it away.
 
-export type OverviewGroup = 'stage' | 'status' | 'priority' | 'assignee' | 'list' | 'task_type';
+export type OverviewGroup = 'stage' | 'status' | 'priority' | 'assignee' | 'list' | 'task_type' | 'project';
 type ViewMode = 'list' | 'board' | 'calendar';
 
 const GROUP_OPTIONS: { value: OverviewGroup; label: string }[] = [
@@ -52,6 +52,7 @@ const GROUP_OPTIONS: { value: OverviewGroup; label: string }[] = [
   { value: 'assignee', label: 'Assignee' },
   { value: 'list', label: 'List' },
   { value: 'task_type', label: 'Task type' },
+  { value: 'project', label: 'Project' },
 ];
 
 const PRIORITY_PILL: Record<string, { label: string; dot: string; emergency?: boolean }> = {
@@ -366,6 +367,18 @@ export default function TaskOverview({
       out.push(one('__none__', 'Unassigned', '#A0A0A0', none));
     } else if (group === 'list') {
       out = lists.map((l) => one(l.id, l.name, '#A0A0A0', listed.filter((t) => t.list?.id === l.id)));
+    } else if (group === 'project') {
+      // One card per project the scoped tasks resolve to (nearest container's
+      // project), in first-seen order; unassigned tasks land in "No project".
+      const byProject = new Map<string, { name: string; tasks: Task[] }>();
+      for (const t of listed) {
+        const key = t.project?.id || '__none__';
+        if (!byProject.has(key)) {
+          byProject.set(key, { name: t.project?.name || 'No project', tasks: [] });
+        }
+        byProject.get(key)!.tasks.push(t);
+      }
+      out = [...byProject.entries()].map(([key, v]) => one(key, v.name, '#A0A0A0', v.tasks));
     } else {
       const typeOf = (t: Task) => (taskTypes || []).find((tt) => tt.id === t.task_type_id) || null;
       const bySection = new Map<string, Map<string, { name: string; color: string; tasks: Task[] }>>();
