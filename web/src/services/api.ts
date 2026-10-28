@@ -18,6 +18,18 @@ function getClientSource(): string {
   return /Mobi|Android|iPhone|iPad|Mobile/i.test(ua) ? 'mobile_web' : 'web';
 }
 
+// The user's IANA timezone, resolved once. Sent as X-Time-Zone so the server
+// can persist it and run day-boundary jobs (time-block auto-completion) at the
+// user's LOCAL midnight. Empty when Intl is unavailable — the server then
+// keeps its default zone for that user.
+const IANA_TZ = (() => {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || '';
+  } catch {
+    return '';
+  }
+})();
+
 // Attach auth token + client source to every request
 api.interceptors.request.use((config) => {
   const token = useAuthStore.getState().accessToken;
@@ -26,6 +38,7 @@ api.interceptors.request.use((config) => {
   }
   config.headers['X-Client-Source'] = getClientSource();
   config.headers['X-Timezone-Offset'] = String(-new Date().getTimezoneOffset());
+  if (IANA_TZ) config.headers['X-Time-Zone'] = IANA_TZ;
   return config;
 });
 

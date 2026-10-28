@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { supabaseAuth } from '../supabase';
 import { supabaseAdmin } from '../supabase';
+import { rememberUserTimeZone } from '../utils/userTimeZone';
 import type { UserType } from '@squadhub/shared';
 
 // Extend Express Request to include user info
@@ -54,6 +55,13 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
 
     req.userType = (profile?.user_type as UserType) || 'internal';
     req.userName = (profile?.display_name as string) || undefined;
+
+    // Capture the client's IANA zone (X-Time-Zone) so background jobs can use
+    // the user's local midnight as a day boundary. Debounced + fire-and-forget.
+    const tzHeader = req.headers['x-time-zone'];
+    if (typeof tzHeader === 'string' && tzHeader) {
+      rememberUserTimeZone(req.userId!, tzHeader);
+    }
 
     next();
   } catch {

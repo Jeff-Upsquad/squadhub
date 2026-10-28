@@ -155,6 +155,7 @@ import { startRoutineCron } from './cron/routine-cron';
 import { startTaskMirrorCron } from './cron/task-mirror-cron';
 import { startElapsedTimeCron } from './cron/elapsed-time-cron';
 import { startHoursCompletionCron } from './cron/hours-completion-cron';
+import { startWorkBlockCompletionCron } from './cron/work-block-cron';
 import { startSquadhireSyncSweeper, startManualAssignmentSweeper, startSelectionNotifySweeper, startActivationNotifySweeper, startTalentAcceptedNotifySweeper } from './utils/squadhireWebhook';
 import { startJobSyncSweeper } from './utils/squadhireJobWebhook';
 import { startProfileAccessGrantsSyncSweeper } from './utils/squadhireGrantsWebhook';
@@ -384,6 +385,7 @@ server.listen(config.port, () => {
     startTaskMirrorCron();
     startElapsedTimeCron();
     startHoursCompletionCron();
+    startWorkBlockCompletionCron();
 
     // Outbound SquadHire webhook retry sweeper. No-ops when SQUADHIRE_WEBHOOK_URL
     // is unset, so dev environments without SquadHire configured are unaffected.
