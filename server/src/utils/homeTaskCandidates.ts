@@ -4,7 +4,7 @@ type Kind = 'new' | 'focused' | 'assigned' | 'worked';
 type Entry = { digest: string; rows: any[]; bytes: number };
 const snapshots = new Map<string, Entry>();
 let storedBytes = 0;
-const maxBytes = 8 * 1024 * 1024;
+const maxBytes = 16 * 1024 * 1024;
 
 /** Revalidate every request in Postgres; reuse bodies only after its fresh hash matches. */
 export async function getHomeTaskCandidates(
@@ -26,6 +26,7 @@ export async function getHomeTaskCandidates(
   }
   if (data.rows === null) {
     if (!cached || cached.digest !== data.digest) throw new Error('Home task snapshot body unavailable');
+    if (snapshots.get(key) === cached) { snapshots.delete(key); snapshots.set(key, cached); }
     return structuredClone(cached.rows);
   }
   if (!Array.isArray(data.rows)) throw new Error('Invalid Home task snapshot rows');
@@ -34,7 +35,7 @@ export async function getHomeTaskCandidates(
   if (bytes <= maxBytes) {
     const prior = snapshots.get(key);
     if (prior) { storedBytes -= prior.bytes; snapshots.delete(key); }
-    while (snapshots.size >= 32 || storedBytes + bytes > maxBytes) {
+    while (snapshots.size >= 128 || storedBytes + bytes > maxBytes) {
       const oldest = snapshots.keys().next().value;
       if (oldest === undefined) break;
       storedBytes -= snapshots.get(oldest)!.bytes; snapshots.delete(oldest);
