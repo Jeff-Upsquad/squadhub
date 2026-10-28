@@ -20,6 +20,7 @@ import { resolveClientSource } from '../../utils/clientSource';
 import { recordWorkBlockCompletionIfActive } from './workBlocks';
 import { recordGroupRunCompletionIfActive } from './groupRuns';
 import { getUserWorkedTaskHistory } from '../../utils/inProgressTasks';
+import { getHomeTaskCandidates } from '../../utils/homeTaskCandidates';
 import { normalizeTaskStatusForList, defaultTaskStatusForList, getListStageInfo } from '../../utils/statusGroups';
 
 const router = Router();
@@ -854,11 +855,7 @@ router.get('/tasks/my', async (req: Request, res: Response) => {
       const isFocused = (t: any) => t.focused_at != null;
       const existingIds = new Set(tasks.map((t: any) => t.id));
       const fromExisting = (openTasks as any[]).filter(isFocused);
-      const { data: createdFocused } = await supabaseAdmin
-        .from('tasks')
-        .select('*')
-        .not('focused_at', 'is', null)
-        .eq('created_by', req.userId!);
+      const createdFocused = await getHomeTaskCandidates(req.userId!, 'focused', { includeDone });
       let extra = (createdFocused ?? []).filter((t: any) => !existingIds.has(t.id) && isFocused(t));
       if (!includeDone) {
         extra = extra.filter((t: any) => {
@@ -961,38 +958,10 @@ router.get('/tasks/new', async (req: Request, res: Response) => {
     const userId = req.userId!;
     const includeReviewed = req.query.include_reviewed === 'true';
 
-    // Same base shape as /tasks/my: skip routine templates and done/closed/cancelled tasks.
-    // Also skip mirrored Course/Meeting tasks — they're auto-materialised, not
-    // something the user needs to "review" as a freshly-assigned task.
-    const base = () =>
-      supabaseAdmin
-        .from('tasks')
-        .select('*')
-        .is('recurrence', null)
-        .is('source_kind', null)
-        .not('status', 'in', '(done,closed,cancelled,Done,Closed,Cancelled)');
-
-    // (A) Assigned to me.
-    const assignedRes = await base().contains('assignee_ids', [userId]);
-    if (assignedRes.error) {
-      res.status(500).json({ success: false, error: assignedRes.error.message });
-      return;
-    }
-
-    // (B) Created by me and still unassigned. An empty UUID[] is '{}', not NULL, so
-    // PostgREST can't express "no assignees" cleanly — filter in JS after the fetch.
-    const createdRes = await base().eq('created_by', userId);
-    if (createdRes.error) {
-      res.status(500).json({ success: false, error: createdRes.error.message });
-      return;
-    }
-    const createdUnassigned = (createdRes.data || []).filter(
-      (t: any) => !t.assignee_ids || t.assignee_ids.length === 0,
-    );
-
-    // Merge + dedupe (a task I created and assigned to myself hits both queries).
-    const byId = new Map<string, any>();
-    for (const t of [...(assignedRes.data || []), ...createdUnassigned]) byId.set(t.id, t);
+    // Resolve assignment and review eligibility beside the data. Downloading all
+    // creator tasks here used to discard most of their full bodies immediately.
+    const candidates = await getHomeTaskCandidates(userId, 'new', { includeReviewed });
+    const byId = new Map<string, any>(candidates.map((t: any) => [t.id, t]));
 
     // Which of THESE has the caller already reviewed? Scope the lookup to the
     // candidate IDs: an unbounded select hits PostgREST's 1000-row cap, so once
