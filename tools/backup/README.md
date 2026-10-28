@@ -132,3 +132,9 @@ References:
 - https://supabase.com/docs/guides/platform/migrating-within-supabase/backup-restore
 - https://supabase.com/docs/guides/platform/backups
 - https://supabase.com/docs/guides/platform/manage-your-usage/egress
+
+### Compressed full-backup transport
+
+Set `BACKUP_TRANSPORT=compact` in the private backup configuration after a rehearsal passes. The default remains `native`. Compact mode compresses escaped COPY rows inside PostgreSQL over the same read-only snapshot. It reconstructs a complete native `pg_dump` archive in a disposable container with no network, then compares every row digest, sequence state, schema, owner and function/relation/column ACL before accepting it. Each stored backup still restores independently through the existing restore tool.
+
+The PGP envelope uses a public compression label; TLS and the existing outer AES-GCM encryption provide confidentiality. No compression credential or function is installed in Supabase. GNU `gpg` and `gpgconf` are required on the backup server. If compact transport or verification fails, a new snapshot and inventory are taken for a normal full dump; its traffic can be higher. Partitions/inheritance currently use this fallback. Monitor actual egress as well as the reported compressed data bytes, which exclude database metadata and protocol overhead.
