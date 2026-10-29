@@ -280,6 +280,18 @@ export default function TodayList() {
     return !!b;
   }), [allFocusCandidates, inProgressIds, focusBuckets, recurringFocusBuckets, timers, activeWB]);
 
+  // Persist automatic returns and explicit bucket placements as real stars so
+  // the task panel offers the same removal control as manually focused tasks.
+  const { mutate: autoFocusTask } = useFocusTask();
+  const autoFocusedIds = useRef(new Set<string>());
+  useEffect(() => {
+    for (const task of focusTasks) {
+      if (isTaskCompleted(task) || isTaskFocused(task) || autoFocusedIds.current.has(task.id)) continue;
+      autoFocusedIds.current.add(task.id);
+      autoFocusTask({ id: task.id, focused: true });
+    }
+  }, [focusTasks, autoFocusTask]);
+
   const mainTasks = useMemo(
     () => focusTasks.filter((t) => {
       const b = effectiveFocusBucket(t, focusBuckets, recurringFocusBuckets, inProgressIds.has(t.id));

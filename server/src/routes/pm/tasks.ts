@@ -3845,9 +3845,15 @@ router.patch('/tasks/:id/focus', async (req: Request, res: Response) => {
   try {
     const id = req.params.id as string;
     const focused = !!req.body?.focused;
+    const { data: prior, error: readError } = await supabaseAdmin
+      .from('tasks').select('metadata').eq('id', id).single();
+    if (readError) throw readError;
     const { data, error } = await supabaseAdmin
       .from('tasks')
-      .update({ focused_at: focused ? new Date().toISOString() : null })
+      .update({
+        focused_at: focused ? new Date().toISOString() : null,
+        metadata: { ...prior.metadata, focus_removed_at: focused ? null : new Date().toISOString() },
+      })
       .eq('id', id)
       .select('*')
       .single();
