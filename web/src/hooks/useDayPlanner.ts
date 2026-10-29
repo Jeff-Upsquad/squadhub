@@ -258,7 +258,11 @@ export function useFocusTask() {
     onMutate: async ({ id, focused }) => {
       await qc.cancelQueries({ queryKey: ['day-planner'] });
       const focused_at = focused ? new Date().toISOString() : null;
-      const snapshots = patchTaskInCaches(qc, id, { focused_at });
+      const task = findCachedTask(qc, id);
+      const snapshots = patchTaskInCaches(qc, id, {
+        focused_at,
+        metadata: { ...task?.metadata, focus_removed_at: focused ? null : new Date().toISOString() },
+      });
       return { snapshots };
     },
     onError: (_err, _vars, ctx) => {

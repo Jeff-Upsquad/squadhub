@@ -66,6 +66,24 @@ describe('persistent In progress', () => {
     expect(buildInProgressTasks([worked], [worked], [worked.id], context('2026-10-14'))).toEqual([worked]);
   });
 
+  it('keeps an explicitly unstarred scheduled task out until it is starred again', () => {
+    vi.useFakeTimers();
+    const removed = task({
+      work_date: '2026-10-19T00:00:00Z', focused_at: null,
+      metadata: { focus_removed_at: '2026-10-19T02:00:00Z' },
+    });
+    for (const day of ['2026-10-19', '2026-10-20', '2026-10-21']) {
+      vi.setSystemTime(new Date(`${day}T03:00:00Z`));
+      const ctx = context(day);
+      expect(buildFocusTasks([removed], ctx)).toEqual([]);
+      expect(buildInProgressTasks([removed], [removed], [], ctx)).toEqual([]);
+      const starred = { ...removed, focused_at: `${day}T03:00:00Z` };
+      expect(buildFocusTasks([starred], ctx)).toEqual([starred]);
+      expect(buildFocusTasks([starred], ctx, [starred.id])).toEqual([starred]);
+      expect(buildInProgressTasks([removed], [removed], [removed.id], ctx)).toEqual([removed]);
+    }
+  });
+
   it('uses the user timezone at midnight for both logged work and the work date', () => {
     const worked = task({ work_date: '2026-10-18T18:30:00Z', focused_at: null });
     const india = context('2026-10-14', '2026-10-13T18:30:00Z');

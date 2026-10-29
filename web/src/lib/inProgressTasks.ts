@@ -8,9 +8,10 @@ export type WorkedTaskContext = {
   removedFromFocusIds?: string[];
 };
 
-/** Removal survives day changes unless a date or focus star makes the task eligible again. */
-function isRemovedWithoutSchedule(task: Task, context: WorkedTaskContext): boolean {
-  return !!context.removedFromFocusIds?.includes(task.id)
+/** Explicit unstars persist until re-starred; legacy undated removals also persist. */
+function isRemovedFromHome(task: Task, context: WorkedTaskContext): boolean {
+  return (task.metadata?.focus_removed_at != null && !isTaskFocused(task))
+    || !!context.removedFromFocusIds?.includes(task.id)
     && !task.work_date && !task.due_date && !isTaskFocused(task);
 }
 
@@ -31,9 +32,9 @@ export function buildFocusTasks(availableTasks: Task[], context: WorkedTaskConte
   const dismissed = new Set(dismissedTaskIds);
   return [...unique.values()]
     .filter((task) => !isTaskCompleted(task)
-      && !isRemovedWithoutSchedule(task, context)
+      && !isRemovedFromHome(task, context)
       && (isTaskFocused(task) || isDeferredWorkedTask(task, context))
-      && !(dismissed.has(task.id) && isDeferredWorkedTask(task, context))
+      && !(dismissed.has(task.id) && !isTaskFocused(task) && isDeferredWorkedTask(task, context))
       && !isFutureDay(task.work_date, context.timeZone))
     .sort((a, b) => (a.focused_at ?? '').localeCompare(b.focused_at ?? ''));
 }
@@ -59,5 +60,5 @@ export function buildInProgressTasks(
   const activeIds = new Set(activeTaskIds);
   return [...activeTasks, ...[...tasks.values()].filter((task) => !addedIds.has(task.id))]
     .filter((task) => !isTaskCompleted(task)
-      && (activeIds.has(task.id) || (!isRemovedWithoutSchedule(task, context) && !isDeferredWorkedTask(task, context))));
+      && (activeIds.has(task.id) || (!isRemovedFromHome(task, context) && !isDeferredWorkedTask(task, context))));
 }
