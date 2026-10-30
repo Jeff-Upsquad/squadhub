@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Request, Response } from 'express';
 
 const fixtures = vi.hoisted(() => ({ docs: [] as any[] }));
-vi.mock('../supabase', () => ({ supabaseAdmin: { from: () => {
+vi.mock('../supabase', () => ({ supabaseAdmin: { from: (table: string) => {
   const filters: Array<(doc: any) => boolean> = [];
   const query: any = {
     select: () => query,
@@ -12,9 +12,16 @@ vi.mock('../supabase', () => ({ supabaseAdmin: { from: () => {
         : (doc) => doc[key] === value);
       return query;
     },
+    in: (key: string, values: unknown[]) => { filters.push((row) => values.includes(row[key])); return query; },
     is: (key: string, value: unknown) => { filters.push((doc) => doc[key] === value); return query; },
     order: () => query,
-    then: (resolve: (value: unknown) => void) => resolve({ data: fixtures.docs.filter((doc) => filters.every((filter) => filter(doc))), error: null }),
+    then: (resolve: (value: unknown) => void) => {
+      const rows = table === 'lms_items' ? fixtures.docs
+        : table === 'lms_lessons' ? fixtures.docs.map((doc) => ({
+          id: `page-${doc.id}`, item_id: doc.id, title: 'Shared content', is_active: true,
+        })) : [];
+      return resolve({ data: rows.filter((row) => filters.every((filter) => filter(row))), error: null });
+    },
   };
   return query;
 } } }));
