@@ -283,7 +283,11 @@ class Backup:
         path = self.root / 'pending-alerts.json'
         pending = json.loads(path.read_text()) if path.exists() else []
         if not any(n['metadata']['dedupe_key'] == dedupe_key for n in pending):
-            pending.append({'id': str(uuid.uuid4()), 'user_id': self.c['ALERT_USER_ID'],
+            # The queue is cleared after delivery. Derive the inbox ID from the
+            # event so later watchdog runs also conflict with the delivered row.
+            identity = json.dumps([self.project, self.c['ALERT_USER_ID'], dedupe_key])
+            notice_id = str(uuid.uuid5(uuid.NAMESPACE_URL, identity))
+            pending.append({'id': notice_id, 'user_id': self.c['ALERT_USER_ID'],
                             'type': 'task_updated', 'reference_type': 'announcement',
                             'reference_id': self.c['ALERT_USER_ID'],
                             'created_at': dt.datetime.now(UTC).isoformat(),

@@ -35,7 +35,7 @@ beforeEach(() => {
 });
 
 async function readAs(botId: string) {
-  const route = router.stack.find((layer) => layer.route?.path === '/knowledge')?.route;
+  const route = router.stack.find((layer: { route?: { path: string } }) => layer.route?.path === '/knowledge')?.route;
   if (!route) throw new Error('Knowledge endpoint not found');
   const res = { status: vi.fn().mockReturnThis(), json: vi.fn() };
   // A caller-supplied bot_id must never override the authenticated bot.

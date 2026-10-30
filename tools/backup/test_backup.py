@@ -68,6 +68,7 @@ class AlertTests(unittest.TestCase):
     def fake_job(self, root):
         job = object.__new__(backup.Backup)
         job.root = Path(root)
+        job.project = 'test-project'
         job.c = {'ALERT_USER_ID': 'self-user'}
         job.app = {'SUPABASE_SERVICE_ROLE_KEY':'test-only', 'SUPABASE_URL':'https://example.invalid'}
         return job
@@ -117,6 +118,33 @@ class AlertTests(unittest.TestCase):
                 job.alerts(); job.alerts()
             job.run.assert_called_once()
             self.assertEqual(len(json.loads((Path(root)/'pending-alerts.json').read_text())), 1)
+
+    def test_delivered_event_keeps_same_id_when_watchdog_requeues(self):
+        from unittest.mock import MagicMock
+        with tempfile.TemporaryDirectory() as root:
+            job = self.fake_job(root)
+            with patch('urllib.request.urlopen', return_value=MagicMock()) as send:
+                for _ in range(2):
+                    job.queue_alert('Stale', 'Check backup', 'stale-2026-10-30')
+                    self.assertEqual(job.alerts(), 0)
+            notices = [json.loads(call.args[0].data) for call in send.call_args_list]
+            self.assertEqual(notices[0]['id'], notices[1]['id'])
+            job.queue_alert('Stale', 'Check backup', 'stale-2026-10-31')
+            next_day = json.loads((Path(root)/'pending-alerts.json').read_text())[0]
+            self.assertNotEqual(next_day['id'], notices[0]['id'])
+
+    def test_alert_identity_is_scoped_to_project_and_recipient(self):
+        with tempfile.TemporaryDirectory() as root:
+            job = self.fake_job(root)
+            path = Path(root)/'pending-alerts.json'
+            ids = []
+            for project, user in [('p1', 'u1'), ('p2', 'u1'), ('p1', 'u2')]:
+                job.project = project
+                job.c['ALERT_USER_ID'] = user
+                job.queue_alert('Stale', 'Check backup', 'same-event')
+                ids.append(json.loads(path.read_text())[0]['id'])
+                path.unlink()
+            self.assertEqual(len(set(ids)), 3)
 
     def test_successful_delivery_clears_queue(self):
         from unittest.mock import MagicMock
