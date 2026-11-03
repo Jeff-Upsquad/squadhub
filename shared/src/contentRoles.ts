@@ -1,3 +1,4 @@
+import { CREATOR_ROLES } from './creatorRoles';
 // SYNCED COPY — keep identical in Profiles, SquadHub (squadhub) and SquadCRM
 // (squadcrm), plus SquadHire CRM, at shared/src/contentRoles.ts. Each repo has a content-roles
 // sync test pinning this file's SHA-256: change all three copies together and
@@ -1310,7 +1311,7 @@ export const REMAINING_ROLES = [
   }
 ] as const;
 
-export const SPECIALIST_ROLES = [...CONTENT_ROLES, ...REMAINING_ROLES] as const;
+export const SPECIALIST_ROLES = [...CONTENT_ROLES, ...REMAINING_ROLES, ...CREATOR_ROLES] as const;
 
 export type SpecialistRole = typeof SPECIALIST_ROLES[number];
 // Compatibility names retained for the existing specialist form components.

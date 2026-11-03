@@ -3,10 +3,11 @@
 import argparse
 import json
 import os
+import re
 from pathlib import Path
 import subprocess
 import sys
-from urllib.parse import quote, urlencode, urlsplit
+from urllib.parse import quote, urlencode, urlsplit, unquote, parse_qs
 
 
 def configuration(repo):
@@ -43,13 +44,74 @@ def configuration(repo):
     return ref, url
 
 
+def selected_migration(repo, url, version, apply):
+    """Apply one reviewed migration when a shared ledger prevents a bulk push."""
+    if not re.fullmatch(r'\d{14}', version):
+        raise ValueError('A selected migration must use its exact 14-digit version.')
+    matches = list((repo / 'supabase/migrations').glob(version + '_*.sql'))
+    if len(matches) != 1:
+        raise ValueError('Expected exactly one local SQL file for the selected version.')
+    migration = matches[0]
+    sql = migration.read_text()
+    name = migration.stem[len(version) + 1:]
+    if not sql.strip() or any(tag in sql for tag in ('$migration_sql$', '$migration_runner$')):
+        raise ValueError('Migration is empty or contains a reserved SQL delimiter.')
+    if not re.fullmatch(r'[a-zA-Z0-9_]+', name):
+        raise ValueError('Migration filename must use letters, numbers and underscores.')
+    if apply:
+        query = f"""BEGIN;
+SET LOCAL lock_timeout = '10s';
+SELECT pg_advisory_xact_lock(hashtext('squadhub-selected-migration'));
+DO $migration_runner$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM supabase_migrations.schema_migrations WHERE version = '{version}') THEN
+    EXECUTE $migration_sql${sql}$migration_sql$;
+    INSERT INTO supabase_migrations.schema_migrations (version, name, statements)
+      VALUES ('{version}', '{name}', ARRAY[$migration_sql${sql}$migration_sql$]);
+  ELSE
+    RAISE EXCEPTION 'Selected migration is already recorded; inspect its schema before retrying';
+  END IF;
+END $migration_runner$;
+COMMIT;
+"""
+    else:
+        query = f"SELECT version, name FROM supabase_migrations.schema_migrations WHERE version = '{version}';"
+    # Keep the verified connection string out of process arguments and output.
+    connection = urlsplit(url)
+    parameters = parse_qs(connection.query)
+    connection_env = {**os.environ, 'PGHOST': connection.hostname, 'PGPORT': str(connection.port),
+                      'PGUSER': unquote(connection.username), 'PGPASSWORD': unquote(connection.password),
+                      'PGDATABASE': connection.path.lstrip('/'), 'PGSSLMODE': 'verify-full',
+                      'PGSSLROOTCERT': parameters['sslrootcert'][0]}
+    result = subprocess.run(
+        ['psql', '--no-psqlrc', '--set', 'ON_ERROR_STOP=1', '--no-align', '--tuples-only'],
+        input=query, env=connection_env, capture_output=True, text=True, timeout=120,
+    )
+    if result.returncode:
+        raise ValueError('Selected migration command failed (exit ' + str(result.returncode) +
+                         '); no transaction was committed. Connection details were not logged.')
+    if apply:
+        print('Applied and recorded only ' + migration.name)
+    else:
+        print('Selected migration: ' + migration.name)
+        print('Ledger: ' + ('already applied' if result.stdout.strip() else 'pending'))
+        print('No other migrations will be applied. Reviewed SQL:\n' + sql)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('command', choices=['status', 'dry-run', 'apply'])
+    parser.add_argument('--migration', help='Exact 14-digit version; limit dry-run/apply to one reviewed migration.')
     args = parser.parse_args()
     repo = Path(__file__).resolve().parent.parent
     try:
         ref, url = configuration(repo)
+        if args.migration:
+            if args.command == 'status':
+                raise ValueError('--migration is only supported for dry-run and apply.')
+            print('Production target: ' + ref + ' (' + args.command + ', selected migration)', flush=True)
+            selected_migration(repo, url, args.migration, args.command == 'apply')
+            return 0
         command = ['migration', 'list'] if args.command == 'status' else ['db', 'push']
         if args.command == 'dry-run':
             command += ['--dry-run']
