@@ -135,6 +135,12 @@ export default function JobProfileForm({
 
   const unselectedCategories = squadhireCategories.filter((c) => !categoryIds.includes(c.id));
 
+  // A job hangs off the business or one brand — its work location options are
+  // that brand's outlets plus the shared business-level locations.
+  const locationsForBrand = (brandId: string) =>
+    locations.filter((l) => !l.brand_profile_id || l.brand_profile_id === brandId);
+  const brandLocations = locationsForBrand(brandProfileId);
+
   const parseInt0 = (raw: string): number | null => {
     if (!raw.trim()) return null;
     const n = Number(raw);
@@ -207,7 +213,18 @@ export default function JobProfileForm({
             <input type="text" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Senior Graphic Designer" className={inputCls} />
           </Field>
           <Field label="Brand" hint="Leave unset to hang the job directly off the business profile.">
-            <select value={brandProfileId} onChange={(e) => setBrandProfileId(e.target.value)} className={inputCls}>
+            <select
+              value={brandProfileId}
+              onChange={(e) => {
+                const next = e.target.value;
+                setBrandProfileId(next);
+                // Switching brand can orphan a location from another brand — clear it.
+                setLocationId((current) =>
+                  current && locationsForBrand(next).some((l) => l.id === current) ? current : '',
+                );
+              }}
+              className={inputCls}
+            >
               <option value="">— Business itself (no brand) —</option>
               {brands.map((b) => (
                 <option key={b.id} value={b.id}>{b.name}</option>
@@ -257,11 +274,11 @@ export default function JobProfileForm({
               ))}
             </select>
           </Field>
-          <Field label="Location" hint="Saved on the business profile.">
+          <Field label="Location" hint="The selected brand's outlets plus shared business locations.">
             <select value={locationId} onChange={(e) => setLocationId(e.target.value)} className={inputCls}>
               <option value="">— Not set —</option>
-              {locations.map((l) => (
-                <option key={l.id} value={l.id}>{l.label}</option>
+              {brandLocations.map((l) => (
+                <option key={l.id} value={l.id}>{[l.label, l.city].filter(Boolean).join(' · ')}</option>
               ))}
             </select>
           </Field>

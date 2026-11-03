@@ -30,6 +30,11 @@ export const locationSchema = z.object({
   address: z.string().min(1).max(1000),
   city: z.string().max(200).nullable().optional(),
   region: z.string().max(200).nullable().optional(),
+  district: z.string().max(200).nullable().optional(),
+  description: z.string().max(2000).nullable().optional(),
+  // NULL = shared business-level venue; set = an outlet of this brand
+  // (must belong to the same business profile as the location).
+  brand_profile_id: z.string().uuid().nullable().optional(),
   country_id: z.string().uuid().nullable().optional(),
   postal_code: z.string().max(20).nullable().optional(),
   google_maps_url: z.string().max(1000).nullable().optional(),

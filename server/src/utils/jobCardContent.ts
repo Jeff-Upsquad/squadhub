@@ -37,7 +37,10 @@ export function jobCardContent(card: any, profile: any, business: any, brand: an
             label: location.label,
             address: location.address,
             city: location.city ?? null,
+            district: location.district ?? null,
             region: location.region ?? null,
+            postal_code: location.postal_code ?? null,
+            description: location.description ?? null,
             google_maps_url: location.google_maps_url ?? null,
           }
         : null,

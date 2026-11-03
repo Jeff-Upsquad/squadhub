@@ -123,6 +123,17 @@ describe('business hiring profiles and card linking', () => {
     expect((await save('job', 5, { ...job, work_mode: 'onsite', location_id: uuid(9) })).status).toBe(200);
     const { data } = await (await create()).json() as any; expect(data.content.job_profile.location.city).toBe('Kochi');
   });
+  it('ties outlet locations to an owned brand and broadcasts their details', async () => {
+    await setup();
+    expect((await save('location', 9, { business_profile_id: uuid(3), brand_profile_id: uuid(4), label: 'Kochi Outlet', address: 'MG Road', city: 'Kochi', district: 'Ernakulam', region: 'Kerala', postal_code: '682016', description: 'Waterfront cafe outlet' })).status).toBe(200);
+    const stored = db.tables.business_locations.find((l) => l.id === uuid(9));
+    expect(stored.brand_profile_id).toBe(uuid(4)); expect(stored.district).toBe('Ernakulam');
+    // A location may only hang off a brand of the SAME business.
+    expect((await save('location', 10, { business_profile_id: uuid(3), brand_profile_id: uuid(24), label: 'Bad', address: 'X' })).status).toBe(403);
+    expect((await save('job', 5, { ...job, work_mode: 'onsite', location_id: uuid(9) })).status).toBe(200);
+    const { data } = await (await create()).json() as any;
+    expect(data.content.job_profile.location).toMatchObject({ label: 'Kochi Outlet', city: 'Kochi', district: 'Ernakulam', postal_code: '682016', description: 'Waterfront cafe outlet' });
+  });
   it('ignores browser-supplied owner columns when creating a business', async () => {
     await save('business', 3, { ...business, lead_submission_id: uuid(22), created_by: uuid(99) });
     const saved = db.tables.business_profiles.find((b) => b.id === uuid(3));

@@ -209,7 +209,7 @@ export default function OnboardingPanel({
                           Edit profile
                         </button>
                       </div>
-                      <BusinessLocationsEditor businessProfileId={business.id} />
+                      <BusinessLocationsEditor businessProfileId={business.id} brands={brands} />
                     </div>
                   ) : (
                     <>
