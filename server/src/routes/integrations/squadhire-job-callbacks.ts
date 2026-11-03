@@ -1,3 +1,4 @@
+import jobBriefRouter from './squadhire-job-brief';
 import { Router, Request, Response, NextFunction } from 'express';
 import { timingSafeEqual } from 'crypto';
 import { z } from 'zod';
@@ -62,6 +63,8 @@ function verifySquadhireCallbackSecret(
   }
   next();
 }
+
+router.use('/brief', verifySquadhireCallbackSecret, jobBriefRouter);
 
 // ------------------------------------------------------------
 // Envelope (contract §2)
