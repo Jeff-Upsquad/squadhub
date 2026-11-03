@@ -101,7 +101,3 @@ JOIN assignment_services designer ON designer.slug = 'designer'
 JOIN assignment_service_margins base_margin ON base_margin.service_id = designer.id
 WHERE ads.slug = 'social_media_creator'
 ON CONFLICT (service_id, tier, country_id) DO NOTHING;
-
-
-
-
