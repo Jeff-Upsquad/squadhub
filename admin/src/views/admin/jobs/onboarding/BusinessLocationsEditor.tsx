@@ -2,20 +2,25 @@
 
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { BusinessLocation } from '@squadhub/shared';
+import type { BrandProfile, BusinessLocation } from '@squadhub/shared';
 import api from '@/services/api';
 import { showToast } from '@/components/Toast';
 import { Field, inputCls } from './BusinessProfileForm';
 
-// Saved interview venues on a business profile — reused as the location
-// dropdown when scheduling physical interviews (InterviewScheduleDialog).
+// Saved locations on a business profile — work locations for job profiles and
+// the venue dropdown when scheduling physical interviews
+// (InterviewScheduleDialog). A location can hang off the business itself
+// (brand_profile_id NULL) or off one of its brands (an outlet).
 
 type LocationDraft = {
   label: string;
   address: string;
   city: string;
   region: string;
+  district: string;
   postal_code: string;
+  description: string;
+  brand_profile_id: string;
   google_maps_url: string;
   is_primary: boolean;
 };
@@ -25,7 +30,10 @@ const EMPTY_DRAFT: LocationDraft = {
   address: '',
   city: '',
   region: '',
+  district: '',
   postal_code: '',
+  description: '',
+  brand_profile_id: '',
   google_maps_url: '',
   is_primary: false,
 };
@@ -36,13 +44,22 @@ function toDraft(l: BusinessLocation): LocationDraft {
     address: l.address,
     city: l.city ?? '',
     region: l.region ?? '',
+    district: l.district ?? '',
     postal_code: l.postal_code ?? '',
+    description: l.description ?? '',
+    brand_profile_id: l.brand_profile_id ?? '',
     google_maps_url: l.google_maps_url ?? '',
     is_primary: l.is_primary,
   };
 }
 
-export default function BusinessLocationsEditor({ businessProfileId }: { businessProfileId: string }) {
+export default function BusinessLocationsEditor({
+  businessProfileId,
+  brands,
+}: {
+  businessProfileId: string;
+  brands: BrandProfile[];
+}) {
   const qc = useQueryClient();
   // null = closed, 'new' = creating, otherwise the id being edited.
   const [editing, setEditing] = useState<string | null>(null);
@@ -54,6 +71,7 @@ export default function BusinessLocationsEditor({ businessProfileId }: { busines
       api.get(`/admin/jobs/business-profiles/${businessProfileId}/locations`).then((r) => r.data),
   });
   const locations: BusinessLocation[] = locationsRes?.data || [];
+  const brandName = (id: string | null) => brands.find((b) => b.id === id)?.name ?? '';
 
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: ['admin-job-business-locations', businessProfileId] });
@@ -67,7 +85,10 @@ export default function BusinessLocationsEditor({ businessProfileId }: { busines
         address: draft.address.trim(),
         city: draft.city.trim() || null,
         region: draft.region.trim() || null,
+        district: draft.district.trim() || null,
         postal_code: draft.postal_code.trim() || null,
+        description: draft.description.trim() || null,
+        brand_profile_id: draft.brand_profile_id || null,
         google_maps_url: draft.google_maps_url.trim() || null,
         is_primary: draft.is_primary,
       };
@@ -104,7 +125,7 @@ export default function BusinessLocationsEditor({ businessProfileId }: { busines
         <div>
           <p className="text-sm font-medium text-foreground">Locations</p>
           <p className="text-[11px] text-foreground-dim">
-            Saved venues — offered as the dropdown when scheduling physical interviews.
+            Outlets and venues — used as job work locations and offered when scheduling physical interviews.
           </p>
         </div>
         {editing === null && (
@@ -134,12 +155,17 @@ export default function BusinessLocationsEditor({ businessProfileId }: { busines
               <div className="min-w-0">
                 <p className="text-sm font-medium text-foreground">
                   {l.label}
+                  {l.brand_profile_id && (
+                    <span className="ml-2 rounded-full bg-canvas px-2 py-0.5 text-[10px] font-semibold text-foreground-muted">
+                      {brandName(l.brand_profile_id) || 'Brand outlet'}
+                    </span>
+                  )}
                   {l.is_primary && (
                     <span className="ml-2 rounded-full bg-canvas px-2 py-0.5 text-[10px] font-semibold text-foreground-muted">Primary</span>
                   )}
                 </p>
                 <p className="mt-0.5 text-xs text-foreground-muted">
-                  {[l.address, l.city, l.region].filter(Boolean).join(', ')}
+                  {[l.address, l.city, l.district, l.region].filter(Boolean).join(', ')}
                 </p>
                 {l.google_maps_url && (
                   <a
@@ -185,14 +211,25 @@ export default function BusinessLocationsEditor({ businessProfileId }: { busines
             <Field label="Label" required>
               <input type="text" value={draft.label} onChange={(e) => setDraft({ ...draft, label: e.target.value })} placeholder="e.g. Head Office" className={inputCls} />
             </Field>
-            <Field label="City">
-              <input type="text" value={draft.city} onChange={(e) => setDraft({ ...draft, city: e.target.value })} className={inputCls} />
+            <Field label="Brand" hint="Tie the location to one brand's outlet, or keep it shared at business level.">
+              <select value={draft.brand_profile_id} onChange={(e) => setDraft({ ...draft, brand_profile_id: e.target.value })} className={inputCls}>
+                <option value="">— Business itself (shared) —</option>
+                {brands.map((b) => (
+                  <option key={b.id} value={b.id}>{b.name}</option>
+                ))}
+              </select>
             </Field>
           </div>
           <Field label="Address" required>
             <textarea rows={2} value={draft.address} onChange={(e) => setDraft({ ...draft, address: e.target.value })} className={`${inputCls} resize-none`} />
           </Field>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <Field label="City">
+              <input type="text" value={draft.city} onChange={(e) => setDraft({ ...draft, city: e.target.value })} className={inputCls} />
+            </Field>
+            <Field label="District">
+              <input type="text" value={draft.district} onChange={(e) => setDraft({ ...draft, district: e.target.value })} className={inputCls} />
+            </Field>
             <Field label="State / region">
               <input type="text" value={draft.region} onChange={(e) => setDraft({ ...draft, region: e.target.value })} className={inputCls} />
             </Field>
@@ -200,6 +237,9 @@ export default function BusinessLocationsEditor({ businessProfileId }: { busines
               <input type="text" value={draft.postal_code} onChange={(e) => setDraft({ ...draft, postal_code: e.target.value })} className={inputCls} />
             </Field>
           </div>
+          <Field label="Description" hint="Optional — shown to candidates as the matching location's details.">
+            <textarea rows={2} value={draft.description} onChange={(e) => setDraft({ ...draft, description: e.target.value })} className={`${inputCls} resize-none`} />
+          </Field>
           <Field label="Google Maps link" hint="Shared with candidates called for a physical interview.">
             <input type="text" value={draft.google_maps_url} onChange={(e) => setDraft({ ...draft, google_maps_url: e.target.value })} placeholder="https://maps.google.com/…" className={inputCls} />
           </Field>

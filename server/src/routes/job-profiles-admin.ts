@@ -253,6 +253,19 @@ router.get('/business-profiles/:id/locations', async (req: Request, res: Respons
   }
 });
 
+// A location's brand (when set) must belong to the same business profile.
+async function assertBrandOnBusiness(brandProfileId: string, businessProfileId: string) {
+  const { data: brand } = await supabaseAdmin
+    .from('brand_profiles')
+    .select('id, business_profile_id')
+    .eq('id', brandProfileId)
+    .is('deleted_at', null)
+    .maybeSingle();
+  if (!brand || brand.business_profile_id !== businessProfileId) {
+    throw Object.assign(new Error('Brand does not belong to this business profile'), { status: 400 });
+  }
+}
+
 router.post('/business-profiles/:id/locations', async (req: Request, res: Response) => {
   try {
     const body = locationSchema.parse(req.body);
@@ -266,6 +279,7 @@ router.post('/business-profiles/:id/locations', async (req: Request, res: Respon
       res.status(404).json({ success: false, error: 'Business profile not found' });
       return;
     }
+    if (body.brand_profile_id) await assertBrandOnBusiness(body.brand_profile_id, req.params.id as string);
     const { data, error } = await supabaseAdmin
       .from('business_locations')
       .insert({ ...body, business_profile_id: req.params.id })
@@ -281,6 +295,10 @@ router.post('/business-profiles/:id/locations', async (req: Request, res: Respon
       res.status(400).json({ success: false, error: err.errors[0].message });
       return;
     }
+    if (err?.status) {
+      res.status(err.status).json({ success: false, error: err.message });
+      return;
+    }
     console.error('Create business location error:', err);
     res.status(500).json({ success: false, error: err?.message || 'Internal server error' });
   }
@@ -289,6 +307,18 @@ router.post('/business-profiles/:id/locations', async (req: Request, res: Respon
 router.patch('/business-locations/:id', async (req: Request, res: Response) => {
   try {
     const body = locationSchema.partial().parse(req.body);
+    const { data: existing } = await supabaseAdmin
+      .from('business_locations')
+      .select('id, business_profile_id')
+      .eq('id', req.params.id)
+      .maybeSingle();
+    if (!existing) {
+      res.status(404).json({ success: false, error: 'Location not found' });
+      return;
+    }
+    if (body.brand_profile_id) {
+      await assertBrandOnBusiness(body.brand_profile_id, existing.business_profile_id);
+    }
     const { data, error } = await supabaseAdmin
       .from('business_locations')
       .update(body)
@@ -303,10 +333,19 @@ router.patch('/business-locations/:id', async (req: Request, res: Response) => {
       res.status(404).json({ success: false, error: 'Location not found' });
       return;
     }
+    // Location fields ship in the candidate-facing snapshot — keep published
+    // cards fresh (fire-and-forget, same as the other profile PATCHes).
+    redeliverForBusinessProfile(data.business_profile_id as string).catch((err) =>
+      console.error('[job-profiles] location redelivery error', err),
+    );
     res.json({ success: true, data });
   } catch (err: any) {
     if (err instanceof z.ZodError) {
       res.status(400).json({ success: false, error: err.errors[0].message });
+      return;
+    }
+    if (err?.status) {
+      res.status(err.status).json({ success: false, error: err.message });
       return;
     }
     console.error('Patch business location error:', err);

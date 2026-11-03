@@ -4990,12 +4990,16 @@ export interface BusinessProfile {
 export interface BusinessLocation {
   id: string;
   business_profile_id: string;
-  label: string; // 'Head Office'
+  /** NULL = shared business-level venue; set = an outlet of this brand. */
+  brand_profile_id: string | null;
+  label: string; // 'Head Office' / 'Kochi Infopark Outlet'
   address: string;
   city: string | null;
   region: string | null;
-  country_id: string | null;
+  district: string | null;
   postal_code: string | null;
+  description: string | null;
+  country_id: string | null;
   google_maps_url: string | null;
   latitude: number | null;
   longitude: number | null;

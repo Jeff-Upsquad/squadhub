@@ -74,7 +74,10 @@ export async function saveHiringProfile(identity: HiringIdentity, kind: ProfileK
     const businessId = z.string().uuid().parse(raw.business_profile_id);
     parent = await assertOwnedBusiness(identity, businessId);
     if (kind === 'brand') body = { ...brandProfileSchema.parse(raw), business_profile_id: businessId };
-    else if (kind === 'location') body = { ...locationSchema.parse(raw), business_profile_id: businessId };
+    else if (kind === 'location') {
+      body = { ...locationSchema.parse(raw), business_profile_id: businessId };
+      if (body.brand_profile_id) await child('brand_profiles', body.brand_profile_id, businessId);
+    }
     else {
       body = jobProfileSchema.parse(raw);
       if (body.brand_profile_id) await child('brand_profiles', body.brand_profile_id, businessId);
