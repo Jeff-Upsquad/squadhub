@@ -119,7 +119,7 @@ describe('business hiring profiles and card linking', () => {
     expect(db.tables.job_profiles).toHaveLength(1);
   });
   it('stores and reuses an owned physical venue', async () => {
-    await setup(); expect((await save('location', 9, { business_profile_id: uuid(3), label: 'Office', address: 'Test street', city: 'Kochi' })).status).toBe(200);
+    await setup(); expect((await save('location', 9, { business_profile_id: uuid(3), label: 'Office', address: 'Test street', city: 'Kochi', district: 'Ernakulam' })).status).toBe(200);
     expect((await save('job', 5, { ...job, work_mode: 'onsite', location_id: uuid(9) })).status).toBe(200);
     const { data } = await (await create()).json() as any; expect(data.content.job_profile.location.city).toBe('Kochi');
   });
@@ -129,7 +129,7 @@ describe('business hiring profiles and card linking', () => {
     const stored = db.tables.business_locations.find((l) => l.id === uuid(9));
     expect(stored.brand_profile_id).toBe(uuid(4)); expect(stored.district).toBe('Ernakulam');
     // A location may only hang off a brand of the SAME business.
-    expect((await save('location', 10, { business_profile_id: uuid(3), brand_profile_id: uuid(24), label: 'Bad', address: 'X' })).status).toBe(403);
+    expect((await save('location', 10, { business_profile_id: uuid(3), brand_profile_id: uuid(24), label: 'Bad', address: 'X', district: 'Ernakulam' })).status).toBe(403);
     expect((await save('job', 5, { ...job, work_mode: 'onsite', location_id: uuid(9) })).status).toBe(200);
     const { data } = await (await create()).json() as any;
     expect(data.content.job_profile.location).toMatchObject({ label: 'Kochi Outlet', city: 'Kochi', district: 'Ernakulam', postal_code: '682016', description: 'Waterfront cafe outlet' });

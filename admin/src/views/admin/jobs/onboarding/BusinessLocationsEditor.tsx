@@ -85,7 +85,7 @@ export default function BusinessLocationsEditor({
         address: draft.address.trim(),
         city: draft.city.trim() || null,
         region: draft.region.trim() || null,
-        district: draft.district.trim() || null,
+        district: draft.district.trim(),
         postal_code: draft.postal_code.trim() || null,
         description: draft.description.trim() || null,
         brand_profile_id: draft.brand_profile_id || null,
@@ -227,7 +227,7 @@ export default function BusinessLocationsEditor({
             <Field label="City">
               <input type="text" value={draft.city} onChange={(e) => setDraft({ ...draft, city: e.target.value })} className={inputCls} />
             </Field>
-            <Field label="District">
+            <Field label="District" required>
               <input type="text" value={draft.district} onChange={(e) => setDraft({ ...draft, district: e.target.value })} className={inputCls} />
             </Field>
             <Field label="State / region">
@@ -265,8 +265,8 @@ export default function BusinessLocationsEditor({
             <button
               type="button"
               onClick={() => {
-                if (!draft.label.trim() || !draft.address.trim()) {
-                  showToast('Label and address are required.', 'error');
+                if (!draft.label.trim() || !draft.address.trim() || !draft.district.trim()) {
+                  showToast('Label, address, and district are required.', 'error');
                   return;
                 }
                 save.mutate();
