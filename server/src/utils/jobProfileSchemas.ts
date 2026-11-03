@@ -30,7 +30,7 @@ export const locationSchema = z.object({
   address: z.string().min(1).max(1000),
   city: z.string().max(200).nullable().optional(),
   region: z.string().max(200).nullable().optional(),
-  district: z.string().max(200).nullable().optional(),
+  district: z.string().trim().min(1, 'District is required.').max(200),
   description: z.string().max(2000).nullable().optional(),
   // NULL = shared business-level venue; set = an outlet of this brand
   // (must belong to the same business profile as the location).
