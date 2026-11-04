@@ -834,9 +834,10 @@ export default function MainLayout() {
   }, [activeSection, homeView]);
 
   // Fetch workspaces
-  const { data: workspacesRes, isLoading: workspacesLoading } = useQuery({
+  const { data: workspacesRes, isLoading: workspacesLoading, isError: workspacesError, refetch: retryWorkspaces } = useQuery({
     queryKey: ['workspaces'],
-    queryFn: () => api.get('/workspaces').then((r) => r.data),
+    queryFn: ({ signal }) => api.get('/workspaces', { signal, timeout: 15_000 }).then((r) => r.data),
+    retry: false,
   });
 
   const workspaces: (Workspace & { my_role?: string })[] = useMemo(() => workspacesRes?.data || [], [workspacesRes]);
@@ -1277,6 +1278,20 @@ export default function MainLayout() {
     return (
       <div className="flex h-[100dvh] items-center justify-center bg-surface">
         <p className="text-sm text-foreground-dim">Loading...</p>
+      </div>
+    );
+  }
+
+  if (workspacesError && !workspacesRes) {
+    return (
+      <div className="flex h-[100dvh] items-center justify-center bg-surface">
+        <div className="text-center" role="alert">
+          <h2 className="text-lg font-semibold text-foreground">Couldn't load your workspace</h2>
+          <p className="mt-2 text-sm text-foreground-muted">The connection may be temporarily unavailable. Please try again.</p>
+          <button type="button" onClick={() => void retryWorkspaces()} className="mt-4 rounded-lg bg-foreground px-4 py-2 text-sm text-surface">
+            Retry
+          </button>
+        </div>
       </div>
     );
   }

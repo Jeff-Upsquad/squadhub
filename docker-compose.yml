@@ -80,9 +80,10 @@ services:
       - /var/www/internal-release-manifest.json:/data/internal-release-manifest.json:ro
       # Business-app release manifest, editable live by the Business app's tools/release.sh.
       - /var/www/business-release-manifest.json:/data/business-release-manifest.json:ro
+    # Cloudflare DNS intermittently times out from this VPS; use tested alternatives.
     dns:
-      - 1.1.1.1
       - 8.8.8.8
+      - 9.9.9.9
     extra_hosts:
       - "host.docker.internal:host-gateway"
     networks:

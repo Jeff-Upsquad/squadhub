@@ -50,6 +50,11 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
   try {
     const { data, error } = await supabaseAuth.auth.getUser(token);
 
+    if (error && (error.status === 0 || (error.status ?? 0) >= 500 || error.name === 'AuthRetryableFetchError')) {
+      res.status(503).json({ success: false, error: 'Authentication temporarily unavailable. Please retry.' });
+      return;
+    }
+
     if (error || !data.user) {
       res.status(401).json({ success: false, error: 'Invalid or expired token' });
       return;
@@ -58,11 +63,17 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
     req.userId = data.user.id;
     req.userEmail = data.user.email;
 
-    const { data: profile } = await supabaseAdmin
+    const { data: profile, error: profileError } = await supabaseAdmin
       .from('users')
       .select('user_type, status, display_name')
       .eq('id', data.user.id)
+      .abortSignal(AbortSignal.timeout(10_000))
       .single();
+
+    if (profileError) {
+      res.status(503).json({ success: false, error: 'Account verification temporarily unavailable. Please retry.' });
+      return;
+    }
 
     if (profile?.status === 'banned') {
       res.status(403).json({ success: false, error: 'Your account has been banned.' });
@@ -80,7 +91,7 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
 
     next();
   } catch {
-    res.status(401).json({ success: false, error: 'Invalid or expired token' });
+    res.status(503).json({ success: false, error: 'Authentication temporarily unavailable. Please retry.' });
   }
 }
 

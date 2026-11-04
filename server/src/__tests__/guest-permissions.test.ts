@@ -65,9 +65,9 @@ describe('Guest Permission Enforcement', () => {
 
     expect(workspaceRole).toBe('guest');
 
-    // Verify every single permission is false — no default-allow fallback
+    // Boolean permissions deny access; the numeric edit-window setting is 0.
     for (const [_key, value] of Object.entries(permissions)) {
-      expect(value).toBe(false);
+      expect(value).toBe(typeof value === 'number' ? 0 : false);
     }
   });
 
@@ -82,9 +82,9 @@ describe('Guest Permission Enforcement', () => {
 
     expect(workspaceRole).toBe('guest');
 
-    // All permissions must be false — no default-allow fallback
+    // Missing roles deny boolean permissions and retain the numeric default.
     for (const [_key, value] of Object.entries(permissions)) {
-      expect(value).toBe(false);
+      expect(value).toBe(typeof value === 'number' ? 0 : false);
     }
   });
 
@@ -108,9 +108,9 @@ describe('Guest Permission Enforcement', () => {
 
     expect(workspaceRole).toBe('admin');
 
-    // Verify every permission is true for admin
+    // Admins have every boolean permission and an unlimited edit window (0).
     for (const [_key, value] of Object.entries(permissions)) {
-      expect(value).toBe(true);
+      expect(value).toBe(typeof value === 'number' ? 0 : true);
     }
   });
 

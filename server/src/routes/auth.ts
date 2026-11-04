@@ -396,6 +396,11 @@ router.post('/refresh', async (req: Request, res: Response) => {
       refresh_token: body.refresh_token,
     });
 
+    if (error && (error.status === 0 || (error.status ?? 0) >= 500 || error.name === 'AuthRetryableFetchError')) {
+      res.status(503).json({ success: false, error: 'Session refresh temporarily unavailable. Please retry.' });
+      return;
+    }
+
     if (error || !data.session) {
       res.status(401).json({ success: false, error: 'Session expired' });
       return;
