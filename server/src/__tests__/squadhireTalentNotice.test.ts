@@ -5,14 +5,14 @@ import { TALENT_NOTICE_KINDS, talentNoticeSchema } from '../utils/squadhireTalen
 
 const MIGRATIONS_DIR = join(__dirname, '../../../supabase/migrations');
 
-// The newest migration that redefines notifications_type_check is the live
-// allowlist — every notice kind lands verbatim in notifications.type.
+// Find the newest complete literal allowlist. Later format() migrations extend
+// the existing constraint with %s; they do not replace its accepted kinds.
 function latestNotificationTypes(): Set<string> {
   const files = readdirSync(MIGRATIONS_DIR).filter((f) => f.endsWith('.sql')).sort().reverse();
   for (const file of files) {
     const sql = readFileSync(join(MIGRATIONS_DIR, file), 'utf8');
     const check = sql.match(/ADD CONSTRAINT notifications_type_check CHECK \(([\s\S]*?)\)\s*;/);
-    if (check) return new Set([...check[1].matchAll(/'([a-z_]+)'/g)].map((m) => m[1]));
+    if (check && !check[1].includes('%s')) return new Set([...check[1].matchAll(/'([a-z_]+)'/g)].map((m) => m[1]));
   }
   throw new Error('no migration defines notifications_type_check');
 }

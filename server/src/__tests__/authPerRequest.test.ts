@@ -8,9 +8,24 @@ function response(){const r={status:vi.fn(),json:vi.fn()};r.status.mockReturnVal
 beforeEach(()=>{
  vi.clearAllMocks();db.getUser.mockResolvedValue({data:{user:{id:'user',email:'fixture@example.invalid'}},error:null});
  db.single.mockResolvedValue({data:{user_type:'internal',status:'active',display_name:'Fixture'}});
- const q={select:vi.fn(),eq:vi.fn(),single:db.single};q.select.mockReturnValue(q);q.eq.mockReturnValue(q);db.from.mockReturnValue(q);
+ const q={select:vi.fn(),eq:vi.fn(),abortSignal:vi.fn(),single:db.single};q.select.mockReturnValue(q);q.eq.mockReturnValue(q);q.abortSignal.mockReturnValue(q);db.from.mockReturnValue(q);
 });
 describe('authentication within one HTTP request',()=>{
+ it('returns a retryable service error for an Auth connection failure',async()=>{
+  db.getUser.mockResolvedValue({data:{user:null},error:{name:'AuthRetryableFetchError',status:0}});
+  const res=response(),next=vi.fn();await requireAuth(request(),res as unknown as Response,next);
+  expect(res.status).toHaveBeenCalledWith(503);expect(next).not.toHaveBeenCalled();expect(db.single).not.toHaveBeenCalled();
+ });
+ it('does not authorize an account when the profile lookup fails',async()=>{
+  db.single.mockResolvedValue({data:null,error:{message:'fetch failed'}});
+  const res=response(),next=vi.fn();await requireAuth(request(),res as unknown as Response,next);
+  expect(res.status).toHaveBeenCalledWith(503);expect(next).not.toHaveBeenCalled();
+ });
+ it('returns a service error when verification throws',async()=>{
+  db.getUser.mockRejectedValue(new Error('connection timeout'));
+  const res=response(),next=vi.fn();await requireAuth(request(),res as unknown as Response,next);
+  expect(res.status).toHaveBeenCalledWith(503);expect(next).not.toHaveBeenCalled();
+ });
  it('verifies once while traversing six sibling routers and preserves identity',async()=>{
   const req=request(),res=response(),next=vi.fn();
   for(let n=0;n<6;n++)await requireAuth(req,res as unknown as Response,next);

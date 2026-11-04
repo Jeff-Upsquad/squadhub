@@ -15,7 +15,8 @@ router.get('/', requireAuth, async (req: Request, res: Response) => {
     const { data, error } = await supabaseAdmin
       .from('workspace_members')
       .select('workspace_id, role, workspaces(*)')
-      .eq('user_id', req.userId!);
+      .eq('user_id', req.userId!)
+      .abortSignal(AbortSignal.timeout(10_000));
 
     if (error) {
       res.status(500).json({ success: false, error: error.message });

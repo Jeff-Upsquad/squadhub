@@ -11,6 +11,12 @@ export const supabaseAdmin = createClient(config.supabaseUrl, config.supabaseSer
 
 // Separate client for auth verification only (avoids contaminating admin client state)
 export const supabaseAuth = createClient(config.supabaseUrl, config.supabaseServiceRoleKey, {
+  global: {
+    fetch: (input, init) => fetch(input, {
+      ...init,
+      signal: AbortSignal.any([AbortSignal.timeout(10_000), ...(init?.signal ? [init.signal] : [])]),
+    }),
+  },
   auth: {
     autoRefreshToken: false,
     persistSession: false,

@@ -46,7 +46,7 @@ async function refreshAccessToken(): Promise<string | null> {
   refreshPromise = (async () => {
     try {
       // Use bare axios (not `api`) to avoid recursion through the interceptor.
-      const res = await axios.post('/auth/refresh', { refresh_token: refreshToken });
+      const res = await axios.post('/auth/refresh', { refresh_token: refreshToken }, { timeout: 15_000 });
       const newAccess = res.data?.data?.access_token as string | undefined;
       const newRefresh = res.data?.data?.refresh_token as string | undefined;
       if (!newAccess || !newRefresh) {
@@ -55,7 +55,9 @@ async function refreshAccessToken(): Promise<string | null> {
       }
       updateTokens(newAccess, newRefresh);
       return newAccess;
-    } catch {
+    } catch (error) {
+      // A network outage is not evidence that the saved session is invalid.
+      if (axios.isAxiosError(error) && (!error.response || error.response.status >= 500)) throw error;
       logout();
       return null;
     } finally {
@@ -84,10 +86,10 @@ function jwtExpMs(token: string): number {
 export async function getFreshAccessToken(minTtlMs = 120_000): Promise<string | null> {
   const { accessToken } = useAuthStore.getState();
   if (accessToken && jwtExpMs(accessToken) - Date.now() > minTtlMs) return accessToken;
-  return refreshAccessToken();
+  return refreshAccessToken().catch(() => null);
 }
 
-// Handle 401 — attempt a one-shot refresh+retry; logout only if refresh fails.
+// Handle 401 — attempt a one-shot refresh+retry; logout only if credentials are rejected.
 api.interceptors.response.use(
   (response) => response,
   async (error: AxiosError) => {
