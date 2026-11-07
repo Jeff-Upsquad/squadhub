@@ -90,6 +90,15 @@ export async function overlapsWorkBlockRun(
   return !!run;
 }
 
+// Task timer sessions stop at 6 hours (see MAX_TIMER_SESSION_MS on the web). The
+// server enforces it too, so an out-of-date client can't log a forgotten timer.
+// Manually logged time is the user's own statement and isn't capped.
+export const MAX_TIMER_ENTRY_SECONDS = 6 * 60 * 60;
+
+export function capTimerSeconds(seconds: number, source: string): number {
+  return source === 'timer' ? Math.min(seconds, MAX_TIMER_ENTRY_SECONDS) : seconds;
+}
+
 export async function logTaskTimeEntry(params: LogTaskTimeParams): Promise<LogTaskTimeResult> {
   const { taskId, userId, startedAt, durationSeconds, source, workBlockRunId, note, skipDailySummary } = params;
 

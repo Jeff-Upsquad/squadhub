@@ -12,7 +12,7 @@ import { PARTNER_USER_TYPES } from '@squadhub/shared';
 import { spawnRoutineInstance } from '../../services/routineSpawner';
 import { validateWorkRange } from '../../utils/taskWorkRange';
 import { todayIST } from '../../utils/ist';
-import { logTaskTimeEntry, ensureAssigneeOnTimeLogged, addDailyWorkSeconds, overlapsWorkBlockRun, getOverlappingWorkBlockRun, consolidateContiguousEntries } from '../../utils/taskTime';
+import { logTaskTimeEntry, capTimerSeconds, ensureAssigneeOnTimeLogged, addDailyWorkSeconds, overlapsWorkBlockRun, getOverlappingWorkBlockRun, consolidateContiguousEntries } from '../../utils/taskTime';
 import { getExcludedTaskIds } from '../../utils/taskViewReporting';
 import { logTaskActivity, type TaskActivityEvent } from '../../utils/taskActivity';
 import { getUserSkillLevel, checkLoggedTimeChange, isUserAdmin } from '../../utils/skills';
@@ -1197,7 +1197,8 @@ const createTimeEntrySchema = z.object({
 router.post('/tasks/:id/time-entries', async (req: Request, res: Response) => {
   try {
     const taskId = req.params.id as string;
-    const { started_at, duration_seconds, note, source } = createTimeEntrySchema.parse(req.body);
+    const { started_at, duration_seconds: requestedSeconds, note, source } = createTimeEntrySchema.parse(req.body);
+    const duration_seconds = capTimerSeconds(requestedSeconds, source ?? 'timer');
 
     // Access control: caller must have access to the task's list.
     const { data: task } = await supabaseAdmin
@@ -2609,12 +2610,14 @@ router.post('/tasks', async (req: Request, res: Response) => {
 
     // Log creation-time work through the same history/reporting path as task timers.
     if (body.initial_logged_seconds) {
-      const startedAt = new Date(Date.now() - body.initial_logged_seconds * 1000).toISOString();
+      const initialSource = body.initial_time_source || 'manual';
+      const initialSeconds = capTimerSeconds(body.initial_logged_seconds, initialSource);
+      const startedAt = new Date(Date.now() - initialSeconds * 1000).toISOString();
       const withinBlock = await overlapsWorkBlockRun(req.userId!, startedAt, new Date().toISOString());
       const logged = await logTaskTimeEntry({
         taskId: task.id, userId: req.userId!, startedAt,
-        durationSeconds: body.initial_logged_seconds,
-        source: body.initial_time_source || 'manual', skipDailySummary: withinBlock,
+        durationSeconds: initialSeconds,
+        source: initialSource, skipDailySummary: withinBlock,
       });
       if (!logged.ok) {
         // No time entry was written: remove the new task so retry cannot duplicate it.
@@ -2622,7 +2625,7 @@ router.post('/tasks', async (req: Request, res: Response) => {
         res.status(500).json({ success: false, error: `Could not save logged time: ${logged.error}` });
         return;
       }
-      task.time_tracked = body.initial_logged_seconds;
+      task.time_tracked = initialSeconds;
       if (!task.assignee_ids?.length) task.assignee_ids = [req.userId!];
     }
 

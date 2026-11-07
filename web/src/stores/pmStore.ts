@@ -41,6 +41,10 @@ export interface TimerState {
 export const MAX_SECONDARY_TIMERS = 5;
 export const MAX_PARALLEL_TIMERS = MAX_SECONDARY_TIMERS + 1;
 
+// A task timer session stops itself after this long, so a forgotten timer can't
+// log days of time. Mirrored on the server by MAX_TIMER_ENTRY_SECONDS.
+export const MAX_TIMER_SESSION_MS = 6 * 60 * 60 * 1000;
+
 // One task's slice of a closed timer segment. Wall-clock time between two
 // timer start/stop events is divided evenly among every timer that was running
 // through that segment; callers persist each share as a task time entry.
@@ -89,6 +93,29 @@ function closeSegmentShares(timers: TimerState[], segmentStart: number | null, n
   const per = Math.round((now - segmentStart) / 1000 / timers.length);
   if (per < 1) return [];
   return timers.map((t) => ({ taskId: t.taskId, listId: t.listId, startedAt: segmentStart, seconds: per }));
+}
+
+const timerExpiresAt = (t: TimerState) =>
+  t.startedAt + MAX_TIMER_SESSION_MS - (t.elapsedBefore || 0) * 1000;
+
+// Close every timer that has passed the session limit, as of the moment it hit
+// the limit rather than now. Survivors keep the equal-split accounting up to
+// each expiry, and only the time before it is ever logged.
+function settleExpiredTimers(timers: TimerState[], segmentStart: number | null, now: number) {
+  let running = timers;
+  let segment = segmentStart;
+  const shares: TimerShare[] = [];
+  const expired: TimerState[] = [];
+  while (running.length) {
+    const nextExpiry = Math.min(...running.map(timerExpiresAt));
+    if (nextExpiry > now) break;
+    const at = segment === null ? nextExpiry : Math.max(segment, nextExpiry);
+    shares.push(...closeSegmentShares(running, segment, at));
+    expired.push(...running.filter((t) => timerExpiresAt(t) <= at));
+    running = running.filter((t) => timerExpiresAt(t) > at);
+    segment = running.length ? at : null;
+  }
+  return { timers: running, segmentStart: segment, shares, expired };
 }
 
 /** Broadcast live timer changes across browser tabs/windows to prevent concurrent drift. */
@@ -252,6 +279,7 @@ interface PMState {
   startParallelTimer: (taskId: string, taskTitle: string, listId: string, baseTracked: number) => { shares: TimerShare[] } | null;
   adoptCompanionTimer: (taskId: string, taskTitle: string, listId: string, baseTracked: number, startedAt: number) => { shares: TimerShare[] } | null;
   stopParallelTimer: (taskId: string) => { stopped: TimerState; shares: TimerShare[] } | null;
+  expireLongRunningTimers: () => { expired: TimerState[]; shares: TimerShare[] };
   splitRunningTimersForManualEntry: (manualTaskId: string, manualStartMs: number, manualDurationSec: number) => ManualSplitResult;
   setPendingTimerStart: (pending: PendingTimerStart | null) => void;
   enqueueTimeShares: (shares: TimerShare[]) => void;
@@ -571,11 +599,12 @@ export const usePMStore = create<PMState>()(
           return { fadingTaskIds: next };
         }),
       startParallelTimer: (taskId, taskTitle, listId, baseTracked) => {
-        const { timers, timerSegmentStart } = get();
+        const now = Date.now();
+        const settled = settleExpiredTimers(get().timers, get().timerSegmentStart, now);
+        const timers = settled.timers;
         if (timers.some((t) => t.taskId === taskId)) return null;
         if (timers.length >= MAX_PARALLEL_TIMERS) return null;
-        const now = Date.now();
-        const shares = closeSegmentShares(timers, timerSegmentStart, now);
+        const shares = [...settled.shares, ...closeSegmentShares(timers, settled.segmentStart, now)];
         const nextTimers = [...timers, { taskId, taskTitle, listId, startedAt: now, baseTracked }];
         set({
           timers: nextTimers,
@@ -586,16 +615,17 @@ export const usePMStore = create<PMState>()(
         return { shares };
       },
       adoptCompanionTimer: (taskId, taskTitle, listId, baseTracked, startedAt) => {
-        const { timers, timerSegmentStart } = get();
-        if (timers.some((t) => t.taskId === taskId) || timers.length >= MAX_PARALLEL_TIMERS) return null;
         const now = Date.now();
+        const settled = settleExpiredTimers(get().timers, get().timerSegmentStart, now);
+        const timers = settled.timers;
+        if (timers.some((t) => t.taskId === taskId) || timers.length >= MAX_PARALLEL_TIMERS) return null;
         const start = Math.min(now, startedAt);
-        const shares = closeSegmentShares(timers, timerSegmentStart, now);
+        const shares = [...settled.shares, ...closeSegmentShares(timers, settled.segmentStart, now)];
         // When another web timer was already running, close its segment and
         // record the companion's time before the handoff separately. From this
         // point forward the existing parallel-timer split applies.
         if (timers.length && now - start >= 1000) {
-          shares.push({ taskId, listId, startedAt: start, seconds: Math.floor((now - start) / 1000) });
+          shares.push({ taskId, listId, startedAt: start, seconds: Math.floor(Math.min(now - start, MAX_TIMER_SESSION_MS) / 1000) });
         }
         const nextTimers = [...timers, { taskId, taskTitle, listId, startedAt: start, baseTracked }];
         const nextSegment = timers.length ? now : start;
@@ -611,17 +641,30 @@ export const usePMStore = create<PMState>()(
         const stopped = timers.find((t) => t.taskId === taskId);
         if (!stopped) return null;
         const now = Date.now();
+        const settled = settleExpiredTimers(timers, timerSegmentStart, now);
+        // Stopped after it had already hit the limit: nothing past the limit counts.
+        const alreadyExpired = !settled.timers.some((t) => t.taskId === taskId);
         // The stopping timer ran through this segment too, so it takes its
         // equal split alongside the survivors.
-        const shares = closeSegmentShares(timers, timerSegmentStart, now);
-        const remaining = timers.filter((t) => t.taskId !== taskId);
-        const nextSegment = remaining.length ? now : null;
+        const shares = alreadyExpired
+          ? settled.shares
+          : [...settled.shares, ...closeSegmentShares(settled.timers, settled.segmentStart, now)];
+        const remaining = settled.timers.filter((t) => t.taskId !== taskId);
+        const nextSegment = alreadyExpired ? settled.segmentStart : remaining.length ? now : null;
         set({
           timers: remaining,
           timerSegmentStart: nextSegment,
         });
         broadcastTimerState(remaining, nextSegment);
         return { stopped, shares };
+      },
+      expireLongRunningTimers: () => {
+        const settled = settleExpiredTimers(get().timers, get().timerSegmentStart, Date.now());
+        if (settled.expired.length) {
+          set({ timers: settled.timers, timerSegmentStart: settled.segmentStart });
+          broadcastTimerState(settled.timers, settled.segmentStart);
+        }
+        return { expired: settled.expired, shares: settled.shares };
       },
       splitRunningTimersForManualEntry: (manualTaskId, manualStartMs, manualDurationSec) => {
         const { timers, timerSegmentStart } = get();

@@ -57,6 +57,7 @@ import ThemeToggle from '../components/ThemeToggle';
 import RailTimer from './RailTimer';
 import ActiveTimerTiles from '../components/ActiveTimer';
 import TimerConflictDialog from '../components/TimerConflictDialog';
+import TimerLimitWatcher from '../components/TimerLimitWatcher';
 import TimerModeDialog from '../components/TimerModeDialog';
 import TimeSheetPanel from '../components/TimeSheetPanel';
 import ClientDashboard from '../views/app/client/ClientDashboard';
@@ -1649,6 +1650,7 @@ export default function MainLayout() {
         />
 
         <TimerConflictDialog />
+        <TimerLimitWatcher />
         <TimerModeDialog />
         <GlobalTaskDetailPanel />
         <GoalsHost />
@@ -2055,6 +2057,7 @@ export default function MainLayout() {
             FAB (plus each surface's own header actions). */}
         <EmergencyBanner after={isHomeHub ? <ActiveTimerTiles /> : null} />
         <TimerConflictDialog />
+        <TimerLimitWatcher />
         <TimerModeDialog />
         {/* Fallback for the brief window before the tab strip is seeded (a brand
             new user with empty persisted tabs): render the live view from global
