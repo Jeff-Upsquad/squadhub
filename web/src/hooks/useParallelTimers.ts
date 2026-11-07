@@ -185,8 +185,21 @@ export function useParallelTimers() {
     await flushTimerShares(qc, res.shares);
   };
 
+  // Auto-stop for the session limit: same bookkeeping as stopTimer, for every
+  // timer that has run past it. Returns the timers it stopped.
+  const stopExpiredTimers = async () => {
+    const { expired, shares } = usePMStore.getState().expireLongRunningTimers();
+    for (const t of expired) {
+      if (wbRun) closeTaskTime.mutate({ run_id: wbRun.run.id, task_id: t.taskId });
+      if (gRun) closeGroupTaskTime.mutate({ run_id: gRun.id, task_id: t.taskId });
+    }
+    await flushTimerShares(qc, shares);
+    return expired;
+  };
+
   return {
     timers,
+    stopExpiredTimers,
     startTimer,
     requestStartTimer,
     stopTimer,
