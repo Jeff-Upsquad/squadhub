@@ -119,6 +119,16 @@ export const config = {
   livekitUrl: process.env.LIVEKIT_URL || '',
   livekitApiKey: process.env.LIVEKIT_API_KEY || '',
   livekitApiSecret: process.env.LIVEKIT_API_SECRET || '',
+
+  // Squad Hub SaaS bridge (app.squadhub.in, separate repo + DB). Server-to-server
+  // HMAC-signed calls in both directions (utils/bridgeSign.ts). When the secret
+  // is unset the inbound /bridge/v1 routes return 503 and outbound calls no-op
+  // with a log line. SAAS_PROVISIONING_ENABLED gates the outbound trigger hooks
+  // (account / shared-workspace provisioning, lifecycle sync) — default OFF so
+  // production behaviour is unchanged until it is flipped.
+  saasBridgeSecret: process.env.SAAS_BRIDGE_SECRET || '',
+  saasApiUrl: process.env.SAAS_API_URL || '',
+  saasProvisioningEnabled: process.env.SAAS_PROVISIONING_ENABLED === 'true',
 } as const;
 
 // Validate required env vars at startup

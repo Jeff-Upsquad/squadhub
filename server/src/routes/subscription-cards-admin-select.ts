@@ -36,6 +36,7 @@ import {
 } from '../utils/clientCardLink';
 import { lockAcceptedBidPrice } from '../utils/lockAcceptedBidPrice';
 import { provisionActivatedClientSpaces } from '../utils/activatedClientSpaces';
+import { fireSaasHook, saasCardLifecycle, saasCarryWorkspaceToSuccessor } from '../utils/saasBridgeClient';
 import crypto from 'crypto';
 
 const router = Router();
@@ -1103,6 +1104,11 @@ router.post('/subscription-cards/:id/upgrade-downgrade', async (req: Request, re
     );
     if ('error' in result) { res.status(500).json({ success: false, error: result.error }); return; }
 
+    // Squad Hub SaaS: the subscription continues on the new card — carry the
+    // shared-workspace link over (the workspace is NOT closed). Best-effort,
+    // flag-gated.
+    fireSaasHook('card-supersede', () => saasCarryWorkspaceToSuccessor(cardId, result.id));
+
     // 5. The client's subscription continues on the new card (best-effort sync).
     await syncClientSubscriptionForCard(result.id, { status: 'active' }).catch((err) =>
       console.error('[upgrade-downgrade] client subscription sync failed', err),
@@ -1228,6 +1234,9 @@ export async function pauseCardCore(cardId: string, actor: CardActor): Promise<C
       actorLabel: actor.userName ?? null,
       metadata: { recipient_type: card.selected_recipient_type, recipient_id: card.selected_recipient_id },
     });
+
+    // Squad Hub SaaS: pause the card's shared workspace (best-effort, flag-gated).
+    fireSaasHook('card-pause', () => saasCardLifecycle(cardId, 'pause'));
 
     return { httpStatus: 200, body: { success: true, ...(warnings.length ? { warning: warnings.join(' ') } : {}) } };
   } catch (err: any) {
@@ -1774,6 +1783,11 @@ export async function resumeCardCore(
       actorLabel: actor.userName ?? null,
       metadata: { mode },
     });
+
+    // Squad Hub SaaS: resume the card's shared workspace (best-effort,
+    // flag-gated). A resume onto a NEW talent also opened a term, which ran the
+    // assignment hook (ensure + add talent); the hand-off removed the old one.
+    fireSaasHook('card-resume', () => saasCardLifecycle(cardId, 'resume'));
 
     return { httpStatus: 200, body: { success: true, ...(warnings.length ? { warning: warnings.join(' ') } : {}) } };
   } catch (err: any) {

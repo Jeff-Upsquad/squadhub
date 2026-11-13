@@ -4,7 +4,8 @@
 // Per (card, IST month) reconciliation of the plan's committed monthly hours
 // (the TARGET, mirrored read-only from the plan) against the hours actually
 // spent in the card's linked space -- tracked task time (task_time_entries) plus
-// elapsed idle-day time (elapsed_time_entries). Produces a signed "additional
+// elapsed idle-day time (elapsed_time_entries) plus SaaS-pushed daily totals for
+// the card (saas_time_totals, see utils/saasTimeTotals.ts). Produces a signed "additional
 // hours" delta (+ overage / - shortfall) and the money it moves (ONE-SIDED):
 //   - shortfall (additional_hours < 0): payout += additional_hours * partner_hourly_rate (deduction)
 //   - overage (additional_hours > 0): reported for visibility but moves NO money
@@ -30,6 +31,7 @@ import { supabaseAdmin } from '../supabase';
 import type { CardBilling } from './cardBilling';
 import { getFolderPlanTimeline, committedHoursForRange, istMonthBounds } from './folderCommittedHours';
 import { aggregateFolderTimeSummary, aggregateFolderElapsedSummary } from '../services/folderShareMetrics';
+import { sumSaasCardSeconds } from './saasTimeTotals';
 
 const round2 = (n: number): number => Math.round(n * 100) / 100;
 
@@ -130,14 +132,17 @@ export async function computeCardHoursCompletion(
   const tl = await getFolderPlanTimeline(linkedFolderId);
   const targetMonthly = tl.hasCard ? committedHoursForRange(tl, from, to) : 0;
 
-  // Actual: tracked task time + elapsed idle-day time for the space this month.
-  const [tracked, elapsed] = await Promise.all([
+  // Actual: tracked task time + elapsed idle-day time for the space this month,
+  // plus daily totals pushed by Squad Hub SaaS for this card (saas_time_totals —
+  // work logged in the SaaS shared workspace; 0 when none / bridge unused).
+  const [tracked, elapsed, saasSec] = await Promise.all([
     aggregateFolderTimeSummary(linkedFolderId, from, to),
     aggregateFolderElapsedSummary(linkedFolderId, from, to),
+    sumSaasCardSeconds(cardId, from, to),
   ]);
   const trackedSec = tracked.reduce((s, r) => s + Number(r.total_work_seconds || 0), 0);
   const elapsedSec = elapsed.reduce((s, r) => s + Number(r.elapsed_seconds || 0), 0);
-  const actualHours = round2((trackedSec + elapsedSec) / 3600);
+  const actualHours = round2((trackedSec + elapsedSec + saasSec) / 3600);
 
   const additionalHours = additionalHoursActiveForMonth(periodMonth)
     ? round2(actualHours - targetMonthly)

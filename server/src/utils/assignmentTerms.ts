@@ -14,6 +14,7 @@
 // ============================================================
 import { supabaseAdmin } from '../supabase';
 import { resolveCardBilling } from './cardBilling';
+import { fireSaasHook, saasProvisionAssignment } from './saasBridgeClient';
 
 interface EnsureTermInput {
   cardId: string;
@@ -82,7 +83,7 @@ export async function ensureActiveAssignmentTerm(input: EnsureTermInput): Promis
       console.error('[assignmentTerms] resolveCardBilling failed', e);
     }
 
-    await supabaseAdmin.from('subscription_assignment_terms').insert({
+    const { error: insertErr } = await supabaseAdmin.from('subscription_assignment_terms').insert({
       card_id: cardId,
       recipient_type: recipientType,
       recipient_id: recipientId,
@@ -97,6 +98,15 @@ export async function ensureActiveAssignmentTerm(input: EnsureTermInput): Promis
       subscription_price: billing?.subscription_price ?? null,
       currency: billing?.currency ?? null,
     });
+    if (insertErr) {
+      console.error('[assignmentTerms] term insert failed', insertErr.message);
+      return;
+    }
+
+    // Squad Hub SaaS: a talent/partner is now actively assigned to this card →
+    // ensure their SaaS account + the card's shared workspace (best-effort,
+    // never blocks; no-op unless SAAS_PROVISIONING_ENABLED).
+    fireSaasHook('assignment', () => saasProvisionAssignment({ cardId, recipientType, recipientId }));
   } catch (err) {
     console.error('[assignmentTerms] ensureActiveAssignmentTerm failed', err);
   }

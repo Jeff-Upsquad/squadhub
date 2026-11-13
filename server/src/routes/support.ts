@@ -5,11 +5,23 @@ import { requireMiniAppOrAdmin } from '../middleware/miniApp';
 import { getUserIdsByRoleId } from '../utils/roles';
 import { isSupportAgent, ensureChannelMember } from '../utils/supportAccess';
 import { supabaseAdmin } from '../supabase';
+import { SAAS_REQUESTER_USER_ID, notifySaasIfExternalTicket } from '../utils/saasSupport';
 
 const router = Router();
 
-const CATEGORIES = ['technical', 'accounts', 'financial', 'general'] as const;
-type Category = (typeof CATEGORIES)[number];
+/**
+ * A failure whose message the HTTP routes have always returned verbatim (DB
+ * insert errors on create/reply). Anything else stays a generic 500, exactly
+ * as before the create/reply logic moved into the shared *Core helpers.
+ */
+export class SupportCoreError extends Error {}
+
+function exposedError(err: unknown): string {
+  return err instanceof SupportCoreError ? err.message : 'Internal server error';
+}
+
+export const CATEGORIES = ['technical', 'accounts', 'financial', 'general'] as const;
+export type Category = (typeof CATEGORIES)[number];
 const CATEGORY_LABEL: Record<Category, string> = {
   technical: 'Technical',
   accounts: 'Accounts',
@@ -18,7 +30,7 @@ const CATEGORY_LABEL: Record<Category, string> = {
 };
 
 // PostgREST embed hints — the FK-named joins to the users table.
-const TICKET_SELECT =
+export const TICKET_SELECT =
   '*, creator:users!support_tickets_created_by_fkey(id, display_name, avatar_url, email), ' +
   'assignee:users!support_tickets_assigned_to_fkey(id, display_name, avatar_url, email)';
 
@@ -35,7 +47,7 @@ async function canAccessTicket(
 }
 
 /** Ensure the one Support channel exists for a workspace; return its id. */
-async function ensureSupportChannel(workspaceId: string, userId: string): Promise<string> {
+export async function ensureSupportChannel(workspaceId: string, userId: string): Promise<string> {
   const { data: existing } = await supabaseAdmin
     .from('channels')
     .select('id')
@@ -122,7 +134,7 @@ async function resolveWorkspaceId(req: Request): Promise<string | null> {
 }
 
 /** Fetch a ticket row (raw, no joins) or null. */
-async function getTicketRow(id: string) {
+export async function getTicketRow(id: string) {
   const { data } = await supabaseAdmin.from('support_tickets').select('*').eq('id', id).maybeSingle();
   return data;
 }
@@ -134,7 +146,11 @@ async function notify(
   actorId: string,
   type: string,
 ): Promise<void> {
-  const filtered = rows.filter((r) => r.user_id && r.user_id !== actorId);
+  // The SaaS requester proxy is a placeholder, not a person — never notify it
+  // (the SaaS user is notified via the bridge instead).
+  const filtered = rows.filter(
+    (r) => r.user_id && r.user_id !== actorId && r.user_id !== SAAS_REQUESTER_USER_ID,
+  );
   if (!filtered.length) return;
   await supabaseAdmin.from('notifications').insert(
     filtered.map((r) => ({
@@ -213,76 +229,107 @@ const createSchema = z.object({
   priority: z.enum(['low', 'normal', 'high', 'urgent']).optional(),
 });
 
+export interface CreateTicketCoreInput {
+  workspaceId: string;
+  creatorId: string;
+  category: Category;
+  subject: string;
+  description: string;
+  priority?: 'low' | 'normal' | 'high' | 'urgent';
+  /** Set for tickets raised from Squad Hub SaaS over the bridge. */
+  externalRequesterId?: string | null;
+  /** Optional messages.metadata on the opening message (bridge requester info). */
+  rootMetadata?: Record<string, unknown> | null;
+}
+
+/**
+ * Open a ticket: the description becomes a top-level Support-channel message
+ * (its thread is the conversation), the ticket row is numbered by trigger, and
+ * the category routing rule auto-assigns + notifies. Shared by POST /tickets
+ * and the SaaS bridge (POST /bridge/v1/support/tickets). Throws on failure.
+ */
+export async function createSupportTicketCore(input: CreateTicketCoreInput): Promise<any> {
+  const channelId = await ensureSupportChannel(input.workspaceId, input.creatorId);
+  // The creator converses in the real chat thread — grant channel access.
+  // (Not for the SaaS requester proxy: it never signs in.)
+  if (input.creatorId !== SAAS_REQUESTER_USER_ID) {
+    await ensureChannelMember(channelId, input.creatorId);
+  }
+
+  // The opening description becomes a top-level channel message; its thread
+  // is the conversation.
+  const rootInsert: Record<string, unknown> = {
+    channel_id: channelId,
+    sender_id: input.creatorId,
+    content: input.description,
+    type: 'text',
+    mentions: [],
+  };
+  if (input.rootMetadata) rootInsert.metadata = input.rootMetadata;
+  const { data: rootMsg, error: msgErr } = await supabaseAdmin
+    .from('messages')
+    .insert(rootInsert)
+    .select('id')
+    .single();
+  if (msgErr || !rootMsg) throw new SupportCoreError(msgErr?.message || 'Could not open ticket');
+
+  // Auto-assign by category routing rule, if one is configured.
+  const { data: rule } = await supabaseAdmin
+    .from('support_ticket_routing')
+    .select('assignee_id')
+    .eq('workspace_id', input.workspaceId)
+    .eq('category', input.category)
+    .maybeSingle();
+  const autoAssignee = rule?.assignee_id || null;
+
+  const ticketInsert: Record<string, unknown> = {
+    workspace_id: input.workspaceId,
+    channel_id: channelId,
+    root_message_id: (rootMsg as any).id,
+    category: input.category,
+    subject: input.subject,
+    priority: input.priority || 'normal',
+    created_by: input.creatorId,
+    assigned_to: autoAssignee,
+    assigned_at: autoAssignee ? new Date().toISOString() : null,
+  };
+  if (input.externalRequesterId) ticketInsert.external_requester_id = input.externalRequesterId;
+  const { data: ticket, error: tErr } = await supabaseAdmin
+    .from('support_tickets')
+    .insert(ticketInsert)
+    .select(TICKET_SELECT)
+    .single();
+  if (tErr || !ticket) throw new SupportCoreError(tErr?.message || 'Could not create ticket');
+  const t = ticket as any;
+
+  if (autoAssignee) {
+    await notify(
+      [
+        {
+          user_id: autoAssignee,
+          title: `New ${CATEGORY_LABEL[input.category]} ticket assigned to you`,
+          body: `SUP-${t.ticket_number}: ${input.subject}`,
+        },
+      ],
+      t.id,
+      input.creatorId,
+      'support_ticket_assigned',
+    );
+  }
+  return ticket;
+}
+
 router.post('/tickets', requireAuth, async (req: Request, res: Response) => {
   try {
     const body = createSchema.parse(req.body);
-    const channelId = await ensureSupportChannel(body.workspace_id, req.userId!);
-    // The creator converses in the real chat thread — grant channel access.
-    await ensureChannelMember(channelId, req.userId!);
-
-    // The opening description becomes a top-level channel message; its thread
-    // is the conversation.
-    const { data: rootMsg, error: msgErr } = await supabaseAdmin
-      .from('messages')
-      .insert({
-        channel_id: channelId,
-        sender_id: req.userId,
-        content: body.description,
-        type: 'text',
-        mentions: [],
-      })
-      .select('id')
-      .single();
-    if (msgErr || !rootMsg) {
-      res.status(500).json({ success: false, error: msgErr?.message || 'Could not open ticket' });
-      return;
-    }
-
-    // Auto-assign by category routing rule, if one is configured.
-    const { data: rule } = await supabaseAdmin
-      .from('support_ticket_routing')
-      .select('assignee_id')
-      .eq('workspace_id', body.workspace_id)
-      .eq('category', body.category)
-      .maybeSingle();
-    const autoAssignee = rule?.assignee_id || null;
-
-    const { data: ticket, error: tErr } = await supabaseAdmin
-      .from('support_tickets')
-      .insert({
-        workspace_id: body.workspace_id,
-        channel_id: channelId,
-        root_message_id: (rootMsg as any).id,
-        category: body.category,
-        subject: body.subject,
-        priority: body.priority || 'normal',
-        created_by: req.userId,
-        assigned_to: autoAssignee,
-        assigned_at: autoAssignee ? new Date().toISOString() : null,
-      })
-      .select(TICKET_SELECT)
-      .single();
-    if (tErr || !ticket) {
-      res.status(500).json({ success: false, error: tErr?.message || 'Could not create ticket' });
-      return;
-    }
-    const t = ticket as any;
-
-    if (autoAssignee) {
-      await notify(
-        [
-          {
-            user_id: autoAssignee,
-            title: `New ${CATEGORY_LABEL[body.category]} ticket assigned to you`,
-            body: `SUP-${t.ticket_number}: ${body.subject}`,
-          },
-        ],
-        t.id,
-        req.userId!,
-        'support_ticket_assigned',
-      );
-    }
-
+    const ticket = await createSupportTicketCore({
+      workspaceId: body.workspace_id,
+      creatorId: req.userId!,
+      category: body.category,
+      subject: body.subject,
+      description: body.description,
+      priority: body.priority,
+    });
     res.status(201).json({ success: true, data: ticket });
   } catch (err) {
     if (err instanceof z.ZodError) {
@@ -290,7 +337,7 @@ router.post('/tickets', requireAuth, async (req: Request, res: Response) => {
       return;
     }
     console.error('Create ticket error:', err);
-    res.status(500).json({ success: false, error: 'Internal server error' });
+    res.status(500).json({ success: false, error: exposedError(err) });
   }
 });
 
@@ -356,7 +403,7 @@ router.get('/tickets/:id/messages', requireAuth, async (req: Request, res: Respo
   }
 });
 
-const replySchema = z.object({
+export const replySchema = z.object({
   content: z.string().trim().max(8000).optional(),
   type: z.enum(['text', 'image', 'audio', 'video', 'file']).default('text'),
   file_url: z.string().optional(),
@@ -365,6 +412,86 @@ const replySchema = z.object({
   file_mime: z.string().optional(),
   duration_ms: z.number().optional(),
 });
+
+export type TicketReplyBody = z.infer<typeof replySchema>;
+
+/**
+ * Post a reply into a ticket's thread: inserts the thread message, keeps the
+ * legacy thread index + ticket activity in sync, emits realtime, notifies the
+ * other side, and — for tickets raised from Squad Hub SaaS — tells the SaaS so
+ * the requester gets an in-app notification. Shared by
+ * POST /tickets/:id/messages and the SaaS bridge. Throws on failure.
+ */
+export async function postSupportTicketReplyCore(input: {
+  row: any;
+  senderId: string;
+  body: TicketReplyBody;
+  metadata?: Record<string, unknown> | null;
+  io?: any;
+}): Promise<any> {
+  const { row, senderId, body } = input;
+  if (!row.root_message_id) throw new SupportCoreError('Ticket has no conversation root');
+
+  const insertRow: Record<string, unknown> = {
+    channel_id: row.channel_id,
+    sender_id: senderId,
+    content: body.content || null,
+    type: body.type,
+    file_url: body.file_url || null,
+    mentions: [],
+    parent_message_id: row.root_message_id,
+  };
+  if (body.file_name) insertRow.file_name = body.file_name;
+  if (body.file_size) insertRow.file_size = body.file_size;
+  if (body.file_mime) insertRow.file_mime = body.file_mime;
+  if (body.duration_ms) insertRow.duration_ms = body.duration_ms;
+  if (input.metadata) insertRow.metadata = input.metadata;
+
+  const { data: message, error } = await supabaseAdmin
+    .from('messages')
+    .insert(insertRow)
+    .select('*, sender:users!sender_id(id, display_name, avatar_url, email)')
+    .single();
+  if (error || !message) throw new SupportCoreError(error?.message || 'Could not send');
+
+  // Keep the legacy thread index in sync (mirrors /messages behaviour).
+  await supabaseAdmin
+    .from('message_threads')
+    .insert({ parent_message_id: row.root_message_id, reply_message_id: message.id });
+
+  await supabaseAdmin
+    .from('support_tickets')
+    .update({ last_activity_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+    .eq('id', row.id);
+
+  // Real-time to everyone viewing this ticket thread.
+  if (input.io) input.io.to(`support_ticket:${row.id}`).emit('support_ticket_message', { ticket_id: row.id, message });
+
+  // Notify the "other side": the creator hears from agents, the assignee (and
+  // creator) hear from each other.
+  const recipients = new Set<string>();
+  if (row.created_by !== senderId) recipients.add(row.created_by);
+  if (row.assigned_to && row.assigned_to !== senderId) recipients.add(row.assigned_to);
+  await notify(
+    Array.from(recipients).map((user_id) => ({
+      user_id,
+      title: `New reply on SUP-${row.ticket_number}`,
+      body: body.content ? body.content.slice(0, 140) : 'Sent an attachment',
+    })),
+    row.id,
+    senderId,
+    'support_ticket_reply',
+  );
+
+  // Bridge-created ticket + an agent (not the requester) replied → SaaS notify.
+  notifySaasIfExternalTicket({
+    ticketId: row.id,
+    senderId,
+    preview: body.content ? body.content.slice(0, 140) : 'Sent an attachment',
+  });
+
+  return message;
+}
 
 router.post('/tickets/:id/messages', requireAuth, async (req: Request, res: Response) => {
   try {
@@ -386,61 +513,12 @@ router.post('/tickets/:id/messages', requireAuth, async (req: Request, res: Resp
       res.status(409).json({ success: false, error: 'Ticket has no conversation root' });
       return;
     }
-
-    const insertRow: Record<string, unknown> = {
-      channel_id: row.channel_id,
-      sender_id: req.userId,
-      content: body.content || null,
-      type: body.type,
-      file_url: body.file_url || null,
-      mentions: [],
-      parent_message_id: row.root_message_id,
-    };
-    if (body.file_name) insertRow.file_name = body.file_name;
-    if (body.file_size) insertRow.file_size = body.file_size;
-    if (body.file_mime) insertRow.file_mime = body.file_mime;
-    if (body.duration_ms) insertRow.duration_ms = body.duration_ms;
-
-    const { data: message, error } = await supabaseAdmin
-      .from('messages')
-      .insert(insertRow)
-      .select('*, sender:users!sender_id(id, display_name, avatar_url, email)')
-      .single();
-    if (error || !message) {
-      res.status(500).json({ success: false, error: error?.message || 'Could not send' });
-      return;
-    }
-
-    // Keep the legacy thread index in sync (mirrors /messages behaviour).
-    await supabaseAdmin
-      .from('message_threads')
-      .insert({ parent_message_id: row.root_message_id, reply_message_id: message.id });
-
-    await supabaseAdmin
-      .from('support_tickets')
-      .update({ last_activity_at: new Date().toISOString(), updated_at: new Date().toISOString() })
-      .eq('id', row.id);
-
-    // Real-time to everyone viewing this ticket thread.
-    const io = req.app.get('io');
-    if (io) io.to(`support_ticket:${row.id}`).emit('support_ticket_message', { ticket_id: row.id, message });
-
-    // Notify the "other side": the creator hears from agents, the assignee (and
-    // creator) hear from each other.
-    const recipients = new Set<string>();
-    if (row.created_by !== req.userId) recipients.add(row.created_by);
-    if (row.assigned_to && row.assigned_to !== req.userId) recipients.add(row.assigned_to);
-    await notify(
-      Array.from(recipients).map((user_id) => ({
-        user_id,
-        title: `New reply on SUP-${row.ticket_number}`,
-        body: body.content ? body.content.slice(0, 140) : 'Sent an attachment',
-      })),
-      row.id,
-      req.userId!,
-      'support_ticket_reply',
-    );
-
+    const message = await postSupportTicketReplyCore({
+      row,
+      senderId: req.userId!,
+      body,
+      io: req.app.get('io'),
+    });
     res.status(201).json({ success: true, data: message });
   } catch (err) {
     if (err instanceof z.ZodError) {
@@ -448,11 +526,36 @@ router.post('/tickets/:id/messages', requireAuth, async (req: Request, res: Resp
       return;
     }
     console.error('Reply ticket error:', err);
-    res.status(500).json({ success: false, error: 'Internal server error' });
+    res.status(500).json({ success: false, error: exposedError(err) });
   }
 });
 
 // ---- Status: close / reopen (creator or agent) ---------------------------
+/** Close / reopen a ticket and broadcast the change. Throws on failure. */
+export async function setSupportTicketStatusCore(
+  row: any,
+  status: 'open' | 'closed',
+  actorId: string,
+  io?: any,
+): Promise<any> {
+  const patch: Record<string, unknown> = {
+    status,
+    updated_at: new Date().toISOString(),
+    last_activity_at: new Date().toISOString(),
+    closed_at: status === 'closed' ? new Date().toISOString() : null,
+    closed_by: status === 'closed' ? actorId : null,
+  };
+  const { data: ticket, error } = await supabaseAdmin
+    .from('support_tickets')
+    .update(patch)
+    .eq('id', row.id)
+    .select(TICKET_SELECT)
+    .single();
+  if (error) throw new Error(error.message);
+  if (io) io.to(`support_ticket:${row.id}`).emit('support_ticket_updated', { ticket_id: row.id, status });
+  return ticket;
+}
+
 async function setStatus(req: Request, res: Response, status: 'open' | 'closed') {
   const row = await getTicketRow(String(req.params.id));
   if (!row) {
@@ -463,26 +566,12 @@ async function setStatus(req: Request, res: Response, status: 'open' | 'closed')
     res.status(403).json({ success: false, error: 'Access denied' });
     return;
   }
-  const patch: Record<string, unknown> = {
-    status,
-    updated_at: new Date().toISOString(),
-    last_activity_at: new Date().toISOString(),
-    closed_at: status === 'closed' ? new Date().toISOString() : null,
-    closed_by: status === 'closed' ? req.userId : null,
-  };
-  const { data: ticket, error } = await supabaseAdmin
-    .from('support_tickets')
-    .update(patch)
-    .eq('id', row.id)
-    .select(TICKET_SELECT)
-    .single();
-  if (error) {
-    res.status(500).json({ success: false, error: error.message });
-    return;
+  try {
+    const ticket = await setSupportTicketStatusCore(row, status, req.userId!, req.app.get('io'));
+    res.json({ success: true, data: ticket });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err?.message || 'Internal server error' });
   }
-  const io = req.app.get('io');
-  if (io) io.to(`support_ticket:${row.id}`).emit('support_ticket_updated', { ticket_id: row.id, status });
-  res.json({ success: true, data: ticket });
 }
 
 router.post('/tickets/:id/close', requireAuth, (req, res) => setStatus(req, res, 'closed'));

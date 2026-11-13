@@ -6,6 +6,7 @@ import { checkResourceAccess, meetsAccessLevel, isWorkspaceAdmin } from '../midd
 import { supabaseAdmin } from '../supabase';
 import { findFirstUrl, unfurl } from '../services/unfurl';
 import { isSupportChannel, isSupportAgent, userOwnsSupportTicketRoot } from '../utils/supportAccess';
+import { notifySaasIfExternalTicketRoot } from '../utils/saasSupport';
 import { canActorDm, isDmParticipant, loadDmActor, otherDmParticipantIds } from '../utils/dmAccess';
 import { deleteR2Object } from '../r2';
 import { config } from '../config';
@@ -287,6 +288,17 @@ router.post('/', requireAuth, async (req: Request, res: Response) => {
       if (body.parent_message_id) {
         io.to(room).emit('thread_reply', message);
       }
+    }
+
+    // Agent reply in a Support ticket thread raised from Squad Hub SaaS → tell
+    // the SaaS so the requester is notified in-app. Fire-and-forget; no-op
+    // unless the bridge is configured and the thread is a bridge ticket.
+    if (body.parent_message_id && body.channel_id) {
+      notifySaasIfExternalTicketRoot({
+        rootMessageId: body.parent_message_id,
+        senderId: req.userId!,
+        preview: body.content ? body.content.slice(0, 140) : 'Sent an attachment',
+      });
     }
 
     // If replying in a bot doubt thread, have a conversation with the bot unless explicitly finalizing

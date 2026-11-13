@@ -138,6 +138,8 @@ import squadBotsIntegrationRoutes from './routes/integrations/squad-bots';
 import squadBotsAdminRoutes from './routes/squad-bots-admin';
 import squadhireCategoriesRoutes from './routes/integrations/squadhire-categories';
 import ssoSquadhireRoutes from './routes/sso-squadhire';
+import saasAccountsAdminRoutes from './routes/saas-accounts-admin';
+import saasStaffRoutes from './routes/saas-staff';
 import subscriptionSquadhireProfilesAdminRoutes from './routes/subscription-squadhire-profiles-admin';
 import profileAccessRoutes from './routes/profile-access';
 import profileAccessAdminRoutes from './routes/profile-access-admin';
@@ -148,6 +150,8 @@ import huddlesRoutes from './routes/huddles';
 import featureTipsRoutes from './routes/feature-tips';
 import adminFeatureTipsRoutes from './routes/admin/feature-tips';
 import agentRoutes from './routes/agent';
+import saasBridgeRoutes from './routes/bridge';
+import { bridgeJsonParser } from './utils/bridgeSign';
 import { startCheckInCron } from './cron/checkin-cron';
 import { startTimesheetCron } from './cron/timesheet-cron';
 import { startTimerCron } from './cron/timer-cron';
@@ -177,6 +181,9 @@ app.use(cors({
   origin: [config.clientUrl, config.adminUrl, config.cashbookUrl, config.desktopUrl].filter(Boolean),
   credentials: true,
 }));
+// Squad Hub SaaS bridge — HMAC-signed server-to-server API. Mounted before the
+// app-wide JSON parser so its own parser can keep the raw body for signing.
+app.use('/bridge/v1', morgan('dev'), bridgeJsonParser, saasBridgeRoutes);
 app.use(express.json({ limit: '10mb' }));
 app.use(morgan('dev'));
 
@@ -333,6 +340,9 @@ app.use('/integrations/squad-bots', squadBotsIntegrationRoutes);
 app.use('/admin/integrations/squadhire', squadhireCategoriesRoutes);
 // "Sign in with SquadHub" SSO: authorize (browser) + token/directory (server-to-server)
 app.use('/sso/squadhire', ssoSquadhireRoutes);
+// Squad Hub SaaS (app.squadhub.in) — super-admin accounts proxy + staff client workspaces, over the signed bridge.
+app.use('/admin/saas', saasAccountsAdminRoutes);
+app.use('/saas', saasStaffRoutes);
 
 // Profile Access — local mirror of SquadHire's talent_access_grants.
 app.use('/profile-access', profileAccessRoutes);
