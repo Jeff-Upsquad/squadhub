@@ -26,8 +26,43 @@ type VerifiedRequestIdentity = {
 // verified identity on that request only; every new request still contacts Auth.
 const verifiedRequests = new WeakMap<Request, VerifiedRequestIdentity>();
 
+// ── Squad Hub SaaS bridge "act-as" identity ────────────────────────────────
+// The signed bridge passthrough (routes/bridge/actAs.ts) runs a small allowlist
+// of existing Hub routes as a partner/client user. It marks the request here,
+// in a module-private WeakMap keyed by the live Request object: nothing a
+// client sends (headers, body, query) can create or alter an entry, and the
+// entry dies with that one request object, so it cannot leak to another call.
+export type BridgeActingUser = {
+  userId: string;
+  userEmail: string | undefined;
+  userType: UserType;
+  userName: string | undefined;
+};
+const bridgeActingUsers = new WeakMap<Request, Readonly<BridgeActingUser>>();
+
+/** Only the verified bridge act-as handler may call this. */
+export function markBridgeActingUser(req: Request, user: BridgeActingUser): void {
+  bridgeActingUsers.set(req, Object.freeze({ ...user }));
+}
+
+export function getBridgeActingUser(req: Request): Readonly<BridgeActingUser> | undefined {
+  return bridgeActingUsers.get(req);
+}
+
 // Verify token using Supabase's own auth verification
 export async function requireAuth(req: Request, res: Response, next: NextFunction): Promise<void> {
+  // Bridge act-as: the bridge handler already verified the HMAC signature and
+  // re-checked this user's type/status/admin flag moments ago.
+  const acting = bridgeActingUsers.get(req);
+  if (acting) {
+    req.userId = acting.userId;
+    req.userEmail = acting.userEmail;
+    req.userType = acting.userType;
+    req.userName = acting.userName;
+    next();
+    return;
+  }
+
   const authHeader = req.headers.authorization;
 
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
