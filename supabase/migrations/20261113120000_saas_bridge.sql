@@ -1,6 +1,12 @@
 -- ============================================================
 -- Squad Hub ⇄ Squad Hub SaaS bridge (app.squadhub.in) — Hub side.
 --
+-- Target: production hvcpoxgkdybyscaebtik (see workflows/supabase-production.md).
+-- Additive and idempotent (IF NOT EXISTS / ON CONFLICT DO NOTHING). Safe to
+-- apply before or after the app deploy: until SAAS_BRIDGE_SECRET is set nothing
+-- writes these tables, and the one unconditional read (card hours completion →
+-- saas_time_totals) treats a missing table as zero rows.
+--
 -- The SaaS is a separate repo + separate Supabase project. Each system owns
 -- its own data; the tables below only hold identity mappings and the one piece
 -- of SaaS-originated data the Hub must aggregate (daily time totals). All are

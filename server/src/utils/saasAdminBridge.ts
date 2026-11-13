@@ -1,25 +1,18 @@
 /**
- * Minimal outbound client for the Squad Hub SaaS bridge (app.squadhub.in),
- * used by the super-admin "SaaS Accounts" module and the staff "Client
- * workspaces" sidebar.
+ * Minimal outbound proxy client for the Squad Hub SaaS bridge
+ * (SAAS_API_URL, e.g. https://saas-api.squadhub.in), used by the super-admin
+ * "SaaS Accounts" module and the staff "Client workspaces" sidebar.
  *
- * NOTE: this intentionally duplicates the signing half of the shared
- * `server/src/utils/bridgeSign.ts` / `saasBridgeClient.ts` helpers, which are
- * being written on a parallel branch. Once both land, replace
- * `signSaasBridgeRequest` / `saasBridgeRequest` here with those helpers
- * (the signature format below is the contract's, byte for byte).
- *
- * Contract (v1):
- *   X-Bridge-Timestamp: unix seconds
- *   X-Bridge-Signature: hex HMAC-SHA256(secret,
- *       `${timestamp}.${METHOD}.${pathWithQuery}.${sha256hex(rawBody || "")}`)
- *   X-Bridge-Actor (optional): JSON {"hub_user_id","email"} for audit
+ * Unlike utils/saasBridgeClient.ts (best-effort provisioning hooks that never
+ * surface errors), this passes the SaaS's status + `{ success, data | error }`
+ * body straight back to the admin/web caller. Signing is the shared contract
+ * helper in utils/bridgeSign.ts — there is deliberately no second signer here.
  *
  * Config: SAAS_API_URL + SAAS_BRIDGE_SECRET. If either is unset the bridge is
- * "not connected" and callers should answer 503 (see `saasNotConnected`).
+ * "not connected" and callers answer 503 (see `saasNotConnected`).
  */
-import crypto from 'crypto';
 import type { Response } from 'express';
+import { signBridgeRequest } from './bridgeSign';
 
 export interface SaasBridgeConfig {
   apiUrl: string;
@@ -36,27 +29,6 @@ export function getSaasBridgeConfig(): SaasBridgeConfig | null {
 
 export function isSaasBridgeConfigured(): boolean {
   return getSaasBridgeConfig() !== null;
-}
-
-export function sha256Hex(input: string): string {
-  return crypto.createHash('sha256').update(input, 'utf8').digest('hex');
-}
-
-/**
- * Signs one bridge request per the contract. `pathWithQuery` is the exact
- * request target the receiver sees (path + `?query`, no origin).
- */
-export function signSaasBridgeRequest(
-  method: string,
-  pathWithQuery: string,
-  rawBody: string,
-  secret: string,
-  now: number = Math.floor(Date.now() / 1000),
-): { timestamp: string; signature: string } {
-  const timestamp = String(now);
-  const payload = `${timestamp}.${method.toUpperCase()}.${pathWithQuery}.${sha256Hex(rawBody || '')}`;
-  const signature = crypto.createHmac('sha256', secret).update(payload, 'utf8').digest('hex');
-  return { timestamp, signature };
 }
 
 export interface SaasBridgeActor {
@@ -108,11 +80,10 @@ export async function saasBridgeRequest(opts: {
   const pathWithQuery = `${prefix}${opts.path}${search ? `?${search}` : ''}`;
 
   const rawBody = opts.body === undefined || opts.method === 'GET' ? '' : JSON.stringify(opts.body);
-  const { timestamp, signature } = signSaasBridgeRequest(opts.method, pathWithQuery, rawBody, cfg.secret);
-
   const headers: Record<string, string> = {
-    'X-Bridge-Timestamp': timestamp,
-    'X-Bridge-Signature': signature,
+    // bridgeSign signs from `/bridge/` on, so a path prefix on SAAS_API_URL
+    // (e.g. https://x/api) is stripped exactly as the SaaS verifier strips it.
+    ...signBridgeRequest(opts.method, pathWithQuery, rawBody, cfg.secret),
     Accept: 'application/json',
   };
   if (rawBody) headers['Content-Type'] = 'application/json';

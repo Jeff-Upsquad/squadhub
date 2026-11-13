@@ -37,7 +37,7 @@ vi.mock('../supabase', () => ({
 
 import adminRouter from '../routes/saas-accounts-admin';
 import staffRouter from '../routes/saas-staff';
-import { signSaasBridgeRequest } from '../utils/saasAdminBridge';
+import { signBridgeRequest } from '../utils/bridgeSign';
 
 const SECRET = 'test-bridge-secret';
 let server: Server;
@@ -99,10 +99,12 @@ function header(init: RequestInit, name: string): string | undefined {
   return (init.headers as Record<string, string>)[name];
 }
 
-describe('signSaasBridgeRequest', () => {
+describe('signBridgeRequest (shared signer used by the proxy)', () => {
   it('matches the contract formula', () => {
     const body = '{"a":1}';
-    const { timestamp, signature } = signSaasBridgeRequest('post', '/bridge/v1/x?y=1', body, SECRET, 1700000000);
+    const h = signBridgeRequest('post', '/bridge/v1/x?y=1', body, SECRET, 1700000000);
+    const timestamp = h['X-Bridge-Timestamp'];
+    const signature = h['X-Bridge-Signature'];
     const bodyHash = crypto.createHash('sha256').update(body).digest('hex');
     const expected = crypto
       .createHmac('sha256', SECRET)
@@ -113,7 +115,7 @@ describe('signSaasBridgeRequest', () => {
   });
 
   it('hashes an empty body as sha256("")', () => {
-    const { signature } = signSaasBridgeRequest('GET', '/p', '', SECRET, 1);
+    const signature = signBridgeRequest('GET', '/p', '', SECRET, 1)['X-Bridge-Signature'];
     const empty = crypto.createHash('sha256').update('').digest('hex');
     expect(signature).toBe(crypto.createHmac('sha256', SECRET).update(`1.GET./p.${empty}`).digest('hex'));
   });
@@ -151,8 +153,8 @@ describe('/admin/saas proxy', () => {
     expect(url).toBe('https://saas.test/bridge/v1/admin/accounts?q=acme&kind=talent');
     const ts = header(init, 'X-Bridge-Timestamp')!;
     expect(Math.abs(Number(ts) - Date.now() / 1000)).toBeLessThan(5);
-    const expected = signSaasBridgeRequest('GET', '/bridge/v1/admin/accounts?q=acme&kind=talent', '', SECRET, Number(ts));
-    expect(header(init, 'X-Bridge-Signature')).toBe(expected.signature);
+    const expected = signBridgeRequest('GET', '/bridge/v1/admin/accounts?q=acme&kind=talent', '', SECRET, Number(ts));
+    expect(header(init, 'X-Bridge-Signature')).toBe(expected['X-Bridge-Signature']);
     expect(JSON.parse(header(init, 'X-Bridge-Actor')!)).toEqual({ hub_user_id: 'admin-1', email: 'admin-1@example.com' });
   });
 
@@ -162,9 +164,20 @@ describe('/admin/saas proxy', () => {
     const { url, init } = outbound[0];
     expect(url).toBe('https://saas.test/bridge/v1/admin/accounts/acc%201/plan');
     const ts = Number(header(init, 'X-Bridge-Timestamp'));
-    const expected = signSaasBridgeRequest('POST', '/bridge/v1/admin/accounts/acc%201/plan', String(init.body), SECRET, ts);
+    const expected = signBridgeRequest('POST', '/bridge/v1/admin/accounts/acc%201/plan', String(init.body), SECRET, ts);
     expect(init.body).toBe('{"plan_id":"p1"}');
-    expect(header(init, 'X-Bridge-Signature')).toBe(expected.signature);
+    expect(header(init, 'X-Bridge-Signature')).toBe(expected['X-Bridge-Signature']);
+  });
+
+  it('signs from /bridge/ on when SAAS_API_URL carries a path prefix (contract v1.1)', async () => {
+    process.env.SAAS_API_URL = 'https://saas.test/api/';
+    const r = await call('GET', '/admin/saas/accounts/a1', { user: 'admin-1' });
+    expect(r.status).toBe(200);
+    const { url, init } = outbound[0];
+    expect(url).toBe('https://saas.test/api/bridge/v1/admin/accounts/a1');
+    const ts = Number(header(init, 'X-Bridge-Timestamp'));
+    const bare = signBridgeRequest('GET', '/bridge/v1/admin/accounts/a1', '', SECRET, ts);
+    expect(header(init, 'X-Bridge-Signature')).toBe(bare['X-Bridge-Signature']);
   });
 
   it('requires a reason to impersonate', async () => {

@@ -5,7 +5,7 @@
 // workspace's `channel_kind='support'` channel, ticket = thread). The SaaS user
 // is NOT a Hub account: they're a `support_external_requesters` row, and the
 // Hub-side sender/creator of their messages is one suspended system user
-// (SAAS_REQUESTER_USER_ID, seeded by migration 20261023120000_saas_bridge).
+// (SAAS_REQUESTER_USER_ID, seeded by migration 20261113120000_saas_bridge).
 // When the SaaS user also maps to a real Hub user (hub_user_id), that user is
 // the creator/sender instead, so the ticket shows up in their Hub support view.
 //

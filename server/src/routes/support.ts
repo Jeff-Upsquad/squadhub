@@ -9,6 +9,17 @@ import { SAAS_REQUESTER_USER_ID, notifySaasIfExternalTicket } from '../utils/saa
 
 const router = Router();
 
+/**
+ * A failure whose message the HTTP routes have always returned verbatim (DB
+ * insert errors on create/reply). Anything else stays a generic 500, exactly
+ * as before the create/reply logic moved into the shared *Core helpers.
+ */
+export class SupportCoreError extends Error {}
+
+function exposedError(err: unknown): string {
+  return err instanceof SupportCoreError ? err.message : 'Internal server error';
+}
+
 export const CATEGORIES = ['technical', 'accounts', 'financial', 'general'] as const;
 export type Category = (typeof CATEGORIES)[number];
 const CATEGORY_LABEL: Record<Category, string> = {
@@ -260,7 +271,7 @@ export async function createSupportTicketCore(input: CreateTicketCoreInput): Pro
     .insert(rootInsert)
     .select('id')
     .single();
-  if (msgErr || !rootMsg) throw new Error(msgErr?.message || 'Could not open ticket');
+  if (msgErr || !rootMsg) throw new SupportCoreError(msgErr?.message || 'Could not open ticket');
 
   // Auto-assign by category routing rule, if one is configured.
   const { data: rule } = await supabaseAdmin
@@ -288,7 +299,7 @@ export async function createSupportTicketCore(input: CreateTicketCoreInput): Pro
     .insert(ticketInsert)
     .select(TICKET_SELECT)
     .single();
-  if (tErr || !ticket) throw new Error(tErr?.message || 'Could not create ticket');
+  if (tErr || !ticket) throw new SupportCoreError(tErr?.message || 'Could not create ticket');
   const t = ticket as any;
 
   if (autoAssignee) {
@@ -326,7 +337,7 @@ router.post('/tickets', requireAuth, async (req: Request, res: Response) => {
       return;
     }
     console.error('Create ticket error:', err);
-    res.status(500).json({ success: false, error: (err as any)?.message || 'Internal server error' });
+    res.status(500).json({ success: false, error: exposedError(err) });
   }
 });
 
@@ -419,7 +430,7 @@ export async function postSupportTicketReplyCore(input: {
   io?: any;
 }): Promise<any> {
   const { row, senderId, body } = input;
-  if (!row.root_message_id) throw new Error('Ticket has no conversation root');
+  if (!row.root_message_id) throw new SupportCoreError('Ticket has no conversation root');
 
   const insertRow: Record<string, unknown> = {
     channel_id: row.channel_id,
@@ -441,7 +452,7 @@ export async function postSupportTicketReplyCore(input: {
     .insert(insertRow)
     .select('*, sender:users!sender_id(id, display_name, avatar_url, email)')
     .single();
-  if (error || !message) throw new Error(error?.message || 'Could not send');
+  if (error || !message) throw new SupportCoreError(error?.message || 'Could not send');
 
   // Keep the legacy thread index in sync (mirrors /messages behaviour).
   await supabaseAdmin
@@ -515,7 +526,7 @@ router.post('/tickets/:id/messages', requireAuth, async (req: Request, res: Resp
       return;
     }
     console.error('Reply ticket error:', err);
-    res.status(500).json({ success: false, error: (err as any)?.message || 'Internal server error' });
+    res.status(500).json({ success: false, error: exposedError(err) });
   }
 });
 
