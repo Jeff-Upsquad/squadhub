@@ -23,6 +23,7 @@ import {
   runIdentityBackfill,
 } from '../utils/identityBackfill';
 import { ensureClientPortalAccess } from '../utils/ensureClientPortalAccess';
+import { fireSaasHook, saasProvisionBusinessForClient } from '../utils/saasBridgeClient';
 import { propagateIdentityNames } from '../utils/propagateIdentityNames';
 
 const router = Router();
@@ -116,7 +117,9 @@ async function assignPlansToClient(clientId: string, planIds: string[]) {
   return { error: null };
 }
 
-async function enrichClient(
+// Exported for the Squad Hub SaaS bridge (routes/bridge/business.ts), which
+// serves a business's cards from this same matcher instead of re-deriving it.
+export async function enrichClient(
   client: any,
   opts: { includeArchived?: boolean; withCardLifecycle?: boolean } = {},
 ) {
@@ -1012,6 +1015,9 @@ router.post('/', async (req: Request, res: Response) => {
       displayName: body.contact_person,
       createdBy: (req as any).userId || null,
     });
+    // Squad Hub SaaS: ensure the business account (best-effort; no-op unless
+    // SAAS_PROVISIONING_ENABLED).
+    fireSaasHook('business-account', () => saasProvisionBusinessForClient(client.id));
 
     const enriched = await enrichClient(client);
     res.json({ success: true, data: enriched });

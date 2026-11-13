@@ -60,64 +60,70 @@ router.get('/mine', async (req: Request, res: Response) => {
       return;
     }
 
-    const orParts: string[] = [];
-    if (clientIds.length > 0) orParts.push(`client_id.in.(${clientIds.join(',')})`);
-    if (submissionIds.length > 0) orParts.push(`lead_submission_id.in.(${submissionIds.join(',')})`);
-
-    const { data: cards, error } = await supabaseAdmin
-      .from('job_cards')
-      .select('*')
-      .or(orParts.join(','))
-      .is('deleted_at', null)
-      .is('archived_at', null)
-      .order('created_at', { ascending: false });
-    if (error) {
-      res.status(500).json({ success: false, error: error.message });
-      return;
-    }
-
-    const list = cards ?? [];
-    const profileIds = Array.from(new Set(list.map((c: any) => c.job_profile_id).filter(Boolean))) as string[];
-    const profileById: Record<string, any> = {};
-    const businessById: Record<string, any> = {};
-    const brandById: Record<string, any> = {};
-    if (profileIds.length > 0) {
-      const { data: profiles } = await supabaseAdmin
-        .from('job_profiles')
-        .select('id, title, business_profile_id, brand_profile_id, employment_type, work_mode, salary_min, salary_max, salary_currency, salary_period')
-        .in('id', profileIds);
-      (profiles ?? []).forEach((p: any) => { profileById[p.id] = p; });
-      const businessIds = Array.from(new Set((profiles ?? []).map((p: any) => p.business_profile_id).filter(Boolean)));
-      const brandIds = Array.from(new Set((profiles ?? []).map((p: any) => p.brand_profile_id).filter(Boolean)));
-      const [{ data: businesses }, { data: brands }] = await Promise.all([
-        businessIds.length > 0
-          ? supabaseAdmin.from('business_profiles').select('id, name, logo_url').in('id', businessIds)
-          : Promise.resolve({ data: [] } as { data: any[] }),
-        brandIds.length > 0
-          ? supabaseAdmin.from('brand_profiles').select('id, name, logo_url').in('id', brandIds)
-          : Promise.resolve({ data: [] } as { data: any[] }),
-      ]);
-      (businesses ?? []).forEach((b: any) => { businessById[b.id] = b; });
-      (brands ?? []).forEach((b: any) => { brandById[b.id] = b; });
-    }
-
-    res.json({
-      success: true,
-      data: list.map((card: any) => {
-        const profile = card.job_profile_id ? profileById[card.job_profile_id] ?? null : null;
-        return {
-          ...card,
-          stage: categorizeJobCard(card),
-          job_profile: profile,
-          business_profile: profile?.business_profile_id ? businessById[profile.business_profile_id] ?? null : null,
-          brand_profile: profile?.brand_profile_id ? brandById[profile.brand_profile_id] ?? null : null,
-        };
-      }),
-    });
+    const data = await listJobCardsForClientScope(clientIds, submissionIds);
+    res.json({ success: true, data });
   } catch (err: any) {
     console.error('List my job cards error:', err);
     res.status(500).json({ success: false, error: err?.message || 'Internal server error' });
   }
 });
+
+/**
+ * Job cards belonging to these clients / lead submissions (direct FKs
+ * client_id / lead_submission_id), live only, with their stage and job /
+ * business / brand profile. Shared by GET /job-cards/mine and the Squad Hub
+ * SaaS bridge (GET /bridge/v1/business/:hubClientId/cards). Throws on error.
+ */
+export async function listJobCardsForClientScope(clientIds: string[], submissionIds: string[]): Promise<any[]> {
+  if (clientIds.length === 0 && submissionIds.length === 0) return [];
+  const orParts: string[] = [];
+  if (clientIds.length > 0) orParts.push(`client_id.in.(${clientIds.join(',')})`);
+  if (submissionIds.length > 0) orParts.push(`lead_submission_id.in.(${submissionIds.join(',')})`);
+
+  const { data: cards, error } = await supabaseAdmin
+    .from('job_cards')
+    .select('*')
+    .or(orParts.join(','))
+    .is('deleted_at', null)
+    .is('archived_at', null)
+    .order('created_at', { ascending: false });
+  if (error) throw new Error(error.message);
+
+  const list = cards ?? [];
+  const profileIds = Array.from(new Set(list.map((c: any) => c.job_profile_id).filter(Boolean))) as string[];
+  const profileById: Record<string, any> = {};
+  const businessById: Record<string, any> = {};
+  const brandById: Record<string, any> = {};
+  if (profileIds.length > 0) {
+    const { data: profiles } = await supabaseAdmin
+      .from('job_profiles')
+      .select('id, title, business_profile_id, brand_profile_id, employment_type, work_mode, salary_min, salary_max, salary_currency, salary_period')
+      .in('id', profileIds);
+    (profiles ?? []).forEach((p: any) => { profileById[p.id] = p; });
+    const businessIds = Array.from(new Set((profiles ?? []).map((p: any) => p.business_profile_id).filter(Boolean)));
+    const brandIds = Array.from(new Set((profiles ?? []).map((p: any) => p.brand_profile_id).filter(Boolean)));
+    const [{ data: businesses }, { data: brands }] = await Promise.all([
+      businessIds.length > 0
+        ? supabaseAdmin.from('business_profiles').select('id, name, logo_url').in('id', businessIds)
+        : Promise.resolve({ data: [] } as { data: any[] }),
+      brandIds.length > 0
+        ? supabaseAdmin.from('brand_profiles').select('id, name, logo_url').in('id', brandIds)
+        : Promise.resolve({ data: [] } as { data: any[] }),
+    ]);
+    (businesses ?? []).forEach((b: any) => { businessById[b.id] = b; });
+    (brands ?? []).forEach((b: any) => { brandById[b.id] = b; });
+  }
+
+  return list.map((card: any) => {
+    const profile = card.job_profile_id ? profileById[card.job_profile_id] ?? null : null;
+    return {
+      ...card,
+      stage: categorizeJobCard(card),
+      job_profile: profile,
+      business_profile: profile?.business_profile_id ? businessById[profile.business_profile_id] ?? null : null,
+      brand_profile: profile?.brand_profile_id ? brandById[profile.brand_profile_id] ?? null : null,
+    };
+  });
+}
 
 export default router;

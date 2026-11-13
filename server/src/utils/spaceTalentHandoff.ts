@@ -18,6 +18,7 @@
 // ============================================================
 import { supabaseAdmin } from '../supabase';
 import { sharePartnerWithCardClient } from './sharePartnerWithClient';
+import { fireSaasHook, saasRemoveCardTalent } from './saasBridgeClient';
 
 type RecipientType = 'talent' | 'partner' | null;
 
@@ -31,7 +32,7 @@ interface HandoffInput {
 
 // Resolve a card recipient to a SquadHub users.id. Partners already carry the
 // user id; talents are matched by the email on their card recipient row.
-async function resolveRecipientUserId(
+export async function resolveRecipientUserId(
   cardId: string,
   type: RecipientType,
   id: string | null,
@@ -56,7 +57,7 @@ async function resolveRecipientUserId(
 }
 
 // card → submission_subscription → submission → client.
-async function resolveCardClientId(cardId: string): Promise<string | null> {
+export async function resolveCardClientId(cardId: string): Promise<string | null> {
   const { data: card } = await supabaseAdmin
     .from('subscription_cards')
     .select('submission_subscription_id')
@@ -92,6 +93,9 @@ export async function handOffSpaceToNewTalent(input: HandoffInput): Promise<void
       await sharePartnerWithCardClient(newUserId, cardId);
     }
     if (oldUserId && oldUserId !== newUserId) {
+      // Squad Hub SaaS: drop the outgoing talent from the card's shared
+      // workspace (best-effort; no-op unless SAAS_PROVISIONING_ENABLED).
+      fireSaasHook('remove-talent', () => saasRemoveCardTalent(cardId, oldUserId));
       const clientId = await resolveCardClientId(cardId);
       if (clientId) {
         await supabaseAdmin

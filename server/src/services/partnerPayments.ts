@@ -21,6 +21,11 @@ import { prorateMonthly, activeDaysInMonth } from '../utils/assignmentBilling';
 import { fetchTalentAvailability } from '../utils/squadhireTalent';
 import { loadCardBilling, resolveTermBilling, type CardBilling } from '../utils/cardBilling';
 import { loadCardHoursCompletions } from '../utils/cardHoursCompletion';
+import {
+  listPaymentStatusesForRecipient,
+  toPartnerFacingStatus,
+  type PartnerFacingStatus,
+} from './partnerPaymentStatus';
 
 export type AssignmentTermRow = {
   id: string;
@@ -526,4 +531,228 @@ export async function getUserPaymentDetail(input: UserDetailInput): Promise<any>
           : null,
     },
   };
+}
+
+// ------------------------------------------------------------
+// Partner-facing views (partner-payments mini app + SaaS bridge)
+//
+// Extracted verbatim from routes/partner-payments-miniapp.ts so the mini app and
+// the Squad Hub SaaS bridge (/bridge/v1/talent/:id/payouts*) serve the SAME
+// numbers from ONE implementation. Partner-facing: statuses go through
+// toPartnerFacingStatus() and hold_reason is never returned.
+//
+// NOTE: these keep the mini app's existing behaviour of passing
+// linkedFolderId=null into loadCardHoursCompletions (so additional-hours deltas
+// read as 0 here, unlike getUserPaymentDetail above). Changing that would
+// change what partners see today — do it deliberately, in one place, here.
+// ------------------------------------------------------------
+
+function shiftMonthKey(key: string, delta: number): string {
+  const [y, m] = key.split('-').map(Number);
+  const d = new Date(Date.UTC(y, m - 1 + delta, 1));
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+}
+
+async function fetchRecipientTerms(recipientId: string): Promise<AssignmentTermRow[]> {
+  const { data, error } = await supabaseAdmin
+    .from('subscription_assignment_terms')
+    .select('*')
+    .eq('recipient_id', recipientId)
+    .order('assigned_date', { ascending: false });
+  if (error) throw new Error(error.message);
+  return (data || []) as AssignmentTermRow[];
+}
+
+async function cardLifecycleLookup(cardIds: string[]): Promise<Map<string, any>> {
+  const map = new Map<string, any>();
+  if (!cardIds.length) return map;
+  const { data } = await supabaseAdmin
+    .from('subscription_cards')
+    .select('id, state, paused_at, cancelled_at')
+    .in('id', cardIds);
+  (data || []).forEach((c: any) => map.set(c.id, c));
+  return map;
+}
+
+function nullFolderCompletionInput(
+  cardIds: string[],
+  billing: Map<string, CardBilling>,
+): { cardId: string; linkedFolderId: null; billing: CardBilling }[] {
+  return cardIds
+    .map((id) => ({ cardId: id, linkedFolderId: null, billing: billing.get(id) }))
+    .filter((c): c is { cardId: string; linkedFolderId: null; billing: CardBilling } => !!c.billing);
+}
+
+/** Does this recipient id hold any assignment term (talent or partner)? */
+export async function recipientHasTerms(recipientId: string): Promise<boolean> {
+  const { count } = await supabaseAdmin
+    .from('subscription_assignment_terms')
+    .select('id', { count: 'exact', head: true })
+    .eq('recipient_id', recipientId);
+  return (count ?? 0) > 0;
+}
+
+/**
+ * One month's partner-facing payout detail for one recipient: per-client cards
+ * (dates, plan, prorated pay incl. additional hours) + totals.
+ * (Recipient scoping — talent vs partner — is intentionally not applied, same
+ * as the mini app: in this context both are treated as the same.)
+ */
+export async function getPartnerFacingMonth(recipientId: string, monthRaw: unknown): Promise<any> {
+  const { year, month, key } = parseMonth(monthRaw);
+  const todayIso = new Date().toISOString().slice(0, 10);
+
+  const terms = await fetchRecipientTerms(recipientId);
+  const cardIds = [...new Set(terms.map((t) => t.card_id))];
+  const [billing, cards] = await Promise.all([loadCardBilling(cardIds), cardLifecycleLookup(cardIds)]);
+  const completions = await loadCardHoursCompletions(nullFolderCompletionInput(cardIds, billing), year, month);
+
+  const paymentByCurrency = new Map<string, number>();
+  let committedWeekly = 0;
+  let additionalHoursTotal = 0;
+  const weeklyCounted = new Set<string>();
+  const additionalCounted = new Set<string>();
+
+  const clients = terms
+    .map((t) => {
+      const b = resolveTermBilling(t, billing.get(t.card_id));
+      const start = t.work_start_date ?? t.assigned_date;
+      const end = t.work_end_date ?? t.unassigned_date ?? null;
+      const activeDays = activeDaysInMonth(start, end, year, month, todayIso);
+      const monthPayment = b ? prorateMonthly(b.partner_price, start, end, year, month, todayIso) : 0;
+      if (monthPayment > 0) {
+        const cur = b?.currency || 'INR';
+        paymentByCurrency.set(cur, (paymentByCurrency.get(cur) || 0) + monthPayment);
+      }
+      if (activeDays > 0 && b?.weekly_hours != null && !weeklyCounted.has(t.card_id)) {
+        committedWeekly += b.weekly_hours;
+        weeklyCounted.add(t.card_id);
+      }
+      const comp = completions.get(t.card_id);
+      if (activeDays > 0 && comp && !additionalCounted.has(t.card_id)) {
+        additionalCounted.add(t.card_id);
+        additionalHoursTotal += comp.additional_hours;
+        if (comp.additional_partner_payment !== 0) {
+          const cur = b?.currency || 'INR';
+          paymentByCurrency.set(cur, (paymentByCurrency.get(cur) || 0) + comp.additional_partner_payment);
+        }
+      }
+      const c = cards.get(t.card_id);
+      return {
+        term_id: t.id,
+        business_name: t.business_name,
+        subscription_name: t.subscription_name,
+        status: t.status,
+        card_state: c?.state ?? null,
+        card_paused_at: c?.paused_at ?? null,
+        card_cancelled_at: c?.cancelled_at ?? null,
+        start_date: start ? start.slice(0, 10) : null,
+        end_date: end ? end.slice(0, 10) : null,
+        plan_label: b?.plan_snapshot?.plan?.plan ?? null,
+        plan_tier: b?.plan_snapshot?.plan?.tier ?? null,
+        currency: b?.currency ?? 'INR',
+        month_active_days: activeDays,
+        month_payment: monthPayment,
+        committed_weekly_hours: b?.weekly_hours ?? null,
+        additional_hours: comp?.additional_hours ?? 0,
+        additional_payment: comp?.additional_partner_payment ?? 0,
+      };
+    })
+    .filter((c) => c.month_active_days > 0);
+
+  return {
+    month: key,
+    clients,
+    totals: {
+      month_payments: [...paymentByCurrency.entries()].map(([currency, amount]) => ({ currency, amount })),
+      committed_weekly_hours: Math.round(committedWeekly * 100) / 100,
+      additional_hours: Math.round(additionalHoursTotal * 100) / 100,
+    },
+  };
+}
+
+/**
+ * Partner-facing monthly payout series for the last `count` months (1–24),
+ * each carrying the month's real payout status from the shared store (mapped
+ * through toPartnerFacingStatus — never hold_reason).
+ */
+export async function getPartnerFacingHistory(recipientId: string, count: number): Promise<any> {
+  const months = Math.min(Math.max(Math.trunc(count), 1), 24);
+  const currentKey = parseMonth(null).key;
+
+  const terms = await fetchRecipientTerms(recipientId);
+  const cardIds = [...new Set(terms.map((t) => t.card_id))];
+  const billing = await loadCardBilling(cardIds);
+  // Terms for one recipient share a recipient_type in practice; take it from
+  // the ledger rather than guessing, since it keys the status rows.
+  const statuses = await listPaymentStatusesForRecipient(terms[0]?.recipient_type ?? 'talent', recipientId);
+
+  const monthList: { year: number; month: number; key: string }[] = [];
+  for (let i = months - 1; i >= 0; i--) {
+    const k = shiftMonthKey(currentKey, -i);
+    monthList.push({ year: Number(k.slice(0, 4)), month: Number(k.slice(5, 7)), key: k });
+  }
+
+  const todayIso = new Date().toISOString().slice(0, 10);
+  const completionSets = await Promise.all(
+    monthList.map(({ year, month }) =>
+      loadCardHoursCompletions(nullFolderCompletionInput(cardIds, billing), year, month),
+    ),
+  );
+
+  const rows = monthList.map(({ year, month, key }, idx) => {
+    const completions = completionSets[idx];
+    const lines: { client: string | null; currency: string; amount: number; note?: string }[] = [];
+    const totals = new Map<string, number>();
+    const weeklyCounted = new Set<string>();
+    const additionalCounted = new Set<string>();
+    let committedWeekly = 0;
+
+    for (const t of terms) {
+      const b = resolveTermBilling(t, billing.get(t.card_id));
+      const start = t.work_start_date ?? t.assigned_date;
+      const end = t.work_end_date ?? t.unassigned_date ?? null;
+      const activeDays = activeDaysInMonth(start, end, year, month, todayIso);
+      if (activeDays <= 0) continue;
+      if (b?.weekly_hours != null && !weeklyCounted.has(t.card_id)) {
+        committedWeekly += b.weekly_hours;
+        weeklyCounted.add(t.card_id);
+      }
+      const cur = b?.currency || 'INR';
+      const base = b ? prorateMonthly(b.partner_price, start, end, year, month, todayIso) : 0;
+      let amount = base;
+      const notes: string[] = [];
+      if (base > 0 && activeDays < new Date(Date.UTC(year, month, 0)).getUTCDate()) {
+        notes.push(`prorated · ${activeDays} active days`);
+      }
+      const comp = completions.get(t.card_id);
+      if (comp && !additionalCounted.has(t.card_id)) {
+        additionalCounted.add(t.card_id);
+        if (comp.additional_partner_payment !== 0) {
+          amount += comp.additional_partner_payment;
+          notes.push(`${comp.additional_hours > 0 ? '+' : ''}${comp.additional_hours} add’l hrs`);
+        }
+      }
+      if (amount !== 0) {
+        totals.set(cur, (totals.get(cur) || 0) + amount);
+        lines.push({ client: t.business_name, currency: cur, amount: Math.round(amount * 100) / 100, note: notes.join(' · ') || undefined });
+      }
+    }
+
+    const nextMonth = shiftMonthKey(key, 1);
+    const stored = statuses.get(key);
+    const commissionStatus: PartnerFacingStatus = toPartnerFacingStatus(stored?.status);
+    return {
+      month: key,
+      payments: [...totals.entries()].map(([currency, amount]) => ({ currency, amount })),
+      commission_status: commissionStatus,
+      // Only a real "paid" carries a date; anything else is still outstanding.
+      post_date: commissionStatus === 'paid' ? stored?.updated_at ?? null : null,
+      expected_post_date: `${nextMonth}-01`,
+      committed_weekly_hours: Math.round(committedWeekly * 100) / 100,
+      lines,
+    };
+  });
+
+  return { current_month: currentKey, payouts: rows };
 }
