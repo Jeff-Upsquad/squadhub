@@ -137,6 +137,21 @@ instasnap.duckdns.org {
 	reverse_proxy host.docker.internal:8000
 }
 
+# Squad Hub SaaS (separate repo Jeff-Upsquad/squadhub-saas, deployed to /opt/squadhub-saas).
+app.squadhub.in {
+	@saas_api path /socket.io/* /health
+	handle @saas_api {
+		reverse_proxy squadhub-saas-server:4000
+	}
+	handle {
+		reverse_proxy squadhub-saas-web:3000
+	}
+}
+
+saas-api.squadhub.in {
+	reverse_proxy squadhub-saas-server:4000
+}
+
 cashbook.squadhub.in {
 	encode gzip
 	root * /srv/cashbook-web
@@ -272,19 +287,4 @@ squadhire-demo.upsquadconnect.com {
 
 squadbooks.upsquadconnect.com {
 	reverse_proxy squadbooks-saas:3300
-}
-
-# Squad Hub SaaS (separate repo Jeff-Upsquad/squadhub-saas, deployed to /opt/squadhub-saas).
-app.squadhub.in {
-	@saas_api path /socket.io/* /health
-	handle @saas_api {
-		reverse_proxy squadhub-saas-server:4000
-	}
-	handle {
-		reverse_proxy squadhub-saas-web:3000
-	}
-}
-
-saas-api.squadhub.in {
-	reverse_proxy squadhub-saas-server:4000
 }
