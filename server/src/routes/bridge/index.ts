@@ -13,10 +13,14 @@ import businessRoutes from './business';
 import talentRoutes from './talent';
 import supportRoutes from './support';
 import miscRoutes from './misc';
+import { createActAsRouter } from './actAs';
+import actAsInnerRoutes from './actAsRoutes';
 
 const router = Router();
 
 router.use(requireBridge);
+// Signed act-as passthrough: /as/:hubUserId/<allowlisted Hub route>. See actAs.ts.
+router.use(createActAsRouter(actAsInnerRoutes));
 router.use(businessRoutes);
 router.use(talentRoutes);
 router.use(supportRoutes);
