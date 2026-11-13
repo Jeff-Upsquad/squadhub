@@ -23,7 +23,8 @@ import { AppIcon, type AppDef } from '../../config/apps';
 import { useUnreadCount } from '../../hooks/useUnreadCount';
 import { useUnreadSummary } from '../../hooks/useUnreadSummary';
 import { useWorkspaceStore } from '../../stores/workspaceStore';
-import { useIsClient, useIsPartner } from '../../hooks/useUserType';
+import { useIsClient, useIsInternal, useIsPartner } from '../../hooks/useUserType';
+import SaasClientWorkspaces from './SaasClientWorkspaces';
 import { useDms } from '../../hooks/useDms';
 import NewDmModal from './chat/NewDmModal';
 import DmListItem from './chat/DmListItem';
@@ -319,6 +320,7 @@ export default function HomeSidebar({
   const [showCreateWorkspace, setShowCreateWorkspace] = useState(false);
   const isClient = useIsClient();
   const isPartner = useIsPartner();
+  const isInternal = useIsInternal();
   const openedAt = useRecentOpensStore((s) => s.openedAt);
   // Apps the user can access + their pinned subset.
   const availableApps = useAvailableApps();
@@ -1023,6 +1025,9 @@ export default function HomeSidebar({
                     )}
                   </>
                 )}
+
+                {/* ---- Client workspaces (Squad Hub SaaS; self-hides when the bridge is off) ---- */}
+                {isInternal && <SaasClientWorkspaces />}
 
                 {/* ---- Areas ---- */}
                 <SectionLabel title="Areas" action={canCreateSpaces ? addButton('Create area', () => setShowCreateSpace(true)) : undefined} />
