@@ -7,9 +7,9 @@ import { requireAnyMiniAppOrAdmin } from '../middleware/miniApp';
 // SquadCRM and SquadHireCRM each own a TeamChat module (GET /team-chats/open,
 // GET /team-chats/unread, POST /team-chats/:id/read|close|reopen) on their own
 // API servers. Browsers can't call those directly (CRM CORS only allows the
-// CRM web origin), and the two CRMs share Supabase auth with SquadHub, so the
-// SquadHub JWT the browser already holds is valid there. This router forwards
-// the call server-to-server with the same Authorization header.
+// CRM web origin). Forward the caller token server-to-server. The CRMs now
+// have separate identity backends, so an upstream authentication rejection is
+// an integration failure; it must never invalidate an authenticated Hub session.
 //
 // Sources:
 //   crm   -> SquadCRM      (CRM_API_URL, default http://localhost:4100)
@@ -58,6 +58,18 @@ async function proxy(
       },
       body: method === 'POST' ? JSON.stringify({}) : undefined,
     });
+    // requireAuth has already verified the SquadHub session. Passing a CRM's
+    // 401 through would make the browser refresh a valid Hub token and then
+    // log out when the CRM rejects that replacement too.
+    if (upstream.status === 401) {
+      await upstream.body?.cancel();
+      res.status(502).json({
+        success: false,
+        code: 'CRM_AUTH_REJECTED',
+        error: 'CRM chat authentication is unavailable. Your SquadHub session is still valid.',
+      });
+      return;
+    }
     const data = await upstream.json().catch(() => null);
     res.status(upstream.status).json(data ?? { success: false, error: 'Empty upstream response' });
   } catch (err) {
