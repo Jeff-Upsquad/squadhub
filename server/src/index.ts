@@ -185,7 +185,8 @@ app.use(cors({
 // app-wide JSON parser so its own parser can keep the raw body for signing.
 app.use('/bridge/v1', morgan('dev'), bridgeJsonParser, saasBridgeRoutes);
 app.use(express.json({ limit: '10mb' }));
-app.use(morgan('dev'));
+// Invitation URLs carry a one-use credential. Never put it in access logs.
+app.use(morgan('dev', { skip: (req) => req.url?.split('?')[0] === '/auth/invite/verify' }));
 
 // Health check
 app.get('/health', (_req, res) => {

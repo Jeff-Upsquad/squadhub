@@ -19,8 +19,23 @@ import type { UserType } from '@squadhub/shared';
 import { propagateIdentityNames } from '../utils/propagateIdentityNames';
 import { mobileAppForUserType } from '../utils/mobileAppAccess';
 import { resolveWorkAccess } from '../utils/workAccess';
+import { config } from '../config';
+import { localIdentityRequest, redeemLocalInvitation } from '../services/localIdentity';
 
 const router = Router();
+router.get('/invite/verify', async (req: Request, res: Response) => {
+  res.set('Cache-Control', 'no-store');
+  res.set('Referrer-Policy', 'no-referrer');
+  if (config.identityBackend !== 'postgres') {
+    res.status(404).json({ success: false, error: 'Local invitations are not enabled' });
+    return;
+  }
+  try {
+    res.redirect(303, await redeemLocalInvitation(String(req.query.token_hash || '')));
+  } catch {
+    res.status(400).json({ success: false, error: 'This invitation has expired or was already used. Ask your administrator for a new link.' });
+  }
+});
 
 // Validation schemas
 const registerSchema = z.object({
@@ -51,6 +66,26 @@ router.post('/register', async (req: Request, res: Response) => {
   try {
     const body = registerSchema.parse(req.body);
 
+    // Local identity is admin/invite-only. Validate the invitation BEFORE
+    // creating a login so a rejected public signup leaves no orphan identity.
+    const { data: invitation, error: invitationError } = await supabaseAdmin
+      .from('invitations')
+      .select(INVITATION_COLUMNS)
+      .eq('email', body.email)
+      .eq('status', 'pending')
+      .maybeSingle<PendingInvitation & { expires_at: string }>();
+    const isInvited = invitation && new Date(invitation.expires_at) > new Date();
+    if (config.identityBackend === 'postgres') {
+      if (invitationError) {
+        res.status(503).json({ success: false, error: 'Invitation verification temporarily unavailable. Please retry.' });
+        return;
+      }
+      if (!isInvited) {
+        res.status(403).json({ success: false, error: 'Accounts must be created or invited by an administrator.' });
+        return;
+      }
+    }
+
     // Create user in Supabase Auth (admin API for user creation)
     const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
       email: body.email,
@@ -63,16 +98,6 @@ router.post('/register', async (req: Request, res: Response) => {
       res.status(400).json({ success: false, error: authError.message });
       return;
     }
-
-    // Check if this email has a pending, non-expired invitation
-    const { data: invitation } = await supabaseAdmin
-      .from('invitations')
-      .select(INVITATION_COLUMNS)
-      .eq('email', body.email)
-      .eq('status', 'pending')
-      .maybeSingle<PendingInvitation & { expires_at: string }>();
-
-    const isInvited = invitation && new Date(invitation.expires_at) > new Date();
 
     // User type comes from invitation (if invited) or request body
     const userType = isInvited ? invitation.user_type : body.user_type;
@@ -251,6 +276,11 @@ router.post('/login', async (req: Request, res: Response) => {
       .select('*')
       .eq('id', data.user.id)
       .single();
+
+    if (config.identityBackend === 'postgres' && !profile) {
+      res.status(403).json({ success: false, error: 'This account has not been provisioned for SquadHub.' });
+      return;
+    }
 
     // Check user approval status
     if (profile?.status === 'pending') {
@@ -505,6 +535,13 @@ router.post(
 router.post('/change-password', requireAuth, async (req: Request, res: Response) => {
   try {
     const body = changePasswordSchema.parse(req.body);
+    if (config.identityBackend === 'postgres') {
+      await localIdentityRequest(req.headers.authorization!, 'PUT', 'user', {
+        password: body.new_password, data: { must_reset_password: false },
+      });
+      res.json({ success: true, message: 'Password updated' });
+      return;
+    }
     const { error } = await supabaseAdmin.auth.admin.updateUserById(req.userId as string, {
       password: body.new_password,
       user_metadata: { must_reset_password: false },
@@ -521,6 +558,14 @@ router.post('/change-password', requireAuth, async (req: Request, res: Response)
 
 // POST /auth/logout
 router.post('/logout', async (req: Request, res: Response) => {
+  if (config.identityBackend === 'postgres' && req.headers.authorization?.startsWith('Bearer ')) {
+    try {
+      await localIdentityRequest(req.headers.authorization, 'POST', 'logout', {});
+    } catch {
+      res.status(503).json({ success: false, error: 'Logout temporarily unavailable. Please retry.' });
+      return;
+    }
+  }
   // Client-side logout is sufficient (discard tokens)
   // Optionally revoke the refresh token on the server
   res.json({ success: true, message: 'Logged out' });

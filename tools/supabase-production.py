@@ -44,6 +44,42 @@ def configuration(repo):
     return ref, url
 
 
+def source_backup_status(repo, credentials):
+    """Verify the hosted source using its existing read-only backup identity.
+
+    This mode cannot execute migrations. It exists for a reviewed migration off
+    hosted Supabase when no administrator password is installed on this machine.
+    TLS, project identity and the dedicated read-only role are still mandatory.
+    """
+    target = json.loads((repo / 'supabase/production-target.json').read_text())
+    ref = target.get('source_project_ref') if target.get('kind') == 'postgres' else target['project_ref']
+    values = {}
+    for line in credentials.read_text().splitlines():
+        if '=' in line and not line.lstrip().startswith('#'):
+            key, value = line.split('=', 1)
+            values[key.strip()] = value.strip().strip('"').strip("'")
+    if (values.get('PROJECT_REF') != ref or values.get('PGHOST') != 'db.' + ref + '.supabase.co'
+            or values.get('PGUSER') != 'squadhub_backup_v1' or values.get('PGSSLMODE') != 'verify-full'
+            or values.get('PGDATABASE') != 'postgres' or values.get('PGPORT') != '5432'
+            or not Path(values.get('PGSSLROOTCERT', '/missing')).is_file()):
+        raise ValueError('Source backup credentials do not match the checked-in project and verified TLS target.')
+    env = {**os.environ, **{k: values[k] for k in ('PGHOST', 'PGPORT', 'PGUSER', 'PGPASSWORD', 'PGDATABASE', 'PGSSLMODE', 'PGSSLROOTCERT')}}
+    query = """BEGIN READ ONLY;
+SELECT json_build_object('database',current_database(),'read_only',current_setting('transaction_read_only'),
+  'migration_count',count(*),'latest_migration',max(version),
+  'ledger_digest',md5(string_agg(version || ':' || coalesce(name,''),',' ORDER BY version)))
+FROM supabase_migrations.schema_migrations;
+ROLLBACK;"""
+    result = subprocess.run(['psql', '-XqAt', '-v', 'ON_ERROR_STOP=1'], input=query, env=env,
+                            capture_output=True, text=True, timeout=120)
+    if result.returncode:
+        raise ValueError('Verified read-only source status failed; no migration was attempted.')
+    data = json.loads(result.stdout.strip())
+    if data['read_only'] != 'on' or data['database'] != 'postgres':
+        raise ValueError('Source status did not run in a read-only transaction.')
+    print(json.dumps({'production_source_project': ref, 'verified_tls': True, **data}))
+
+
 def selected_migration(repo, url, version, apply):
     """Apply one reviewed migration when a shared ledger prevents a bulk push."""
     if not re.fullmatch(r'\d{14}', version):
@@ -102,9 +138,22 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('command', choices=['status', 'dry-run', 'apply'])
     parser.add_argument('--migration', help='Exact 14-digit version; limit dry-run/apply to one reviewed migration.')
+    parser.add_argument('--repo', type=Path, help='Explicit repository path when running this read-only helper from a temporary location.')
+    parser.add_argument('--source-backup-config', type=Path, help='Status only: verify the hosted source with its dedicated read-only backup credentials.')
     args = parser.parse_args()
-    repo = Path(__file__).resolve().parent.parent
+    repo = args.repo.resolve() if args.repo else Path(__file__).resolve().parent.parent
     try:
+        if args.source_backup_config:
+            if args.command != 'status' or args.migration:
+                raise ValueError('Backup credentials can only perform read-only source status.')
+            source_backup_status(repo, args.source_backup_config)
+            return 0
+        target = json.loads((repo / 'supabase/production-target.json').read_text())
+        if target.get('kind') == 'postgres':
+            sys.path.insert(0, str(repo / 'tools/postgres'))
+            import production as postgres_production
+            postgres_production.run(repo, args.command, args.migration)
+            return 0
         ref, url = configuration(repo)
         if args.migration:
             if args.command == 'status':

@@ -58,5 +58,41 @@ class SelectedMigrationTests(unittest.TestCase):
         self.assertNotIn('private-password', str(caught.exception))
 
 
+class ReadOnlySourceStatusTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.repo = Path(self.temp.name)
+        (self.repo / 'supabase').mkdir()
+        (self.repo / 'supabase/production-target.json').write_text('{"project_ref":"hvcpoxgkdybyscaebtik"}')
+        self.cert = self.repo / 'ca.crt'
+        self.cert.write_text('test certificate')
+        self.credentials = self.repo / 'private.env'
+        self.values = {'PROJECT_REF':'hvcpoxgkdybyscaebtik','PGHOST':'db.hvcpoxgkdybyscaebtik.supabase.co',
+                       'PGUSER':'squadhub_backup_v1','PGPASSWORD':'private-password','PGDATABASE':'postgres',
+                       'PGPORT':'5432','PGSSLMODE':'verify-full','PGSSLROOTCERT':str(self.cert)}
+
+    def save(self):
+        self.credentials.write_text(''.join(k+'='+v+'\n' for k,v in self.values.items()))
+
+    @patch.object(production.subprocess,'run')
+    def test_status_uses_read_only_transaction_and_keeps_password_out_of_arguments(self,run):
+        self.save()
+        run.return_value=subprocess.CompletedProcess([],0,stdout='{"database":"postgres","read_only":"on"}',stderr='')
+        production.source_backup_status(self.repo,self.credentials)
+        args,options=run.call_args
+        self.assertTrue(options['input'].startswith('BEGIN READ ONLY;'))
+        self.assertNotIn('private-password',str(args))
+        self.assertEqual(options['env']['PGSSLMODE'],'verify-full')
+
+    @patch.object(production.subprocess,'run')
+    def test_wrong_source_and_unverified_tls_fail_before_connecting(self,run):
+        for key,value in [('PROJECT_REF','retired'),('PGHOST','elsewhere'),('PGUSER','postgres'),('PGSSLMODE','disable')]:
+            old=self.values[key];self.values[key]=value;self.save()
+            with self.assertRaises(ValueError):production.source_backup_status(self.repo,self.credentials)
+            self.values[key]=old
+        run.assert_not_called()
+
+
 if __name__ == '__main__':
     unittest.main()

@@ -12,6 +12,9 @@ export const config = {
   supabaseUrl: process.env.SUPABASE_URL || '',
   supabaseAnonKey: process.env.SUPABASE_ANON_KEY || '',
   supabaseServiceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY || '',
+  // Opt-in local replacement. URL/keys retain their transport-compatible names
+  // so PostgREST and the local identity service can serve existing clients.
+  identityBackend: process.env.IDENTITY_BACKEND || 'supabase',
 
   // JWT
   jwtSecret: process.env.JWT_SECRET || '',
@@ -135,6 +138,9 @@ export const config = {
 const required = ['supabaseUrl', 'supabaseAnonKey', 'supabaseServiceRoleKey', 'jwtSecret'] as const;
 
 export function validateConfig() {
+  if (!['supabase', 'postgres'].includes(config.identityBackend)) {
+    throw new Error('IDENTITY_BACKEND must be supabase or postgres');
+  }
   const missing = required.filter((key) => !config[key]);
   if (missing.length > 0) {
     console.error(`Missing required environment variables: ${missing.join(', ')}`);

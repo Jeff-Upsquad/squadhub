@@ -1,0 +1,6 @@
+.env
+.backup.env
+.*.env
+*.dump
+*.enc
+reports/

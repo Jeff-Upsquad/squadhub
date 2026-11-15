@@ -1,0 +1,58 @@
+{
+  admin off
+  auto_https off
+}
+:8080 {
+  @browser_origin {
+    header Origin https://squadhub.in
+    header Origin https://admin.squadhub.in
+    header Origin https://bots.squadhub.in
+    header Origin https://clips.squadhub.in
+    header Origin https://smm.squadhub.in
+    header Origin https://smm.72.61.245.97.nip.io
+    header Origin https://crm.squadhub.in
+    header Origin https://shcrm.squadhub.in
+  }
+  header @browser_origin {
+    Access-Control-Allow-Origin "{http.request.header.Origin}"
+    Access-Control-Allow-Methods "GET, POST, PUT, PATCH, DELETE, HEAD, OPTIONS"
+    Access-Control-Allow-Headers "authorization, apikey, content-type, x-client-info, x-supabase-api-version, accept-profile, content-profile, prefer, range, x-upsert, cache-control"
+    Access-Control-Expose-Headers "Content-Range, Range-Unit, Preference-Applied, Link, X-Total-Count"
+    Vary Origin
+  }
+  @preflight {
+    method OPTIONS
+    header Origin https://squadhub.in
+    header Origin https://admin.squadhub.in
+    header Origin https://bots.squadhub.in
+    header Origin https://clips.squadhub.in
+    header Origin https://smm.squadhub.in
+    header Origin https://smm.72.61.245.97.nip.io
+    header Origin https://crm.squadhub.in
+    header Origin https://shcrm.squadhub.in
+  }
+  handle @preflight {
+    respond "" 204
+  }
+  handle_path /auth/v1/* {
+    reverse_proxy identity:4101
+  }
+  @rest_key {
+    path /rest/v1/*
+    header apikey {$LOCAL_ANON_KEY}
+    header apikey {$LOCAL_SERVICE_ROLE_KEY}
+  }
+  handle @rest_key {
+    uri strip_prefix /rest/v1
+    reverse_proxy rest:3000
+  }
+  handle /rest/v1/* {
+    respond "API key required" 401
+  }
+  handle /health {
+    reverse_proxy identity:4101
+  }
+  handle {
+    respond "Not found" 404
+  }
+}

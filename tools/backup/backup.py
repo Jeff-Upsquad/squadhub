@@ -215,10 +215,13 @@ class Backup:
             table['digest'] = xml.findtext('.//digest') or None
         return tables
 
+    def source_metadata(self, query):
+        return json.loads(query("SELECT json_build_object('server_version',current_setting('server_version'),'database_bytes',pg_database_size(current_database()),'vault_secrets',(SELECT count(*) FROM vault.secrets),'roles',(SELECT json_agg(json_build_object('name',rolname,'bypass_rls',rolbypassrls)) FROM pg_roles WHERE left(rolname,3) <> 'pg_'),'verification_settings',json_build_object('extra_float_digits',current_setting('extra_float_digits')))"))
+
     def _capture_database(self, folder, compact):
         env = folder / 'client.env'
         with self.snapshot(env) as (snap, query):
-            info = json.loads(query("SELECT json_build_object('server_version',current_setting('server_version'),'database_bytes',pg_database_size(current_database()),'vault_secrets',(SELECT count(*) FROM vault.secrets),'roles',(SELECT json_agg(json_build_object('name',rolname,'bypass_rls',rolbypassrls)) FROM pg_roles WHERE rolname NOT LIKE 'pg_%'))"))
+            info = self.source_metadata(query)
             if info['vault_secrets']:
                 raise RuntimeError('Vault secrets found: encryption-root-key recovery must be configured first')
             info['tables'] = self.inventory(query)
