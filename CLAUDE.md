@@ -1,14 +1,16 @@
 # Agent Instructions
 
-## Supabase production (updated 28 October 2026)
+## PostgreSQL production (updated 16 November 2026)
 
-Current project: **`hvcpoxgkdybyscaebtik`**, shared by SquadHub / Squad CRM. Read
+Production data and login now run on the VPS, target **`squadhub-local`**, shared
+by SquadHub, Bots, SMM and Clips. Read
 [workflows/supabase-production.md](workflows/supabase-production.md) before
-migrations, database commands or CMPD/PD. Use
-`python3 tools/supabase-production.py status` to verify the destination.
-The old project `kfxdbhwxzvptzzcuzlal` is retired. Local CLI login/cache must not override
-the checked-in `supabase/production-target.json`. New worktrees use the helper's
-primary-checkout credential fallback. Deploy scripts do not apply migrations.
+migrations, database commands or CMPD/PD. Verify the checked-in destination with
+`python3 tools/supabase-production.py status`. This helper selects PostgreSQL
+from `supabase/production-target.json` and verifies its deployment marker over SSH.
+The hosted projects `hvcpoxgkdybyscaebtik` and `kfxdbhwxzvptzzcuzlal` are retired
+sources, never destinations for new application migrations. CRM and SquadHire CRM
+use separate databases. Deploy scripts do not apply migrations.
 
 You're working inside the **WAT framework** (Workflows, Agents, Tools). This architecture separates concerns so that probabilistic AI handles reasoning while deterministic code handles execution. That separation is what makes this system reliable.
 

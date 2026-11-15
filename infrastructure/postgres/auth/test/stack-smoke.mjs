@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { randomBytes } from 'node:crypto';
 import { createClient } from '@supabase/supabase-js';
 const base=process.env.TRIAL_API_URL || 'http://gateway:8080';
-if(!['gateway','127.0.0.1','localhost'].includes(new URL(base).hostname))throw new Error('Only an isolated local API is allowed');
+if(!['gateway','squadhub-data','127.0.0.1','localhost'].includes(new URL(base).hostname))throw new Error('Only an isolated local API is allowed');
 const admin=createClient(base,process.env.LOCAL_SERVICE_ROLE_KEY,{auth:{persistSession:false,autoRefreshToken:false}});
 const client=createClient(base,process.env.LOCAL_ANON_KEY,{auth:{persistSession:false,autoRefreshToken:false}});
 const email=`migration-probe-${randomBytes(6).toString('hex')}@example.invalid`,password=randomBytes(20).toString('hex');
@@ -41,13 +41,14 @@ try{
     const crmLink=check(await admin.auth.admin.generateLink({type:'invite',email:'crm-'+email,options:{redirectTo:'http://127.0.0.1:55400/invite-accepted',data:{display_name:'CRM invite probe'}}}),'CRM invitation');extras.push(crmLink.user.id);
     check(await admin.from('users').upsert({id:crmLink.user.id,email:'crm-'+email,display_name:'CRM invite probe',status:'active',user_type:'internal'}),'CRM invite profile');
     const action=new URL(crmLink.properties.action_link);
-    const redeemed=await fetch(base+action.pathname+action.search,{redirect:'manual'});assert.equal(redeemed.status,303,'invitation through app proxy');
+    const redemption=process.env.TRIAL_APP_URL+'/auth/invite/verify'+action.search;
+    const redeemed=await fetch(redemption,{redirect:'manual'});assert.equal(redeemed.status,303,'invitation through app proxy');
     const location=new URL(redeemed.headers.get('location'));assert.equal(location.origin+location.pathname,'http://127.0.0.1:55400/invite-accepted');
     const fragment=new URLSearchParams(location.hash.slice(1));
     const invitedClient=createClient(base,process.env.LOCAL_ANON_KEY,{auth:{persistSession:false,autoRefreshToken:false}});
     check(await invitedClient.auth.setSession({access_token:fragment.get('access_token'),refresh_token:fragment.get('refresh_token')}),'invitation session');
     check(await invitedClient.auth.updateUser({password:password+'invite'}),'invited password setup');
-    assert.equal((await fetch(base+action.pathname+action.search,{redirect:'manual'})).status,400,'invitation replay rejected');
+    assert.equal((await fetch(redemption,{redirect:'manual'})).status,400,'invitation replay rejected');
     const r=await fetch(`${process.env.TRIAL_APP_URL}/auth/login`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({email,password})});
     assert.equal(r.status,200,'app login');const data=await r.json();assert.equal(data.success,true);
     for(const path of ['/users/me','/notifications?limit=1','/notifications/unread-count','/messages/unread-summary',`/timer/active?workspace_id=${workspace.id}`]){
