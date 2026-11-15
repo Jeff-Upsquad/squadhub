@@ -1,6 +1,6 @@
 # PD — Sync, Deploy
 
-> **Database target:** Read [supabase-production.md](supabase-production.md) before migrations. Current production: `hvcpoxgkdybyscaebtik`. Run `python3 tools/supabase-production.py status`; deploy does not apply SQL.
+> **Database target:** Read [supabase-production.md](supabase-production.md) before migrations. Current production: VPS PostgreSQL `squadhub-local`. Run `python3 tools/supabase-production.py status`; deploy does not apply SQL.
 
 ## Objective
 
