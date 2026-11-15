@@ -1,6 +1,13 @@
 {
-  "project_ref": "hvcpoxgkdybyscaebtik",
-  "shared_by": "SquadHub / Squad CRM",
-  "migrated_on": "2026-10-28",
+  "kind": "postgres",
+  "project_ref": "squadhub-local",
+  "source_project_ref": "hvcpoxgkdybyscaebtik",
+  "ssh_host": "root@72.61.245.97",
+  "container": "squadhub-local-data-db-1",
+  "compose_project": "squadhub-local-data",
+  "database": "squadhub_trial_20261115_751ccf2b",
+  "deployment_id": "b4f2ded7-3faa-4bf2-aa7d-e09a108aaa5a",
+  "shared_by": "SquadHub / Bots / SMM / Clips",
+  "migrated_on": "2026-11-16",
   "retired_project_ref": "kfxdbhwxzvptzzcuzlal"
 }
