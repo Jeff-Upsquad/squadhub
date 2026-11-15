@@ -1,0 +1,17 @@
+# Apply only after the final frozen-source snapshot has been imported/verified.
+services:
+  gateway:
+    volumes:
+      - ./Caddyfile.production:/etc/caddy/Caddyfile:ro
+    environment:
+      LOCAL_ANON_KEY: ${LOCAL_ANON_KEY:?required}
+      LOCAL_SERVICE_ROLE_KEY: ${LOCAL_SERVICE_ROLE_KEY:?required}
+    networks:
+      data: {}
+      entry: {}
+      production:
+        aliases: [squadhub-data]
+networks:
+  production:
+    external: true
+    name: squadhub_squadhub

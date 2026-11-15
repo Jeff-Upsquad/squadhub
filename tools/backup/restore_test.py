@@ -18,9 +18,12 @@ import time
 import backup as lib
 
 
-def restore_test(config, run_id=None):
+def restore_test(config, run_id=None, backup_factory=lib.Backup):
     os.umask(0o077)
-    job = lib.Backup(config)
+    job = backup_factory(config)
+    administrator = job.c.get('RESTORE_ADMIN_USER', 'supabase_admin')
+    if administrator not in ('supabase_admin', 'postgres'):
+        raise ValueError('Unsupported restore administrator')
     s3 = job.s3()
     if run_id is None:
         manifest = json.loads((job.root / 'latest.json').read_text())
@@ -52,7 +55,7 @@ def restore_test(config, run_id=None):
         # into this isolated database container.
         client = ['docker', 'exec', '-i', name]
         def sql(statement, database='sqh_restore'):
-            return job.run(client + ['psql', '-h', '127.0.0.1', '-U', 'supabase_admin', '-d', database, '-XqAt', '-v', 'ON_ERROR_STOP=1'], stdin=statement.encode()).decode().strip()
+            return job.run(client + ['psql', '-h', '127.0.0.1', '-U', administrator, '-d', database, '-XqAt', '-v', 'ON_ERROR_STOP=1'], stdin=statement.encode()).decode().strip()
         try:
             job.run(['docker', 'run', '-d', '--name', name, '--network', 'none', '--memory', '768m',
                      '--cpus', '1', '--tmpfs', '/var/lib/postgresql/data:rw,size=768m',
@@ -61,7 +64,7 @@ def restore_test(config, run_id=None):
             # The image briefly starts a Unix-socket-only init server. Wait
             # for the final TCP listener, never that temporary init process.
             for attempt in range(60):
-                check = subprocess.run(['docker', 'exec', name, 'pg_isready', '-h', '127.0.0.1', '-U', 'supabase_admin', '-d', 'postgres'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                check = subprocess.run(['docker', 'exec', name, 'pg_isready', '-h', '127.0.0.1', '-U', administrator, '-d', 'postgres'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                 if check.returncode == 0:
                     break
                 time.sleep(2)
@@ -78,13 +81,16 @@ def restore_test(config, run_id=None):
             # with standalone functions contained in the source dump.
             sql('CREATE DATABASE sqh_restore TEMPLATE template0;', 'postgres')
             job.run(['docker', 'cp', str(folder / 'database.dump'), name + ':/tmp/database.dump'])
-            job.run(client + ['pg_restore', '-h', '127.0.0.1', '-U', 'supabase_admin', '--no-owner', '--clean', '--if-exists', '--exit-on-error', '-d', 'sqh_restore', '/tmp/database.dump'])
+            job.run(client + ['pg_restore', '-h', '127.0.0.1', '-U', administrator, '--no-owner', '--clean', '--if-exists', '--exit-on-error', '-d', 'sqh_restore', '/tmp/database.dump'])
+            digits = int(inventory.get('verification_settings', {}).get('extra_float_digits', 0))
+            if digits not in range(-15, 4):
+                raise RuntimeError('Invalid inventory float-rendering setting')
             # The restored DB is offline: cron/network extensions cannot contact
             # WhatsApp, webhooks, customer endpoints, or any production service.
             for table in inventory['tables']:
                 schema = '"' + table['schema'].replace('"', '""') + '"'
                 tab = '"' + table['table'].replace('"', '""') + '"'
-                actual = json.loads(sql(f"SET timezone='UTC'; SELECT json_build_object('rows',count(*),'digest',md5(string_agg(md5(row_to_json(t)::text),'' ORDER BY md5(row_to_json(t)::text)))) FROM {schema}.{tab} t;"))
+                actual = json.loads(sql(f"SET timezone='UTC'; SET extra_float_digits={digits}; SELECT json_build_object('rows',count(*),'digest',md5(string_agg(md5(row_to_json(t)::text),'' ORDER BY md5(row_to_json(t)::text)))) FROM {schema}.{tab} t;"))
                 if actual != {'rows': table['rows'], 'digest': table['digest']}:
                     raise RuntimeError(f"Restored table verification failed: {table['schema']}.{table['table']}")
             result = {'run_id': manifest['run_id'], 'verified_at': lib.dt.datetime.now(lib.UTC).isoformat(),

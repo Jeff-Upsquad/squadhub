@@ -41,6 +41,11 @@ admin.squadhub.in {
 }
 
 api.squadhub.in {
+	# Independent PostgreSQL / identity transport, used by browser SDK clients.
+	# The data gateway attaches to this network only after verified cutover.
+	handle_path /local-data/* {
+		reverse_proxy squadhub-data:8080
+	}
 	handle /downloads/* {
 		root * /srv/cashbook-downloads
 		uri strip_prefix /downloads

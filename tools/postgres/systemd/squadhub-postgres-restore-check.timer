@@ -1,0 +1,8 @@
+[Unit]
+Description=Weekly local PostgreSQL restore rehearsal
+[Timer]
+OnCalendar=Sun *-*-* 04:00:00 UTC
+Persistent=true
+Unit=squadhub-postgres-restore-check.service
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,11 @@
+[Unit]
+Description=Encrypted local PostgreSQL backup to Cloudflare R2
+After=network-online.target docker.service
+Requires=docker.service
+[Service]
+Type=oneshot
+User=root
+UMask=0077
+ExecStart=/usr/bin/python3 /opt/squadhub/tools/postgres/backup_local.py backup --config /etc/squadhub-postgres-backup/.env
+TimeoutStartSec=45min
+Nice=10

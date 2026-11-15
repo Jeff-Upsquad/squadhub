@@ -1,0 +1,118 @@
+name: squadhub-local-data
+services:
+  db:
+    image: postgres:17.9-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_PASSWORD: ${LOCAL_POSTGRES_PASSWORD:?Run generate-env.mjs first}
+      POSTGRES_DB: ${LOCAL_POSTGRES_DB:-squadhub}
+      LOCAL_AUTHENTICATOR_PASSWORD: ${LOCAL_AUTHENTICATOR_PASSWORD:?required}
+      LOCAL_IDENTITY_PASSWORD: ${LOCAL_IDENTITY_PASSWORD:?required}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init.sh:/docker-entrypoint-initdb.d/10-local-identity.sh:ro
+      - ./bootstrap.sql:/opt/squadhub/bootstrap.sql:ro
+    command: [postgres, -c, shared_buffers=128MB, -c, max_connections=40, -c, work_mem=4MB, -c, maintenance_work_mem=64MB, -c, max_wal_size=512MB, -c, password_encryption=scram-sha-256]
+    mem_limit: 1g
+    cpus: 0.75
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -U postgres -d "$$POSTGRES_DB"']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    networks: [data]
+    logging: &logging
+      driver: json-file
+      options: {max-size: 10m, max-file: '3'}
+  identity:
+    build: ./auth
+    restart: unless-stopped
+    environment:
+      IDENTITY_DATABASE_URL: postgres://local_identity:${LOCAL_IDENTITY_PASSWORD:?required}@db:5432/${LOCAL_POSTGRES_DB:-squadhub}
+      LOCAL_JWT_SECRET: ${LOCAL_JWT_SECRET:?required}
+      LOCAL_ANON_KEY: ${LOCAL_ANON_KEY:?required}
+      LOCAL_SERVICE_ROLE_KEY: ${LOCAL_SERVICE_ROLE_KEY:?required}
+      LOCAL_AUTH_ISSUER: ${LOCAL_AUTH_ISSUER:?required}
+      LOCAL_AUTH_PUBLIC_URL: ${LOCAL_AUTH_PUBLIC_URL:-http://127.0.0.1:55400/trial-api/auth/invite}
+      LOCAL_AUTH_REDIRECT_URLS: ${LOCAL_AUTH_REDIRECT_URLS:-http://127.0.0.1:55400/invite-accepted}
+      IDENTITY_RATE_LIMIT_SECRET: ${IDENTITY_RATE_LIMIT_SECRET:?required}
+    depends_on:
+      db: {condition: service_healthy}
+    mem_limit: 256m
+    cpus: 0.5
+    read_only: true
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    healthcheck:
+      test: [CMD, node, -e, "fetch('http://localhost:4101/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks: [data]
+    logging: *logging
+  identity-test:
+    profiles: [test]
+    build:
+      context: ./auth
+      target: test
+    environment:
+      TEST_DATABASE_URL: postgres://postgres:${LOCAL_POSTGRES_PASSWORD:?required}@db:5432/squadhub_identity_test
+      BOOTSTRAP_SQL: /bootstrap.sql
+    volumes: ['./bootstrap.sql:/bootstrap.sql:ro']
+    depends_on:
+      db: {condition: service_healthy}
+    mem_limit: 512m
+    cpus: 0.5
+    networks: [data]
+  rest:
+    image: postgrest/postgrest:v14.5
+    restart: unless-stopped
+    environment:
+      PGRST_DB_URI: postgres://authenticator:${LOCAL_AUTHENTICATOR_PASSWORD:?required}@db:5432/${LOCAL_POSTGRES_DB:-squadhub}
+      PGRST_DB_SCHEMAS: public,smm
+      PGRST_DB_ANON_ROLE: anon
+      PGRST_DB_POOL: '10'
+      PGRST_DB_MAX_ROWS: '1000'
+      PGRST_DB_PRE_REQUEST: hub_identity.check_session
+      PGRST_JWT_SECRET: ${LOCAL_JWT_SECRET:?required}
+      PGRST_JWT_AUD: authenticated
+      PGRST_APP_SETTINGS_JWT_ISSUER: ${LOCAL_AUTH_ISSUER:?required}
+      PGRST_LOG_LEVEL: warn
+    depends_on:
+      db: {condition: service_healthy}
+    mem_limit: 128m
+    cpus: 0.5
+    read_only: true
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    networks: [data]
+    logging: *logging
+  gateway:
+    image: caddy:2.10.2-alpine
+    restart: unless-stopped
+    environment:
+      GOMEMLIMIT: 48MiB
+    # Rehearsal only: no public listener, no production network attachment.
+    ports: ['127.0.0.1:55400:8080']
+    volumes: ['./Caddyfile:/etc/caddy/Caddyfile:ro']
+    depends_on:
+      identity: {condition: service_healthy}
+      rest: {condition: service_started}
+    mem_limit: 64m
+    cpus: 0.25
+    read_only: true
+    tmpfs: [/data, /config]
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    # Official Caddy binary carries this file capability; its bounding set must
+    # allow execution even though the trial listener uses unprivileged port 8080.
+    cap_add: [NET_BIND_SERVICE]
+    networks: [data, entry]
+    logging: *logging
+networks:
+  data: {internal: true}
+  # Docker does not publish ports from an internal-only network. Only the
+  # gateway joins this bridge; the DB, identity, REST and app trial stay private.
+  entry: {}
+volumes:
+  postgres_data:
