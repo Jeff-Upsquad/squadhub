@@ -25,7 +25,7 @@
 
 import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
-import { supabaseAdmin, supabase } from '../supabase';
+import { supabaseAdmin, createAuthClient } from '../supabase';
 import { config } from '../config';
 
 // ─── Phone helpers ───────────────────────────────────────────────────────────
@@ -280,15 +280,16 @@ export async function applyTempPassword(
 
   // Smoke-test the credential before handing it out, so we never WhatsApp
   // or show an admin a temp password that silently doesn't work.
-  const { error: signInErr } = await supabase.auth.signInWithPassword({
+  const smokeClient = createAuthClient();
+  const { error: signInErr } = await smokeClient.auth.signInWithPassword({
     email,
     password: tempPassword,
   });
   if (signInErr) {
     throw new PasswordResetError(500, 'Failed to set a temporary password. Please try again.');
   }
-  // Don't leave the smoke-test session sitting on the shared public client.
-  await supabase.auth.signOut().catch(() => undefined);
+  // Revoke only the smoke-test session, leaving other device sessions alone.
+  await smokeClient.auth.signOut({ scope: 'local' }).catch(() => undefined);
 
   // The temp password is a live credential — never log it by default. Opt in
   // explicitly for local debugging; must NOT be set in production.
@@ -339,7 +340,7 @@ export async function verifyTempPassword(ticketToken: string, tempPassword: stri
   const email = existing?.user?.email;
   if (!email) throw new PasswordResetError(400, 'This account has no email on file.');
 
-  const { data, error } = await supabase.auth.signInWithPassword({
+  const { data, error } = await createAuthClient().auth.signInWithPassword({
     email,
     password: candidate,
   });

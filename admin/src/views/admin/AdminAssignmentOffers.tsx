@@ -456,10 +456,13 @@ export function ClientBidActions({
   };
 
   const act = useMutation({
-    mutationFn: (v: { kind: 'accept' | 'decline' } | { kind: 'counter'; amount: OfferAmount }) =>
-      v.kind === 'counter'
-        ? api.post(`/admin/subscription-cards/${cardId}/offers/${offerId}/counter`, { amount: v.amount })
-        : api.post(`/admin/subscription-cards/${cardId}/offers/${offerId}/${v.kind}`, {}),
+    mutationFn: async (v: { kind: 'accept' | 'decline' } | { kind: 'counter'; amount: OfferAmount }) => {
+      if (v.kind === 'counter') {
+        await api.post(`/admin/subscription-cards/${cardId}/offers/${offerId}/counter`, { amount: v.amount });
+      } else {
+        await api.post(`/admin/subscription-cards/${cardId}/offers/${offerId}/${v.kind}`, {});
+      }
+    },
     onSuccess: (_d, v) => {
       invalidate();
       setCountering(false);
