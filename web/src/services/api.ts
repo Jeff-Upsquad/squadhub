@@ -43,27 +43,38 @@ async function refreshAccessToken(): Promise<string | null> {
     return null;
   }
 
-  refreshPromise = (async () => {
+  const refresh = async () => {
+    // Other tabs persist rotated tokens to the same key. Re-read under the
+    // browser lock before exchanging a single-use refresh credential.
+    await useAuthStore.persist.rehydrate();
+    const current = useAuthStore.getState();
+    if (current.refreshToken !== refreshToken) return current.accessToken;
     try {
       // Use bare axios (not `api`) to avoid recursion through the interceptor.
       const res = await axios.post('/auth/refresh', { refresh_token: refreshToken }, { timeout: 15_000 });
       const newAccess = res.data?.data?.access_token as string | undefined;
       const newRefresh = res.data?.data?.refresh_token as string | undefined;
+      // A logout or a different sign-in may have happened while awaiting HTTP.
+      if (useAuthStore.getState().refreshToken !== refreshToken) return useAuthStore.getState().accessToken;
       if (!newAccess || !newRefresh) {
-        logout();
-        return null;
+        throw new Error('Session refresh returned an incomplete response');
       }
       updateTokens(newAccess, newRefresh);
       return newAccess;
     } catch (error) {
       // A network outage is not evidence that the saved session is invalid.
-      if (axios.isAxiosError(error) && (!error.response || error.response.status >= 500)) throw error;
+      if (useAuthStore.getState().refreshToken !== refreshToken) return useAuthStore.getState().accessToken;
+      if (!axios.isAxiosError(error) || ![401, 403].includes(error.response?.status ?? 0)) throw error;
       logout();
       return null;
-    } finally {
-      refreshPromise = null;
     }
-  })();
+  };
+  refreshPromise = (async () => {
+    if (typeof navigator !== 'undefined' && navigator.locks) {
+      return await navigator.locks.request('squadhub-session-refresh', refresh);
+    }
+    return refresh();
+  })().finally(() => { refreshPromise = null; });
 
   return refreshPromise;
 }
@@ -121,11 +132,13 @@ api.interceptors.response.use(
     }
 
     if (original._retried) {
-      useAuthStore.getState().logout();
       return Promise.reject(error);
     }
 
-    const newToken = await refreshAccessToken();
+    // A late 401 may belong to a request sent before another request refreshed.
+    const currentToken = useAuthStore.getState().accessToken;
+    const newToken = currentToken && original.headers?.Authorization !== `Bearer ${currentToken}`
+      ? currentToken : await refreshAccessToken();
     if (!newToken) {
       return Promise.reject(error);
     }

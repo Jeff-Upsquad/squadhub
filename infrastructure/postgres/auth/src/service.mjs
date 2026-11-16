@@ -26,6 +26,11 @@ export function createApp(pool, config) {
       !(url.protocol==='http:' && ['localhost','127.0.0.1'].includes(url.hostname))))throw new Error('Identity links require HTTPS or a loopback trial URL');
   }
   const app = express();
+  // A response can be lost after rotation commits. Briefly return the same
+  // successor for retries and concurrent callers, without persisting raw tokens.
+  // Bounded to avoid unbounded memory growth; revocation is checked on every use.
+  const refreshRetries = new Map();
+  const refreshInFlight = new Map();
   app.disable('x-powered-by');
   // Gateway supplies one trusted X-Forwarded-For hop; identity has no host port.
   app.set('trust proxy', 1);
@@ -102,8 +107,8 @@ export function createApp(pool, config) {
 
   app.post('/signup', (_req,_res) => fail(403,'Accounts must be created or invited by an administrator','signup_disabled'));
   app.post('/token', async (req,res) => {
-    await rateLimit(req,'token');
     if (req.query.grant_type === 'password') {
+      await rateLimit(req,'password');
       const email=normalizeEmail(req.body.email);
       const { rows } = await pool.query('SELECT * FROM auth.users WHERE lower(email)=$1 AND deleted_at IS NULL',[email]);
       const user=rows[0];
@@ -120,16 +125,46 @@ export function createApp(pool, config) {
     }
     if (req.query.grant_type === 'refresh_token') {
       if (typeof req.body.refresh_token !== 'string' || req.body.refresh_token.length > 256) fail(400,'Invalid refresh token');
-      const result = await transaction(async db => {
-        const hash=tokenHash(req.body.refresh_token);
-        const {rows}=await db.query(`SELECT * FROM hub_identity.sessions WHERE refresh_hash=$1
-          AND revoked_at IS NULL AND expires_at > now() FOR UPDATE`,[hash]);
-        const s=rows[0]; if (!s) return null;
-        const user=await userById(db,s.user_id); await allowed(db,user);
-        const refresh=opaqueToken();
-        await db.query('UPDATE hub_identity.sessions SET refresh_hash=$1 WHERE id=$2',[tokenHash(refresh),s.id]);
-        return sessionResponse(user,s.id,refresh);
-      });
+      const hash=tokenHash(req.body.refresh_token);
+      // Backend requests share an IP. One user's login attempts must never
+      // exhaust another user's refresh budget.
+      await rateLimit(req,`refresh:${hash}`);
+      const cached=refreshRetries.get(hash);
+      let result;
+      if (cached && cached.until > Date.now()) {
+        const {rows}=await pool.query(`SELECT * FROM hub_identity.sessions WHERE id=$1
+          AND refresh_hash=$2 AND revoked_at IS NULL AND expires_at>now()`,
+          [cached.sessionId,tokenHash(cached.response.refresh_token)]);
+        if (rows[0]) {
+          const user=await userById(pool,rows[0].user_id);await allowed(pool,user);
+          result=sessionResponse(user,rows[0].id,cached.response.refresh_token);
+        }
+      } else if (cached) refreshRetries.delete(hash);
+      if (!result) {
+        let pending=refreshInFlight.get(hash);
+        if (!pending) {
+          pending=transaction(async db => {
+            const {rows}=await db.query(`SELECT * FROM hub_identity.sessions WHERE refresh_hash=$1
+              AND revoked_at IS NULL AND expires_at > now() FOR UPDATE`,[hash]);
+            const s=rows[0]; if (!s) return null;
+            const user=await userById(db,s.user_id); await allowed(db,user);
+            const refresh=opaqueToken();
+            await db.query('UPDATE hub_identity.sessions SET refresh_hash=$1 WHERE id=$2',[tokenHash(refresh),s.id]);
+            return {response:sessionResponse(user,s.id,refresh),sessionId:s.id};
+          }).then(rotated=>{
+            if (rotated) {
+              if (refreshRetries.size >= 1024) refreshRetries.delete(refreshRetries.keys().next().value);
+              const entry={...rotated,until:Date.now()+10_000};
+              refreshRetries.set(hash,entry);
+              setTimeout(()=>{if(refreshRetries.get(hash)===entry)refreshRetries.delete(hash);},10_000).unref();
+            }
+            return rotated?.response ?? null;
+          });
+          refreshInFlight.set(hash,pending);
+        }
+        try { result=await pending; }
+        finally { if(refreshInFlight.get(hash)===pending)refreshInFlight.delete(hash); }
+      }
       if (!result) fail(400,'Refresh token is invalid or already used','refresh_token_not_found');
       res.json(result); return;
     }

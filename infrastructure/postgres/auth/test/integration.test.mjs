@@ -75,12 +75,27 @@ it('bad passwords, inactive profiles and expired sessions fail closed',async()=>
 it('refresh rotation is atomic and raw refresh credentials never persist',async()=>{
   const u=await account('refresh'),session=await login(u);
   const responses=await Promise.all([1,2].map(()=>api('/token?grant_type=refresh_token',{refresh_token:session.refresh_token})));
-  assert.deepEqual(responses.map(r=>r.status).sort(),[200,400]);
+  assert.deepEqual(responses.map(r=>r.status).sort(),[200,200]);
   const rotated=responses.find(r=>r.status===200).body;
+  assert.equal(responses[1].body.refresh_token,responses[0].body.refresh_token);
   assert.notEqual(rotated.refresh_token,session.refresh_token);
   const {rows}=await pool.query('SELECT refresh_hash FROM hub_identity.sessions WHERE user_id=$1',[u.id]);
   assert.equal(rows[0].refresh_hash,tokenHash(rotated.refresh_token));
   assert.notEqual(rows[0].refresh_hash,rotated.refresh_token);
+  const retry=await api('/token?grant_type=refresh_token',{refresh_token:session.refresh_token});
+  assert.equal(retry.status,200);
+  assert.equal(retry.body.refresh_token,rotated.refresh_token);
+  const next=await api('/token?grant_type=refresh_token',{refresh_token:rotated.refresh_token});
+  assert.equal(next.status,200);
+  assert.equal((await api('/token?grant_type=refresh_token',{refresh_token:session.refresh_token})).status,400);
+  await api('/logout?scope=local',{},next.body.access_token);
+  assert.equal((await api('/token?grant_type=refresh_token',{refresh_token:rotated.refresh_token})).status,400);
+});
+it('refresh retry grace expires after ten seconds',async()=>{
+  const u=await account('refresh-expiry'),session=await login(u);
+  assert.equal((await api('/token?grant_type=refresh_token',{refresh_token:session.refresh_token})).status,200);
+  await new Promise(resolve=>setTimeout(resolve,10_100));
+  assert.equal((await api('/token?grant_type=refresh_token',{refresh_token:session.refresh_token})).status,400);
 });
 it('logout revokes access immediately, including the PostgREST pre-request gate',async()=>{
   const u=await account('logout'),session=await login(u);
@@ -165,4 +180,10 @@ it('admin invitation links confirm once, reject open redirects and support SDK p
   const updated=await client.auth.updateUser({password:'invitation-password'});assert.equal(updated.error,null);
   assert.equal((await fetch(properties.action_link,{redirect:'manual'})).status,400);
   await login({email,password:'invitation-password'});
+});
+it('login rate limiting does not consume the refresh budget of users sharing an IP',async()=>{
+  const u=await account('refresh-budget'),session=await login(u);
+  for(let i=0;i<31;i++)await api('/token?grant_type=password',{email:u.email,password:'incorrect'});
+  assert.equal((await api('/token?grant_type=password',{email:u.email,password:u.password})).status,429);
+  assert.equal((await api('/token?grant_type=refresh_token',{refresh_token:session.refresh_token})).status,200);
 });

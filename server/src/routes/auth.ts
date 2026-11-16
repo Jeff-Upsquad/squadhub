@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
-import { supabaseAdmin, supabase } from '../supabase';
+import { supabaseAdmin, supabase, createAuthClient } from '../supabase';
 import {
   applyAcceptedInvitation,
   INVITATION_COLUMNS,
@@ -193,7 +193,7 @@ async function signInWithTimeout(email: string, password: string) {
     let timer: NodeJS.Timeout | undefined;
     try {
       const result = await Promise.race([
-        supabase.auth.signInWithPassword({ email, password }),
+        createAuthClient().auth.signInWithPassword({ email, password }),
         new Promise<never>((_, reject) => {
           timer = setTimeout(() => reject(SIGN_IN_TIMED_OUT), SIGN_IN_TIMEOUT_MS);
         }),
@@ -422,11 +422,11 @@ router.post('/refresh', async (req: Request, res: Response) => {
   try {
     const body = refreshSchema.parse(req.body);
 
-    const { data, error } = await supabase.auth.refreshSession({
+    const { data, error } = await createAuthClient().auth.refreshSession({
       refresh_token: body.refresh_token,
     });
 
-    if (error && (error.status === 0 || (error.status ?? 0) >= 500 || error.name === 'AuthRetryableFetchError')) {
+    if (error && (error.status === 0 || error.status === 429 || (error.status ?? 0) >= 500 || error.name === 'AuthRetryableFetchError')) {
       res.status(503).json({ success: false, error: 'Session refresh temporarily unavailable. Please retry.' });
       return;
     }

@@ -24,12 +24,19 @@ export const supabaseAuth = createClient(config.supabaseUrl, config.supabaseServ
 });
 
 // Public client — respects RLS, used when acting on behalf of a user
-export const supabase = createClient(config.supabaseUrl, config.supabaseAnonKey, {
-  auth: {
-    autoRefreshToken: false,
-    persistSession: false,
-  },
-});
+// Auth operations must use a fresh client: even with persistSession=false the
+// SDK retains a session in memory and can refresh it before an explicit refresh.
+export function createAuthClient() {
+  return createClient(config.supabaseUrl, config.supabaseAnonKey, {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+      detectSessionInUrl: false,
+    },
+  });
+}
+
+export const supabase = createAuthClient();
 
 // Create a client scoped to a specific user's JWT (for RLS)
 export function supabaseForUser(accessToken: string) {
