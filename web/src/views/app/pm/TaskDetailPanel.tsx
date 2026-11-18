@@ -734,6 +734,11 @@ export default function TaskDetailPanel({
     if (!effectiveTaskId) return undefined;
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
+      // The delete confirmation owns Escape while open: cancel it, keep the panel.
+      if (showDeleteModal) {
+        if (!deleteTask.isPending) setShowDeleteModal(false);
+        return;
+      }
       // Armed title links disarm first — Escape resets to safe, doesn't close.
       if (titleLinksArmed) {
         setTitleLinksArmed(false);
@@ -746,7 +751,29 @@ export default function TaskDetailPanel({
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [effectiveTaskId, setActiveTask, titleLinksArmed]);
+  }, [effectiveTaskId, setActiveTask, titleLinksArmed, showDeleteModal, deleteTask.isPending]);
+
+  // Cmd/Ctrl+Shift+D — open the delete confirmation for the open task; Enter
+  // inside the dialog confirms, so deleting is fully keyboard-driven. Peek
+  // panels are hover previews, so keyboard deletion stays with the primary
+  // panel and only one confirmation is ever shown at a time.
+  useEffect(() => {
+    if (!effectiveTaskId || isPeek) return undefined;
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.metaKey || e.ctrlKey) || !e.shiftKey || e.altKey) return;
+      if (e.key.toLowerCase() !== 'd') return;
+      if (!canEdit || !task || showDeleteModal) return;
+      if (document.querySelector('[data-delete-confirm]')) return;
+      // Never fire while typing in a field — mirrors the Escape guard above.
+      const el = document.activeElement as HTMLElement | null;
+      const tag = el?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || el?.isContentEditable) return;
+      e.preventDefault();
+      setShowDeleteModal(true);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [effectiveTaskId, isPeek, canEdit, task, showDeleteModal]);
 
   // Disarm title links when switching tasks.
   useEffect(() => {
@@ -975,6 +1002,26 @@ export default function TaskDetailPanel({
       },
     });
   };
+
+  // While the delete confirmation is open, Enter confirms and Escape cancels.
+  // Focused modal buttons keep native activation, so clicking still works and
+  // Enter on a focused button never double-fires. Peek panels are hover
+  // previews — their dialog stays mouse/touch-only.
+  useEffect(() => {
+    if (!showDeleteModal || isPeek) return undefined;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        if (!deleteTask.isPending) setShowDeleteModal(false);
+        return;
+      }
+      if (e.key !== 'Enter' || !task || deleteTask.isPending) return;
+      if ((e.target as HTMLElement | null)?.tagName === 'BUTTON') return;
+      e.preventDefault();
+      handleConfirmDelete();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [showDeleteModal, isPeek, task, deleteTask.isPending, handleConfirmDelete]);
 
   const handleAddComment = () => {
     if (!commentText.trim()) return;
@@ -3453,7 +3500,7 @@ export default function TaskDetailPanel({
       )}
 
       {showDeleteModal && task && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+        <div data-delete-confirm="true" className="fixed inset-0 z-[60] flex items-center justify-center p-4">
           <div
             className="absolute inset-0 bg-black/40 backdrop-blur-sm"
             onClick={() => !deleteTask.isPending && setShowDeleteModal(false)}
@@ -3477,6 +3524,7 @@ export default function TaskDetailPanel({
             <p className="mt-3 text-sm text-[var(--sh-ink-2)]">
               Are you sure you want to delete this task? This action cannot be undone.
             </p>
+            <p className="mt-1 text-xs text-[var(--sh-ink-3)]">Press Enter to delete, Esc to cancel.</p>
             <div className="mt-5 flex justify-end gap-2">
               <button
                 type="button"
