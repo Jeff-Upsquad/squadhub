@@ -11044,8 +11044,8 @@ html[data-theme="noir"] .inbox-slider-panel {
 
 /* ── Details — one well, laid out in rows by importance:
      1. Status · Type · Priority · Labels            (labelled pills)
-     2. Work date · Due date · Start date · Repeat   (four cells)
-     3. Estimate · Time logged [· Elapsed]           (equal cells)
+     2. Work date · Due date · Start date · Time logged  (four cells)
+     3. Repeat · Estimate [· Elapsed]                    (equal cells)
      4. Created by                                   (footer line)
    Rows are ordered with flex `order`; the DOM is untouched. ── */
 .td-panel .td-settings-card,
@@ -11203,9 +11203,9 @@ html[data-theme="noir"] .inbox-slider-panel {
 .td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row[data-td="work"] { order: 6; }
 .td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row[data-td="due"] { order: 7; }
 .td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row[data-td="start"] { order: 8; }
-.td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row[data-td="repeat"] { order: 9; }
+.td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row[data-td="time"] { order: 9; flex-basis: 50% !important; }
 .td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row[data-td="estimate"] { order: 10; flex-basis: 50% !important; }
-.td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row[data-td="time"] { order: 11; flex-basis: 50% !important; }
+.td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row[data-td="repeat"] { order: 11; }
 .td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] .td-settings-row[data-td="elapsed"] { order: 12; flex-basis: 25% !important; }
 .td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"]:has([data-td="elapsed"]) .td-settings-row[data-td="estimate"] { flex-basis: 25% !important; }
 /* Cell labels float inside a fixed-height row, so the animation does not
@@ -11937,9 +11937,9 @@ html[data-theme="noir"] .inbox-slider-panel {
 .td-panel-luma.apple.td-shell.td-compact .td-settings-card[data-compact="true"] .td-settings-row[data-td="status"] { order: 3; }
 .td-panel-luma.apple.td-shell.td-compact .td-settings-card[data-compact="true"] .td-settings-row[data-td="priority"] { order: 4; }
 .td-panel-luma.apple.td-shell.td-compact .td-settings-card[data-compact="true"] .td-settings-row[data-td="type"] { order: 5; }
-.td-panel-luma.apple.td-shell.td-compact .td-settings-card[data-compact="true"] .td-settings-row[data-td="repeat"] { order: 6; }
+.td-panel-luma.apple.td-shell.td-compact .td-settings-card[data-compact="true"] .td-settings-row[data-td="time"] { order: 6; }
 .td-panel-luma.apple.td-shell.td-compact .td-settings-card[data-compact="true"] .td-settings-row[data-td="estimate"] { order: 7; }
-.td-panel-luma.apple.td-shell.td-compact .td-settings-card[data-compact="true"] .td-settings-row[data-td="time"] { order: 8; }
+.td-panel-luma.apple.td-shell.td-compact .td-settings-card[data-compact="true"] .td-settings-row[data-td="repeat"] { order: 8; }
 .td-panel-luma.apple.td-shell.td-compact .td-settings-card[data-compact="true"] .td-settings-row[data-td="elapsed"] { order: 9; }
 .td-panel-luma.apple.td-shell.td-compact .td-settings-card[data-compact="true"] .td-settings-row[data-td="labels"] { order: 10; }
 .td-panel-luma.apple.td-shell.td-compact .td-settings-card[data-compact="true"] .td-settings-row[data-td="goals"] { order: 11; }
