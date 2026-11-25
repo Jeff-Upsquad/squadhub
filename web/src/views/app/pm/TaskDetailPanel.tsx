@@ -1535,11 +1535,102 @@ export default function TaskDetailPanel({
                 aria-label={isDone ? 'Mark incomplete' : 'Mark complete'}
               />
               <div className="td-m-hero-copy">
-                <h1 className={isDone ? 'is-done' : undefined}>{task.title}</h1>
+                {editing === 'title' ? (
+                  <textarea
+                    ref={titleEditRef}
+                    autoFocus
+                    value={editValue}
+                    rows={1}
+                    onChange={(e) => { setEditValue(e.target.value); autoGrow(e.target); }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSave('title'); }
+                      if (e.key === 'Escape') setEditing(null);
+                    }}
+                    onBlur={() => handleSave('title')}
+                    aria-label="Task title"
+                    className="td-m-hero-title-edit"
+                  />
+                ) : (() => {
+                  // The desktop title row is hidden on mobile, so the hero owns
+                  // both interactions: tapping the title (or the pencil) edits,
+                  // tapping a URL inside it opens the link.
+                  const startEdit = canEdit
+                    ? () => { setEditing('title'); setEditValue(task.title); }
+                    : undefined;
+                  let hasLink = false;
+                  try {
+                    hasLink = new RegExp(URL_PATTERN, 'i').test(task.title);
+                  } catch {
+                    hasLink = false;
+                  }
+                  if (!hasLink) {
+                    return (
+                      <h1
+                        onClick={startEdit}
+                        className={`${isDone ? 'is-done' : ''}${canEdit ? ' td-m-title-edit' : ''}`.trim() || undefined}
+                      >
+                        {task.title}
+                      </h1>
+                    );
+                  }
+                  const segs: ReactNode[] = [];
+                  let last = 0;
+                  let ki = 0;
+                  const re = new RegExp(URL_PATTERN, 'gi');
+                  for (const m of task.title.matchAll(re)) {
+                    const start = m.index ?? 0;
+                    if (start > last) {
+                      segs.push(
+                        <span key={`t${ki++}`} onClick={startEdit} className={canEdit ? 'td-m-title-edit' : undefined}>
+                          {task.title.slice(last, start)}
+                        </span>
+                      );
+                    }
+                    const { url, tail } = splitTrailingPunct(m[0]);
+                    const href = toHref(url);
+                    segs.push(
+                      <a
+                        key={`l${ki++}`}
+                        href={href}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={(e) => { e.preventDefault(); e.stopPropagation(); openExternalUrl(href); }}
+                        className="td-m-title-link"
+                      >
+                        {url}
+                      </a>
+                    );
+                    if (tail) segs.push(<span key={`p${ki++}`}>{tail}</span>);
+                    last = start + m[0].length;
+                  }
+                  if (last < task.title.length) {
+                    segs.push(
+                      <span key={`t${ki++}`} onClick={startEdit} className={canEdit ? 'td-m-title-edit' : undefined}>
+                        {task.title.slice(last)}
+                      </span>
+                    );
+                  }
+                  return (
+                    <h1 className={isDone ? 'is-done' : undefined}>{segs}</h1>
+                  );
+                })()}
                 {(spaceName || listName) && (
                   <p>{[spaceName, folderName, listName].filter(Boolean).join(' › ')}</p>
                 )}
               </div>
+              {canEdit && editing !== 'title' && (
+                <button
+                  type="button"
+                  className="td-m-hero-edit"
+                  aria-label="Edit task title"
+                  title="Edit title"
+                  onClick={() => { setEditing('title'); setEditValue(task.title); }}
+                >
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                  </svg>
+                </button>
+              )}
               {progressTotal > 0 && (
                 <span className="td-m-ring" aria-label={`${progressDone} of ${progressTotal}`}>
                   <svg viewBox="0 0 46 46" aria-hidden>
@@ -1874,7 +1965,7 @@ export default function TaskDetailPanel({
                   data-celebrating={mainCelebrating ? 'true' : 'false'}
                   aria-label={isDone ? 'Mark incomplete' : 'Mark complete'}
                 />
-                {editing === 'title' ? (
+                {editing === 'title' && !isMobile ? (
                   <textarea
                     ref={titleEditRef}
                     autoFocus
