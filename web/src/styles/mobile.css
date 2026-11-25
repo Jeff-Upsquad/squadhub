@@ -1647,11 +1647,53 @@
     line-height: 1.25;
     letter-spacing: -0.4px;
     color: #fff;
+    overflow-wrap: anywhere;
   }
   .td-m-hero-copy h1.is-done {
     text-decoration: line-through;
     color: rgba(255, 255, 255, 0.72);
   }
+  /* Title editing + links in the mobile hero (the desktop title row is hidden). */
+  .td-m-hero-copy h1.td-m-title-edit { cursor: text; }
+  .td-m-hero-title-edit {
+    display: block;
+    width: 100%;
+    margin: 0;
+    padding: 0 0 2px;
+    border: 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.55);
+    background: transparent;
+    color: #fff;
+    font: inherit;
+    font-size: 24px;
+    font-weight: 700;
+    line-height: 1.25;
+    letter-spacing: -0.4px;
+    resize: none;
+    outline: none;
+    overflow: hidden;
+  }
+  .td-m-title-link {
+    color: #9ecbff;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    overflow-wrap: anywhere;
+  }
+  .td-m-hero-edit {
+    flex: none;
+    display: grid;
+    place-items: center;
+    width: 30px;
+    height: 30px;
+    margin-top: 2px;
+    padding: 0;
+    border: 0;
+    border-radius: 9px;
+    background: rgba(255, 255, 255, 0.1);
+    color: rgba(255, 255, 255, 0.78);
+    cursor: pointer;
+  }
+  .td-m-hero-edit:active { background: rgba(255, 255, 255, 0.22); color: #fff; }
   .td-m-hero-copy p {
     margin: 4px 0 0;
     font-size: 12px;
